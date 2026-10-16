@@ -78,6 +78,16 @@
           </button>
           <span class="person-active" [class.is-idle]="!item.lastActiveAt">{{ lastActiveLabel(item) }}</span>
         </div>
+        <!-- Folds apply to every panel, so this one button folds or unfolds the whole overview. -->
+        <button
+          type="button"
+          class="person-open"
+          [attr.aria-label]="allSectionsCollapsed() ? expandAllLabel : collapseAllLabel"
+          [kTooltip]="allSectionsCollapsed() ? expandAllLabel : collapseAllLabel"
+          (click)="toggleAllSections()"
+        >
+          <i class="ti" [class.ti-chevrons-down]="allSectionsCollapsed()" [class.ti-chevrons-up]="!allSectionsCollapsed()"></i>
+        </button>
         <button
           type="button"
           class="person-open"

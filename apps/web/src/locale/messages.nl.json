@@ -808,6 +808,9 @@
     "5009018781985547984": "Markeer kaarten daarna als inactief",
     "4912814137584164542": "Portfolio verzamelt het aantal kaarten en de voortgang op elk bord dat een lid kan zien. Schakel het uit om het te verwijderen uit de zijbalk, zoekfunctie en snelkoppelingen voor iedereen in deze organisatie.",
     "5536494665625548839": "Portfolio tonen",
+    "3911817769522706118": "Tijd in uitvoering",
+    "4269318564728384576": "Houd actief werk bij in deze organisatie. Uitschakelen pauzeert de timers en verbergt de voortgangsfuncties op alle borden. Geregistreerde tijd blijft bewaard. Elk bord kan de functie ook afzonderlijk uitschakelen.",
+    "4387535478780037275": "In uitvoering inschakelen",
     "2547571169649786686": "Gevarenzone",
     "5075744064713142206": "Verwijder deze organisatie",
     "6577579813144647708": "Verwijdert permanent deze organisatie en alles waarvan deze eigenaar is, inclusief alle borden, lijsten, kaarten en bijlagen.",
@@ -1954,7 +1957,6 @@
     "9166912077349483542": "Geen etiket",
     "430859064314356197": "Openen",
     "4451997363840910432": "Volgende bestelling",
-    "3911817769522706118": "Tijd in uitvoering",
     "7239750919884229270": "Bijgewerkt",
     "8224724288725812333": "Ontvanger",
     "4077520913910941990": "Label",
@@ -2227,6 +2229,8 @@
     "1018005099733189631": "Niets voltooid in de afgelopen {$days} dagen",
     "1828918972378089736": "Iedereen tonen in plaats van {$person}",
     "8094778148005568454": "Alleen {$person} tonen",
+    "1059198867325116136": "Alle secties samenvouwen",
+    "5141061786065104291": "Alle secties uitvouwen",
     "4875921088778203989": "Kaarten van {$person} openen",
     "6336533552281101568": "Hierna van {$person} sluiten",
     "4766284696448562726": "Hierna van {$person} bewerken",
@@ -3761,8 +3765,6 @@
     "3652007016355058890": "Jouw borden",
     "2054599520790063739": "Borden die je deelt",
     "6368227149612917458": "E-mail gekopieerd",
-    "8228936172465447983": "Kan het e-mailadres niet kopiëren.",
-    "4269318564728384576": "Houd actief werk bij in deze organisatie. Uitschakelen pauzeert de timers en verbergt de voortgangsfuncties op alle borden. Geregistreerde tijd blijft bewaard. Elk bord kan de functie ook afzonderlijk uitschakelen.",
-    "4387535478780037275": "In uitvoering inschakelen"
+    "8228936172465447983": "Kan het e-mailadres niet kopiëren."
   }
 }

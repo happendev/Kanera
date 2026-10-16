@@ -9,7 +9,6 @@ All notable changes to Kanera are documented here.
 - **Notification sounds:** choose the original chime, three new gentle Kanera sounds (Ripple, Bloom and Pebble), or None in Profile settings → Notifications.
 - **Time in progress:** mark lists as **In progress** and each card in them tracks working time (09:00–17:00 weekdays), shown on the card, in card detail, the table and Work done. Cards in progress too long turn amber, notify their watchers and can trigger automations; admins can correct a card's time.
 - **Team overview:** a new Team Cards display with one panel per teammate showing what they have in progress (longest-running first), what they recently worked on, the head of their Up next, their other open cards by due date, and what they finished in the last 7 days. Open, In progress, Overdue and Done 7d counts expand into the full list, in-progress work with no assignee gets its own panel, and quiet teammates fold into one row.
-- **Curate a teammate's Up next from Team overview:** pick a teammate to see just their panel with their Up next docked beside it, then queue their next work from a **Not queued** list of their open cards, soonest due first. This replaces the separate Up next view. Sections fold across every panel at once.
 - **React to and comment on uploads:** when someone attaches a file, such as a screenshot of what they've built, the activity row now has a thumbs-up and a Comment button right under it. Comment starts a reply that links the file and mentions whoever uploaded it.
 - **Thumbs-up notifications:** when someone gives your comment or uploaded file a thumbs-up, you now get an inbox notification and a push notification. Email is off by default; turn it on under Profile settings → Notifications ("Thumbs-up on your comment or file"). Removing the thumbs-up takes the notification back. Duplicated cards keep the thumbs-ups on their copied files.
 - **Kanera speaks your language:** the whole app, including onboarding, boards, cards, notifications, settings, emails and push notifications, is now available in English (US), English (UK), Spanish, Brazilian Portuguese, French, German, Japanese, Dutch, Norwegian Bokmål, Simplified Chinese and Traditional Chinese. Choose a language under Profile settings → Language (or from the sign-in page). It is saved to your account, so every device and every email follows it.
@@ -24,11 +23,17 @@ All notable changes to Kanera are documented here.
 - On phones and tablets the board header keeps New card and the board menu beside the title; Board overview and Watch move into the board menu.
 - **Faster boards and global views:** large boards open with less server work, while My Cards and Team Cards refresh around 65% faster with over 40% less API CPU in large-workload benchmarks.
 - **More efficient realtime and background processing:** notifications and emails arrive sooner under load, with less repeated work and fewer processing pauses across automations, push delivery, webhooks, daily digests and cleanup.
+- **Faster card reads for AI agents:** opening a card with many links (the API's card detail and the MCP `cards.get` tool) no longer slows down while background link repair runs, cutting typical response time from about 24–32 ms to 7 ms in benchmarks.
 - Hosted subscription payment analytics are recorded against the organisation creator, so PostHog's first-touch acquisition properties attribute revenue.
 - Cards with unread activity now stand out on busy boards: alongside the bold title and dot, the tile gets a faint accent tint and an accent ring.
 - Emails now show dates in the recipient's language and its date order, with the month named (for example "12 Oct 2026" in UK English), instead of US month-first order for everyone.
+- Tabs left open, or returned to after a while, renew their sign-in just before it lapses instead of first having a request rejected, so counts and priorities refresh in one round-trip.
 
 ### Fixed
+
+- Board mirrors now copy attachments uploaded by guests from another organisation, instead of failing to find the file and retrying the card indefinitely. A card that still can't sync (for example, its source file is gone) stops retrying after about a day and resumes when the source card changes or the mirror is resumed; one broken card no longer holds up the rest of the mirror.
+- Emails to reserved test domains (`.test`, `.example`, `example.com` and similar) are no longer sent from production, and a recipient the mail server permanently refuses is marked failed straight away instead of being retried.
+- Self-hosted monitoring: Alloy no longer re-sends old container logs that Loki rejects after a restart, and a new alert catches log entries Loki rejects (4xx) or Alloy drops, which the 5xx alert missed.
 
 - Clarified translated card deselection, upcoming deadlines, assignment activity and copied email addresses; corrected Japanese relative time and the French purple colour label.
 

@@ -808,6 +808,9 @@
     "5009018781985547984": "Mark cards inactive after",
     "4912814137584164542": "Portfolio rolls up card counts and progress across every board a member can see. Turn it off to remove it from the sidebar, search and shortcuts for everyone in this organization.",
     "5536494665625548839": "Show Portfolio",
+    "3911817769522706118": "Time in progress",
+    "4269318564728384576": "Track active work across this organization. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Boards can also opt out individually.",
+    "4387535478780037275": "Enable in progress",
     "2547571169649786686": "Danger zone",
     "5075744064713142206": "Delete this organization",
     "6577579813144647708": "Permanently removes this organization and everything it owns, including all boards, lists, cards, and attachments.",
@@ -1954,7 +1957,6 @@
     "9166912077349483542": "No label",
     "430859064314356197": "Open",
     "4451997363840910432": "Up next order",
-    "3911817769522706118": "Time in progress",
     "7239750919884229270": "Updated",
     "8224724288725812333": "Assignee",
     "4077520913910941990": "Label",
@@ -2227,6 +2229,8 @@
     "1018005099733189631": "Nothing completed in the last {$days} days",
     "1828918972378089736": "Show everyone instead of {$person}",
     "8094778148005568454": "Show only {$person}",
+    "1059198867325116136": "Collapse all sections",
+    "5141061786065104291": "Expand all sections",
     "4875921088778203989": "Open {$person}’s cards",
     "6336533552281101568": "Close Up next for {$person}",
     "4766284696448562726": "Edit Up next for {$person}",
@@ -3761,8 +3765,6 @@
     "3652007016355058890": "Your boards",
     "2054599520790063739": "Boards you share",
     "6368227149612917458": "Email copied",
-    "8228936172465447983": "Couldn't copy the email address.",
-    "4269318564728384576": "Track active work across this organization. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Boards can also opt out individually.",
-    "4387535478780037275": "Enable in progress"
+    "8228936172465447983": "Couldn't copy the email address."
   }
 }

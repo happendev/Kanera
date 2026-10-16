@@ -316,7 +316,7 @@ function linkedEntityAccess(claims: AuthClaims) {
     async readableCardIds(rows: { id: string; boardId: string }[]): Promise<Set<string>> {
       const visible = new Set<string>();
       const restricted = new Set<string>();
-      for (const row of rows) {
+      await Promise.all(rows.map(async (row) => {
         try {
           const access = await boardAccess(row.boardId);
           if (access.assignedItemsOnly) restricted.add(row.id);
@@ -324,7 +324,7 @@ function linkedEntityAccess(claims: AuthClaims) {
         } catch {
           // A link may outlive the viewer's membership; hide it rather than fail the whole panel.
         }
-      }
+      }));
       if (restricted.size) {
         const assigned = await db.select({ id: cards.id }).from(cards).where(and(
           inArray(cards.id, [...restricted]),
@@ -342,7 +342,8 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
   // indexes (internal_links_workspace_source_idx / _target_idx), so it is already index-served —
   // splitting it into two queries per relation measured no faster and cost two extra round-trips.
   // Internal links never cross workspaces, so one switch decides every note row on this card.
-  const noteRows = !(await notesEnabledForWorkspace(workspaceId)) ? [] : await db
+  // The note and card halves are independent, so they run concurrently.
+  const noteRowsQuery = notesEnabledForWorkspace(workspaceId).then((enabled) => !enabled ? [] : db
     .select({
       note: notes,
       boardName: boards.name,
@@ -353,9 +354,9 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
       and(eq(internalLinks.sourceType, "note"), eq(internalLinks.targetType, "card"), eq(internalLinks.targetId, cardId), eq(internalLinks.sourceId, notes.id)),
     ))
     .leftJoin(boards, eq(boards.id, notes.boardId))
-    .where(eq(internalLinks.workspaceId, workspaceId));
+    .where(eq(internalLinks.workspaceId, workspaceId)));
 
-  const cardRows = await db
+  const cardRowsQuery = db
     .select({
       id: cards.id,
       organisationKey: cards.organisationKey,
@@ -377,11 +378,16 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
     .where(eq(internalLinks.workspaceId, workspaceId));
 
   const access = linkedEntityAccess(claims);
-  const readableCardIds = await access.readableCardIds(cardRows);
+  // Access checks are memoised per board/workspace inside `access`, so starting them all at once
+  // costs one check per distinct scope and the slowest scope sets the wait, not their sum.
+  const [noteRows, { rows: cardRows, readable: readableCardIds }] = await Promise.all([
+    noteRowsQuery.then((rows) => Promise.all(rows.map(async (row) => ({ ...row, readable: await access.canReadNote(row.note) })))),
+    cardRowsQuery.then(async (rows) => ({ rows, readable: await access.readableCardIds(rows) })),
+  ]);
   const seen = new Set<string>();
   const summaries: LinkedInternalSummary[] = [];
   for (const row of noteRows) {
-    if (seen.has(`note:${row.note.id}`) || !(await access.canReadNote(row.note))) continue;
+    if (seen.has(`note:${row.note.id}`) || !row.readable) continue;
     seen.add(`note:${row.note.id}`);
     summaries.push({
       kind: "note",
@@ -463,8 +469,43 @@ export function resetInternalLinkRepairCoalescing(): void {
   recentRepairAttempts.clear();
 }
 
+/**
+ * Coalescing bounds how often one target repairs, not how many targets repair at once. An agent
+ * fanning out reads over many cards started one repair per card, each a long run of sequential
+ * queries, and together they held most of the 10-connection pool while the reads themselves waited.
+ * A small per-process slot count keeps repair a trickle beside foreground traffic. Waiting happens in
+ * the triggering request's own async chain, so request-scoped state (the outbox-only realtime flag,
+ * the rate-limit meter) still belongs to that request. A full backlog drops the attempt and forgets
+ * it, so the next open retries instead of losing the repair for a whole coalescing window.
+ */
+const REPAIR_CONCURRENCY = 2;
+const REPAIR_BACKLOG_MAX = 200;
+let activeRepairs = 0;
+const repairWaiters: (() => void)[] = [];
+
+async function withRepairSlot(key: string, run: () => Promise<void>): Promise<void> {
+  if (activeRepairs < REPAIR_CONCURRENCY) activeRepairs += 1;
+  else if (repairWaiters.length >= REPAIR_BACKLOG_MAX) {
+    recentRepairAttempts.delete(key);
+    return;
+  } else await new Promise<void>((resolve) => repairWaiters.push(resolve));
+  try {
+    await run();
+  } finally {
+    // Hand the slot straight to the next waiter so a newcomer cannot overtake the backlog.
+    const next = repairWaiters.shift();
+    if (next) next();
+    else activeRepairs -= 1;
+  }
+}
+
 export async function repairInternalLinksAroundCard(claims: AuthClaims, cardId: string, workspaceId: string): Promise<void> {
-  if (!shouldAttemptRepair(`card:${cardId}`)) return;
+  const key = `card:${cardId}`;
+  if (!shouldAttemptRepair(key)) return;
+  await withRepairSlot(key, () => repairAroundCard(claims, cardId, workspaceId));
+}
+
+async function repairAroundCard(claims: AuthClaims, cardId: string, workspaceId: string): Promise<void> {
   // The detail read that triggered this repair has usually answered already, so links healed here
   // reach the open card (and the other end of each link) through the invalidation event.
   const fanouts: LinkFanout[] = [];
@@ -494,7 +535,12 @@ export async function repairInternalLinksAroundCard(claims: AuthClaims, cardId: 
 }
 
 export async function repairInternalLinksAroundNote(claims: AuthClaims, note: Note): Promise<void> {
-  if (!shouldAttemptRepair(`note:${note.id}`)) return;
+  const key = `note:${note.id}`;
+  if (!shouldAttemptRepair(key)) return;
+  await withRepairSlot(key, () => repairAroundNote(claims, note));
+}
+
+async function repairAroundNote(claims: AuthClaims, note: Note): Promise<void> {
   const fanouts: LinkFanout[] = [];
   const cardCandidates = await db
     .select({ id: cards.id, boardId: cards.boardId, description: cards.description })

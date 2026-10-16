@@ -808,6 +808,9 @@
     "5009018781985547984": "Marcar cartões como inativos após",
     "4912814137584164542": "O Portfólio reúne contagens de cartões e progresso de todos os quadros que um membro pode ver. Desative-o para removê-lo da barra lateral, da busca e dos atalhos para todos nesta organização.",
     "5536494665625548839": "Mostrar Portfólio",
+    "3911817769522706118": "Tempo em andamento",
+    "4269318564728384576": "Acompanhe o trabalho ativo nesta organização. Desativar pausa os cronômetros e oculta os recursos de progresso em todos os quadros. O tempo registrado é mantido. Cada quadro também pode desativar esse recurso.",
+    "4387535478780037275": "Ativar em andamento",
     "2547571169649786686": "Zona de perigo",
     "5075744064713142206": "Excluir esta organização",
     "6577579813144647708": "Remove permanentemente esta organização e tudo o que pertence a ela, incluindo todos os quadros, listas, cartões e anexos.",
@@ -1954,7 +1957,6 @@
     "9166912077349483542": "Sem etiqueta",
     "430859064314356197": "Em aberto",
     "4451997363840910432": "Ordem em A seguir",
-    "3911817769522706118": "Tempo em andamento",
     "7239750919884229270": "Atualizado",
     "8224724288725812333": "Responsável",
     "4077520913910941990": "Etiqueta",
@@ -2227,6 +2229,8 @@
     "1018005099733189631": "Nada concluído nos últimos {$days} dias",
     "1828918972378089736": "Mostrar todos em vez de {$person}",
     "8094778148005568454": "Mostrar apenas {$person}",
+    "1059198867325116136": "Recolher todas as seções",
+    "5141061786065104291": "Expandir todas as seções",
     "4875921088778203989": "Abrir os cartões de {$person}",
     "6336533552281101568": "Fechar A seguir de {$person}",
     "4766284696448562726": "Editar A seguir de {$person}",
@@ -3761,8 +3765,6 @@
     "3652007016355058890": "Seus quadros",
     "2054599520790063739": "Quadros em comum",
     "6368227149612917458": "Endereço de e-mail copiado",
-    "8228936172465447983": "Não foi possível copiar o endereço de e-mail.",
-    "4269318564728384576": "Acompanhe o trabalho ativo nesta organização. Desativar pausa os cronômetros e oculta os recursos de progresso em todos os quadros. O tempo registrado é mantido. Cada quadro também pode desativar esse recurso.",
-    "4387535478780037275": "Ativar em andamento"
+    "8228936172465447983": "Não foi possível copiar o endereço de e-mail."
   }
 }

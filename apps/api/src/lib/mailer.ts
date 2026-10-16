@@ -70,7 +70,7 @@ import {
 } from "./email-templates/index.js";
 import { serverMessages } from "./i18n/messages/index.js";
 import { recipientLocale } from "./i18n/request-locale.js";
-import { sendEmail, type SendEmailOptions } from "./smtp.js";
+import { sendEmail, SmtpReplyError, type SendEmailOptions } from "./smtp.js";
 
 /**
  * Every send takes the recipient's language (`locale`, directly or in `params`), resolved by the
@@ -132,6 +132,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     if (!config) {
       throw new Error("no SMTP configuration available");
     }
+    assertDeliverableRecipient(row.toEmail);
     await deliverEmail({ config, to: row.toEmail, subject: row.subject, html: renderEmail(row), headers: emailHeaders(row) });
     log.info({ emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "email sent");
   }
@@ -157,7 +158,8 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
       })
       .where(eq(emailQueue.id, row.id))
       .returning();
-    log.error({ err, emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "failed to send email");
+    if (permanentEmailFailure(err)) log.warn({ err, emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "email recipient rejected permanently");
+    else log.error({ err, emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "failed to send email");
     return updated ?? row;
   }
 
@@ -459,6 +461,43 @@ export function renderEmail(row: EmailQueue): string {
     case "lifecycle_active_checkin":
       return lifecycleActiveCheckinEmail(data as LifecycleEmailParams);
   }
+}
+
+// RFC 2606 / RFC 6761 names that can never receive mail. Demo and seed accounts use them, and a
+// production SMTP relay rejects them with a permanent 5xx, so they are refused before any send.
+const RESERVED_EMAIL_TLDS = new Set(["test", "example", "invalid", "localhost"]);
+const RESERVED_EMAIL_DOMAINS = ["example.com", "example.net", "example.org"];
+
+export function isReservedEmailDomain(email: string): boolean {
+  const domain = email.slice(email.lastIndexOf("@") + 1).trim().toLowerCase().replace(/\.$/, "");
+  const tld = domain.slice(domain.lastIndexOf(".") + 1);
+  return RESERVED_EMAIL_TLDS.has(tld) || RESERVED_EMAIL_DOMAINS.some((reserved) => domain === reserved || domain.endsWith(`.${reserved}`));
+}
+
+class UndeliverableRecipientError extends Error {
+  override name = "UndeliverableRecipientError";
+}
+
+/**
+ * Production only: development and E2E deliver reserved-domain seed users to a local mail catcher,
+ * which is how their verification and reset emails are read.
+ */
+export function assertDeliverableRecipient(email: string, environment = env.KANERA_ENVIRONMENT): void {
+  if (environment === "production" && isReservedEmailDomain(email)) {
+    throw new UndeliverableRecipientError(`recipient ${email} uses a reserved domain (RFC 2606); not sent`);
+  }
+}
+
+/**
+ * Failures that retrying the same row cannot fix. "suppressed" is a reserved recipient refused
+ * before any send (expected for demo/seed users, not an incident); "rejected" is the server refusing
+ * the recipient itself (5xx to RCPT TO). A 5xx at connect, AUTH or MAIL FROM is a relay or
+ * configuration fault that affects every email, so it returns null and stays retryable.
+ */
+export function permanentEmailFailure(err: unknown): "suppressed" | "rejected" | null {
+  if (err instanceof UndeliverableRecipientError) return "suppressed";
+  if (err instanceof SmtpReplyError && err.stage === "RCPT" && err.code >= 500 && err.code < 600) return "rejected";
+  return null;
 }
 
 export function errorMessage(err: unknown): string {

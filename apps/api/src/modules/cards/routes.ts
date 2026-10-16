@@ -683,13 +683,14 @@ export async function cardRoutes(
     if (!card) throw notFound();
     // The row is already in hand; passing it skips a redundant re-read of its board_id.
     const ctx = await assertCardAccess(req.auth, card);
-    // Healing with the viewer's claims can reveal links the author could not record, but its
-    // workspace-wide note scan must not block this read; the next open can consume the repair.
-    void repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId).catch((err: unknown) =>
-      req.log.warn({ err, cardId: id }, "failed to repair internal links around card"),
-    );
 
-    const [customFieldValues, labelAssignments, assignees, attachments, checklists, appliedTemplateRows, linkedNotes] = await Promise.all([
+    const attachmentsQuery = db
+      .select(attachmentRowBaseColumns)
+      .from(cardAttachments)
+      .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
+      .where(eq(cardAttachments.cardId, id))
+      .orderBy(desc(cardAttachments.createdAt));
+    const [customFieldValues, labelAssignments, assignees, [attachments, attachmentReactions], checklists, appliedTemplateRows, linkedNotes] = await Promise.all([
       db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, id)),
       db
         .select({ labelId: cardLabelAssignments.labelId })
@@ -699,12 +700,9 @@ export async function cardRoutes(
         .select({ userId: cardAssignees.userId })
         .from(cardAssignees)
         .where(eq(cardAssignees.cardId, id)),
-      db
-        .select(attachmentRowBaseColumns)
-        .from(cardAttachments)
-        .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
-        .where(eq(cardAttachments.cardId, id))
-        .orderBy(desc(cardAttachments.createdAt)),
+      // Reactions need only the attachment ids, so they chain off that query instead of waiting for
+      // the slowest of the other reads.
+      attachmentsQuery.then(async (rows) => [rows, await fetchReactionsByAttachment(rows.map((attachment) => attachment.id))] as const),
       loadChecklistsForCard(id),
       db
         .select({ templateId: cardChecklistTemplateApplications.templateId })
@@ -712,7 +710,12 @@ export async function cardRoutes(
         .where(eq(cardChecklistTemplateApplications.cardId, id)),
       loadLinkedNotesForCard(req.auth, id, ctx.workspaceId),
     ]);
-    const attachmentReactions = await fetchReactionsByAttachment(attachments.map((attachment) => attachment.id));
+    // Healing with the viewer's claims can reveal links the author could not record, but its
+    // workspace-wide note scan must not block this read; the next open can consume the repair. It
+    // starts only once this read's own queries are done so it never competes with them for the pool.
+    void repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId).catch((err: unknown) =>
+      req.log.warn({ err, cardId: id }, "failed to repair internal links around card"),
+    );
 
     return {
       card: toWireCard(card, req.auth.cid),

@@ -808,6 +808,9 @@
     "5009018781985547984": "Merk kort som inaktive etter",
     "4912814137584164542": "Porteføljen samler opp antall kort og fremgang på tvers av hver tavle et medlem kan se. Slå den av for å fjerne den fra sidefeltet, søk og snarveier for alle i denne organisasjonen.",
     "5536494665625548839": "Vis portefølje",
+    "3911817769522706118": "Tid i arbeid",
+    "4269318564728384576": "Spor aktivt arbeid i denne organisasjonen. Når funksjonen slås av, settes tidtakingen på pause og fremdriftsfunksjonene skjules på alle tavler. Registrert tid beholdes. Funksjonen kan også slås av på hver enkelt tavle.",
+    "4387535478780037275": "Aktiver pågår",
     "2547571169649786686": "Faresone",
     "5075744064713142206": "Slett denne organisasjonen",
     "6577579813144647708": "Fjerner denne organisasjonen og alt den eier permanent, inkludert alle tavler, lister, kort og vedlegg.",
@@ -1954,7 +1957,6 @@
     "9166912077349483542": "Ingen etikett",
     "430859064314356197": "Åpne",
     "4451997363840910432": "Neste bestilling",
-    "3911817769522706118": "Tid i arbeid",
     "7239750919884229270": "Oppdatert",
     "8224724288725812333": "Oppdragstaker",
     "4077520913910941990": "Etikett",
@@ -2227,6 +2229,8 @@
     "1018005099733189631": "Ingenting fullført de siste {$days} dagene",
     "1828918972378089736": "Vis alle i stedet for {$person}",
     "8094778148005568454": "Vis bare {$person}",
+    "1059198867325116136": "Skjul alle seksjoner",
+    "5141061786065104291": "Vis alle seksjoner",
     "4875921088778203989": "Åpne kortene til {$person}",
     "6336533552281101568": "Lukk Neste for {$person}",
     "4766284696448562726": "Rediger Neste for {$person}",
@@ -3761,8 +3765,6 @@
     "3652007016355058890": "Tavlene dine",
     "2054599520790063739": "Tavler du deler",
     "6368227149612917458": "E-postadresse kopiert",
-    "8228936172465447983": "Kunne ikke kopiere e-postadressen.",
-    "4269318564728384576": "Spor aktivt arbeid i denne organisasjonen. Når funksjonen slås av, settes tidtakingen på pause og fremdriftsfunksjonene skjules på alle tavler. Registrert tid beholdes. Funksjonen kan også slås av på hver enkelt tavle.",
-    "4387535478780037275": "Aktiver pågår"
+    "8228936172465447983": "Kunne ikke kopiere e-postadressen."
   }
 }

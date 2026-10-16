@@ -387,7 +387,8 @@ fill the disk before compaction
 config applies ingestion rate limits and frequent compaction, and a host
 disk-space alert is the backstop, but for high volume put the monitoring volumes on
 a dedicated data disk (or Loki on object storage). The provisioned alerts cover
-target-down, low disk, Prometheus reload/TSDB failures, and Loki ingestion errors.
+target-down, low disk, Prometheus reload/TSDB failures, Loki ingestion errors
+(5xx), rejected or dropped log entries (4xx), and emails that failed permanently.
 
 ### Reach Grafana + Prometheus over WireGuard (recommended)
 

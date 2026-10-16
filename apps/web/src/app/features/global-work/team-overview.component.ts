@@ -185,9 +185,20 @@ export class TeamOverviewComponent {
     return this.collapsedSections().has(section);
   }
 
+  /** Every section folded; the panel header's fold-all button then unfolds them instead. */
+  readonly allSectionsCollapsed = computed(() => OVERVIEW_SECTIONS.every((section) => this.collapsedSections().has(section)));
+
   toggleSection(section: OverviewSection): void {
     const next = new Set(this.collapsedSections());
     if (!next.delete(section)) next.add(section);
+    this.storeCollapsedSections(next);
+  }
+
+  toggleAllSections(): void {
+    this.storeCollapsedSections(new Set(this.allSectionsCollapsed() ? [] : OVERVIEW_SECTIONS));
+  }
+
+  private storeCollapsedSections(next: ReadonlySet<OverviewSection>): void {
     this.collapsedSections.set(next);
     try {
       localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify([...next]));
@@ -514,6 +525,9 @@ export class TeamOverviewComponent {
   private isQuiet(item: PersonOverview): boolean {
     return item.open === 0 && item.done === 0 && item.recent.length === 0 && !item.upNext?.total;
   }
+
+  readonly collapseAllLabel = $localize`:Team overview panel button folding every section in every panel:Collapse all sections`;
+  readonly expandAllLabel = $localize`:Team overview panel button unfolding every section in every panel:Expand all sections`;
 
   openCardsLabel(name: string): string {
     return $localize`:Button opening one teammate's cards:Open ${name}:person:’s cards`;

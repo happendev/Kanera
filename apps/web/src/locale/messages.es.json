@@ -808,6 +808,9 @@
     "5009018781985547984": "Marcar tarjetas como inactivas tras",
     "4912814137584164542": "Portafolio reúne el recuento y el progreso de las tarjetas de todos los tableros que un miembro puede ver. Desactívalo para quitarlo de la barra lateral, la búsqueda y los atajos de todos los miembros de esta organización.",
     "5536494665625548839": "Mostrar Portafolio",
+    "3911817769522706118": "Tiempo en curso",
+    "4269318564728384576": "Registra el trabajo activo en esta organización. Al desactivarlo, se pausan los temporizadores y se ocultan las funciones de progreso en todos los tableros. El tiempo registrado se conserva. También se puede desactivar en cada tablero.",
+    "4387535478780037275": "Activar en progreso",
     "2547571169649786686": "Zona de peligro",
     "5075744064713142206": "Eliminar esta organización",
     "6577579813144647708": "Elimina de forma permanente esta organización y todo lo que contiene, incluidos todos los tableros, listas, tarjetas y archivos adjuntos.",
@@ -1954,7 +1957,6 @@
     "9166912077349483542": "Sin etiqueta",
     "430859064314356197": "Abiertas",
     "4451997363840910432": "Orden en Próximas",
-    "3911817769522706118": "Tiempo en curso",
     "7239750919884229270": "Actualizada",
     "8224724288725812333": "Responsable",
     "4077520913910941990": "Etiqueta",
@@ -2227,6 +2229,8 @@
     "1018005099733189631": "Nada completado en los últimos {$days} días",
     "1828918972378089736": "Mostrar a todos en lugar de {$person}",
     "8094778148005568454": "Mostrar solo a {$person}",
+    "1059198867325116136": "Contraer todas las secciones",
+    "5141061786065104291": "Expandir todas las secciones",
     "4875921088778203989": "Abrir las tarjetas de {$person}",
     "6336533552281101568": "Cerrar Próximas de {$person}",
     "4766284696448562726": "Editar Próximas de {$person}",
@@ -3761,8 +3765,6 @@
     "3652007016355058890": "Tus tableros",
     "2054599520790063739": "Tableros en común",
     "6368227149612917458": "Dirección de correo copiada",
-    "8228936172465447983": "No se pudo copiar la dirección de correo electrónico.",
-    "4269318564728384576": "Registra el trabajo activo en esta organización. Al desactivarlo, se pausan los temporizadores y se ocultan las funciones de progreso en todos los tableros. El tiempo registrado se conserva. También se puede desactivar en cada tablero.",
-    "4387535478780037275": "Activar en progreso"
+    "8228936172465447983": "No se pudo copiar la dirección de correo electrónico."
   }
 }

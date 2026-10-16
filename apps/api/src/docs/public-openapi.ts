@@ -439,6 +439,11 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           code: { type: "string", examples: ["VALIDATION", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "RATE_LIMITED", "INTERNAL"] },
           message: { type: "string" },
           issues: { type: "array", items: { type: "object", additionalProperties: true } },
+          reason: {
+            type: "string",
+            enum: [...dto.AUTH_FAILURE_REASONS],
+            description: "On 401 UNAUTHORIZED: why the bearer credential was rejected.",
+          },
         },
         additionalProperties: true,
       },

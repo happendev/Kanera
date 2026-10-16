@@ -808,6 +808,9 @@
     "5009018781985547984": "Marquer les cartes comme inactives après",
     "4912814137584164542": "Le portefeuille agrège le nombre de cartes et l'avancement de tous les tableaux qu'un membre peut voir. Désactivez-le pour le retirer de la barre latérale, de la recherche et des raccourcis pour tous les membres de cette organisation.",
     "5536494665625548839": "Afficher le portefeuille",
+    "3911817769522706118": "Temps en cours",
+    "4269318564728384576": "Suivez le travail en cours dans cette organisation. La désactivation met les compteurs en pause et masque les fonctionnalités de progression sur tous les tableaux. Le temps enregistré est conservé. Chaque tableau peut aussi désactiver cette option.",
+    "4387535478780037275": "Activer le suivi en cours",
     "2547571169649786686": "Zone de danger",
     "5075744064713142206": "Supprimer cette organisation",
     "6577579813144647708": "Supprime définitivement cette organisation et tout ce qu'elle contient, y compris tous les tableaux, listes, cartes et pièces jointes.",
@@ -1954,7 +1957,6 @@
     "9166912077349483542": "Sans étiquette",
     "430859064314356197": "Ouvertes",
     "4451997363840910432": "Ordre À suivre",
-    "3911817769522706118": "Temps en cours",
     "7239750919884229270": "Mise à jour",
     "8224724288725812333": "Responsable",
     "4077520913910941990": "Étiquette",
@@ -2227,6 +2229,8 @@
     "1018005099733189631": "Rien de terminé au cours des {$days} derniers jours",
     "1828918972378089736": "Afficher tout le monde au lieu de {$person}",
     "8094778148005568454": "Afficher seulement {$person}",
+    "1059198867325116136": "Réduire toutes les sections",
+    "5141061786065104291": "Développer toutes les sections",
     "4875921088778203989": "Ouvrir les cartes de {$person}",
     "6336533552281101568": "Fermer À suivre de {$person}",
     "4766284696448562726": "Modifier À suivre de {$person}",
@@ -3761,8 +3765,6 @@
     "3652007016355058890": "Vos tableaux",
     "2054599520790063739": "Tableaux en commun",
     "6368227149612917458": "Adresse e-mail copiée",
-    "8228936172465447983": "Impossible de copier l'adresse e-mail.",
-    "4269318564728384576": "Suivez le travail en cours dans cette organisation. La désactivation met les compteurs en pause et masque les fonctionnalités de progression sur tous les tableaux. Le temps enregistré est conservé. Chaque tableau peut aussi désactiver cette option.",
-    "4387535478780037275": "Activer le suivi en cours"
+    "8228936172465447983": "Impossible de copier l'adresse e-mail."
   }
 }

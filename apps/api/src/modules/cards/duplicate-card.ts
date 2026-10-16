@@ -35,7 +35,7 @@ import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { allocateCardKeys } from "../../lib/card-keys.js";
 import { emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { badRequest } from "../../lib/errors.js";
-import { unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { parseMediaReference, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { EMPTY_LINK_FANOUT, emitInternalLinksChanged, replaceInternalLinksForSource, type LinkFanout } from "../../lib/internal-links.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
@@ -91,8 +91,16 @@ async function emitCardActivityFeedItem(boardId: string, cardId: string, activit
   await emitActivityFeedItem(boardId, cardId, activity);
 }
 
+/**
+ * The tenant whose storage holds an attachment's blobs. Uploads land in the uploader's active
+ * organisation (a cross-organisation guest's own tenant), which the stored media path records, so
+ * the row's clientId (the board's organisation) is only a fallback for legacy non-media URLs.
+ */
+function attachmentBlobClientId(attachment: Pick<typeof cardAttachments.$inferSelect, "url" | "clientId">): string {
+  return parseMediaReference(attachment.url)?.clientId ?? attachment.clientId;
+}
+
 export async function copyAttachmentBlobs(
-  srcStorage: StorageProvider,
   dstStorage: StorageProvider,
   dstClientId: string,
   source: typeof cardAttachments.$inferSelect,
@@ -107,6 +115,7 @@ export async function copyAttachmentBlobs(
 }> {
   const ext = source.fileKey.includes(".") ? source.fileKey.slice(source.fileKey.lastIndexOf(".") + 1) : "";
   const baseKey = cardAttachmentStorageKey(newCardId, ext);
+  const srcStorage = await getStorageForClient(attachmentBlobClientId(source));
 
   const originalBuffer = await srcStorage.get(source.fileKey);
   await dstStorage.put(baseKey, originalBuffer, source.mimeType);
@@ -341,15 +350,13 @@ export async function duplicateCustomFieldValues(
 
 async function copyAttachmentsForDuplicate(
   sourceAttachments: (typeof cardAttachments.$inferSelect)[],
-  srcCtx: Pick<CardAccessContext, "clientId">,
   dstCtx: Pick<BoardAccessContext, "clientId">,
   newCardId: string,
 ): Promise<{ copiedAttachments: DuplicatedAttachment[]; dstStorage: StorageProvider }> {
-  const srcStorage = await getStorageForClient(srcCtx.clientId);
-  const dstStorage = srcCtx.clientId === dstCtx.clientId ? srcStorage : await getStorageForClient(dstCtx.clientId);
+  const dstStorage = await getStorageForClient(dstCtx.clientId);
   const attachmentCopyTasks = sourceAttachments.map(async (att) => ({
     src: att,
-    copy: await copyAttachmentBlobs(srcStorage, dstStorage, dstCtx.clientId, att, newCardId),
+    copy: await copyAttachmentBlobs(dstStorage, dstCtx.clientId, att, newCardId),
   }));
   try {
     const copiedAttachments = await Promise.all(attachmentCopyTasks);
@@ -617,7 +624,7 @@ export async function duplicateCardInto({
   ]);
 
   const newCardId = randomUUID();
-  const { copiedAttachments, dstStorage } = await copyAttachmentsForDuplicate(sourceAttachments, srcCtx, dstCtx, newCardId);
+  const { copiedAttachments, dstStorage } = await copyAttachmentsForDuplicate(sourceAttachments, dstCtx, newCardId);
 
   const mediaUrls = cardAttachmentUrlMap(copiedAttachments);
 

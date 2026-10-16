@@ -46,9 +46,10 @@ export class ApiClient {
       return fetch(`${environment.apiUrl}${path}`, { ...init, headers, credentials: "include" });
     };
 
-    let res = await doFetch(this.auth.getAccessToken());
+    const sent = await this.auth.getFreshAccessToken();
+    let res = await doFetch(sent);
     if (res.status === 401) {
-      const fresh = await this.auth.refresh();
+      const fresh = await this.tokenAfterUnauthorized(sent);
       if (fresh) res = await doFetch(fresh);
     }
     if (res.status === 409) {
@@ -85,7 +86,7 @@ export class ApiClient {
    * Multipart upload with byte-level progress. `request()` can't report upload progress because
    * fetch() exposes no upload-progress hook, so this path uses XMLHttpRequest instead. It mirrors
    * request()'s transport contract: offline guard, Bearer token, credentialed (cookie) requests,
-   * one 401 -> auth.refresh() -> retry, and ApiError(status, body) on failure — so callers keep
+   * early renewal, one 401 -> renewed token -> retry, and ApiError(status, body) on failure — so callers keep
    * using formatAttachmentUploadError (FILE_TOO_LARGE, STORAGE_QUOTA_EXCEEDED, 413, …) unchanged.
    */
   async upload<T>(
@@ -147,9 +148,10 @@ export class ApiClient {
       });
     };
 
-    let res = await send(this.auth.getAccessToken());
+    const sent = await this.auth.getFreshAccessToken();
+    let res = await send(sent);
     if (res.status === 401) {
-      const fresh = await this.auth.refresh();
+      const fresh = await this.tokenAfterUnauthorized(sent);
       if (fresh) res = await send(fresh);
     }
     const parse = (text: string): unknown => {
@@ -163,6 +165,17 @@ export class ApiClient {
       throw new ApiError(res.status, parse(res.text) ?? { message: UPLOAD_FAILED_MESSAGE });
     }
     return (parse(res.text) ?? undefined) as T;
+  }
+
+  /**
+   * The token to retry a 401 with. Requests in flight across a renewal come back 401 carrying the
+   * token they started with; when another caller has already rotated it, retry with that token
+   * rather than rotating the refresh cookie again. refresh() is single-flight while a renewal runs.
+   */
+  private async tokenAfterUnauthorized(rejected: string | null): Promise<string | null> {
+    const current = this.auth.getAccessToken();
+    if (current && current !== rejected) return current;
+    return this.auth.refresh();
   }
 
   get<T>(path: string) {

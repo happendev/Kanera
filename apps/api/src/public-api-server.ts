@@ -21,7 +21,7 @@ import { env } from "./env.js";
 import { clientIpForRequest } from "./lib/client-ip.js";
 import { registerErrorHandler } from "./lib/errors.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
-import { registerMetrics } from "./lib/metrics.js";
+import { publicApiRateLimitWaitDuration, registerMetrics } from "./lib/metrics.js";
 import { registerPublicApiIdempotency } from "./lib/public-api-idempotency.js";
 import { withSignedMedia } from "./lib/media-keys.js";
 import { localParts } from "./lib/due-date.js";
@@ -161,6 +161,11 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     queueMaxWaitMs: options.rateLimit?.queueMaxWaitMs ?? env.PUBLIC_API_RATE_LIMIT_QUEUE_MAX_WAIT_MS,
   };
   const requestStartedAt = new WeakMap<object, number>();
+  // Time a request spent in the per-second rate-limit queue: one Valkey round trip normally, up to the
+  // rest of the second once the bucket is spent. It is part of the request's latency but not its work,
+  // so it is reported beside handler time rather than hidden inside it: a burst on a Free
+  // organisation otherwise reads as a slow route.
+  const rateLimitWaitMs = new WeakMap<object, number>();
   const app = Fastify({
     bodyLimit: DEFAULT_BODY_LIMIT_BYTES,
     trustProxy: env.PUBLIC_API_TRUST_PROXY,
@@ -200,7 +205,10 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     // Handler time as seen by this process. The MCP layer subtracts it from its own round-trip
     // measurement to separate API execution from network/proxy time when diagnosing agent latency.
     const startedAt = requestStartedAt.get(req) ?? requestContext.get("requestStartedAt");
-    if (startedAt !== undefined) reply.header("Server-Timing", `app;dur=${(performance.now() - startedAt).toFixed(1)}`);
+    if (startedAt !== undefined) {
+      const waited = rateLimitWaitMs.get(req);
+      reply.header("Server-Timing", `app;dur=${(performance.now() - startedAt).toFixed(1)}${waited ? `, ratelimit;dur=${waited.toFixed(1)}` : ""}`);
+    }
     return payload;
   });
   app.addHook("onRequest", async (req) => {
@@ -213,6 +221,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     if (startedAt === undefined) return;
     const durationMs = performance.now() - startedAt;
     if (durationMs < slowRequestLogMs) return;
+    const waitedMs = rateLimitWaitMs.get(req);
     // Per-request forensic record (exact url + requestId), shipped to Loki by Alloy. Aggregate latency
     // alerting lives in Grafana (p95 rule) — we deliberately do NOT also fire a per-request ops webhook.
     req.log.warn({
@@ -220,6 +229,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
       method: req.method,
       url: req.url,
       statusCode: reply.statusCode,
+      ...(waitedMs ? { rateLimitWaitMs: Math.round(waitedMs) } : {}),
     }, "slow request");
   });
 
@@ -375,9 +385,16 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
         // rejection, so a request queued out of its second does not also spend its minute.
         for (const bucket of buckets) {
           const policy = { limit: bucket.limit, windowMs: bucket.windowMs };
-          const result = bucket.window === "second"
-            ? await rateLimiter.queue(bucket.key, policy, queue)
-            : await rateLimiter.check(bucket.key, policy);
+          let result: RateLimitResult;
+          if (bucket.window === "second") {
+            const queuedAt = performance.now();
+            result = await rateLimiter.queue(bucket.key, policy, queue);
+            const waited = performance.now() - queuedAt;
+            rateLimitWaitMs.set(req, (rateLimitWaitMs.get(req) ?? 0) + waited);
+            publicApiRateLimitWaitDuration.observe({ route: req.routeOptions.url ?? "unmatched", scope: bucket.scope.kind === "organisation" ? bucket.scope.tier : "ceiling" }, waited / 1000);
+          } else {
+            result = await rateLimiter.check(bucket.key, policy);
+          }
           results.push(result);
           const headers = tightestRateLimit(results);
           if (headers) applyRateLimitHeaders(reply, headers);

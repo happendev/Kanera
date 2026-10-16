@@ -25,6 +25,18 @@ const httpRequestDuration = new client.Histogram({
   registers: [metricsRegistry],
 });
 
+// Time public API credential requests spend queued for a per-second rate-limit slot, which
+// kanera_http_request_duration_seconds includes. Subtract it before reading a route's latency as
+// handler cost. `scope` is the bucket that queued: the per-user ceiling, or the organisation's plan
+// tier (free/paid).
+export const publicApiRateLimitWaitDuration = new client.Histogram({
+  name: "kanera_public_api_rate_limit_wait_seconds",
+  help: "Time public API requests waited in the per-second rate-limit queue",
+  labelNames: ["route", "scope"],
+  buckets: [0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [metricsRegistry],
+});
+
 // Database query latency, fed from the existing instrumentQuery wrapper in db.ts. Intentionally has no
 // SQL-text label: statement text is unbounded cardinality and would blow up the series count. To
 // attribute slow time to specific statements, use pg_stat_statements on the Postgres side.
@@ -41,6 +53,15 @@ export const oauthOperationsTotal = new client.Counter({
   name: "kanera_oauth_operations_total",
   help: "Successful OAuth operations by flow",
   labelNames: ["operation", "client_kind"],
+  registers: [metricsRegistry],
+});
+
+// 401s from the authenticate hook by reason (bounded by AUTH_FAILURE_REASONS). Expired access tokens
+// are expected refresh traffic from long-lived browser tabs; a rise in the others is a real problem.
+export const authFailuresTotal = new client.Counter({
+  name: "kanera_auth_failures_total",
+  help: "Requests rejected by bearer authentication, by reason",
+  labelNames: ["reason"],
   registers: [metricsRegistry],
 });
 
@@ -69,7 +90,8 @@ export const notificationDeliveryTotal = new client.Counter({
 
 export interface NotificationQueueStats {
   push: { queued: number; inFlight: number; oldestAgeSeconds: number };
-  email: { queued: number; inFlight: number; oldestAgeSeconds: number };
+  // Terminal failures leave the queue, so a healthy-looking empty queue can hide them.
+  email: { queued: number; inFlight: number; failedLast24h: number; oldestAgeSeconds: number };
 }
 
 export function timestampAgeSeconds(value: Date | string | null, now = Date.now()): number {
@@ -110,6 +132,7 @@ new client.Gauge({
     this.set({ queue: "push", state: "in_flight" }, stats.push.inFlight);
     this.set({ queue: "email", state: "queued" }, stats.email.queued);
     this.set({ queue: "email", state: "in_flight" }, stats.email.inFlight);
+    this.set({ queue: "email", state: "failed_24h" }, stats.email.failedLast24h);
   },
 });
 

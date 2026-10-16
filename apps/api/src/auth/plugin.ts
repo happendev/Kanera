@@ -1,12 +1,14 @@
 import jwt from "@fastify/jwt";
 import { requestContext } from "@fastify/request-context";
+import type { AuthFailureReason } from "@kanera/shared/dto";
 import { supportSessions, users, workspaceApiKeys, workspaces, type ClientMcpPolicy, type ClientRole, type WorkspaceApiKeyKind, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { unauthorized } from "../lib/errors.js";
+import { AppError } from "../lib/errors.js";
+import { authFailuresTotal } from "../lib/metrics.js";
 import { hashOpaqueToken } from "../lib/tokens.js";
 import { authenticateMcpDelegationToken } from "../oauth/routes.js";
 import type { ApiRateTier } from "../lib/api-rate-limit.js";
@@ -223,6 +225,24 @@ export function applyBearerAuthContext(req: FastifyRequest, claims: AuthClaims):
   }
 }
 
+function jwtFailureReason(error: unknown): AuthFailureReason {
+  const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+  if (code === "FST_JWT_AUTHORIZATION_TOKEN_EXPIRED") return "token_expired";
+  if (code === "FST_JWT_NO_AUTHORIZATION_IN_HEADER") return "no_token";
+  return "token_invalid";
+}
+
+/**
+ * A 401 that says why. The web client refreshes on any 401, but an expired five-minute access token
+ * is routine renewal traffic while a missing or invalid one is a real failure; the reason keeps the
+ * two apart in the response, the logs and the metrics without changing the stable UNAUTHORIZED code.
+ */
+function authFailure(req: FastifyRequest, reason: AuthFailureReason): AppError {
+  authFailuresTotal.inc({ reason });
+  req.log.info({ authFailureReason: reason }, "authentication failed");
+  return new AppError(401, "UNAUTHORIZED", "unauthorized", { reason });
+}
+
 export default fp(async (app) => {
   app.register(jwt, {
     secret: env.JWT_SECRET,
@@ -238,13 +258,17 @@ export default fp(async (app) => {
       const claims = raw.startsWith("kanera_delegate_")
         ? req.url.startsWith("/api/v1/") ? authenticateMcpDelegationToken(raw) : null
         : await authenticateApiKey(req, raw);
-      if (!claims) throw unauthorized();
+      if (!claims) throw authFailure(req, "token_invalid");
       applyBearerAuthContext(req, claims);
       return;
     }
 
     try {
       await req.jwtVerify();
+    } catch (error) {
+      throw authFailure(req, jwtFailureReason(error));
+    }
+    try {
       // Normal access JWTs deliberately avoid a live DB check. Org removal repoints the user's
       // default membership and forces realtime eviction; an already-issued token has at most the
       // configured five-minute TTL before refresh validates membership again.
@@ -253,7 +277,7 @@ export default fp(async (app) => {
       const authKind = req.user.authKind === "support" ? "support" : "user";
       if (authKind === "support") {
         const support = req.user.support;
-        if (!support) throw unauthorized();
+        if (!support) throw authFailure(req, "token_invalid");
 
         // Unlike ordinary short-lived access tokens, support sessions are explicitly revocable.
         // Match every identity-bearing claim against the durable row so a session can only act as
@@ -271,7 +295,7 @@ export default fp(async (app) => {
             gt(supportSessions.expiresAt, new Date()),
           ))
           .limit(1);
-        if (!activeSession) throw unauthorized();
+        if (!activeSession) throw authFailure(req, "token_invalid");
       }
       req.auth = { ...req.user, authKind };
       requestContext.set("clientId", req.user.cid);
@@ -281,8 +305,9 @@ export default fp(async (app) => {
         requestContext.set("supportSessionId", req.user.support?.sessionId);
         requestContext.set("supportActorEmail", req.user.support?.byEmail);
       }
-    } catch {
-      throw unauthorized();
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw authFailure(req, "token_invalid");
     }
   });
 });

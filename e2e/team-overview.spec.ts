@@ -320,4 +320,11 @@ test("Team overview focuses one teammate with their Up next docked, curated from
   await expect(assignedToggles.first()).toHaveAttribute("aria-expanded", "false");
   await assignedToggles.first().click();
   await expect(assignedToggles.first()).toHaveAttribute("aria-expanded", "true");
+
+  // Any panel header's fold-all button folds every section in every panel, then unfolds them.
+  const sectionToggles = page.locator("k-team-overview .section-toggle");
+  await page.getByRole("button", { name: "Collapse all sections" }).nth(1).click();
+  for (const toggle of await sectionToggles.all()) await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await page.getByRole("button", { name: "Expand all sections" }).first().click();
+  for (const toggle of await sectionToggles.all()) await expect(toggle).toHaveAttribute("aria-expanded", "true");
 });

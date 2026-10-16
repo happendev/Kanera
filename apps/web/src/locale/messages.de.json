@@ -808,6 +808,9 @@
     "5009018781985547984": "Karten als inaktiv markieren nach",
     "4912814137584164542": "Das Portfolio fasst Kartenanzahl und Fortschritt über alle Boards zusammen, die ein Mitglied sehen kann. Deaktiviere es, um es für alle in dieser Organisation aus Seitenleiste, Suche und Tastenkürzeln zu entfernen.",
     "5536494665625548839": "Portfolio anzeigen",
+    "3911817769522706118": "Zeit in Arbeit",
+    "4269318564728384576": "Erfasse aktive Arbeit in dieser Organisation. Beim Deaktivieren pausieren die Zeitzähler und die Fortschrittsfunktionen werden auf allen Boards ausgeblendet. Erfasste Zeiten bleiben erhalten. Die Funktion kann auch pro Board deaktiviert werden.",
+    "4387535478780037275": "In Bearbeitung aktivieren",
     "2547571169649786686": "Gefahrenbereich",
     "5075744064713142206": "Diese Organisation löschen",
     "6577579813144647708": "Entfernt diese Organisation und alles, was ihr gehört, dauerhaft – einschließlich aller Boards, Listen, Karten und Anhänge.",
@@ -1954,7 +1957,6 @@
     "9166912077349483542": "Kein Label",
     "430859064314356197": "Offen",
     "4451997363840910432": "Reihenfolge „Als Nächstes“",
-    "3911817769522706118": "Zeit in Arbeit",
     "7239750919884229270": "Aktualisiert",
     "8224724288725812333": "Zugewiesene Person",
     "4077520913910941990": "Label",
@@ -2227,6 +2229,8 @@
     "1018005099733189631": "In den letzten {$days} Tagen nichts abgeschlossen",
     "1828918972378089736": "Alle statt {$person} anzeigen",
     "8094778148005568454": "Nur {$person} anzeigen",
+    "1059198867325116136": "Alle Abschnitte einklappen",
+    "5141061786065104291": "Alle Abschnitte ausklappen",
     "4875921088778203989": "Karten von {$person} öffnen",
     "6336533552281101568": "„Als Nächstes“ von {$person} schließen",
     "4766284696448562726": "„Als Nächstes“ von {$person} bearbeiten",
@@ -3761,8 +3765,6 @@
     "3652007016355058890": "Deine Boards",
     "2054599520790063739": "Gemeinsame Boards",
     "6368227149612917458": "E-Mail-Adresse kopiert",
-    "8228936172465447983": "Die E-Mail-Adresse konnte nicht kopiert werden.",
-    "4269318564728384576": "Erfasse aktive Arbeit in dieser Organisation. Beim Deaktivieren pausieren die Zeitzähler und die Fortschrittsfunktionen werden auf allen Boards ausgeblendet. Erfasste Zeiten bleiben erhalten. Die Funktion kann auch pro Board deaktiviert werden.",
-    "4387535478780037275": "In Bearbeitung aktivieren"
+    "8228936172465447983": "Die E-Mail-Adresse konnte nicht kopiert werden."
   }
 }

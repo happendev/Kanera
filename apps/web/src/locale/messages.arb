@@ -15748,6 +15748,20 @@
       "src/app/features/global-work/team-overview.component.ts"
     ]
   },
+  "1059198867325116136": "Collapse all sections",
+  "@1059198867325116136": {
+    "description": "Team overview panel button folding every section in every panel",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "5141061786065104291": "Expand all sections",
+  "@5141061786065104291": {
+    "description": "Team overview panel button unfolding every section in every panel",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
   "4875921088778203989": "Open {$person}’s cards",
   "@4875921088778203989": {
     "description": "Button opening one teammate's cards",
