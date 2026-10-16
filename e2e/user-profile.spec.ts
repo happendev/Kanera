@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { users } from "./support/env";
 import { expect, test } from "./support/fixtures";
 import { boardIdOf, cardTile, createCard, openBoard, openCard, workspaceSettingsHref } from "./support/ui";
@@ -67,9 +67,36 @@ test("a card-tile avatar opens the person's profile instead of the card, and Vie
 
   const avatar = cardTile(page, title).getByRole("button", { name: `View profile of ${users.marcus.name}` });
   await expect(avatar).toBeVisible();
-  await avatar.click();
-
   const profile = page.getByRole("dialog", { name: `${users.marcus.name} profile` });
+  // Closing while the request is pending must not register render hooks on a destroyed popover.
+  let releaseProfile!: () => void;
+  const held = new Promise<void>((resolve) => { releaseProfile = resolve; });
+  let pendingProfile: Promise<void> | undefined;
+  const profileUrl = `**/api/users/${marcusId}/profile?*`;
+  const holdProfile = (route: Route) => {
+    pendingProfile = (async () => {
+      const response = await route.fetch();
+      await held;
+      await route.fulfill({ response });
+    })();
+    return pendingProfile;
+  };
+  await page.route(profileUrl, holdProfile);
+  try {
+    await avatar.click();
+    await expect(profile).toHaveAttribute("aria-busy", "true");
+    await expect.poll(() => Boolean(pendingProfile)).toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(profile).toHaveCount(0);
+    const delivered = page.waitForResponse((response) => response.url().includes(`/api/users/${marcusId}/profile?`));
+    releaseProfile();
+    await (await delivered).finished();
+  } finally {
+    releaseProfile();
+    await pendingProfile;
+    await page.unroute(profileUrl, holdProfile);
+  }
+  await avatar.click();
   await expect(profile).toBeVisible();
   await expect(profile).toHaveAttribute("aria-busy", "false");
   // The avatar sits inside the tile's card link; the profile is the more specific intent.

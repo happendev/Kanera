@@ -90,6 +90,7 @@ export class UserProfilePopoverComponent implements OnInit, AfterViewInit {
   private readonly toast = inject(ToastService);
   private readonly cardKeys = inject(CardKeyDisplayService);
   private readonly injector = inject(Injector);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly panelEl = viewChild<ElementRef<HTMLElement>>("panelEl");
 
   readonly request = input.required<UserProfileRequest>();
@@ -148,7 +149,7 @@ export class UserProfilePopoverComponent implements OnInit, AfterViewInit {
     const navigation = inject(Router).events.subscribe((event) => {
       if (event instanceof NavigationStart) this.service.close();
     });
-    inject(DestroyRef).onDestroy(() => {
+    this.destroyRef.onDestroy(() => {
       window.clearInterval(timer);
       navigation.unsubscribe();
     });
@@ -273,10 +274,12 @@ export class UserProfilePopoverComponent implements OnInit, AfterViewInit {
     } catch {
       this.failed.set(true);
     } finally {
-      this.loading.set(false);
-      // Placement measured the skeleton; the real content is taller. Wait for the render that adds it,
-      // since sizing reads the content height (a microtask ran before zoneless change detection).
-      afterNextRender(() => this.panel.reposition(), { injector: this.injector });
+      // A slow response can settle after dismissal; a destroyed view cannot register render hooks.
+      if (!this.destroyRef.destroyed) {
+        this.loading.set(false);
+        // Placement measured the skeleton; wait for the render that adds the taller real content.
+        afterNextRender(() => this.panel.reposition(), { injector: this.injector });
+      }
     }
   }
 
