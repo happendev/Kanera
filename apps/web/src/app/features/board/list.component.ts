@@ -1,3 +1,4 @@
+import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { ToastService } from "../../shared/toast.service";
 import { InProgressHintService } from "./in-progress-hint.service";
 import type { CdkDragDrop, CdkDragMove} from "@angular/cdk/drag-drop";
@@ -137,6 +138,7 @@ export class ListComponent implements OnDestroy {
   protected readonly inProgressHint = inject(InProgressHintService);
   private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
+  private readonly completionWarning = inject(CompletionWarningService);
   private readonly notifications = inject(NotificationsService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly dragCoordinator = inject(CardDragCoordinator);
@@ -621,6 +623,7 @@ export class ListComponent implements OnDestroy {
     if (!this.canEdit() || this.savingCompletion()) return;
     this.savingCompletion.set(true);
     try {
+      if (!await this.completionWarning.allow(completed, { boardId: this.boardId(), listId: this.list().id })) return;
       await this.api.post(`/boards/${this.boardId()}/lists/${this.list().id}/cards/completion`, { completed });
       const listName = this.list().name;
       this.toasts.success(

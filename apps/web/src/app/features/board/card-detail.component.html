@@ -322,6 +322,8 @@
       <!-- Tracked time in progress, above the description for every viewer (the list control that
            starts and stops it is not shown to read-only viewers). It stays after the card leaves
            progress or is completed: muted and stopped, but still the card's total. -->
+      @if (timeInProgress() || dependencyChips().length) {
+      <div class="detail-status-row">
       @if (timeInProgress(); as timer) {
       <div class="detail-time-row">
         <div class="detail-time-in-progress" [class.is-done]="!timer.running" [class.is-alert]="timer.alert" [kTooltip]="timer.label" [attr.aria-label]="timer.label" role="status">
@@ -344,7 +346,18 @@
         </button>
         }
       </div>
-      @if (editingTimeInProgress()) {
+      }
+      <!-- Dependencies sit beside the clock: "can I start this?" is answered before the description.
+           Each chip jumps to the Dependencies section, which lists the cards. -->
+      @for (chip of dependencyChips(); track chip.kind) {
+      <button type="button" class="detail-dependency" [class]="'is-' + chip.kind" (click)="scrollToDependencies()" [kTooltip]="chip.tooltip" [attr.aria-label]="chip.tooltip">
+        <i class="ti" [class]="'ti ' + chip.icon" aria-hidden="true"></i>
+        <span>{{ chip.label }}</span>
+      </button>
+      }
+      </div>
+      }
+      @if (timeInProgress() && editingTimeInProgress()) {
       <form class="detail-time-editor" (submit)="$event.preventDefault(); saveTimeInProgress()">
         <label>
           <input class="detail-time-input" type="number" min="0" max="100000" step="1" inputmode="numeric" [value]="timeDraftHours()" (input)="timeDraftHours.set(+$any($event.target).value)" aria-label="Hours" i18n-aria-label="Accessible name of the hours input when correcting time in progress" />
@@ -360,7 +373,6 @@
         <p class="detail-time-error" role="alert" i18n="Error when saving a corrected time in progress fails">The time in progress could not be saved. Try again.</p>
         }
       </form>
-      }
       }
 
       <!-- Description -->
@@ -844,6 +856,10 @@
         </div>
         }
       </section>
+
+      <k-card-relations [cardId]="card().id" [workspaceId]="card().workspaceId" [relations]="relations()" [hiddenBlockerCount]="hiddenBlockerCount()" [statusShownAbove]="true"
+        [cardClosed]="!!(card().completedAt || card().archivedAt)"
+        [canEdit]="canEdit()" [canEditRole]="canEditRole()" (changed)="refreshRelations()" (openCard)="openRelatedCard($event)" />
 
       @if (linkedNotes().length) {
       <section class="detail-section">

@@ -248,6 +248,16 @@ function baseCardConditions(
   // the card sits in one; a completed card there is finished work, not work in progress.
   if (filters.inProgressOnly) conditions.push(isNotNull(columns.inProgressSince), isNull(columns.completedAt));
   if (filters.inProgressTooLongOnly) conditions.push(isNull(columns.completedAt), inProgressTooLongSql(columns.inProgressSince));
+  // Same definition as card_summary_view.blocked_by_count and lib/card-relations.ts: open blockers
+  // only, including ones on boards the viewer cannot open. A done card is not waiting on anything.
+  if (filters.blockedOnly) conditions.push(isNull(columns.completedAt), sql`exists (
+    select 1 from card_relation work_blocker_link
+    inner join card work_blocker on work_blocker.id = work_blocker_link.source_card_id
+    where work_blocker_link.target_card_id = ${columns.id}
+      and work_blocker_link.kind = 'blocks'
+      and work_blocker.completed_at is null
+      and work_blocker.archived_at is null
+  )`);
   if (filters.completedFrom) conditions.push(gte(columns.completedAt, new Date(filters.completedFrom)));
   if (filters.completedTo) conditions.push(lte(columns.completedAt, new Date(filters.completedTo)));
   if (filters.dueFrom) conditions.push(gte(columns.dueDateLocalDate, filters.dueFrom));
@@ -414,6 +424,19 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
   // Attach all field options in one query; the former per-workspace loader multiplied this pair of
   // catalog reads by every workspace visible in Global Work.
   const wireFields = await attachFieldOptions(fieldRows);
+  const boardClientIds = new Map(scopeBoards.map((board) => [board.id, board.clientId]));
+  const memberUserIds = [...new Set(memberRows.map((member) => member.userId))];
+  const membershipRows = memberUserIds.length
+    ? await db
+        .select({ userId: clientMembers.userId, clientId: clientMembers.clientId })
+        .from(clientMembers)
+        .where(and(
+          inArray(clientMembers.userId, memberUserIds),
+          inArray(clientMembers.clientId, [...new Set(boardClientIds.values())]),
+          isNull(clientMembers.removedAt),
+        ))
+    : [];
+  const memberships = new Set(membershipRows.map((row) => `${row.userId}:${row.clientId}`));
 
   const organisations = new Map<string, WorkCatalog["organisations"][number]>();
   const workspaceMap = new Map<string, WorkCatalog["workspaces"][number]>();
@@ -444,8 +467,12 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
       displayName: member.displayName,
       avatarUrl: signedAvatarUrl(member.clientId, member.avatarUrl),
       boardIds: [],
+      guestBoardIds: [],
     };
     current.boardIds.push(member.boardId);
+    // Guest is relative to each board's organisation, not the person's home one: a user can belong
+    // to several organisations, and users.clientId is only their storage anchor.
+    if (!memberships.has(`${member.userId}:${boardClientIds.get(member.boardId)}`)) current.guestBoardIds.push(member.boardId);
     people.set(member.userId, current);
   }
   const byWorkspaceAndPosition = (

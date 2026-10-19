@@ -878,4 +878,9 @@ export const es: ErrorCatalog = {
     "Este archivo adjunto no tiene una imagen {variant}.",
   "work-done history is limited to the last {days} days":
     "El historial de trabajo realizado se limita a los últimos {days} días.",
+  "a card cannot be related to itself": "Una tarjeta no puede relacionarse consigo misma.",
+  "a completed card cannot block another card": "Una tarjeta completada no puede bloquear otra tarjeta.",
+  "cards must be in the same workspace to be related": "Las tarjetas deben estar en el mismo espacio de trabajo para relacionarse.",
+  "relation not found": "No se encontró la relación.",
+  "this relation would create a blocking cycle": "Esta relación crearía un ciclo de bloqueo.",
 };

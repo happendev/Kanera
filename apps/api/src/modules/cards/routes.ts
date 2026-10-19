@@ -3,10 +3,11 @@ import { inProgressClockOf, SERVER_EVENTS, type WireCard, type WireCardChecklist
 import { ACTIVITY_ACTION, activityEvents, boards, clients, workspaces, automationInProgressRuns, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardInProgressAlerts, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import { db, type Db, type Tx, type TxOnly } from "../../db.js";
 import { env } from "../../env.js";
+import type { Mailer } from "../../lib/mailer.js";
 import { assignedCardVisibility, assertBatchCardVisibility, assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import {
   emitActivityFeedItem,
@@ -18,7 +19,7 @@ import {
 } from "../../lib/activity.js";
 import { enqueueCardAssignedEmails, enqueueDueDateChangedEmails } from "../../lib/assignee-email-notifications.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
-import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runCardMoveAutomations, runChecklistCompletionAutomations, runCustomFieldValueChangedAutomations, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
+import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runCardMoveAutomations, runCardBlockedAutomations, runCardUnblockedAutomations, runChecklistCompletionAutomations, runCustomFieldValueChangedAutomations, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
 import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { applyChecklistTemplates } from "../../lib/checklist-templates.js";
 import { loadChecklistsForCard, loadChecklistsForCards } from "../../lib/checklist-rows.js";
@@ -56,6 +57,9 @@ import { attachmentRowBaseColumns } from "../../lib/attachment-rows.js";
 import { fetchReactionsByAttachment } from "../../lib/comment-reactions.js";
 import { ensureBoardMembershipForUsers, shouldAutoWatchAuthoredCards } from "../../lib/card-assignment.js";
 import { clearRemindersOnCompletedCards, emitClearedCardReminders, type ClearedCardReminder } from "../../lib/card-follow.js";
+import { blockedByCounts, captureUnblockedDependents, captureBlockedDependents, emitDependentsChanged, emitRelationNeighboursChanged, loadCardRelations, lockWorkspaceRelations } from "../../lib/card-relations.js";
+import { notifyDependencyHandoffs, recordBlockersCleared, type DependencyHandoff } from "../../lib/dependency-notifications.js";
+import { cardRelationRoutes } from "./relations.routes.js";
 import type { AuthClaims } from "../../auth/plugin.js";
 
 const CHECKLIST_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
@@ -492,6 +496,8 @@ async function emitCardLabels(rows: readonly CardLabelsWrite[]): Promise<void> {
     await emitCoalescedCardActivityFeedItem(update.boardId, update.cardId, update.activity);
     await emitAutomationEffects(update.automationEffects);
   }
+  // Related cards show these labels in their Dependencies section.
+  await emitRelationNeighboursChanged(rows.map((update) => update.cardId));
 }
 
 type CardAssigneesWrite = {
@@ -564,6 +570,8 @@ async function emitCardAssignees(rows: readonly CardAssigneesWrite[], mailer: Fa
   }
   // Assignment changes alter live "Up next" visibility without touching queue rows.
   await invalidateQueuesForCards(rows.map((update) => update.cardId));
+  // Related cards show these assignees in their Dependencies section.
+  await emitRelationNeighboursChanged(rows.map((update) => update.cardId));
 }
 
 type CardCompletionWrite = {
@@ -572,6 +580,7 @@ type CardCompletionWrite = {
   activity: CoalescedActivityResult;
   automationEffects: AutomationEffects;
   clearedReminders: ClearedCardReminder[];
+  handoffs: DependencyHandoff[];
 };
 
 /**
@@ -599,6 +608,8 @@ async function applyCardCompletion(
   },
 ): Promise<CardCompletionWrite> {
   const { card: current, completed, completedAt } = opts;
+  const before = await captureBlockedDependents(tx, opts.workspaceId, [current.id]);
+  const readyBefore = completed ? [] : await captureUnblockedDependents(tx, opts.workspaceId, [current.id]);
   const [card] = await tx
     .update(cards)
     .set({ completedAt, updatedAt: new Date() })
@@ -620,7 +631,21 @@ async function applyCardCompletion(
   if (completed) await clearOverdueNotificationsForCards(tx, [current.id]);
   else await createOverdueNotificationsForCards(tx, [current.id]);
   const clearedReminders = completed ? await clearRemindersOnCompletedCards(tx, [current.id]) : [];
-  const automationEffects = completed
+  // Completing this card may clear the last blocker of cards that wait on it. The handoff is
+  // recorded first so the dependent's feed reads "unblocked" before any automation it triggers.
+  // Reopening it blocks those cards again; that handoff is recorded by the blocked runner.
+  const handoffs: DependencyHandoff[] = completed
+    ? await recordBlockersCleared(tx, { before, actorId: opts.actorId })
+    : [];
+  let unblockedEffects: AutomationEffects;
+  if (completed) {
+    unblockedEffects = await runCardUnblockedAutomations(tx, { handoffs, workspaceId: opts.workspaceId, clientId: opts.clientId, triggerActorId: opts.actorId });
+  } else {
+    const run = await runCardBlockedAutomations(tx, { cardIds: readyBefore, workspaceId: opts.workspaceId, clientId: opts.clientId, triggerActorId: opts.actorId, blocker: card! });
+    handoffs.push(...run.handoffs);
+    unblockedEffects = run;
+  }
+  const markedCompleteEffects = completed
     ? await runCardMarkedCompleteAutomations(tx, {
       cardId: current.id,
       boardId: current.boardId,
@@ -629,6 +654,7 @@ async function applyCardCompletion(
       triggerActorId: opts.actorId,
     })
     : { effects: [] };
+  const automationEffects: AutomationEffects = { effects: [...markedCompleteEffects.effects, ...unblockedEffects.effects] };
   // Automations can mutate the card further (move it, complete a parent), so the response must
   // report the row as it stands after they ran. Only re-read when something actually fired: a
   // workspace with no completion automations is the common case, and a whole-list completion
@@ -636,13 +662,13 @@ async function applyCardCompletion(
   const [finalCard] = automationEffects.effects.length > 0
     ? await tx.select().from(cards).where(eq(cards.id, current.id)).limit(1)
     : [card];
-  return { card: card!, finalCard: finalCard ?? card!, activity, automationEffects, clearedReminders };
+  return { card: card!, finalCard: finalCard ?? card!, activity, automationEffects, clearedReminders, handoffs };
 }
 
 /** Post-commit fanout for `applyCardCompletion`, including the queue audiences board rooms miss. */
 async function emitCardCompletion(
   rows: readonly CardCompletionWrite[],
-  opts: { clientId: string; completed: boolean },
+  opts: { clientId: string; completed: boolean; mailer: Mailer; log: FastifyBaseLogger },
 ): Promise<void> {
   for (const { card, activity, automationEffects, clearedReminders } of rows) {
     await emitToBoard(card.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: card.boardId, card: toWireCard(card, opts.clientId) });
@@ -650,6 +676,11 @@ async function emitCardCompletion(
     await emitCoalescedCardActivityFeedItem(card.boardId, card.id, activity, { notify: opts.completed });
     await emitAutomationEffects(automationEffects);
   }
+  // Completing or reopening a blocker flips the Blocked badge on the cards it blocks, which may be
+  // on other boards and whose rows did not change.
+  await emitDependentsChanged(rows.map(({ card }) => card.id), opts.clientId);
+  await notifyDependencyHandoffs({ handoffs: rows.flatMap((row) => row.handoffs), mailer: opts.mailer, webOrigin: env.WEB_ORIGIN })
+    .catch((err: unknown) => opts.log.warn({ err }, "failed to send blockers-cleared notifications"));
   // Completion moves cards in and out of "Up next" queues without touching their rows, so the
   // queue audiences must be pinged separately from the board rooms above.
   await invalidateQueuesForCards(rows.map(({ card }) => card.id));
@@ -690,7 +721,7 @@ export async function cardRoutes(
       .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
       .where(eq(cardAttachments.cardId, id))
       .orderBy(desc(cardAttachments.createdAt));
-    const [customFieldValues, labelAssignments, assignees, [attachments, attachmentReactions], checklists, appliedTemplateRows, linkedNotes] = await Promise.all([
+    const [customFieldValues, labelAssignments, assignees, [attachments, attachmentReactions], checklists, appliedTemplateRows, linkedNotes, relations] = await Promise.all([
       db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, id)),
       db
         .select({ labelId: cardLabelAssignments.labelId })
@@ -709,6 +740,7 @@ export async function cardRoutes(
         .from(cardChecklistTemplateApplications)
         .where(eq(cardChecklistTemplateApplications.cardId, id)),
       loadLinkedNotesForCard(req.auth, id, ctx.workspaceId),
+      loadCardRelations(req.auth, id),
     ]);
     // Healing with the viewer's claims can reveal links the author could not record, but its
     // workspace-wide note scan must not block this read; the next open can consume the repair. It
@@ -730,6 +762,8 @@ export async function cardRoutes(
       checklists,
       appliedChecklistTemplateIds: appliedTemplateRows.map((row) => row.templateId),
       linkedNotes,
+      relations: relations.relations,
+      hiddenBlockerCount: relations.hiddenBlockerCount,
     };
   });
 
@@ -924,6 +958,9 @@ export async function cardRoutes(
   async function commitCardCreate(auth: AuthClaims, plan: CardCreatePlan): Promise<WireCard> {
     const { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate } = plan;
     const result = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       if (body.clientToken) {
         // Serialize idempotent replays before touching the workspace counter. A concurrent retry
         // observes the committed identity and consumes no second number.
@@ -1172,6 +1209,7 @@ export async function cardRoutes(
       .innerJoin(lists, eq(lists.id, cards.listId))
       .where(and(
         eq(cards.listId, listId),
+        eq(cards.boardId, boardId),
         eq(lists.workspaceId, ctx.workspaceId),
         ctx.assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined,
         isNull(cards.archivedAt),
@@ -1196,7 +1234,7 @@ export async function cardRoutes(
       return rows;
     });
 
-    await emitCardCompletion(updates, { clientId: req.auth.cid, completed: body.completed });
+    await emitCardCompletion(updates, { clientId: req.auth.cid, completed: body.completed, mailer: app.mailer, log: req.log });
     return { updated: updates.length };
   });
 
@@ -1225,7 +1263,7 @@ export async function cardRoutes(
       return rows;
     });
 
-    await emitCardCompletion(updates, { clientId: req.auth.cid, completed: body.completed });
+    await emitCardCompletion(updates, { clientId: req.auth.cid, completed: body.completed, mailer: app.mailer, log: req.log });
     return { updated: updates.length, cards: updates.map(({ finalCard }) => toWireCard(finalCard, req.auth.cid)), skippedCardIds };
   });
 
@@ -1309,6 +1347,9 @@ export async function cardRoutes(
     const labelNames = body.labelIds.map((id) => labelNameById.get(id)).filter((name): name is string => Boolean(name));
 
     const updates = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       const rows: CardLabelsWrite[] = [];
       for (const card of targetCards) {
         const previous = await tx
@@ -1356,6 +1397,9 @@ export async function cardRoutes(
     const assigneeNamesById = Object.fromEntries(changedUsers.map((user) => [user.id, user.displayName]));
 
     const updates = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       const rows: CardAssigneesWrite[] = [];
       for (const card of targetCards) {
         const previous = await tx
@@ -1398,6 +1442,9 @@ export async function cardRoutes(
     if (movingCards.length === 0) return { moved: 0, cards: [], skippedCardIds };
 
     const moves = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       await tx.select({ id: lists.id }).from(lists).where(eq(lists.id, body.listId)).for("update").limit(1);
       const positions = await bottomPositionsForCards(body.listId, movingCards.length, tx);
       const rows: {
@@ -1455,6 +1502,7 @@ export async function cardRoutes(
       await emitCardActivityFeedItem(boardId, move.card.id, move.activity);
       await emitAutomationEffects(move.automationEffects);
     }
+    await emitRelationNeighboursChanged(moves.map((move) => move.card.id));
     return { moved: moves.length, cards: moves.map(({ finalCard }) => toWireCard(finalCard, req.auth.cid)), skippedCardIds };
   });
 
@@ -1467,7 +1515,8 @@ export async function cardRoutes(
     if (targetCards.length === 0) return { archived: 0, cards: [], skippedCardIds: [] };
 
     const archivedAt = new Date();
-    const { rows: updates, deletedNotifications } = await db.transaction(async (tx) => {
+    const { rows: updates, deletedNotifications, handoffs, unblockedEffects } = await db.transaction(async (tx) => {
+      const before = await captureBlockedDependents(tx, ctx.workspaceId, targetCards.map((card) => card.id));
       const rows: { card: typeof cards.$inferSelect; activity: ActivityEvent }[] = [];
       for (const current of targetCards) {
         const [card] = await tx
@@ -1487,7 +1536,9 @@ export async function cardRoutes(
         rows.push({ card: card!, activity });
       }
       const deletedNotifications = await clearNotificationsForCards(tx, targetCards.map((card) => card.id));
-      return { rows, deletedNotifications };
+      const handoffs = await recordBlockersCleared(tx, { before, actorId: req.auth.sub });
+      const unblockedEffects = await runCardUnblockedAutomations(tx, { handoffs, workspaceId: ctx.workspaceId, clientId: req.auth.cid, triggerActorId: req.auth.sub });
+      return { rows, deletedNotifications, handoffs, unblockedEffects };
     });
     emitDeletedNotifications(deletedNotifications);
 
@@ -1495,6 +1546,10 @@ export async function cardRoutes(
       await emitCardActivityFeedItem(boardId, card.id, activity);
       await emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: toWireCard(card, req.auth.cid) });
     }
+    await emitDependentsChanged(updates.map(({ card }) => card.id), req.auth.cid);
+    await notifyDependencyHandoffs({ handoffs, mailer: app.mailer, webOrigin: env.WEB_ORIGIN })
+      .catch((err: unknown) => req.log.warn({ err }, "failed to send blockers-cleared notifications"));
+    await emitAutomationEffects(unblockedEffects);
     // Archival removes cards from "Up next" queues without touching their rows, so the queue
     // audiences must be pinged separately from the board room above.
     await invalidateQueuesForCards(updates.map(({ card }) => card.id));
@@ -1739,6 +1794,7 @@ export async function cardRoutes(
     await emitInternalLinksChanged(renamed
       ? mergeLinkFanout(linkFanout, await linkNeighbours(ctx.workspaceId, "card", id))
       : linkFanout);
+    if (renamed) await emitRelationNeighboursChanged([id]);
     return wireCard;
   });
 
@@ -1762,7 +1818,7 @@ export async function cardRoutes(
     }));
     const { finalCard } = write;
 
-    await emitCardCompletion([write], { clientId: req.auth.cid, completed: body.completed });
+    await emitCardCompletion([write], { clientId: req.auth.cid, completed: body.completed, mailer: app.mailer, log: req.log });
     if (body.completed) await evaluateWorkspaceAnalyticsMilestones({
       workspaceId: ctx.workspaceId,
       actorId: req.auth.sub,
@@ -1809,6 +1865,9 @@ export async function cardRoutes(
     const prevPosition = current.position;
     const enteringNewList = fromListId !== body.listId;
     const { position, finalPosition, finalListId, clock, finalClock, rebalancedPositions, laneRebalanced, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       await tx.select({ id: lists.id }).from(lists).where(eq(lists.id, body.listId)).for("update").limit(1);
 
       // The mover needs access to the card's own board. Anchor cards are only
@@ -1945,6 +2004,8 @@ export async function cardRoutes(
       prevPosition,
       ...clock,
     });
+    // Related cards show this card's list in their Dependencies section.
+    if (fromListId !== body.listId) await emitRelationNeighboursChanged([id]);
     if (activity) await emitCardActivityFeedItem(current.boardId, id, activity);
     if (completedCard && completionActivity) {
       const wireCard = toWireCard(completedCard, req.auth.cid);
@@ -2080,6 +2141,9 @@ export async function cardRoutes(
       .where(inArray(users.id, droppedAssigneeIds))).map((row) => row.displayName);
 
     const { updated, finalCard, clearedChecklistItems, activity, relocatedNotifications, automationEffects } = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, dstCtx.workspaceId);
       const [updatedCard] = await tx
         .update(cards)
         .set({ boardId: body.boardId, listId: targetListId, position, updatedAt: new Date() })
@@ -2153,7 +2217,11 @@ export async function cardRoutes(
     });
     await emitToBoard(fromBoardId, SERVER_EVENTS.CARD_DELETED, { boardId: fromBoardId, cardId: id });
     const wireUpdated = toWireCard(updated!, req.auth.cid);
-    await emitToBoard(body.boardId, SERVER_EVENTS.CARD_CREATED, { boardId: body.boardId, card: wireUpdated });
+    // The destination board has never seen this card, so the arrival carries its open-blocker
+    // count; without it viewers there would show it unblocked until they reload.
+    await emitToBoard(body.boardId, SERVER_EVENTS.CARD_CREATED, { boardId: body.boardId, card: wireUpdated, blockedByCount: (await blockedByCounts(db, [id])).get(id) ?? 0 });
+    // Related cards show this card's board and list in their Dependencies section.
+    await emitRelationNeighboursChanged([id]);
     for (const item of clearedChecklistItems) {
       await emitToBoard(body.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, {
         boardId: body.boardId, cardId: id, cardTitle: source.title, listId: targetListId,
@@ -2260,6 +2328,9 @@ export async function cardRoutes(
       });
     const clearedToValue = await describeCustomFieldValue(field, null);
     const changes = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       const set: { value: typeof cardCustomFieldValues.$inferSelect; activity: CoalescedActivityResult; automationEffects: AutomationEffects }[] = [];
       const cleared: { cardId: string; activity: CoalescedActivityResult; automationEffects: AutomationEffects }[] = [];
       for (const card of targetCards) {
@@ -2394,6 +2465,9 @@ export async function cardRoutes(
     const toValue = await describeCustomFieldValue(field, cols);
 
     const { value, activity, automationEffects } = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       const [updatedValue] = await tx
         .insert(cardCustomFieldValues)
         .values({ cardId: id, fieldId, ...cols, updatedAt: new Date() })
@@ -2607,6 +2681,9 @@ export async function cardRoutes(
     const position = between(last?.position ?? null, null).position;
 
     const { checklist, trees, activity, itemActivities, automationEffects } = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       const now = new Date();
       const [checklist] = await tx
         .insert(cardChecklists)
@@ -2951,6 +3028,9 @@ export async function cardRoutes(
     const newItems = await prepareNewChecklistItems(card.boardId, ctx.workspaceId, req.auth.sub, items, options.itemPath);
 
     const { trees, rebalanced, activities, automationEffects } = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       // Share the checklist lock used by bulk creation so concurrent single and batch appends cannot
       // calculate the same numeric position from a stale tail row.
       const [lockedChecklist] = await tx
@@ -3079,6 +3159,9 @@ export async function cardRoutes(
 
     const targetItemIds = targetItems.map((item) => item.id);
     const { items, assigneeActivity, dueDateActivity } = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       const items = await tx
         .update(cardChecklistItems)
         .set({
@@ -3317,6 +3400,11 @@ export async function cardRoutes(
     const id = card.id;
     const checklistId = checklist.id;
     const itemId = current.id;
+    // Completing an item can fire checklist automations, which take the dependency graph lock. Take
+    // it before the card row is touched below, in the same order as every other automation-running
+    // transaction (lock, then card writes), or a concurrent completion of this card can deadlock.
+    const completingItem = body.completed === true && !current.completedAt;
+    if (completingItem) await lockWorkspaceRelations(tx as TxOnly, ctx.workspaceId);
     const reopeningCompletedChecklist = body.completed === false
       && Boolean(current.completedAt)
       && (await tx
@@ -3344,7 +3432,6 @@ export async function cardRoutes(
 
     // Completing an item or clearing its due date drops any standing overdue
     // notification so it no longer shows as overdue.
-    const completingItem = body.completed === true && !current.completedAt;
     const dueDateRemoved = dueDateLocalDate === null;
     if (completingItem || dueDateRemoved) {
       await clearOverdueChecklistItemNotifications(tx, [itemId]);
@@ -3591,6 +3678,9 @@ export async function cardRoutes(
       ));
     }
     const written = await db.transaction(async (tx) => {
+      // A batch that completes any item takes the graph lock before the first item writes the card
+      // row; taking it only when that item's turn comes would invert the order for the batch.
+      if (prepared.some((entry) => entry.body.completed === true && !entry.current.completedAt)) await lockWorkspaceRelations(tx, ctx.workspaceId);
       const results: WrittenChecklistItemUpdate[] = [];
       for (const entry of prepared) results.push(await writeChecklistItemUpdate(tx, entry));
       return results;
@@ -3675,7 +3765,9 @@ export async function cardRoutes(
       return toWireCard(card, req.auth.cid);
     }
 
-    const { updated, activity, deletedNotifications } = await db.transaction(async (tx) => {
+    const { updated, activity, deletedNotifications, handoffs, unblockedEffects } = await db.transaction(async (tx) => {
+      const before = await captureBlockedDependents(tx, ctx.workspaceId, [id]);
+      const readyBefore = body.archived ? [] : await captureUnblockedDependents(tx, ctx.workspaceId, [id]);
       const [updated] = await tx
         .update(cards)
         .set({ archivedAt, updatedAt: new Date() })
@@ -3692,12 +3784,30 @@ export async function cardRoutes(
         payload: { title: card.title, archivedAt },
       });
       const deletedNotifications = body.archived ? await clearNotificationsForCards(tx, [id]) : [];
-      return { updated: updated!, activity, deletedNotifications };
+      // An archived blocker no longer blocks, so archiving can unblock the cards waiting on it.
+      // Restoring it blocks those cards again; that handoff is recorded by the blocked runner.
+      const handoffs: DependencyHandoff[] = body.archived
+        ? await recordBlockersCleared(tx, { before, actorId: req.auth.sub })
+        : [];
+      let unblockedEffects: AutomationEffects;
+      if (body.archived) {
+        unblockedEffects = await runCardUnblockedAutomations(tx, { handoffs, workspaceId: ctx.workspaceId, clientId: req.auth.cid, triggerActorId: req.auth.sub });
+      } else {
+        const run = await runCardBlockedAutomations(tx, { cardIds: readyBefore, workspaceId: ctx.workspaceId, clientId: req.auth.cid, triggerActorId: req.auth.sub, blocker: updated! });
+        handoffs.push(...run.handoffs);
+        unblockedEffects = run;
+      }
+      return { updated: updated!, activity, deletedNotifications, handoffs, unblockedEffects };
     });
     emitDeletedNotifications(deletedNotifications);
     await emitCardActivityFeedItem(card.boardId, id, activity, { notify: false });
     const wireCard = toWireCard(updated, req.auth.cid);
     await emitToBoard(card.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: card.boardId, card: wireCard });
+    // An archived blocker no longer blocks; restoring it blocks again.
+    await emitDependentsChanged([id], req.auth.cid);
+    await notifyDependencyHandoffs({ handoffs, mailer: app.mailer, webOrigin: env.WEB_ORIGIN })
+      .catch((err: unknown) => req.log.warn({ err }, "failed to send blockers-cleared notifications"));
+    await emitAutomationEffects(unblockedEffects);
     // Archiving hides the card from any "Up next" queue holding it (and restoring brings it back)
     // without touching the queue rows, so those audiences are pinged separately.
     await invalidateQueuesForCards([id]);
@@ -3721,6 +3831,9 @@ export async function cardRoutes(
     const toValue = await describeCustomFieldValue(field, null);
 
     const { activity, automationEffects } = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       await tx
         .delete(cardCustomFieldValues)
         .where(and(eq(cardCustomFieldValues.cardId, id), eq(cardCustomFieldValues.fieldId, fieldId)));
@@ -3799,6 +3912,9 @@ export async function cardRoutes(
     }
 
     const { update, finalLabelIds } = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       const update = await applyCardLabels(tx, {
         cardId: id,
         boardId: card.boardId,
@@ -3852,6 +3968,9 @@ export async function cardRoutes(
     }
 
     const update = await db.transaction(async (tx) => {
+      // Graph lock first: automations below may complete or reopen a blocker, and every write that
+      // touches the dependency graph takes this lock before any row, so lock order never inverts.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
       const update = await applyCardAssignees(tx, {
         cardId: id,
         boardId: card.boardId,
@@ -3872,4 +3991,6 @@ export async function cardRoutes(
     await emitCardAssignees([update], app.mailer, req.auth.sub);
     return { assigneeIds: update.assigneeIds };
   });
+
+  cardRelationRoutes(app);
 }

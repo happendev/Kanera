@@ -1,3 +1,5 @@
+import { runCardUnblockedAutomations, emitAutomationEffects } from "../../lib/automations.js";
+import { recordBlockersCleared, notifyDependencyHandoffs } from "../../lib/dependency-notifications.js";
 import { clearNotificationsForScope } from "../../lib/notifications.js";
 import { dto } from "@kanera/shared";
 import type { BoardTransferTarget, CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse, WorkDoneSummaryResponse } from "@kanera/shared/dto";
@@ -42,6 +44,7 @@ import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
 import { emitBoardRebalancedToVisibleUsers, emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToUser, emitToUserDurable, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 import { escapedSearchPattern } from "../../lib/search-pattern.js";
+import { captureBlockedDependents, emitBlockedByCountChanged, emitRelationNeighboursChanged, lockWorkspaceRelations, relationNeighbourIds } from "../../lib/card-relations.js";
 
 type BoardMemberUser = {
   userId: string;
@@ -860,10 +863,28 @@ export async function boardRoutes(app: FastifyInstance) {
     }
 
     await emitToBoardAudience(id, "board:deleted", { workspaceId: ctx.workspaceId, boardId: id }, { workspaceId: ctx.workspaceId });
-    await db.transaction(async (tx) => {
+    // Cards on other boards blocked by this board's cards lose those blockers in the cascade. The
+    // card set and the snapshot are both read under the graph lock inside the transaction, while
+    // the relation rows still exist, so a card moved onto the board while this request waited for
+    // the lock is seen too; their badge is re-announced afterwards.
+    const { handoffs, effects, survivingDependents, neighbours } = await db.transaction(async (tx) => {
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
+      const boardCardIds = new Set((await tx.select({ id: cards.id }).from(cards).where(eq(cards.boardId, id))).map((c) => c.id));
+      const before = await captureBlockedDependents(tx, ctx.workspaceId, [...boardCardIds]);
+      const survivingDependents = [...new Set(before.map((row) => row.dependentId))].filter((cardId) => !boardCardIds.has(cardId));
+      // Every surviving related card loses a row from its Dependencies section.
+      const neighbours = await relationNeighbourIds(tx, [...boardCardIds]);
       await clearNotificationsForScope(tx, { boardId: id });
       await tx.delete(boards).where(eq(boards.id, id));
+      const handoffs = await recordBlockersCleared(tx, { before, actorId: req.auth.sub });
+      const effects = await runCardUnblockedAutomations(tx, { handoffs, workspaceId: ctx.workspaceId, clientId: req.auth.cid, triggerActorId: req.auth.sub });
+      return { handoffs, effects, survivingDependents, neighbours };
     });
+    await notifyDependencyHandoffs({ handoffs, mailer: app.mailer, webOrigin: env.WEB_ORIGIN })
+      .catch((err: unknown) => req.log.warn({ err }, "failed to send blockers-cleared notifications"));
+    await emitAutomationEffects(effects);
+    await emitBlockedByCountChanged(survivingDependents, req.auth.cid);
+    await emitRelationNeighboursChanged([], neighbours.filter((cardId) => !survivingDependents.includes(cardId)));
     await deleteNoteFiles(noteFiles);
     // Freeing the guest's pooled seat reduces the *used* count but not the purchased seat_limit (the
     // bill is unchanged): reducing capacity is a separate explicit admin action. The freed seat is now

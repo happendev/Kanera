@@ -46,6 +46,8 @@ export type WorkspaceTemplateAutomationTrigger =
   | { type: "due_date_arrives" }
   | { type: "all_checklist_items_complete" }
   | { type: "card_marked_complete" }
+  | { type: "card_unblocked" }
+  | { type: "card_blocked" }
   | { type: "card_label_set"; labelName: string }
   | { type: "card_becomes_inactive" }
   | { type: "card_in_progress_too_long" };

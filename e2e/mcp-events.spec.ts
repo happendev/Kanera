@@ -67,7 +67,7 @@ test("MCP 2 discovers events, executes tools, rejects private callbacks and resp
     const reminderEvent = catalog.body.result.events.find((event) => event.name === "reminder.due");
     expect(reminderEvent?.inputSchema.properties).toEqual({});
     expect(reminderEvent?.payloadSchema.properties).not.toHaveProperty("title");
-    expect(catalog.body.result.events.map((event: { name: string }) => event.name)).toEqual(["card.created", "card.updated", "card.moved", "comment.created", "priorities.changed", "my_day.ready", "reminder.due"]);
+    expect(catalog.body.result.events.map((event: { name: string }) => event.name)).toEqual(["card.created", "card.updated", "card.moved", "comment.created", "card.blocked", "card.unblocked", "priorities.changed", "my_day.ready", "reminder.due"]);
     expect(catalog.body.result.events.every((event: { delivery: string[] }) => event.delivery.join() === "webhook")).toBe(true);
     const tools = await rpc<{ tools: Array<{ name: string }>; ttlMs: number; cacheScope: string }>("tools/list");
     expect(tools.body.result).toMatchObject({ resultType: "complete", ttlMs: expect.any(Number), cacheScope: "public" });

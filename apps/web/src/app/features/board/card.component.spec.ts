@@ -39,6 +39,7 @@ function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     attachmentCount: 0,
     checklistDoneCount: 0,
     checklistTotalCount: 0,
+    blockedByCount: 0,
     coverUrl: null,
     coverImageWidth: null,
     coverImageHeight: null,

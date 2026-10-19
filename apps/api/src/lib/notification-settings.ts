@@ -15,7 +15,8 @@ export type NotificationPreferenceType =
   | "cardDueDateChanged"
   | "cardOverdue"
   | "cardReminder"
-  | "reactionAdded";
+  | "reactionAdded"
+  | "cardDependency";
 
 export type PersonalNotificationChannel = "ntfy" | "gotify" | "webhook";
 
@@ -82,6 +83,7 @@ export function defaultNotificationSettings(userId: string): EffectiveNotificati
       cardReminder: defaultTypeChannels(),
       // Email for a thumbs-up is opt-in; matches the column default.
       reactionAdded: { ...defaultTypeChannels(), email: false },
+      cardDependency: defaultTypeChannels(),
     },
     personalChannels: {
       destinationPolicy: notificationDestinationPolicy(),
@@ -111,6 +113,7 @@ export function toEffectiveNotificationSettings(row: NotificationSettings | null
       cardOverdue: { email: row.cardOverdueEmail, push: row.cardOverduePush, ntfy: row.cardOverdueNtfy, gotify: row.cardOverdueGotify, webhook: row.cardOverdueWebhook },
       cardReminder: { email: row.cardReminderEmail, push: row.cardReminderPush, ntfy: row.cardReminderNtfy, gotify: row.cardReminderGotify, webhook: row.cardReminderWebhook },
       reactionAdded: { email: row.reactionAddedEmail, push: row.reactionAddedPush, ntfy: row.reactionAddedNtfy, gotify: row.reactionAddedGotify, webhook: row.reactionAddedWebhook },
+      cardDependency: { email: row.cardDependencyEmail, push: row.cardDependencyPush, ntfy: row.cardDependencyNtfy, gotify: row.cardDependencyGotify, webhook: row.cardDependencyWebhook },
     },
     personalChannels: {
       destinationPolicy: notificationDestinationPolicy(),
@@ -183,6 +186,7 @@ export async function getNotificationWorkspaceRulesForUsers(
         cardOverdue: { email: row.cardOverdueEmail, push: row.cardOverduePush, ntfy: row.cardOverdueNtfy, gotify: row.cardOverdueGotify, webhook: row.cardOverdueWebhook },
         cardReminder: { email: row.cardReminderEmail, push: row.cardReminderPush, ntfy: row.cardReminderNtfy, gotify: row.cardReminderGotify, webhook: row.cardReminderWebhook },
         reactionAdded: { email: row.reactionAddedEmail, push: row.reactionAddedPush, ntfy: row.reactionAddedNtfy, gotify: row.reactionAddedGotify, webhook: row.reactionAddedWebhook },
+        cardDependency: { email: row.cardDependencyEmail, push: row.cardDependencyPush, ntfy: row.cardDependencyNtfy, gotify: row.cardDependencyGotify, webhook: row.cardDependencyWebhook },
       },
     });
   }

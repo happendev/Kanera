@@ -878,4 +878,9 @@ export const fr: ErrorCatalog = {
     "Cette pièce jointe n'a pas d'image {variant}.",
   "work-done history is limited to the last {days} days":
     "L'historique du travail accompli est limité aux {days} derniers jours.",
+  "a card cannot be related to itself": "Une carte ne peut pas être liée à elle-même.",
+  "a completed card cannot block another card": "Une carte terminée ne peut pas bloquer une autre carte.",
+  "cards must be in the same workspace to be related": "Les cartes doivent être dans le même espace de travail pour être liées.",
+  "relation not found": "Relation introuvable.",
+  "this relation would create a blocking cycle": "Cette relation créerait un cycle de blocage.",
 };

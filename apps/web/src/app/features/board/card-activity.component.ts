@@ -1149,6 +1149,36 @@ export class CardActivityComponent {
         const to = formatTrackedDuration(Math.max(0, Number(p["toSeconds"]) || 0) * 1000);
         return ` ${$localize`:Card activity after a person's name - a workspace admin corrected tracked time, e.g. from 96h 20m to 80h:changed the time in progress from ${this.v(from)}:from: to ${this.v(to)}:to:`}`;
       }
+      case "relation:added":
+      case "relation:removed": {
+        // Only the other card's key is recorded: this feed's readers may not be able to open it.
+        const key = this.activityPayloadText(p, "otherCardKey") ?? "?";
+        const other = this.v(key);
+        const added = event.action === "relation:added";
+        switch (p["direction"]) {
+          case "blocks":
+            return added
+              ? ` ${$localize`:Card activity after a person's name - another card now waits on this one:marked this card as blocking ${other}:card:`}`
+              : ` ${$localize`:Card activity after a person's name:removed that this card blocks ${other}:card:`}`;
+          case "blocked_by":
+            return added
+              ? ` ${$localize`:Card activity after a person's name - this card now waits on another card:marked this card as blocked by ${other}:card:`}`
+              : ` ${$localize`:Card activity after a person's name:removed that this card is blocked by ${other}:card:`}`;
+          default:
+            return added
+              ? ` ${$localize`:Card activity after a person's name:related this card to ${other}:card:`}`
+              : ` ${$localize`:Card activity after a person's name:removed the relation to ${other}:card:`}`;
+        }
+      }
+      case "blockers:cleared": {
+        // Key only, like relations: this feed's readers may not be able to open the blocker.
+        const other = this.v(this.activityPayloadText(p, "otherCardKey") ?? "?");
+        return ` ${$localize`:Card activity after a person's name - they completed or archived the named card, which left this one with no open blockers:cleared the last blocker on this card, ${other}:card:`}`;
+      }
+      case "blockers:reopened": {
+        const other = this.v(this.activityPayloadText(p, "otherCardKey") ?? "?");
+        return ` ${$localize`:Card activity after a person's name - they reopened or restored the named card, so this one is blocked again:reopened a blocker on this card, ${other}:card:`}`;
+      }
       case "agentRun:ended": {
         const title = this.activityPayloadText(p, "title");
         const status = this.activityPayloadText(p, "status");

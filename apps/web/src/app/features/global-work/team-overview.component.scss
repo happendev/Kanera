@@ -96,6 +96,16 @@
   }
 }
 
+// A view setting rather than a person, so it sits apart at the strip's far end.
+.strip-toggle {
+  margin-left: auto;
+  padding-left: 10px;
+
+  i {
+    font-size: 15px;
+  }
+}
+
 .strip-name {
   max-width: 10ch;
   overflow: hidden;
@@ -613,6 +623,13 @@
     background: color-mix(in srgb, var(--color-amber) 12%, transparent);
     border-color: color-mix(in srgb, var(--color-amber) 32%, transparent);
   }
+}
+
+// Same treatment as the board tile's Blocked chip, so the state reads the same in both places.
+.row-blocked {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 25%, transparent);
 }
 
 .row-due {

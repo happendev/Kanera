@@ -1,0 +1,977 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+  overflow: auto;
+  // The same gap below the toolbar row as Global Work leaves above the map, so the view sits alike in both.
+  padding: var(--space-3) var(--space-4) var(--space-6);
+  font-variant-numeric: tabular-nums;
+
+  // One palette for statuses, so a tile, its pill, the step list and the summary agree.
+  --dm-blocked: var(--danger);
+  --dm-risk: var(--color-amber, #b45309);
+  --dm-ready: var(--success);
+  --dm-starter: var(--accent);
+  --dm-critical: var(--color-violet, #7c3aed);
+  --dm-wire: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  --dm-wire-cleared: color-mix(in srgb, var(--success) 45%, transparent);
+  --dm-tile-bg: var(--card-bg, var(--surface));
+}
+
+// Inside Global Work the page scrolls; the map must not clip itself or fight it for height.
+:host(.is-stacked) {
+  flex: none;
+  overflow: visible;
+  padding: 0;
+}
+
+.dm-toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.dm-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+// Container buttons: the global reset pins buttons to 36px with an accent hover, so restate both.
+.dm-stat {
+  display: inline-flex;
+  align-items: center;
+  // A word space between the count and its label; the icon sits a little further off.
+  gap: 4px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, var(--radius));
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+
+  strong { color: var(--text); font-weight: 600; }
+  i { margin-right: 2px; font-size: 15px; }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+
+  &:disabled { cursor: default; opacity: 0.55; }
+
+  &.is-blocked.has-count i { color: var(--dm-blocked); }
+  &.is-atRisk.has-count i { color: var(--dm-risk); }
+  &.is-starter.has-count i { color: var(--dm-starter); }
+  &.is-ready.has-count i { color: var(--dm-ready); }
+
+  &.is-active,
+  &.is-active:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    color: var(--text);
+  }
+}
+
+.dm-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dm-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, var(--radius));
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+
+  &:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+
+  &.is-on,
+  &.is-on:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    color: var(--text);
+  }
+}
+
+.dm-callout,
+.dm-note {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+
+  > i { flex: none; margin-top: 2px; font-size: 15px; }
+}
+
+.dm-callout > i { color: var(--dm-risk); }
+
+.dm-linking {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 var(--space-3);
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius-md, var(--radius));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--text);
+  font-size: var(--text-sm);
+
+  > i { flex: none; color: var(--accent); font-size: 15px; }
+}
+
+.dm-linking-text { flex: 1; min-width: 0; }
+.dm-note > i { color: var(--dm-risk); }
+
+.dm-callout-text { min-width: 0; }
+
+.dm-callout-link {
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+}
+
+.dm-state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.dm-retry {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: underline;
+
+  &:hover:not(:disabled) { background: transparent; color: var(--text); }
+}
+
+// The skeleton and the step list stack; the map places each box where packChains put it.
+.dm-chains {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+
+  &.is-map {
+    position: relative;
+    display: block;
+    flex: none;
+  }
+}
+
+.dm-skeleton {
+  width: min(100%, 560px);
+  height: 180px;
+  border-radius: var(--radius-lg);
+}
+
+.dm-chain {
+  box-sizing: border-box;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.dm-chains.is-list .dm-chain { flex: none; }
+
+/* Timeline lanes: every chain is as wide as the shared week axis and they scroll sideways together,
+   so a week never drifts out of line between chains. Titles stay at the left edge meanwhile. */
+.dm-chains.is-timeline {
+  flex: none;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+
+  .dm-chain {
+    flex: none;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .dm-chain-head {
+    position: sticky;
+    left: 0;
+    z-index: 4;
+    flex-wrap: nowrap;
+    width: calc(var(--dm-view-width, 100%) - 2px);
+    overflow: hidden;
+    border-bottom: 0;
+  }
+
+  .dm-chain-title { flex: 1 1 auto; height: 20px; overflow: hidden; align-items: center; align-content: flex-start; }
+  .dm-chain-goal { flex: 0 1 auto; line-height: 20px; }
+  .dm-chain-meta { line-height: 20px; }
+  .dm-scroll { overflow: visible; }
+  .dm-canvas { border-top: 1px solid var(--border); }
+}
+
+// Its height is computed, so the header stays on one line and a wide chain scrolls inside the box.
+.dm-chains.is-map .dm-chain {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  .dm-chain-head { flex: none; flex-wrap: nowrap; overflow: hidden; }
+  // One clipped line: when "2 cards · 2 steps" does not fit beside the goal it wraps onto a line
+  // that is never shown, rather than ellipsizing into "2 s…".
+  .dm-chain-title { flex: 1 1 auto; height: 20px; overflow: hidden; align-items: center; align-content: flex-start; }
+  .dm-chain-goal { flex: 0 1 auto; line-height: 20px; }
+  .dm-chain-meta { line-height: 20px; }
+  .dm-scroll { flex: 1; min-height: 0; overflow-y: hidden; }
+}
+
+/* A bar of its own above the steps, with the same inset on every side. The map fixes its height
+   (CHAIN_HEAD_HEIGHT); the step list lets it wrap. */
+.dm-chain-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 6px 12px 6px 14px;
+  border-bottom: 1px solid var(--border);
+
+  > i { flex: none; color: var(--text-muted); font-size: 16px; }
+}
+
+.dm-chain-title {
+  display: flex;
+  flex: 1 1 200px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.dm-chain-goal {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dm-chain-meta {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.dm-pill {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+
+  &.is-blocked {
+    color: var(--dm-blocked);
+    background: color-mix(in srgb, var(--dm-blocked) 12%, transparent);
+  }
+
+  &.is-risk {
+    color: var(--dm-risk);
+    background: color-mix(in srgb, var(--dm-risk) 14%, transparent);
+  }
+
+  &.is-critical {
+    color: var(--dm-critical);
+    background: color-mix(in srgb, var(--dm-critical) 14%, transparent);
+  }
+}
+
+.dm-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+/* At least as wide as its box, so the last step's band reaches the box's edge. */
+.dm-canvas {
+  position: relative;
+  min-width: 100%;
+}
+
+/* Each step's column, alternately tinted so a tall chain still reads as columns. */
+.dm-step-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+
+  &.is-alt { background: color-mix(in srgb, var(--text) 3.5%, transparent); }
+  &.is-current { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+}
+
+.dm-week-gap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--text-muted) 45%, transparent);
+  pointer-events: none;
+}
+
+.dm-step-label {
+  position: absolute;
+  top: 10px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label, 0.04em);
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  /* Timeline headings: this week stands out, past weeks step back. */
+  &.is-current { color: var(--accent); }
+  &.is-past { opacity: 0.7; }
+  &.is-undated { font-style: italic; }
+}
+
+.dm-wires {
+  position: absolute;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.dm-wire {
+  fill: none;
+  stroke: var(--dm-wire);
+  stroke-width: 1.6;
+  transition: opacity var(--motion-fast, 120ms) ease, stroke var(--motion-fast, 120ms) ease;
+
+  &.is-cleared { stroke: var(--dm-wire-cleared); stroke-dasharray: 4 3; }
+  &.is-risk { stroke: var(--dm-risk); stroke-width: 2; }
+  &.is-lit { stroke: var(--accent); stroke-width: 2.2; }
+  &.is-related { stroke: var(--dm-wire); stroke-dasharray: 2 4; stroke-linecap: round; }
+  &.is-critical { stroke: var(--dm-critical); stroke-width: 2.4; }
+  &.is-draft { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
+  &.is-offpath { opacity: 0.3; }
+  &.is-dim { opacity: 0.18; }
+}
+
+/* The SVG ignores the pointer; only these wide, invisible strokes over removable connectors take it. */
+.dm-wire-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: pointer;
+  outline: none;
+
+  &:focus-visible { stroke: color-mix(in srgb, var(--ring) 35%, transparent); }
+}
+
+.dm-wire-remove {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md, var(--radius));
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-sm);
+  box-shadow: var(--shadow);
+  transform: translate(-50%, calc(-100% - 8px));
+  white-space: nowrap;
+
+  i { color: var(--danger); font-size: 15px; }
+  &:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+}
+
+/* Drag from here to the card this one blocks; a tap starts picking it instead. */
+.dm-link-handle {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  padding: 0;
+  border: 1.5px solid var(--accent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  cursor: crosshair;
+  opacity: 0;
+  touch-action: none;
+  transition: opacity var(--motion-fast, 120ms) ease, transform var(--motion-fast, 120ms) ease;
+
+  i { font-size: 12px; }
+
+  /* A bigger target than the dot, for touch especially. */
+  &::before { content: ""; position: absolute; inset: -9px; }
+
+  &.is-shown,
+  &:focus-visible { opacity: 1; }
+  &:hover:not(:disabled),
+  &[aria-pressed="true"] { opacity: 1; background: var(--accent); color: var(--accent-fg); transform: scale(1.15); }
+  &:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+
+.dm-arrow {
+  &.is-plain { fill: var(--dm-wire); }
+  &.is-cleared { fill: var(--dm-wire-cleared); }
+  &.is-risk { fill: var(--dm-risk); }
+  &.is-lit { fill: var(--accent); }
+  &.is-critical { fill: var(--dm-critical); }
+}
+
+.dm-tile {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--dm-tile-bg);
+  color: var(--text);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: opacity var(--motion-fast, 120ms) ease, box-shadow var(--motion-fast, 120ms) ease, border-color var(--motion-fast, 120ms) ease;
+
+  &:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+  &:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+  // Status reads from the icon, the pill and a soft wash: never an edge stripe.
+  &.is-blocked { background: color-mix(in srgb, var(--dm-blocked) 5%, var(--dm-tile-bg)); }
+  &.is-ready { background: color-mix(in srgb, var(--dm-ready) 6%, var(--dm-tile-bg)); }
+  &.is-done {
+    background: color-mix(in srgb, var(--surface-2) 60%, var(--dm-tile-bg));
+    box-shadow: none;
+
+    .dm-title { color: var(--text-muted); }
+  }
+
+  // A card from another board, there because a chain crosses into it.
+  &.is-context { border-style: dashed; }
+  &.is-risk { box-shadow: 0 0 0 1px color-mix(in srgb, var(--dm-risk) 70%, transparent), var(--shadow-sm); }
+  &.is-match { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent), var(--shadow-sm); }
+  &.is-selected { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+  &.is-critical { box-shadow: 0 0 0 2px color-mix(in srgb, var(--dm-critical) 75%, transparent), var(--shadow-sm); }
+  &.is-offpath { opacity: 0.55; }
+  &.is-dim { opacity: 0.35; }
+
+  /* While a dependency is drawn: where it can go, where it would go, and what it cannot block. */
+  &.is-link-source { opacity: 1; box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+  &.is-link-target { opacity: 1; box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), var(--shadow-sm); cursor: copy; }
+  &.is-link-over { opacity: 1; box-shadow: 0 0 0 2px var(--accent), var(--shadow); cursor: copy; }
+  &.is-link-muted { opacity: 0.4; cursor: not-allowed; }
+}
+
+.dm-tile-head,
+.dm-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.dm-foot { margin-top: auto; }
+
+.dm-status-icon {
+  flex: none;
+  font-size: 14px;
+}
+
+.is-blocked .dm-status-icon { color: var(--dm-blocked); }
+.is-ready .dm-status-icon,
+.is-done .dm-status-icon { color: var(--dm-ready); }
+.is-starter .dm-status-icon { color: var(--dm-starter); }
+.is-open .dm-status-icon { color: var(--text-muted); }
+
+.dm-key {
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dm-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+
+  &::before { content: "·"; margin-right: 1px; }
+  &.is-board::before { content: none; }
+
+  i { flex: none; font-size: 12px; }
+}
+
+.dm-place-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dm-risk-icon {
+  flex: none;
+  margin-left: auto;
+  color: var(--dm-risk);
+  font-size: 14px;
+}
+
+.dm-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dm-tile.is-slim {
+  gap: 4px;
+
+  .dm-title { -webkit-line-clamp: 1; }
+}
+
+/* Labels and card-face fields. Each row has a fixed height that dependency-map.tile.ts counts on. */
+.dm-labels {
+  flex: none;
+  height: 18px;
+  overflow: hidden;
+  --label-bar-wrap: nowrap;
+  --label-bar-gap: 0;
+  --label-chip-height: 18px;
+  --label-chip-max-width: 96px;
+  --label-chip-font-size: 10.5px;
+  --label-chip-padding-x: 6px;
+}
+
+.dm-fields {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dm-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 16px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 16px;
+  white-space: nowrap;
+
+  > i { flex: none; font-size: 12px; }
+  &.is-more { font-style: italic; }
+}
+
+/* Names keep their width up to a cap, so a long value ellipsizes instead of eating the name. */
+.dm-field-name {
+  flex: none;
+  max-width: 8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &::after { content: " ·"; }
+}
+
+/* Block, not flex, so a long value ends in an ellipsis instead of being cut at the tile's edge. */
+.dm-field-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+
+  i { margin-right: 2px; font-size: 12px; vertical-align: -1px; }
+}
+
+.dm-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 120px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 10.5px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+
+  &.has-color {
+    color: color-mix(in srgb, var(--option-color) 75%, var(--text));
+    background: color-mix(in srgb, var(--option-color) 16%, transparent);
+  }
+}
+
+/* In the step list the same pieces flow and wrap freely. */
+.dm-row-labels {
+  --label-bar-gap: 0;
+  --label-chip-height: 18px;
+  --label-chip-font-size: 10.5px;
+}
+
+.dm-avatars {
+  display: inline-flex;
+  flex: none;
+
+  > * + * { margin-left: -5px; }
+}
+
+.dm-avatar-more {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 10px;
+}
+
+.dm-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+
+  i { font-size: 13px; }
+  &.is-overdue { color: var(--danger); }
+}
+
+.dm-spacer { flex: 1; }
+
+.dm-offmap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--dm-blocked);
+
+  i { font-size: 13px; }
+}
+
+.dm-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+.is-blocked .dm-status { color: var(--dm-blocked); background: color-mix(in srgb, var(--dm-blocked) 12%, transparent); }
+.is-ready .dm-status { color: var(--dm-ready); background: color-mix(in srgb, var(--dm-ready) 14%, transparent); }
+.is-starter .dm-status { color: var(--dm-starter); background: color-mix(in srgb, var(--dm-starter) 12%, transparent); }
+
+/* Step list: the same chain as an ordered list, for phones and for reading top to bottom. */
+.dm-chains.is-list .dm-chain { container: dm-chain / inline-size; }
+
+.dm-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 12px 12px 14px;
+  list-style: none;
+}
+
+/* The marker sits in a gutter and a line runs down to the next step's marker. */
+.dm-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+
+  &:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    top: 28px;
+    bottom: calc(4px - var(--space-3));
+    left: 11.5px;
+    width: 1px;
+    background: var(--border);
+  }
+
+  &.is-done:not(:last-child)::before { background: color-mix(in srgb, var(--dm-ready) 45%, var(--border)); }
+}
+
+.dm-step-marker {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  margin-top: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+
+  i { font-size: 14px; }
+
+  .is-active > & {
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    color: var(--text);
+  }
+
+  .is-done > & {
+    border-color: color-mix(in srgb, var(--dm-ready) 50%, var(--border));
+    background: color-mix(in srgb, var(--dm-ready) 14%, var(--surface));
+    color: var(--dm-ready);
+  }
+}
+
+.dm-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* One bordered group per step, rows split by hairlines: a table section, not a stack of cards. */
+.dm-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--dm-tile-bg);
+  list-style: none;
+
+  > li { flex: none; }
+  > li + li { border-top: 1px solid var(--border); }
+}
+
+/* Narrow: title and status on top, relations and date under the title. Wide: one row of columns
+   that line up down the whole chain, since every track but the title has a fixed width. */
+.dm-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon main status"
+    ".    rels rels"
+    ".    due  people";
+  align-items: start;
+  column-gap: 10px;
+  padding: 9px 12px;
+  color: var(--text);
+  text-decoration: none;
+  transition: background var(--motion-fast, 120ms) ease;
+
+  &:hover { background: var(--surface-hover); }
+  &:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+
+  > .dm-status-icon { grid-area: icon; margin-top: 2px; }
+  &.is-done .dm-title { color: var(--text-muted); }
+  &.is-blocked { background: color-mix(in srgb, var(--dm-blocked) 4%, transparent); }
+  &.is-ready { background: color-mix(in srgb, var(--dm-ready) 5%, transparent); }
+  &.is-blocked:hover,
+  &.is-ready:hover { background: var(--surface-hover); }
+  &.is-risk { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dm-risk) 70%, transparent); }
+  &.is-match { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+  &.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
+
+  .dm-title { -webkit-line-clamp: 2; }
+}
+
+.dm-row-main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dm-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.dm-critical-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--dm-critical);
+  font-weight: 500;
+
+  i { font-size: 13px; }
+}
+
+.dm-row-face {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 2px;
+
+  .dm-field { max-width: 100%; }
+}
+
+.dm-row-rels {
+  grid-area: rels;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  &:empty { display: none; }
+}
+
+.dm-row-rel {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 18px;
+
+  i { flex: none; font-size: 13px; line-height: 18px; }
+  &.is-waiting i { color: var(--dm-blocked); }
+  &.is-risk { color: var(--dm-risk); }
+}
+
+.dm-row-due {
+  grid-area: due;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 20px;
+
+  &:empty { display: none; }
+}
+
+.dm-row-people {
+  grid-area: people;
+  justify-self: end;
+
+  &:empty { display: none; }
+}
+
+.dm-row-status {
+  grid-area: status;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+/* Only the stacked layout needs a gap above the rows under the title. */
+.dm-row-rels,
+.dm-row-due,
+.dm-row-people { margin-top: 4px; }
+
+@container dm-chain (min-width: 720px) {
+  .dm-row {
+    grid-template-columns: 16px minmax(0, 1fr) minmax(0, 15rem) 7.5rem 52px 6.5rem;
+    grid-template-areas: "icon main rels due people status";
+    column-gap: 16px;
+  }
+
+  .dm-row-rels,
+  .dm-row-due,
+  .dm-row-people { margin-top: 0; }
+
+  /* Wide rows keep their columns even when a cell is empty. */
+  .dm-row-rels:empty,
+  .dm-row-due:empty,
+  .dm-row-people:empty { display: block; }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .dm-stat,
+  .dm-toggle { height: 44px; }
+
+  /* Touch has no hover to reveal the handles, so they stay out, a little larger. */
+  .dm-link-handle { width: 22px; height: 22px; margin: -11px 0 0 -11px; opacity: 1; }
+
+  .dm-row { min-height: 44px; box-sizing: border-box; }
+}
+
+/* Last, so these override the base rules above at equal specificity. */
+@media (max-width: 640px) {
+  :host { padding: var(--space-3) var(--space-3) var(--space-5); }
+
+  /* One sideways-scrolling row of counts instead of three wrapped rows above the first chain. */
+  .dm-stats {
+    flex-wrap: nowrap;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .dm-stat { flex: none; }
+}

@@ -24,8 +24,9 @@ import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
-import { assignedCardVisibility, isOrgAdmin } from "../../lib/access.js";
+import { assertCardAccess, assignedCardVisibility, isOrgAdmin } from "../../lib/access.js";
 import { applyWorkScope, loadAccessibleBoards } from "../../lib/accessible-boards.js";
+import { notFound } from "../../lib/errors.js";
 import { escapedSearchPattern } from "../../lib/search-pattern.js";
 import { absoluteCardUrl } from "../../lib/wire-card.js";
 
@@ -141,6 +142,7 @@ async function searchData(
   take: number,
   requestedScope?: WorkScope,
   requestedTypes: readonly SearchResultType[] = dto.SEARCH_RESULT_TYPES,
+  relationFilter?: { cardId: string; direction: string },
 ) {
   const scope = await buildAccessScope(auth, requestedScope);
   const types = new Set(requestedTypes);
@@ -195,7 +197,15 @@ async function searchData(
       // Text hits stay live-only, but an exact card key is a direct reference: SDK/MCP/CLI callers
       // resolve bare keys through this route, and an archived card must stay addressable so it can
       // be restored by its advertised key, not only by UUID or canonical URL.
-      .where(and(or(exactCardKeyMatch, and(or(sql`${cards.searchVector} @@ ${tsq}`, cardTitleMatch), isNull(cards.archivedAt))), cardPredicate))
+      .where(and(or(exactCardKeyMatch, and(or(sql`${cards.searchVector} @@ ${tsq}`, cardTitleMatch), isNull(cards.archivedAt))), cardPredicate, relationFilter ? sql`
+        ${cards.id} <> ${relationFilter.cardId}::uuid and ${cards.archivedAt} is null and not exists (
+          select 1 from card_relation cr where
+          (${relationFilter.direction} = 'blocks' and cr.kind = 'blocks' and cr.source_card_id = ${relationFilter.cardId}::uuid and cr.target_card_id = ${cards.id}) or
+          (${relationFilter.direction} = 'blocked_by' and cr.kind = 'blocks' and cr.target_card_id = ${relationFilter.cardId}::uuid and cr.source_card_id = ${cards.id}) or
+          (${relationFilter.direction} = 'relates_to' and cr.kind = 'relates_to' and
+            ((cr.source_card_id = ${relationFilter.cardId}::uuid and cr.target_card_id = ${cards.id}) or
+             (cr.target_card_id = ${relationFilter.cardId}::uuid and cr.source_card_id = ${cards.id})))
+        )` : undefined))
       .orderBy(sql`case when ${exactCardKeyMatch} then 1 else 0 end desc`, sql`ts_rank(${cards.searchVector}, ${tsq}) desc`)
       .limit(take) : Promise.resolve([]),
 
@@ -281,9 +291,15 @@ export async function searchRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/search", async (req) => {
-    const { q, limit } = dto.searchQuery.parse(req.query);
+    const { q, limit, workspaceId, relationCardId, relationDirection } = dto.searchQuery.parse(req.query);
+    if (relationCardId) {
+      const [card] = await db.select().from(cards).where(eq(cards.id, relationCardId)).limit(1);
+      if (!card) throw notFound();
+      await assertCardAccess(req.auth, card);
+    }
     const take = limit ?? DEFAULT_LIMIT;
-    const { cardRows, noteRows, commentRows, attachmentRows } = await searchData(req.auth, q, take);
+    const { cardRows, noteRows, commentRows, attachmentRows } = await searchData(req.auth, q, take, workspaceId ? { allAccessible: false, workspaceIds: [workspaceId], organisationIds: [], boardIds: [] } : undefined, undefined,
+      relationCardId && relationDirection ? { cardId: relationCardId, direction: relationDirection } : undefined);
     const result: WireSearchResults = {
       cards: cardRows.map(({ rank: _rank, exactPriority: _exactPriority, ...row }) => ({ ...row, webUrl: cardUrl(row.organisationKey, row.cardKey) })) satisfies CardSearchResult[],
       notes: noteRows.map(({ rank: _rank, ...row }) => ({ ...row, webUrl: noteUrl(row) })) satisfies NoteSearchResult[],

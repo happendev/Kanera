@@ -150,6 +150,7 @@ function createCardSummary(overrides: Partial<WireCardSummary> = {}): WireCardSu
     attachmentCount: 0,
     checklistDoneCount: 0,
     checklistTotalCount: 0,
+    blockedByCount: 0,
     coverUrl: null,
     coverImageWidth: null,
     coverImageHeight: null,
@@ -205,6 +206,8 @@ function createCardDetail(overrides: Partial<WireCardDetail> = {}): WireCardDeta
     checklists: [],
     appliedChecklistTemplateIds: [],
     linkedNotes: [],
+    relations: [],
+    hiddenBlockerCount: 0,
     ...overrides,
   };
 }
@@ -1433,6 +1436,8 @@ describe("BoardState recent-card retention across a stale hydrate", () => {
       checklists: [],
       appliedChecklistTemplateIds: [],
       linkedNotes: [],
+      relations: [],
+      hiddenBlockerCount: 0,
     });
 
     state.updateCardKeyPrefix("NEW");

@@ -97,6 +97,18 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
       ${rootChecklistsOnly ? sql`where cl.parent_item_id is null` : sql``}
       group by cl.card_id
     ),
+    blocker_counts as (
+      -- Open blockers, hidden ones included (see card_summary_view.blocked_by_count). Served by
+      -- card_relations_target_idx; most cards have no row here, so this stays a cheap anti-join.
+      select cr.target_card_id as card_id, count(*)::integer as blocked_by_count
+      from card_relation cr
+      inner join filtered_cards fc on fc.id = cr.target_card_id
+      inner join card blocker on blocker.id = cr.source_card_id
+      where cr.kind = 'blocks'
+        and blocker.completed_at is null
+        and blocker.archived_at is null
+      group by cr.target_card_id
+    ),
     label_ids as (
       -- JSON uses the driver's native JSON.parse path instead of its JavaScript PostgreSQL-array
       -- decoder, reducing event-loop work on large boards while preserving UUID strings and order.
@@ -161,6 +173,7 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
       coalesce(attachment_counts.attachment_count, 0)::integer as "attachmentCount",
       coalesce(checklist_counts.done_count, 0)::integer as "checklistDoneCount",
       coalesce(checklist_counts.total_count, 0)::integer as "checklistTotalCount",
+      coalesce(blocker_counts.blocked_by_count, 0)::integer as "blockedByCount",
       coalesce(label_ids.label_ids, '[]'::json) as "labelIds",
       coalesce(assignee_ids.assignee_ids, '[]'::json) as "assigneeIds",
       coalesce(custom_field_values.custom_field_values, '[]'::json) as "customFieldValues",
@@ -175,6 +188,7 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
     left join comment_counts on comment_counts.card_id = fc.id
     left join attachment_counts on attachment_counts.card_id = fc.id
     left join checklist_counts on checklist_counts.card_id = fc.id
+    left join blocker_counts on blocker_counts.card_id = fc.id
     left join label_ids on label_ids.card_id = fc.id
     left join assignee_ids on assignee_ids.card_id = fc.id
     left join custom_field_values on custom_field_values.card_id = fc.id
@@ -278,6 +292,7 @@ export function toWireCardSummary<Value extends CompactCardCustomFieldValue>(
     attachmentCount: row.attachmentCount,
     checklistDoneCount: row.checklistDoneCount,
     checklistTotalCount: row.checklistTotalCount,
+    blockedByCount: row.blockedByCount,
     coverUrl: row.coverAttachmentId ? summaryCoverUrl : null,
     // Geometry is meaningful only alongside a selected cover. Nullable legacy rows intentionally
     // keep the fixed-height client fallback instead of triggering storage reads during board load.

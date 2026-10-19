@@ -164,7 +164,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
           @switch (view()) {
             @case ('menu') {
               <div class="fb-menu">
-                @if (showActivity() || showPrioritySet()) {
+                @if (showActivity() || showPrioritySet() || showReminderSet() || showBlocked()) {
                   <div class="fb-section-label" i18n="Filter panel section heading">Quick filters</div>
                 }
                 @if (showActivity()) {
@@ -176,6 +176,19 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                     <i class="ti ti-alert-circle fb-row-icon"></i><span class="fb-row-name" i18n="Quick filter - cards past their due date">Overdue</span>
                     @if (value().showOverdueOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
+                }
+                <!-- Blocked sits with Overdue: both are "this card needs attention" states. -->
+                @if (showBlocked()) {
+                  <button type="button" class="fb-row" [class.active]="value().showBlockedOnly" (click)="toggleBlocked()">
+                    <i class="ti ti-lock fb-row-icon"></i>
+                    <span class="fb-row-text">
+                      <span class="fb-row-name" i18n="card state|Quick filter - cards waiting on another open card">Blocked</span>
+                      <small i18n="Quick filter description - cards waiting on another open card">Cards waiting on another card</small>
+                    </span>
+                    @if (value().showBlockedOnly) { <i class="ti ti-check fb-row-check"></i> }
+                  </button>
+                }
+                @if (showActivity()) {
                   <button type="button" class="fb-row" [class.active]="value().showInactiveOnly" (click)="toggleInactive()">
                     <i class="ti ti-clock-pause fb-row-icon"></i>
                     <span class="fb-row-text">
@@ -867,6 +880,8 @@ export class FilterBarComponent implements OnDestroy {
   readonly showPrioritySet = input(false);
   /** Opt in to the "Reminder set" quick filter; reminders are the viewer's own, so board pages only. */
   readonly showReminderSet = input(false);
+  /** Opt in to the "Blocked" quick filter (boards filter locally, Global Work on the server). */
+  readonly showBlocked = input(false);
   readonly showCompleted = input(false);
   readonly showArchived = input(false);
   /**
@@ -933,6 +948,7 @@ export class FilterBarComponent implements OnDestroy {
     if (v.showInProgressOnly) n++;
     if (v.showPrioritySetOnly) n++;
     if (v.showReminderSetOnly) n++;
+    if (v.showBlockedOnly) n++;
     if (this.completedActive()) n++;
     if (this.archived()) n++;
     if (this.hideCompleted()) n++;
@@ -1029,6 +1045,9 @@ export class FilterBarComponent implements OnDestroy {
   }
   toggleReminderSet() {
     this.emit({ showReminderSetOnly: !this.value().showReminderSetOnly });
+  }
+  toggleBlocked() {
+    this.emit({ showBlockedOnly: !this.value().showBlockedOnly });
   }
   toggleArchived() {
     this.archivedChange.emit(!this.archived());

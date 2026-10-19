@@ -170,6 +170,30 @@ export interface EmailMessages {
     introComment: (p: { firstName: string; actor: string; card: string; board: string }) => string;
     introAttachment: (p: { firstName: string; actor: string; file: string; card: string; board: string }) => string;
   };
+  /** A watched card was marked as blocked by another card, or as blocking one. `other` is "KEY title", or the key alone when the recipient cannot open that card. */
+  cardDependencyAdded: {
+    subjectBlockedBy: (p: { card: string; other: string }) => string;
+    subjectBlocking: (p: { card: string; other: string }) => string;
+    preheader: (p: { actor: string; card: string; board: string }) => string;
+    heading: string;
+    introBlockedBy: (p: { firstName: string; actor: string; card: string; board: string; other: string }) => string;
+    introBlocking: (p: { firstName: string; actor: string; card: string; board: string; other: string }) => string;
+  };
+  /**
+   * An assigned or watched card's last blocker closed (ready to start), or a blocker was reopened
+   * (`*Reblocked`: blocked again). `other` is "KEY title", or the key alone when the recipient cannot
+   * open that card.
+   */
+  cardUnblocked: {
+    subject: (p: { card: string }) => string;
+    preheader: (p: { card: string; board: string }) => string;
+    heading: string;
+    intro: (p: { firstName: string; card: string; board: string; other: string }) => string;
+    subjectReblocked: (p: { card: string }) => string;
+    preheaderReblocked: (p: { card: string; board: string }) => string;
+    headingReblocked: string;
+    introReblocked: (p: { firstName: string; card: string; board: string; other: string }) => string;
+  };
   commentMentioned: {
     subject: (p: { card: string }) => string;
     preheader: (p: { actor: string; card: string; board: string }) => string;
@@ -513,6 +537,15 @@ export interface PushMessages {
     comment: (p: { actor: string; board: string; card: string }) => string;
     attachment: (p: { actor: string; board: string; card: string; file: string }) => string;
   };
+  dependency: {
+    title: string;
+    blockedBy: (p: { actor: string; card: string; other: string }) => string;
+    blocking: (p: { actor: string; card: string; other: string }) => string;
+  };
+  /** An assigned or watched card's last blocker closed; `other` is that blocker's key. */
+  unblocked: { title: string; body: (p: { card: string; other: string }) => string };
+  /** A blocker of an assigned or watched card was reopened, so it is blocked again; `other` is that blocker's key. */
+  reblocked: { title: string; body: (p: { card: string; other: string }) => string };
   dueDateChanged: { title: string; body: (p: { actor: string; card: string }) => string };
   cardOverdue: { title: string; body: (p: { card: string }) => string };
   checklistItemOverdue: { title: string; body: (p: { item: string; card: string }) => string };

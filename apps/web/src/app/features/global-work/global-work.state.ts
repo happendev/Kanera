@@ -1,3 +1,4 @@
+import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { DestroyRef, Injectable, computed, effect, inject, signal } from "@angular/core";
 import { compactInProgressClock, resolveInProgressClock, type ReportedInProgressClock } from "../board/time-in-progress.util";
 import type {
@@ -89,6 +90,7 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
       inactiveOnly: false,
       inProgressOnly: false,
       inProgressTooLongOnly: false,
+      blockedOnly: false,
       dueFrom: null,
       dueTo: null,
       overdueOnly: false,
@@ -114,11 +116,12 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
 }
 
 /**
- * Displays that are wrong on a partial card set: the board's lane order and "Next" card, and the
- * overview's per-teammate counts, which would silently under-report from page one.
+ * Displays that are wrong on a partial card set: the board's lane order and "Next" card, the
+ * overview's per-teammate counts, which would silently under-report from page one, and the
+ * dependency map, which is seeded with the loaded cards and would drop every chain past page one.
  */
 function displayNeedsEveryCard(display: WorkDisplayMode): boolean {
-  return display === "board" || display === "overview";
+  return display === "board" || display === "overview" || display === "dependencies";
 }
 
 /** The card fields the query projection keeps in sync, whether from a realtime echo or a local edit. */
@@ -142,6 +145,7 @@ const REALTIME_REFRESH_MAX_MS = 1_500;
 @Injectable()
 export class GlobalWorkState {
   private readonly api = inject(ApiClient);
+  private readonly completionWarning = inject(CompletionWarningService);
   readonly auth = inject(AuthService);
   readonly sockets = inject(SocketService);
   private readonly offlineCache = inject(OfflineCacheService);
@@ -682,7 +686,7 @@ export class GlobalWorkState {
       void Promise.all([this.refreshTeamPriorities(this.requestVersion), this.loadRemainingCards(this.requestVersion)])
         .then(() => this.persistCache())
         .catch(() => this.error.set($localize`We couldn’t load every card. Try refreshing the page.`));
-    } else if (display === "board") {
+    } else if (display === "board" || display === "dependencies") {
       this.teamPriorityCandidates.set([]);
       void this.loadRemainingCards(this.requestVersion)
         .then(() => this.persistCache())
@@ -850,6 +854,7 @@ export class GlobalWorkState {
   }
 
   async setCardCompleted(cardId: string, completed: boolean): Promise<void> {
+    if (!await this.completionWarning.allow(completed, { cardIds: [cardId] })) return;
     await this.api.patch(`/cards/${cardId}/completion`, { completed });
     await this.queryFirstPage();
   }

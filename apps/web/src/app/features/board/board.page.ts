@@ -1,3 +1,4 @@
+import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { MenuDirective } from "../../shared/menu.directive";
 import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy} from "@angular/core";
@@ -43,12 +44,14 @@ import { isCardInactive } from "@kanera/shared/card-timing";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 import { BulkCustomFieldsDialogComponent } from "./bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.component";
+import { DependencyMapComponent } from "../dependencies/dependency-map.component";
 import { WorkDoneViewComponent } from "./work-done-view/work-done-view.component";
 import { workDoneLayoutState } from "./work-done-view/work-done-preferences";
 import type { WorkDoneLayout } from "./work-done-view/work-done.types";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { CardDetailComponent } from "./card-detail.component";
 import { isOverdue } from "./due-date.util";
+import { blockedByCountOf } from "./card-relations.util";
 import { BoardGroupColumnComponent, type GroupCardDropPayload } from "./board-group-column.component";
 import { CardComposerDialogComponent, type CardComposerSeed } from "./card-composer.dialog";
 import { BoardTableViewComponent } from "./table-view/board-table-view.component";
@@ -99,6 +102,7 @@ const VIEW_LABELS = {
   table: $localize`:View switch label:Table view`,
   calendar: $localize`:View switch label:Calendar view`,
   history: $localize`:View switch label; the view lists completed work:Work done`,
+  dependencies: $localize`:View switch label; the view maps which cards block which:Dependencies view`,
 } as const;
 /** Page title and header while the board's own name is still loading. */
 const BOARD_FALLBACK_TITLE = $localize`:Page title while a board loads:Board`;
@@ -118,7 +122,7 @@ function sameIdSet(a: string[], b: string[]): boolean {
 @Component({
   selector: "k-board-page",
   standalone: true,
-  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, ToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
+  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, DependencyMapComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, ToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -133,6 +137,7 @@ export class BoardPage implements OnDestroy {
   private readonly socketBridge = inject(BoardSocketBridge);
   private readonly analytics = inject(AnalyticsService);
   private readonly api = inject(ApiClient);
+  private readonly completionWarning = inject(CompletionWarningService);
   private readonly appTitle = inject(AppTitleService);
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
@@ -172,7 +177,7 @@ export class BoardPage implements OnDestroy {
   });
   private readonly requestedView = computed<ViewMode>(() => {
     const fromUrl = this.view();
-    if (fromUrl === "table" || fromUrl === "board" || fromUrl === "notes" || fromUrl === "calendar" || fromUrl === "history") return fromUrl;
+    if (fromUrl === "table" || fromUrl === "board" || fromUrl === "notes" || fromUrl === "calendar" || fromUrl === "history" || fromUrl === "dependencies") return fromUrl;
     return this.rememberedView();
   });
   /**
@@ -199,6 +204,7 @@ export class BoardPage implements OnDestroy {
       { id: "board", icon: "layout-kanban", label: VIEW_LABELS.board, shortLabel: $localize`:Short view switch label for the kanban view:Board`, disabled },
       { id: "table", icon: "table", label: VIEW_LABELS.table, shortLabel: $localize`:Short view switch label:Table`, disabled },
       { id: "calendar", icon: "calendar-week", label: VIEW_LABELS.calendar, shortLabel: $localize`:Short view switch label:Calendar`, disabled },
+      { id: "dependencies", icon: "git-merge", label: VIEW_LABELS.dependencies, shortLabel: $localize`:Short view switch label for the view that maps which cards block which:Dependencies`, disabled },
       { id: "history", icon: "history", label: VIEW_LABELS.history, disabled },
       ...(this.state.notesEnabled() ? [{ id: "notes" as const, icon: "notebook", label: $localize`:View switch label:Board Notes`, shortLabel: $localize`:Short view switch label:Notes`, disabled }] : []),
     ];
@@ -287,6 +293,8 @@ export class BoardPage implements OnDestroy {
   readonly showPrioritySetOnly = signal(false);
   /** Only cards the viewer has a pending reminder on (`NotificationsService.reminderFor`). */
   readonly showReminderSetOnly = signal(false);
+  /** Only cards with at least one open blocker (`blockedByCount`, hidden blockers included). */
+  readonly showBlockedOnly = signal(false);
   readonly showArchived = signal(false);
   readonly completedFrom = signal("");
   readonly completedTo = signal("");
@@ -391,6 +399,7 @@ export class BoardPage implements OnDestroy {
     showInProgressOnly: this.showInProgressOnly(),
     showPrioritySetOnly: this.showPrioritySetOnly(),
     showReminderSetOnly: this.showReminderSetOnly(),
+    showBlockedOnly: this.showBlockedOnly(),
   }));
 
   // Every non-archived custom field is filterable via the condition builder (all seven types).
@@ -450,8 +459,9 @@ export class BoardPage implements OnDestroy {
     // so applying it there would blank the archive rather than filter it.
     const prioritySetOnly = this.showPrioritySetOnly();
     const reminderSetOnly = this.showReminderSetOnly();
+    const blockedOnly = this.showBlockedOnly();
     const showArchived = this.showArchived();
-    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!inProgressOnly || showArchived) && (!prioritySetOnly || showArchived) && (!reminderSetOnly || showArchived) && (!cardFilter || showArchived)) return null;
+    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!inProgressOnly || showArchived) && (!prioritySetOnly || showArchived) && (!reminderSetOnly || showArchived) && (!blockedOnly || showArchived) && (!cardFilter || showArchived)) return null;
     const fieldsById = conditions.length ? this.state.customFieldsById() : null;
     const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
     const listSet = new Set(listIds);
@@ -491,6 +501,8 @@ export class BoardPage implements OnDestroy {
           const reminder = this.notifications.reminderFor(card.id);
           if (!reminder || reminder.firedAt) return false;
         }
+        // Completed cards are done whatever blocked them, so they drop out like other live-work filters.
+        if (!showArchived && blockedOnly && (card.completedAt || !blockedByCountOf(card))) return false;
         if (fieldsById && cfValuesByCard && !matchesCfConditions(card.id, conditions, fieldsById, cfValuesByCard)) return false;
         return true;
       });
@@ -711,6 +723,7 @@ export class BoardPage implements OnDestroy {
     this.boardCardFilter() !== null ||
     this.showPrioritySetOnly() ||
     this.showReminderSetOnly() ||
+    this.showBlockedOnly() ||
     this.showArchived() ||
     this.showCompleted()
   );
@@ -993,6 +1006,8 @@ export class BoardPage implements OnDestroy {
       ["3", "calendar", VIEW_LABELS.calendar],
       ["4", "history", VIEW_LABELS.history],
       ["5", "notes", $localize`:Keyboard shortcut that switches to the notes view:Board notes`],
+      // After Notes rather than beside Calendar, so the digits people already know keep their views.
+      ["6", "dependencies", VIEW_LABELS.dependencies],
     ];
     this.shortcuts.registerAll($localize`:Keyboard shortcut group heading:Board`, [
       { keys: "c", label: $localize`:Keyboard shortcut:New card`, when: () => ready() && this.state.canEdit() && this.effectiveView() !== "notes" && !this.showArchived(), run: () => this.openComposer() },
@@ -1112,7 +1127,7 @@ export class BoardPage implements OnDestroy {
 
     effect(() => {
       const remembered = readViewMode(`board:${this.boardId()}`);
-      this.rememberedView.set(remembered === "table" || remembered === "notes" || remembered === "calendar" || remembered === "history" ? remembered : "board");
+      this.rememberedView.set(remembered === "table" || remembered === "notes" || remembered === "calendar" || remembered === "history" || remembered === "dependencies" ? remembered : "board");
     });
 
     effect(() => {
@@ -1210,6 +1225,7 @@ export class BoardPage implements OnDestroy {
       this.boardCardFilter.set(null);
       this.showPrioritySetOnly.set(saved?.showPrioritySetOnly ?? false);
       this.showReminderSetOnly.set(saved?.showReminderSetOnly ?? false);
+      this.showBlockedOnly.set(saved?.showBlockedOnly ?? false);
       this.showArchived.set(false);
       this.membersPopoverOpen.set(false);
       this.completedFrom.set(completed?.from ?? "");
@@ -1446,6 +1462,7 @@ export class BoardPage implements OnDestroy {
         showInProgressOnly: this.showInProgressOnly(),
         showPrioritySetOnly: this.showPrioritySetOnly(),
         showReminderSetOnly: this.showReminderSetOnly(),
+        showBlockedOnly: this.showBlockedOnly(),
       };
       writeFilters(scope, filters);
     });
@@ -1672,6 +1689,7 @@ export class BoardPage implements OnDestroy {
           );
           return;
         case "completion": {
+          if (!await this.completionWarning.allow(target.meta.completed === true, { cardIds: [cardId] })) return;
           const card = await this.api.patch<WireCard>(`/cards/${cardId}/completion`, {
             completed: target.meta.completed === true,
           });
@@ -1997,6 +2015,7 @@ export class BoardPage implements OnDestroy {
       this.showInProgressOnly.set(false);
       this.showPrioritySetOnly.set(false);
       this.showReminderSetOnly.set(false);
+      this.showBlockedOnly.set(false);
     }
     const data = await this.loadBoard(boardId, false, next);
     if (this.boardId() !== boardId || seq !== this.filterLoadSeq || this.showArchived() !== next) return;
@@ -2049,6 +2068,7 @@ export class BoardPage implements OnDestroy {
     this.showInProgressOnly.set(v.showInProgressOnly);
     this.showPrioritySetOnly.set(v.showPrioritySetOnly);
     this.showReminderSetOnly.set(v.showReminderSetOnly);
+    this.showBlockedOnly.set(v.showBlockedOnly);
   }
 
   onFilterOpened() {
@@ -2083,6 +2103,7 @@ export class BoardPage implements OnDestroy {
     this.boardCardFilter.set(null);
     this.showPrioritySetOnly.set(false);
     this.showReminderSetOnly.set(false);
+    this.showBlockedOnly.set(false);
     this.showArchived.set(false);
     this.completedFrom.set("");
     this.completedTo.set("");
@@ -2218,6 +2239,19 @@ export class BoardPage implements OnDestroy {
       queryParamsHandling: "merge",
       ...(card ? { browserUrl: cardPath(card.organisationKey, card.key) } : {}),
     });
+  }
+
+  /**
+   * A tile on the Dependencies view. Cards on this board open in the drawer like any other view;
+   * a card from elsewhere in the workspace opens on its own board, where its lists and fields live.
+   */
+  openDependencyCard(card: WireCardSummary) {
+    if (card.boardId === this.boardId()) {
+      this.openCardDetail(card.id);
+      return;
+    }
+    if (!this.unsavedWork.confirmNavigation()) return;
+    void this.router.navigate(["/b", card.boardId, "c", card.id], { browserUrl: cardPath(card.organisationKey, card.key) });
   }
 
   setView(mode: ViewMode) {

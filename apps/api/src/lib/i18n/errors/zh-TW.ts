@@ -438,5 +438,10 @@ export const zhTW: ErrorCatalog = {
   "invalid {provider} credentials": "{provider} 憑據無效",
   "remindAt must be within {days} days": "RememberAt 必須在 {days} 天內",
   "this attachment has no {variant} image": "該附件沒有{variant}圖像",
-  "work-done history is limited to the last {days} days": "完成的工作歷史記錄僅限於最近 {days} 天"
+  "work-done history is limited to the last {days} days": "完成的工作歷史記錄僅限於最近 {days} 天",
+  "a card cannot be related to itself": "卡片不能與自身關聯",
+  "a completed card cannot block another card": "已完成的卡片不能阻塞其他卡片",
+  "cards must be in the same workspace to be related": "卡片必須位於同一工作區才能關聯",
+  "relation not found": "未找到關聯",
+  "this relation would create a blocking cycle": "此關聯會形成阻塞循環",
 };

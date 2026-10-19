@@ -25,18 +25,18 @@ const fileBase64 = z.string()
   .max(700_000)
   .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u);
 const workScope = z.strictObject({
-  allAccessible: z.boolean().default(false).describe("Set true to include every accessible board and ignore the ID filters."),
+  allAccessible: z.boolean().default(false).describe("true includes every accessible board and ignores the ID filters."),
   organisationIds: z.array(uuid).max(20).default([]).describe("Organisation UUIDs to include."),
   workspaceIds: z.array(uuid).max(100).default([]).describe("Workspace UUIDs to include."),
   boardIds: z.array(uuid).max(500).default([]).describe("Board UUIDs to include."),
-}).optional().describe("Omit for every accessible board. When supplied, the listed IDs define the scope unless allAccessible is true.");
+}).optional().describe("Omit for every accessible board; otherwise the listed IDs define the scope unless allAccessible is true.");
 const workCustomFieldCondition = z.strictObject({
   workspaceId: uuid.describe("Workspace UUID that owns the custom field."),
   fieldId: uuid.describe("Custom-field UUID to test."),
-  op: z.enum(WORK_CUSTOM_FIELD_CONDITION_OPS).describe("Comparison operator appropriate for the field type."),
-  value: z.string().max(500).optional().describe("Primary scalar comparison value."),
-  value2: z.string().max(500).optional().describe("Upper bound used only by the between operator."),
-  ids: z.array(uuid).max(100).optional().describe("Option or user UUIDs used by set-based operators."),
+  op: z.enum(WORK_CUSTOM_FIELD_CONDITION_OPS).describe("Operator for the field type."),
+  value: z.string().max(500).optional().describe("Primary comparison value."),
+  value2: z.string().max(500).optional().describe("Upper bound for between."),
+  ids: z.array(uuid).max(100).optional().describe("Option or user UUIDs for set operators."),
 });
 const workFilters = z.strictObject({
   q: z.string().trim().max(200).optional().describe("Case-insensitive card title substring."),
@@ -45,19 +45,20 @@ const workFilters = z.strictObject({
   labelIds: z.array(uuid).max(200).optional().describe("Label UUIDs; cards matching any are included."),
   customFieldConditions: z.array(workCustomFieldCondition).max(50).optional().describe("Typed custom-field predicates combined with the other filters."),
   completion: z.enum(WORK_COMPLETION_FILTERS).optional().describe("Default activeAndRecentlyCompleted; use active for open work only."),
-  unassignedOnly: z.boolean().optional().describe("Return only cards with no assignees."),
+  unassignedOnly: z.boolean().optional().describe("Only cards with no assignees."),
   inactiveOnly: z.boolean().optional().describe("Cards idle past their workspace's inactive threshold (default 14 days)."),
-  inProgressOnly: z.boolean().optional().describe("Only open cards with a running time-in-progress stint (in a list flagged In progress)."),
-  inProgressTooLongOnly: z.boolean().optional().describe("Only open cards whose current in-progress stint has passed their workspace's inProgressAlertDays (never when that is 0)."),
+  inProgressOnly: z.boolean().optional().describe("Only open cards in a list flagged In progress (running time-in-progress stint)."),
+  inProgressTooLongOnly: z.boolean().optional().describe("Only open cards whose in-progress stint has passed the workspace's inProgressAlertDays (never when that is 0)."),
+  blockedOnly: z.boolean().optional().describe("Only open cards with an open blocker."),
   dueFrom: localDateInput.nullable().optional().describe("Inclusive due-date lower bound: YYYY-MM-DD or a phrase such as \"today\"."),
   dueTo: localDateInput.nullable().optional().describe("Inclusive due-date upper bound: YYYY-MM-DD or a phrase such as \"end of week\"."),
-  overdueOnly: z.boolean().optional().describe("Return only overdue active cards."),
-  overdueChecklistOnly: z.boolean().optional().describe("Return only cards with an overdue checklist item."),
+  overdueOnly: z.boolean().optional().describe("Only overdue active cards."),
+  overdueChecklistOnly: z.boolean().optional().describe("Only cards with an overdue checklist item."),
   archived: z.boolean().optional().describe("true returns only archived cards; otherwise only unarchived."),
   completedFrom: instantInput.nullable().optional().describe("Inclusive completion-time lower bound; ISO instant or a date phrase."),
-  completedTo: instantInput.nullable().optional().describe("Inclusive completion-time upper bound; ISO instant or date phrase (a bare date is 00:00 local)."),
-  lastActivityBefore: instantInput.nullable().optional().describe("Return cards with no visible activity at or after this instant or date phrase."),
-  lastMovedBefore: instantInput.nullable().optional().describe("Return cards with no move at or after this instant or date phrase."),
+  completedTo: instantInput.nullable().optional().describe("Inclusive completion-time upper bound; ISO instant or date phrase (bare date = 00:00 local)."),
+  lastActivityBefore: instantInput.nullable().optional().describe("Cards with no visible activity at or after this instant or date phrase."),
+  lastMovedBefore: instantInput.nullable().optional().describe("Cards not moved at or after this instant or date phrase."),
 }).optional();
 const sourceDirectorySchema = z.object({
   boards: z.array(z.looseObject({
@@ -142,6 +143,7 @@ const searchOutputSchema = z.object({
 // the standalone CLI build to bundle these runtime sources instead of depending on private
 // workspace packages.
 const { CARD_DUE_DATE_SLOTS } = await import("@kanera/shared/due-date-slots");
+const { CARD_RELATION_DIRECTIONS } = await import("@kanera/shared/card-relations");
 const dueDateSlot = z.enum(CARD_DUE_DATE_SLOTS);
 const cardTitle = z.string().min(1).max(500).describe("Non-empty card title, up to 500 characters.");
 const cardDescription = z.string().max(50000).nullable().describe("Markdown card description, or null to clear it.");
@@ -862,6 +864,8 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   "separators.delete": CHANGE,
   "cards.set_assignees": CHANGE,
   "cards.set_labels": CHANGE,
+  "cards.set_relations": CHANGE,
+  "cards.dependency_graph": READ,
   "cards.set_custom_field_value": CHANGE,
   "comments.add": SEND,
   "comments.list": READ,
@@ -1075,6 +1079,104 @@ function cardReferenceResolver(api: KaneraClient) {
 async function resolveCardReferences(api: KaneraClient, references: string[]): Promise<string[]> {
   const resolve = cardReferenceResolver(api);
   return Promise.all(references.map(resolve));
+}
+
+type DependencyGraphWire = {
+  cards: Array<{
+    id: string; key: string; title: string; url: string; boardId: string; listId: string; inScope: boolean;
+    completedAt?: string; dueDateLocalDate?: string; dueDateSlot?: string; inProgressSince?: string;
+    blockedByCount?: number; labelIds?: string[]; assigneeIds?: string[];
+  }>;
+  edges: Array<{ id: string; sourceCardId: string; targetCardId: string; kind: "blocks" | "relates_to" }>;
+  boards: Array<{ id: string; name: string }>;
+  lists: Array<{ id: string; name: string }>;
+  labels: Array<{ id: string; name: string }>;
+  people: Array<{ userId: string; displayName: string }>;
+  truncated: boolean;
+};
+
+/** Ids reachable from `start` over `next`, nearest first; `start` itself is left out. */
+function reachableCardIds(start: string, next: Map<string, string[]>): string[] {
+  const seen = new Set([start]);
+  const order: string[] = [];
+  let frontier = [start];
+  while (frontier.length) {
+    const ring: string[] = [];
+    for (const id of frontier) {
+      for (const other of next.get(id) ?? []) {
+        if (seen.has(other)) continue;
+        seen.add(other);
+        order.push(other);
+        ring.push(other);
+      }
+    }
+    frontier = ring;
+  }
+  return order;
+}
+
+/**
+ * The web map's response reshaped for a model: names inlined from the lookups so no follow-up reads
+ * are needed, and blockers that are not on the map counted per card. The API already left out cards
+ * the caller cannot open, so nothing here can reveal more than the response did.
+ */
+function dependencyGraphForAgents(graph: DependencyGraphWire, focusCardId: string | undefined) {
+  const names = (rows: Array<{ id: string; name: string }>) => new Map(rows.map((row) => [row.id, row.name]));
+  const boardNames = names(graph.boards);
+  const listNames = names(graph.lists);
+  const labelNames = names(graph.labels);
+  const people = new Map(graph.people.map((person) => [person.userId, person.displayName]));
+  const completed = new Set(graph.cards.filter((card) => card.completedAt).map((card) => card.id));
+  const blockers = new Map<string, string[]>();
+  const dependents = new Map<string, string[]>();
+  const related = new Map<string, string[]>();
+  const push = (map: Map<string, string[]>, key: string, value: string) => map.set(key, [...(map.get(key) ?? []), value]);
+  for (const edge of graph.edges) {
+    if (edge.kind === "blocks") {
+      push(blockers, edge.targetCardId, edge.sourceCardId);
+      push(dependents, edge.sourceCardId, edge.targetCardId);
+    } else {
+      push(related, edge.sourceCardId, edge.targetCardId);
+      push(related, edge.targetCardId, edge.sourceCardId);
+    }
+  }
+  const cards = graph.cards.map((card) => {
+    const openBlockerCount = card.blockedByCount ?? 0;
+    // blockedByCount includes blockers on boards the caller cannot open and ones past the map's edge.
+    const offMapBlockerCount = openBlockerCount - (blockers.get(card.id) ?? []).filter((id) => !completed.has(id)).length;
+    return {
+      id: card.id,
+      key: card.key,
+      title: card.title,
+      url: card.url,
+      boardId: card.boardId,
+      boardName: boardNames.get(card.boardId) ?? null,
+      listName: listNames.get(card.listId) ?? null,
+      inScope: card.inScope,
+      ...(card.completedAt && { completedAt: card.completedAt }),
+      ...(card.dueDateLocalDate && { dueDateLocalDate: card.dueDateLocalDate, ...(card.dueDateSlot && { dueDateSlot: card.dueDateSlot }) }),
+      ...(card.inProgressSince && { inProgressSince: card.inProgressSince }),
+      ...(card.assigneeIds?.length && { assignees: card.assigneeIds.map((userId) => ({ userId, displayName: people.get(userId) ?? null })) }),
+      ...(card.labelIds?.length && { labels: card.labelIds.map((id) => labelNames.get(id) ?? id) }),
+      ...(openBlockerCount > 0 && { openBlockerCount }),
+      ...(offMapBlockerCount > 0 && { offMapBlockerCount }),
+    };
+  });
+  const focus = focusCardId === undefined ? undefined : {
+    cardId: focusCardId,
+    onMap: graph.cards.some((card) => card.id === focusCardId),
+    blockedBy: blockers.get(focusCardId) ?? [],
+    blocks: dependents.get(focusCardId) ?? [],
+    upstream: reachableCardIds(focusCardId, blockers),
+    downstream: reachableCardIds(focusCardId, dependents),
+    relatedTo: related.get(focusCardId) ?? [],
+  };
+  return {
+    ...(focus && { focus }),
+    cards,
+    edges: graph.edges.map(({ sourceCardId, targetCardId, kind }) => ({ sourceCardId, targetCardId, kind })),
+    truncated: graph.truncated,
+  };
 }
 
 type CardListCursor = { boardId: string; listId: string; offset: number };
@@ -1686,7 +1788,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     const { cards: _cards, ...boardWithoutCards } = detail;
     return boundedConfiguration(boardWithoutCards);
   }, ctx);
-  registerKaneraTool(server, "cards.list", "Get one bounded page of active (unarchived) cards, including completed cards, from exactly one workflow list. Use boards.get first to resolve the list id, then pass nextCursor to continue. Never returns cards from another list or an unbounded card collection. Cards are in board order, top first. Assigned-items-only members see only their assigned cards.", {
+  registerKaneraTool(server, "cards.list", "Get one bounded page of active (unarchived) cards, including completed cards, from exactly one workflow list. Use boards.get first to resolve the list id, then pass nextCursor to continue. Never returns cards from another list or an unbounded card collection. Cards are in board order, top first. Assigned-items-only members see only their assigned cards. A card with open blockers carries blockedByCount (absent means none); prefer cards without it when choosing what to work on, and read cards.get for the blockers themselves.", {
     boardId: uuid.describe("Board containing the requested workflow lists."),
     listId: uuid.describe("Exactly one workflow list id returned by boards.get."),
     cursor: z.string().min(1).optional().describe("Opaque nextCursor returned by the previous page."),
@@ -1721,7 +1823,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     query: z.string().trim().min(1).max(200),
     limit: z.number().int().min(1).max(10).default(5),
   }, (a, _api) => docsSearchClient(ctx.docsSearchUrl).search(a.query, a.limit), ctx);
-  registerKaneraTool(server, "cards.get", "Read a card detail, including labels, assignees, checklist item descriptions, nested sub-checklists, attachments, and linked notes. Checklists are returned flat; a sub-checklist's parentItemId identifies its owning top-level item. For checklist-only work, checklists.get returns a nested tree. Reuse the returned card id as cardId in later calls to skip key resolution. Checklists and items are in display order; attachments newest first.", { cardId: cardReference }, async (a, api) =>
+  registerKaneraTool(server, "cards.get", "Read a card detail, including labels, assignees, checklist item descriptions, nested sub-checklists, attachments, linked notes, and relations (blocks / blocked_by / relates_to, plus hiddenBlockerCount for open blockers you cannot open). Checklists are returned flat; a sub-checklist's parentItemId identifies its owning top-level item. For checklist-only work, checklists.get returns a nested tree. Reuse the returned card id as cardId in later calls to skip key resolution. Checklists and items are in display order; attachments newest first.", { cardId: cardReference }, async (a, api) =>
     api.get(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/detail`), ctx);
   registerKaneraTool(server, "cards.get_content", `Read checklist and comment content for up to 200 selected cards in one board, avoiding one detail/comment request per card during summaries, audits, and migrations. Best-effort: ids not visible on the board are returned in missingCardIds, and cards whose bounded comment history is incomplete are listed in truncatedCardIds so comments.list can page them. Cards return in request order with comments oldest first. ${boardBatchScope}`, {
     boardId: uuid,
@@ -1897,6 +1999,118 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     api.put(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/assignees`, { userIds: a.userIds }), ctx);
   registerKaneraTool(server, "cards.set_labels", "Replace all labels on a card. Requires board editor access and a write-capable credential.", { cardId: cardReference, labelIds: z.array(uuid).max(100) }, async (a, api) =>
     api.put(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/labels`, { labelIds: a.labelIds }), ctx);
+  registerKaneraTool(server, "cards.set_relations", "Add or remove dependencies between cards in the same workspace. direction reads from cardId's side: blocks (cardId blocks each other card), blocked_by (each other card blocks cardId), relates_to (no order). Open blockers keep a card Blocked until completed, archived or unlinked. The first open blocker triggers card_blocked automations and card.blocked MCP events; clearing the last triggers card_unblocked and card.unblocked. Reopening or restoring a blocker can block the dependent again. Adding is idempotent; blocking cycles and completed blockers are rejected. Changes commit per card: refused ones appear in failed beside final relations; successful removals appear in removedCardIds. If the final read fails, addedCardIds or removedCardIds preserve successes beside relationsUnavailable. A batch errors when every attempted change is refused. Requires editor access to cardId and to any card that becomes blocked, read access to other cards, and a write-capable credential. Removal matches visible relations; absent or hidden ones appear in notFoundCardIds and are left alone.", {
+    cardId: cardReference,
+    direction: z.enum(CARD_RELATION_DIRECTIONS),
+    otherCardIds: z.union([cardReference, z.array(cardReference).min(1).max(50)]).describe("One card reference or up to 50."),
+    remove: z.boolean().default(false).describe("Remove these relations instead of adding them."),
+  }, async (a, api) => {
+    const cardId = await resolveCardReference(api, a.cardId);
+    const otherIds = await resolveCardReferences(api, Array.isArray(a.otherCardIds) ? a.otherCardIds : [a.otherCardIds]);
+    if (a.remove) {
+      const before = await api.get<{ relations: { id: string; direction: string; card: { id: string } }[]; hiddenBlockerCount: number }>(`/api/v1/cards/${cardId}/relations`);
+      const missing: string[] = [];
+      // Different references can resolve to the same card. Delete each relation once, and retain
+      // missing cards even if a later rate limit prevents the remaining visible removals.
+      const candidates = [...new Set(otherIds)].flatMap((otherId) => {
+        const relation = before.relations.find((candidate) => candidate.card.id === otherId && candidate.direction === a.direction);
+        if (!relation) {
+          missing.push(otherId);
+          return [];
+        }
+        return [{ cardId: otherId, relationId: relation.id }];
+      });
+      if (!candidates.length) return { ...before, notFoundCardIds: missing };
+
+      const removedCardIds: string[] = [];
+      const failed: { cardId: string; status: number; code: string; message: string }[] = [];
+      const notAttemptedCardIds: string[] = [];
+      let firstError: KaneraApiError | undefined;
+      for (const [index, candidate] of candidates.entries()) {
+        try {
+          await api.delete(`/api/v1/cards/${cardId}/relations/${candidate.relationId}`);
+          removedCardIds.push(candidate.cardId);
+        } catch (error) {
+          if (!(error instanceof KaneraApiError)) throw error;
+          // Another caller may have removed it since the read; the requested state already holds.
+          if (error.status === 404) {
+            missing.push(candidate.cardId);
+            continue;
+          }
+          firstError ??= error;
+          failed.push({ cardId: candidate.cardId, status: error.status, code: error.code, message: error.message });
+          if (error.status === 401 || error.status === 429 || error.status >= 500) {
+            notAttemptedCardIds.push(...candidates.slice(index + 1).map((remaining) => remaining.cardId));
+            break;
+          }
+        }
+      }
+      if (!removedCardIds.length && firstError) throw firstError;
+      const partial = {
+        ...(removedCardIds.length ? { removedCardIds } : {}),
+        ...(missing.length ? { notFoundCardIds: missing } : {}),
+        ...(failed.length ? { failed } : {}),
+        ...(notAttemptedCardIds.length ? { notAttemptedCardIds } : {}),
+      };
+      try {
+        const after = await api.get<Record<string, unknown>>(`/api/v1/cards/${cardId}/relations`);
+        return { ...after, ...partial };
+      } catch (error) {
+        // Removals already committed and may have triggered unblocked automations. A failed read
+        // must not hide them, just as a later refused deletion must not hide earlier successes.
+        if (!(error instanceof KaneraApiError)) throw error;
+        return { ...partial, relationsUnavailable: { status: error.status, code: error.code, message: error.message } };
+      }
+    }
+    // Sequential: each add takes the workspace relation lock, and an earlier add can make a later
+    // one a cycle, which should fail on that card rather than race. Each add commits on its own, so
+    // one card's refusal (cycle, completed blocker, no access) must not hide what was already linked:
+    // the other cards are still attempted and the refusals come back per card beside the final
+    // relations. Only when nothing was added is the whole call an error. A credential or server
+    // failure stops the batch, since the remaining adds would fail the same way.
+    const failed: { cardId: string; status: number; code: string; message: string }[] = [];
+    const notAttemptedCardIds: string[] = [];
+    let firstError: KaneraApiError | undefined;
+    let added = 0;
+    for (const [index, otherId] of otherIds.entries()) {
+      try {
+        await api.post(`/api/v1/cards/${cardId}/relations`, { targetCardId: otherId, direction: a.direction });
+        added += 1;
+      } catch (error) {
+        if (!(error instanceof KaneraApiError)) throw error;
+        firstError ??= error;
+        failed.push({ cardId: otherId, status: error.status, code: error.code, message: error.message });
+        if (error.status === 401 || error.status === 429 || error.status >= 500) {
+          notAttemptedCardIds.push(...otherIds.slice(index + 1));
+          break;
+        }
+      }
+    }
+    if (added === 0 && firstError) throw firstError;
+    const partial = { ...(failed.length ? { failed } : {}), ...(notAttemptedCardIds.length ? { notAttemptedCardIds } : {}) };
+    try {
+      const after = await api.get<Record<string, unknown>>(`/api/v1/cards/${cardId}/relations`);
+      return { ...after, ...partial };
+    } catch (error) {
+      // The read shares the credential's rate limit with the adds that just ran, so it can fail
+      // right after a 429 stopped the batch. The adds are committed either way: report them by id
+      // rather than turning the whole call into an error that hides them.
+      if (!(error instanceof KaneraApiError)) throw error;
+      return { addedCardIds: otherIds.filter((otherId) => !failed.some((entry) => entry.cardId === otherId) && !notAttemptedCardIds.includes(otherId)), ...partial, relationsUnavailable: { status: error.status, code: error.code, message: error.message } };
+    }
+  }, ctx);
+  registerKaneraTool(server, "cards.dependency_graph", "Map blocking chains across boards: what blocks a card and what it holds up, or what is blocked on a board or workspace. Pass exactly one of cardId, boardId, workspaceId. Walks blocks relations both ways through open cards you can open; completed blockers appear but are not walked past. Cards you cannot open are never shown: openBlockerCount still counts them, offMapBlockerCount counts open blockers missing from the map. sourceCardId blocks targetCardId. With cardId, focus gives direct (blockedBy, blocks) and transitive (upstream, downstream) ids, nearest first; onMap is false if that card is completed, archived or unrelated. Max 400 cards (truncated).", {
+    cardId: cardReference.optional().describe("Card UUID, key such as PROJ-123, or URL to map around."),
+    boardId: uuid.optional().describe("Map this board's dependent cards and their chains."),
+    workspaceId: uuid.optional().describe("Map this workspace's dependent cards."),
+  }, async (a, api) => {
+    if ([a.cardId, a.boardId, a.workspaceId].filter((value) => value !== undefined).length !== 1) {
+      validationError("pass exactly one of cardId, boardId or workspaceId");
+    }
+    const cardId = a.cardId === undefined ? undefined : await resolveCardReference(api, a.cardId);
+    const scope = cardId ? { cardIds: [cardId] } : a.boardId ? { boardId: a.boardId } : { workspaceId: a.workspaceId };
+    return dependencyGraphForAgents(await api.post<DependencyGraphWire>("/api/v1/cards/dependency-graph", scope), cardId);
+  }, ctx);
   registerKaneraTool(server, "cards.set_custom_field_value", "Set or clear one custom-field value on a card. Requires board editor access and a write-capable credential.", customFieldValueSchema(), async (a, api) =>
     api.put(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/custom-fields/${a.fieldId}`, customFieldValueBody(a.value)), ctx);
   registerKaneraTool(server, "comments.add", `Publish a comment to authorised board users, optionally linking card attachments already uploaded for that comment. ${MENTION_SYNTAX} This may send notifications and configured webhook deliveries; deleting the comment cannot retract deliveries. Requires board editor access and a write-capable credential. This is not idempotent; do not retry after an ambiguous success.`, {
@@ -2163,8 +2377,8 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     if (a.preset && (a.from || a.to)) validationError("preset cannot be combined with from and to");
     return api.post("/api/v1/work/history/query", a);
   }, ctx, workHistoryOutputSchema);
-  registerKaneraTool(server, "work.query_cards", "Use this when listing current, in-progress, completed, overdue, unassigned, or stale work across one or many Kanera projects. For active work use filters.inProgressOnly with sort=inProgressAsc (longest running first). For another person, use lens=team and one assigneeIds value; do not enumerate boards manually. Results include source-name maps and canonical card links. Ordered by sort (default dueAsc: soonest due first, undated last), ties by card id.", {
-    lens: z.enum(["my", "team"]).describe("Use my for the connected user's assignments; use team with filters.assigneeIds for another person."),
+  registerKaneraTool(server, "work.query_cards", "List current, in-progress, blocked, completed, overdue, unassigned, or stale work across one or many Kanera projects. For active work use filters.inProgressOnly with sort=inProgressAsc (longest running first); filters.blockedOnly for held-up work. For another person, use lens=team and one assigneeIds value; do not enumerate boards manually. Results include name maps and canonical card links. Ordered by sort (default dueAsc: soonest due first, undated last), ties by card id.", {
+    lens: z.enum(["my", "team"]).describe("my: the connected user's assignments; team: another person via filters.assigneeIds."),
     scope: workScope,
     filters: workFilters,
     sort: z.enum(WORK_SORT_VALUES).default("dueAsc"),

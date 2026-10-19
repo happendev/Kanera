@@ -85,6 +85,9 @@ export const workFiltersSchema = z.object({
   // Open cards whose current in-progress stint has run past their workspace's inProgressAlertDays
   // (never while that setting is 0): exactly the cards whose clock turns amber on the board.
   inProgressTooLongOnly: z.boolean().default(false),
+  // Open cards with at least one open blocker, hidden blockers included (the count never reveals
+  // titles). Completed cards are done whatever blocked them, like the board's Blocked quick filter.
+  blockedOnly: z.boolean().default(false),
   dueFrom: z.iso.date().nullable().default(null),
   dueTo: z.iso.date().nullable().default(null),
   overdueOnly: z.boolean().default(false),
@@ -114,6 +117,7 @@ export const workViewDefinitionSchema = z.object({
     inactiveOnly: false,
     inProgressOnly: false,
     inProgressTooLongOnly: false,
+    blockedOnly: false,
     dueFrom: null,
     dueTo: null,
     overdueOnly: false,
@@ -263,6 +267,11 @@ export type WorkCatalogPerson = {
   displayName: string;
   avatarUrl: string | null;
   boardIds: string[];
+  /**
+   * The subset of `boardIds` where this person is a guest: not a member of the organisation that
+   * owns the board. Cross-organisation guests reach boards through `board_members` alone.
+   */
+  guestBoardIds: string[];
 };
 
 export type WorkViewShareCandidate = {

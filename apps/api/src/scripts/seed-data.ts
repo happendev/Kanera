@@ -25,6 +25,7 @@ import {
   cardPriorities,
   cards,
   cardWatchers,
+  cardRelations,
   clientMembers,
   clients,
   comments,
@@ -272,6 +273,7 @@ export type SeedSummary = {
   notes: number;
   scratchpadNotes: number;
   internalLinks: number;
+  cardRelations: number;
   mentions: number;
   notifications: number;
 };
@@ -4692,6 +4694,109 @@ async function seedInternalLinkDemos(tx: Tx, workspaceId: string): Promise<numbe
   return rows.length;
 }
 
+/**
+ * Card dependencies across the development and marketing boards, so a fresh seed shows every state:
+ * a Blocked tile whose blocker sits on the other board, a same-board chain, a card waiting on two
+ * blockers, a completed blocker that no longer blocks, and a plain "related" pair. Each relation
+ * gets the activity rows the live route records on both cards, and a selected watcher in each
+ * workspace gets the "dependency" inbox entry a live add would send.
+ */
+async function seedCardRelationDemos(tx: Tx, input: {
+  workspaceKey: "development" | "marketing";
+  workspaceId: string;
+  clientId: string;
+  actorId: string;
+  watcherId: string;
+  now: Date;
+}): Promise<{ relations: number; notifications: number }> {
+  const cardRows = await tx.select().from(cards).where(eq(cards.workspaceId, input.workspaceId));
+  const cardByTitle = new Map(cardRows.map((row) => [row.title, row]));
+  let relations = 0;
+  let notificationCount = 0;
+  const opposite = { blocks: "blocked_by", blocked_by: "blocks", relates_to: "relates_to" } as const;
+
+  async function relate(sourceTitle: string, targetTitle: string, kind: "blocks" | "relates_to", hoursAgo: number, notifyWatcher = false) {
+    const source = cardByTitle.get(sourceTitle);
+    const target = cardByTitle.get(targetTitle);
+    if (!source || !target) return;
+    // relates_to is stored once with the smaller id as source, as the API stores it.
+    const [first, second] = kind === "relates_to" && target.id < source.id ? [target, source] : [source, target];
+    const [relation] = await tx.insert(cardRelations).values({
+      workspaceId: input.workspaceId,
+      sourceCardId: first.id,
+      targetCardId: second.id,
+      kind,
+      createdById: input.actorId,
+      createdAt: addHours(input.now, -hoursAgo),
+    }).onConflictDoNothing().returning();
+    if (!relation) return;
+    relations += 1;
+    const createdAt = addHours(input.now, -hoursAgo);
+    const sourceDirection = kind === "blocks" ? "blocks" : "relates_to";
+    const sides = [
+      { card: source, other: target, direction: sourceDirection },
+      { card: target, other: source, direction: opposite[sourceDirection] },
+    ] as const;
+    for (const side of sides) {
+      const [activity] = await tx.insert(activityEvents).values({
+        boardId: side.card.boardId,
+        workspaceId: input.workspaceId,
+        actorId: input.actorId,
+        entityType: "card",
+        entityId: side.card.id,
+        action: "relation:added",
+        payload: { relationId: relation.id, direction: side.direction, otherCardId: side.other.id, otherCardKey: side.other.key },
+        createdAt,
+        updatedAt: createdAt,
+      }).returning();
+      if (notifyWatcher && side.direction === "blocked_by") {
+        await tx.insert(cardWatchers).values({ cardId: side.card.id, userId: input.watcherId }).onConflictDoNothing();
+        await tx.insert(notifications).values({
+          clientId: input.clientId,
+          userId: input.watcherId,
+          activityId: activity!.id,
+          cardId: side.card.id,
+          listId: side.card.listId,
+          boardId: side.card.boardId,
+          workspaceId: input.workspaceId,
+          reason: "dependency",
+          createdAt,
+        }).onConflictDoNothing();
+        notificationCount += 1;
+      }
+    }
+  }
+
+  if (input.workspaceKey === "marketing") {
+    // The launch waits on both messaging and approval. Channel work stays on its own board,
+    // making cross-board blockers visible without moving cards out of the team's workflow.
+    await relate("Confirm final product messaging", "Prepare autumn campaign launch", "blocks", 30, true);
+    await relate("Approve the campaign launch package", "Prepare autumn campaign launch", "blocks", 26);
+    await relate("Confirm final product messaging", "Lock the autumn campaign brief", "blocks", 29);
+    await relate("Design the autumn campaign graphics", "Approve the campaign launch package", "blocks", 28);
+    await relate("Write the campaign landing-page copy", "Build the autumn campaign landing page", "blocks", 24);
+    // These reviews explicitly allow follow-ups or a no-screenshot fallback, so they are
+    // useful context for each other without holding up approval or publication.
+    await relate("Legal review of brand claims wording", "Approve the revised voice guidance", "relates_to", 22);
+    await relate("Customer approval of final story", "Editorial review: Northshore story", "relates_to", 20);
+    await relate("Confirm guest speaker availability", "Organise the autumn customer webinar", "blocks", 18);
+    await relate("Receive partner biography and headshot", "Build the webinar registration page", "blocks", 17);
+    // Design can proceed with draft wording; final approval needs HR-confirmed claims.
+    await relate("HR confirmation of recruitment wording", "Approve the recruitment campaign assets", "blocks", 16);
+    // Completed prerequisites keep their relationship, but must not show an active Blocked chip.
+    await relate("Brand type scale finalised", "Update the sales presentation template", "blocks", 48);
+    await relate("Edit the campaign announcement article", "Build the autumn campaign landing page", "relates_to", 12);
+  } else {
+    await relate("Investigate flaky due-date reminders on iOS", "Add push preference controls to mobile settings", "blocks", 30, true);
+    await relate("Tighten upload progress copy for slow connections", "QA regression pass on card attachments in mobile web", "blocks", 26);
+    await relate("Fix reconnect gaps from dogfooding", "Run QA pass for onboarding with no existing workspaces", "blocks", 20);
+    await relate("Retry orphaned attachment cleanup on startup", "Run QA pass for onboarding with no existing workspaces", "blocks", 19);
+    await relate("Refresh engineering branching guide", "Write migration rollback guide for customer imports", "blocks", 48);
+    await relate("Reduce board hydration time for large workspaces", "Prepare tablet layout for board overview", "relates_to", 12);
+  }
+  return { relations, notifications: notificationCount };
+}
+
 function fieldValueUpdate(fieldName: string, fieldType: string, value: SeedFieldValue, optionIdByFieldAndLabel: Map<string, Map<string, string>>) {
   const base = { valueText: null, valueNumber: null, valueCheckbox: null, valueOptionIds: null } as {
     valueText: string | null;
@@ -4844,6 +4949,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
     notes: 0,
     scratchpadNotes: 0,
     internalLinks: 0,
+    cardRelations: 0,
     mentions: 0,
     notifications: 0,
   };
@@ -6280,6 +6386,19 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         }
 
         summary.internalLinks += await seedInternalLinkDemos(tx, workspace!.id);
+        if (workspaceSeed.key === "development" || workspaceSeed.key === "marketing") {
+          const isMarketing = workspaceSeed.key === "marketing";
+          const relationDemo = await seedCardRelationDemos(tx, {
+            workspaceKey: workspaceSeed.key,
+            workspaceId: workspace!.id,
+            clientId: client!.id,
+            actorId: userIdByKey.get(isMarketing ? "ben" : "priya")!,
+            watcherId: userIdByKey.get(isMarketing ? "amelia" : "marcus")!,
+            now: new Date(),
+          });
+          summary.cardRelations += relationDemo.relations;
+          summary.notifications += relationDemo.notifications;
+        }
       }
 
       summary.notifications += await seedAgentRunDemos(tx, {

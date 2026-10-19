@@ -43,6 +43,11 @@ export const COMMAND_ALIASES: CommandAlias[] = [
   { path: ["card", "done"], tool: "cards.set_completion", summary: "Mark a card complete", positionals: ["cardId"], defaults: { completed: true }, group: "Cards" },
   { path: ["card", "reopen"], tool: "cards.set_completion", summary: "Mark a card incomplete", positionals: ["cardId"], defaults: { completed: false }, group: "Cards" },
   { path: ["card", "archive"], tool: "cards.archive", summary: "Archive a card", positionals: ["cardId"], group: "Cards" },
+  // Dependencies read left to right: "card block API-1 WEB-2" means API-1 blocks WEB-2.
+  { path: ["card", "block"], tool: "cards.set_relations", summary: "Mark a card as blocking another, e.g. card block API-1 WEB-2", positionals: ["cardId", "otherCardIds"], defaults: { direction: "blocks" }, group: "Cards" },
+  { path: ["card", "unblock"], tool: "cards.set_relations", summary: "Remove a blocking relation added with card block", positionals: ["cardId", "otherCardIds"], defaults: { direction: "blocks", remove: true }, group: "Cards" },
+  { path: ["card", "relate"], tool: "cards.set_relations", summary: "Relate two cards without an order", positionals: ["cardId", "otherCardIds"], defaults: { direction: "relates_to" }, group: "Cards" },
+  { path: ["deps"], tool: "cards.dependency_graph", summary: "Map what blocks a card and what it holds up; --boardId or --workspaceId maps a whole scope", positionals: ["cardId"], group: "Cards" },
   { path: ["card", "history"], tool: "cards.list_history", summary: "List a card's activity and comments", positionals: ["cardId"], group: "Cards" },
   { path: ["card", "upload-link"], tool: "cards.create_upload_link", summary: "Get a one-time URL to attach a local file with curl -T", positionals: ["cardId", "fileName"], group: "Cards" },
   { path: ["card", "attachment"], tool: "cards.get_attachment", summary: "Read an attachment's text or image contents", positionals: ["cardId", "attachmentId"], group: "Cards" },

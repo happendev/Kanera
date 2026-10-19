@@ -245,18 +245,29 @@ export class KaneraClient {
     try {
       return await this.fetchImpl(input, init);
     } catch (error) {
-      if (this.options.signal?.aborted) {
-        throw new KaneraApiError(499, "REQUEST_CANCELLED", "MCP request was cancelled by the client");
-      }
-      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
-        throw new KaneraApiError(504, "UPSTREAM_TIMEOUT", "Kanera did not respond before the MCP upstream timeout");
-      }
-      throw new KaneraApiError(503, "UPSTREAM_UNAVAILABLE", "Kanera is temporarily unavailable");
+      throw this.transportError(error);
     }
   }
 
+  private transportError(error: unknown): KaneraApiError {
+    if (this.options.signal?.aborted) {
+      return new KaneraApiError(499, "REQUEST_CANCELLED", "MCP request was cancelled by the client");
+    }
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      return new KaneraApiError(504, "UPSTREAM_TIMEOUT", "Kanera did not respond before the MCP upstream timeout");
+    }
+    return new KaneraApiError(503, "UPSTREAM_UNAVAILABLE", "Kanera is temporarily unavailable");
+  }
+
   private async responsePayload<T>(response: Response): Promise<T> {
-    const text = await response.text();
+    let text: string;
+    try {
+      text = await response.text();
+    } catch (error) {
+      // Fetch resolves at the headers, but the socket or deadline can fail while reading the body.
+      // Batch handlers must recognise that failure too, so earlier committed writes stay visible.
+      throw this.transportError(error);
+    }
     const payload = this.parsePayload(text, response);
     if (!response.ok) {
       const problem = typeof payload === "object" && payload ? payload as { code?: string; message?: string; reason?: unknown } : {};

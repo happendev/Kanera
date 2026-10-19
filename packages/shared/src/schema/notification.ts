@@ -10,7 +10,7 @@ import { lists } from "./list.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
 
-export const NOTIFICATION_REASONS = ["assigned", "watching", "mentioned", "overdue", "checklist_item_overdue", "board_member_left", "reminder", "reacted"] as const;
+export const NOTIFICATION_REASONS = ["assigned", "watching", "mentioned", "overdue", "checklist_item_overdue", "board_member_left", "reminder", "reacted", "dependency"] as const;
 export type NotificationReason = (typeof NOTIFICATION_REASONS)[number];
 export const NOTIFICATION_REASON = {
   BOARD_MEMBER_LEFT: "board_member_left",
@@ -21,6 +21,10 @@ export const NOTIFICATION_REASON = {
   CHECKLIST_ITEM_OVERDUE: "checklist_item_overdue",
   REMINDER: "reminder",
   REACTED: "reacted",
+  // A watched card was marked as blocked by another card, or as blocking one; or an assigned or
+  // watched card's last blocker closed, handing the work over (activity `blockers:cleared`), or a
+  // blocker was reopened so the card is blocked again (`blockers:reopened`).
+  DEPENDENCY: "dependency",
 } as const satisfies Record<string, NotificationReason>;
 
 export const notifications = pgTable(

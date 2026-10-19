@@ -47,6 +47,7 @@ function summaryCard(id: string): WireCardSummary {
     attachmentCount: 0,
     checklistDoneCount: 0,
     checklistTotalCount: 0,
+    blockedByCount: 0,
     coverUrl: null,
     coverImageWidth: null,
     coverImageHeight: null,

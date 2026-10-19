@@ -522,3 +522,82 @@ void test("my_day.ready pings once per weekday morning, only while the digest ga
     } }], "content-free, in the user's own zone");
   } finally { await publicApi.close(); }
 });
+
+// Signed callbacks cannot safely use a private E2E receiver (SSRF protections reject it). This
+// test catches duplicate/non-boundary deliveries, lost actor/self attribution and snapshot filters
+// after an automation moves the card, while browser E2E covers the real cross-process fanout.
+void test("dependency MCP events persist exact boundaries without rules and preserve actor and list snapshots", async () => {
+  const f = await fixture();
+  const signingSecret = secret();
+  const delivered: Array<{ name: string; data: { cardId: string; listId: string; actor: typeof actor } }> = [];
+  const send: McpWebhookRequest = async (_url, body, headers) => {
+    checkSignature(headers, body, signingSecret);
+    const payload = JSON.parse(body) as { type: string; challenge: string } | (typeof delivered)[number];
+    if ("type" in payload) return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+    if (payload.name !== "card.updated") delivered.push(payload);
+    return { status: 204, body: "" };
+  };
+  const publicApi = await buildPublicApiServer({ logger: false, enableWebhookDeliveryScheduler: false, rateLimit: { enabled: false }, mcpWebhookRequest: send });
+  const headers = { authorization: `Bearer ${f.key.secret}` };
+  const write = async (method: "POST" | "PATCH" | "DELETE", path: string, payload?: Record<string, unknown>) => {
+    const response = await publicApi.inject({ method, url: `/api/v1/${path}`, headers, payload });
+    assert.ok(response.statusCode < 300, response.body);
+    return response;
+  };
+  const create = async (title: string) => (await write("POST", `boards/${f.workspace.boardId}/lists/${f.workspace.listId}/cards`, { title })).json<{ id: string }>().id;
+  const drain = async () => {
+    while ((await processRealtimeOutbox({ limit: 100 })).processed) { /* drain all card and activity events */ }
+    while (await processMcpEventDeliveries(send)) { /* drain all deliveries */ }
+  };
+  try {
+    const waiting = await create("Waiting");
+    const first = await create("Private blocker title must not leak");
+    const second = await create("Second");
+    for (const name of ["card.blocked", "card.unblocked", "card.updated"]) {
+      await write("POST", "mcp-events/subscribe", { name, arguments: { workspaceId: f.workspace.id, boardId: f.workspace.boardId, cardId: waiting, listId: f.workspace.listId }, delivery: { mode: "webhook", url: "https://receiver.example/dependencies", secret: signingSecret } });
+    }
+    const add = async (id: string) => (await write("POST", `cards/${waiting}/relations`, { targetCardId: id, direction: "blocked_by" })).json<{ id: string }>().id;
+    await add(first);
+    await add(first);
+    const secondRelation = await add(second);
+    await write("PATCH", `cards/${first}/completion`, { completed: true });
+    await drain();
+    assert.deepEqual(delivered.map((e) => e.name), ["card.blocked"]);
+    assert.deepEqual(delivered[0]!.data.actor, { kind: "apiKey", userId: f.owner.user.id, self: true });
+    assert.equal(JSON.stringify(delivered).includes("Private blocker"), false);
+    const queued = await db.select().from(mcpEventDeliveries);
+    const boundary = queued.find((row) => row.payload.name === "card.blocked")!;
+    const update = queued.find((row) => row.payload.name === "card.updated" && row.outboxEventId === boundary.outboxEventId)!;
+    assert.ok(update, "generic update subscribers still receive the boundary");
+    assert.notEqual(update.payload.eventId, boundary.payload.eventId, "a receiver deduplicating webhook-id must retain both catalog events");
+    await write("PATCH", `cards/${second}/archive`, { archived: true });
+    await drain();
+    await write("PATCH", `cards/${second}/archive`, { archived: true });
+    await drain();
+    await write("PATCH", `cards/${second}/archive`, { archived: false });
+    await drain();
+    await write("DELETE", `cards/${waiting}/relations/${secondRelation}`);
+    await drain();
+    await write("PATCH", `cards/${first}/completion`, { completed: false });
+    await drain();
+    assert.deepEqual(delivered.map((e) => e.name), ["card.blocked", "card.unblocked", "card.blocked", "card.unblocked", "card.blocked"]);
+
+    // Automation completion must attribute the boundary to automation, never to the subscriber.
+    const workspaceLists = await db.select().from(lists).where(eq(lists.workspaceId, f.workspace.id));
+    const otherList = workspaceLists.find((list) => list.id !== f.workspace.listId)!;
+    const rule = await f.app.inject({ method: "POST", url: `/workspaces/${f.workspace.id}/automations`, headers: f.owner.auth, payload: { enabled: true, triggerType: "card_enters_list", triggerListId: otherList.id, actions: [{ type: "set_completion", config: { completed: true } }] } });
+    assert.equal(rule.statusCode, 201, rule.body);
+    await write("POST", `cards/${first}/move`, { listId: otherList.id, beforeCardId: null });
+    // Move the dependent before the worker drains: the event still belongs to the original list.
+    await write("POST", `cards/${waiting}/move`, { listId: otherList.id, beforeCardId: null });
+    await drain();
+    assert.equal(delivered.length, 6);
+    assert.equal(delivered[5]!.name, "card.unblocked");
+    assert.equal(delivered[5]!.data.listId, f.workspace.listId);
+    assert.deepEqual(delivered[5]!.data.actor, { kind: "automation", userId: null, self: false });
+    // Replay of the outbox row is idempotent per subscription.
+    for (const event of await db.select().from(eventOutbox)) await enqueueMcpEventDeliveries(event);
+    await drain();
+    assert.equal(delivered.length, 6);
+  } finally { await publicApi.close(); await f.app.close(); }
+});

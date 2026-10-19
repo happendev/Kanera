@@ -13,7 +13,7 @@ The event methods are custom request handlers on the same server (`apps/mcp/src/
 
 Events are HTTP-only.
 
-The catalog exposes `card.created`, `card.updated`, `card.moved`, `comment.created`, `priorities.changed`, `my_day.ready`, and `reminder.due`. For the card and comment events, arguments require `workspaceId`; optional `boardId`, `listId`, and `cardId` narrow the subscription. `listId` must belong to the workspace; omit `boardId` to monitor that shared list across accessible boards. For `card.moved`, either the source or destination list matches, and moves within the same list are excluded. Other event types match the card’s list. `cardId` requires `boardId`. Workspace lists remain shared across boards. Board guests must supply `boardId`; assigned-items-only guests must also supply a currently visible `cardId`.
+The catalog exposes `card.created`, `card.updated`, `card.moved`, `comment.created`, `card.blocked`, `card.unblocked`, `priorities.changed`, `my_day.ready`, and `reminder.due`. For the card and comment events, arguments require `workspaceId`; optional `boardId`, `listId`, and `cardId` narrow the subscription. `listId` must belong to the workspace; omit `boardId` to monitor that shared list across accessible boards. For `card.moved`, either the source or destination list matches, and moves within the same list are excluded. Other event types match the card’s list. `cardId` requires `boardId`. Workspace lists remain shared across boards. Board guests must supply `boardId`; assigned-items-only guests must also supply a currently visible `cardId`.
 
 For example, subscribe to arrivals and departures for one shared list:
 
@@ -68,3 +68,5 @@ The isolated lifecycle tests are necessary because the production callback polic
 - Local/private/metadata/mapped IPv6 destinations, DNS rebinding or redirects bypass destination checks.
 
 Run `pnpm test:e2e -- mcp-events` and `pnpm test:api:integration -- apps/api/src/modules/integrations/mcp-events.itest.ts`. Run MCP's existing tests with `pnpm test:mcp`.
+
+Dependency events describe active cards crossing zero open blockers: `card.blocked` on the first open blocker and `card.unblocked` when the last is cleared. Adding further blockers or repeating the same edit does not repeat the event. Relation edits, completion/reopening, archive/restoration, board or list deletion (cards themselves are only ever archived) and mirrored or automated changes participate. These events do not require a workspace automation rule. They use the same durable outbox, access checks, list snapshot, actor/self attribution and signed webhook delivery as other card events; blocker details are omitted to avoid leaking private boards. Each direction is bounded to once per card per transaction.

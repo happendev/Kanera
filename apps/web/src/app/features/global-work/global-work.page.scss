@@ -53,12 +53,17 @@
     grid-template-rows: minmax(0, 1fr);
   }
 
+  // A column, so a section that keeps its header gives the lanes whatever is left below it.
   .workspace-board {
+    display: flex;
+    flex-direction: column;
     min-height: 0;
   }
 
-  .workspace-lanes.is-bare {
-    height: 100%;
+  .workspace-lanes.fills-frame {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
   }
 }
 
@@ -1018,18 +1023,9 @@ k-work-done-view {
   background: none;
 }
 
-// The single-workspace page supplies the exact remaining height through its flex layout above.
-.workspace-lanes.is-bare {
-  min-height: 420px;
-}
-
 @media (max-width: 768px) {
   .workspace-lanes {
     height: min(72dvh, 680px);
-  }
-
-  .workspace-lanes.is-bare {
-    height: 100%;
   }
 }
 

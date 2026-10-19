@@ -2166,7 +2166,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   automationTriggerTypeValue(automation: WireAutomation): AutomationTriggerTypeName {
-    return automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list";
+    return automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list";
   }
 
   automationTriggerListValue(automation: WireAutomation): string {
@@ -2322,6 +2322,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (automation.triggerType === "all_checklist_items_complete") return $localize`:Automation trigger:All checklist items complete`;
     if (automation.triggerType === "card_assigned_to_user") return $localize`:Automation trigger, followed by member names:Card assigned to`;
     if (automation.triggerType === "card_marked_complete") return $localize`:Automation trigger:Card marked complete`;
+    if (automation.triggerType === "card_blocked") return $localize`:Automation trigger - the card gains its first open blocker:Card blocked`;
+    if (automation.triggerType === "card_unblocked") return $localize`:Automation trigger - the card no longer waits on any open card:Card unblocked`;
     if (automation.triggerType === "card_label_set") return $localize`:Automation trigger, followed by a label name:Label set to`;
     if (automation.triggerType === "custom_field_value_changed") return $localize`:Automation trigger, followed by field = value:Custom field changes to`;
     if (automation.applyOnCreate && automation.applyOnMove) return $localize`:Automation trigger, followed by a list name:Card created or moved into`;
@@ -2398,7 +2400,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private normalizeAutomation(automation: WireAutomation): WireAutomation {
     return {
       ...automation,
-      triggerType: automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list",
+      triggerType: automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list",
       triggerListId: automation.triggerType === "card_enters_list" || automation.triggerType === "card_leaves_list" ? automation.triggerListId : null,
       triggerUserIds: automation.triggerType === "card_assigned_to_user" ? this.stringList(automation.triggerUserIds) : null,
       triggerLabelId: automation.triggerType === "card_label_set" ? automation.triggerLabelId : null,

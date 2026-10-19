@@ -275,6 +275,7 @@ const allToolCases: ToolCase[] = [
   { name: "priorities.move", args: { priorityId: O, anchor: { side: "after", id: null } }, method: "POST", path: `/api/v1/card-priorities/${O}/move`, body: { afterId: null } },
   { name: "priorities.remove", args: { priorityId: O }, method: "DELETE", path: `/api/v1/card-priorities/${O}` },
   { name: "work.portfolio_summary", args: { days: 30, timeZone: "UTC" }, method: "POST", path: "/api/v1/work/portfolio/query", body: { days: 30, timeZone: "UTC" } },
+  { name: "cards.dependency_graph", args: { boardId: B }, method: "POST", path: "/api/v1/cards/dependency-graph", body: { boardId: B } },
   { name: "comments.update", args: { commentId: N, body: "Updated" }, method: "PATCH", path: `/api/v1/comments/${N}`, body: { body: "Updated" } },
   { name: "comments.set_reaction", args: { commentId: N, type: "thumbs_up", active: true }, method: "POST", path: `/api/v1/comments/${N}/reactions`, body: { type: "thumbs_up" } },
   { name: "cards.delete_attachment", args: { cardId: C, attachmentId: N }, method: "DELETE", path: `/api/v1/cards/${C}/attachments/${N}` },
@@ -372,6 +373,26 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
     requests: [
       { method: "GET", path: `/api/v1/cards/${C}/checklists` },
       { method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/items/batch`, body: { items: [{ text: "One" }] } },
+    ],
+  },
+  {
+    // Adds run one by one so a later add that would close a cycle fails on its own card.
+    name: "cards.set_relations",
+    args: { cardId: C, direction: "blocks", otherCardIds: [N, IT] },
+    requests: [
+      { method: "POST", path: `/api/v1/cards/${C}/relations`, body: { targetCardId: N, direction: "blocks" } },
+      { method: "POST", path: `/api/v1/cards/${C}/relations`, body: { targetCardId: IT, direction: "blocks" } },
+      { method: "GET", path: `/api/v1/cards/${C}/relations` },
+    ],
+  },
+  {
+    // Removal finds the relation id by other card and direction; an unmatched card is reported, not deleted.
+    name: "cards.set_relations",
+    args: { cardId: C, direction: "blocks", otherCardIds: N, remove: true },
+    requests: [
+      { method: "GET", path: `/api/v1/cards/${C}/relations` },
+      { method: "DELETE", path: `/api/v1/cards/${C}/relations/${O}` },
+      { method: "GET", path: `/api/v1/cards/${C}/relations` },
     ],
   },
   { name: "boards.get_standalone_settings", args: { boardId: B }, requests: standaloneLookupRequests },
@@ -475,7 +496,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 101);
+  assert.equal(expectedNames.length, 103);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -546,6 +567,9 @@ void test("every MCP tool maps to the expected public API request", async () => 
             nextCursor: null,
           }), { status: 200 });
         }
+        if (url.pathname === "/api/v1/cards/dependency-graph") {
+          return new Response(JSON.stringify({ cards: [], edges: [], boards: [], lists: [], labels: [], people: [], truncated: false }), { status: 200 });
+        }
         if (url.pathname === "/api/v1/work/history/query") {
           return new Response(JSON.stringify({
             actor: { userId: U, displayName: "User" },
@@ -607,6 +631,9 @@ void test("every MCP tool maps to the expected public API request", async () => 
         }
         if (url.pathname === `/api/v1/cards/${C}/attachments/${O}/content`) {
           return new Response("hello world", { status: 206, headers: { "content-type": "text/plain", "content-range": "bytes 0-10/11" } });
+        }
+        if (url.pathname === `/api/v1/cards/${C}/relations` && (init?.method ?? "GET") === "GET") {
+          return new Response(JSON.stringify({ relations: [{ id: O, direction: "blocks", card: { id: N } }], hiddenBlockerCount: 0 }), { status: 200 });
         }
         const checklistStub = checklistStubResponse(url.pathname, init?.method ?? "GET");
         if (checklistStub) return checklistStub;
@@ -785,16 +812,18 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // Following and reminders (cards.set_watching, cards.set_reminder, reminders.list) add roughly
     // 2.7k; each verb folds set and clear into one tool, and both ceilings move by that headroom.
     // Agent follow-through (cards.bulk_create, notifications.list, seed cards on workspace bootstrap,
-    // and labels/assignees/due date on cards.create) adds roughly 6k; the schema budget is 185k and
-    // the OAuth-inclusive ceiling keeps its 8k margin above it.
+    // and labels/assignees/due date on cards.create) adds roughly 6k; the schema budget was 185k and
+    // the OAuth-inclusive ceiling keeps its margin above it (raised 1k for card dependencies:
+    // cards.set_relations semantics and the blockedOnly work filter). cards.dependency_graph adds
+    // roughly 1.4k so agents can read blocking chains in one call; both ceilings move by 1k.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
     // OAuth declarations add a fixed per-tool cost. Preserve the original routing/schema
     // budget independently, and bound the extra auth metadata rather than granting schema growth.
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
     // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
-    assert.ok(schemaCatalogLength <= 185_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 193_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    assert.ok(schemaCatalogLength <= 186_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 195_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.

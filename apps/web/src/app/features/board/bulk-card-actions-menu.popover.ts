@@ -1,3 +1,4 @@
+import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { ToastService } from "../../shared/toast.service";
 import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, output, signal } from "@angular/core";
 import { inProgressClockOf, type WireBoardMemberUser, type WireCard, type WireCardSummary, type WireList } from "@kanera/shared/events";
@@ -447,6 +448,7 @@ export class BulkCardActionsMenuPopover {
   private readonly hostRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
+  private readonly completionWarning = inject(CompletionWarningService);
   private readonly state = inject(BULK_CARD_STORE, { optional: true }) ?? inject(BoardState);
 
   readonly boardId = input.required<string>();
@@ -558,6 +560,7 @@ export class BulkCardActionsMenuPopover {
   async setCompletion(event: MouseEvent, completed: boolean) {
     event.preventDefault();
     event.stopPropagation();
+    if (!await this.completionWarning.allow(completed, { cardIds: this.cardIds() })) return;
     await this.run(completed
       ? (count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card marked complete.} other {# cards marked complete.}}`, { count })
       : (count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card reopened.} other {# cards reopened.}}`, { count }), completed ? "circle-check" : "circle", async () => {

@@ -21,6 +21,8 @@ import {
   checklistItemOverdueEmail,
   commentMentionedEmail,
   reactionAddedEmail,
+  cardDependencyAddedEmail,
+  cardUnblockedEmail,
   dailyDigestEmail,
   downgradedToFreeEmail,
   inviteAcceptedEmail,
@@ -63,6 +65,8 @@ import {
   type ChecklistItemOverdueEmailParams,
   type CommentMentionedEmailParams,
   type ReactionAddedEmailParams,
+  type CardDependencyAddedEmailParams,
+  type CardUnblockedEmailParams,
   type DailyDigestEmailParams,
   type InviteAcceptedEmailParams,
   type StorageWarningEmailParams,
@@ -88,6 +92,8 @@ export interface Mailer {
   sendCardCommentAdded(to: string, params: CardCommentAddedEmailParams): Promise<EmailQueue>;
   sendCommentMentioned(to: string, params: CommentMentionedEmailParams): Promise<EmailQueue>;
   sendReactionAdded(to: string, params: ReactionAddedEmailParams): Promise<EmailQueue>;
+  sendCardDependencyAdded(to: string, params: CardDependencyAddedEmailParams): Promise<EmailQueue>;
+  sendCardUnblocked(to: string, params: CardUnblockedEmailParams): Promise<EmailQueue>;
   sendCardDueDateChanged(to: string, params: CardDueDateChangedEmailParams): Promise<EmailQueue>;
   sendCardOverdue(to: string, params: CardOverdueEmailParams): Promise<EmailQueue>;
   sendCardReminder(to: string, params: CardReminderEmailParams): Promise<EmailQueue>;
@@ -210,6 +216,17 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
 
     async sendReactionAdded(to, params) {
       return queueEmail(to, mail(params.locale).reactionAdded.subject({ actor: params.actorName, card: params.cardTitle }), "reaction_added", params);
+    },
+
+    async sendCardDependencyAdded(to, params) {
+      const m = mail(params.locale).cardDependencyAdded;
+      const values = { card: params.cardTitle, other: params.otherCardTitle ? `${params.otherCardKey} ${params.otherCardTitle}` : params.otherCardKey };
+      return queueEmail(to, params.direction === "blocked_by" ? m.subjectBlockedBy(values) : m.subjectBlocking(values), "card_dependency_added", params);
+    },
+
+    async sendCardUnblocked(to, params) {
+      const m = mail(params.locale).cardUnblocked;
+      return queueEmail(to, params.reblocked ? m.subjectReblocked({ card: params.cardTitle }) : m.subject({ card: params.cardTitle }), "card_unblocked", params);
     },
 
     async sendCardDueDateChanged(to, params) {
@@ -404,6 +421,10 @@ export function renderEmail(row: EmailQueue): string {
       return commentMentionedEmail(data as CommentMentionedEmailParams);
     case "reaction_added":
       return reactionAddedEmail(data as ReactionAddedEmailParams);
+    case "card_dependency_added":
+      return cardDependencyAddedEmail(data as CardDependencyAddedEmailParams);
+    case "card_unblocked":
+      return cardUnblockedEmail(data as CardUnblockedEmailParams);
     case "card_due_date_changed":
       return cardDueDateChangedEmail(data as CardDueDateChangedEmailParams);
     case "card_overdue":

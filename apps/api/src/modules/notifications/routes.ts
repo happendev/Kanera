@@ -76,6 +76,11 @@ function workspaceRuleMatrixValues(types: NotificationWorkspaceRule["types"]) {
     reactionAddedNtfy: types.reactionAdded.ntfy,
     reactionAddedGotify: types.reactionAdded.gotify,
     reactionAddedWebhook: types.reactionAdded.webhook,
+    cardDependencyEmail: types.cardDependency.email,
+    cardDependencyPush: types.cardDependency.push,
+    cardDependencyNtfy: types.cardDependency.ntfy,
+    cardDependencyGotify: types.cardDependency.gotify,
+    cardDependencyWebhook: types.cardDependency.webhook,
   };
 }
 
@@ -450,6 +455,11 @@ export async function notificationsRoutes(app: FastifyInstance) {
       ...(body.types?.reactionAdded?.ntfy !== undefined ? { reactionAddedNtfy: body.types.reactionAdded.ntfy } : {}),
       ...(body.types?.reactionAdded?.gotify !== undefined ? { reactionAddedGotify: body.types.reactionAdded.gotify } : {}),
       ...(body.types?.reactionAdded?.webhook !== undefined ? { reactionAddedWebhook: body.types.reactionAdded.webhook } : {}),
+      ...(body.types?.cardDependency?.email !== undefined ? { cardDependencyEmail: body.types.cardDependency.email } : {}),
+      ...(body.types?.cardDependency?.push !== undefined ? { cardDependencyPush: body.types.cardDependency.push } : {}),
+      ...(body.types?.cardDependency?.ntfy !== undefined ? { cardDependencyNtfy: body.types.cardDependency.ntfy } : {}),
+      ...(body.types?.cardDependency?.gotify !== undefined ? { cardDependencyGotify: body.types.cardDependency.gotify } : {}),
+      ...(body.types?.cardDependency?.webhook !== undefined ? { cardDependencyWebhook: body.types.cardDependency.webhook } : {}),
       updatedAt: new Date(),
     };
     const [row] = await db

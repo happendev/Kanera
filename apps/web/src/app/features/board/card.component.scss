@@ -630,6 +630,30 @@
 
 // Shares the .cf-badge recipe (size, padding, full-ink value, muted icon) because it sits on the same
 // metadata row; a muted, larger due chip beside full-ink field badges read as two unrelated systems.
+// Waiting on another open card. Same footprint as the due-date chip it sits beside, in the overdue
+// treatment: both say "this can't move yet", and a chip of its own would read as a label.
+.card-blocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 1px 6px 1px 4px;
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+
+  i {
+    font-size: 13px;
+    line-height: 1;
+    position: relative;
+    top: -0.5px;
+  }
+}
+
 .card-due {
   display: inline-flex;
   align-items: center;

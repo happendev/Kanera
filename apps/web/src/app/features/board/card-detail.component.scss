@@ -2378,6 +2378,60 @@
   }
 }
 
+// Status chips above the description: time in progress and, when blocked, the Blocked chip.
+.detail-status-row {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+}
+
+// Dependency chips: the time-in-progress chip's shape. Blocked wears the danger hue of the tile's
+// Blocked chip, all-clear the success hue, an open card holding others up amber; the rest are neutral.
+.detail-dependency {
+  --chip-hue: var(--text-muted);
+
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  height: auto;
+  padding: 3px 10px 3px 8px;
+  color: var(--chip-hue);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--chip-hue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chip-hue) 24%, transparent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+
+  i {
+    font-size: 15px;
+  }
+
+  span {
+    color: var(--text);
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--chip-hue) 14%, transparent);
+  }
+
+  &.is-blocked {
+    --chip-hue: var(--danger);
+  }
+
+  &.is-clear {
+    --chip-hue: var(--success, var(--color-green));
+  }
+
+  &.is-blocking {
+    --chip-hue: var(--color-amber);
+  }
+}
+
 // The time chip plus, for workspace admins, its correction button.
 .detail-time-row {
   display: flex;
@@ -2424,6 +2478,10 @@
   .detail-time-editor button {
     min-width: 44px;
     height: 44px;
+  }
+
+  .detail-dependency {
+    min-height: 44px;
   }
 }
 

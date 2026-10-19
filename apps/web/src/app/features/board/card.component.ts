@@ -26,6 +26,7 @@ import { formatDate, formatDateTime } from "../../shared/date-format";
 import { hasTimeInProgress, timeInProgressChip, type TimeInProgressChip } from "./time-in-progress.util";
 import { MinuteClockService } from "../../shared/minute-clock.service";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
+import { blockedChipLabel } from "./card-relations.util";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 export type { CardLabelPresentation } from "./card-labels.component";
@@ -135,6 +136,11 @@ export class CardComponent {
     if (!reminder || reminder.firedAt) return null;
     return $localize`:Tooltip on the card's reminder icon; the reminder time follows:Reminder: ${formatDateTime(reminder.remindAt, "weekday")}:time:`;
   });
+  /**
+   * Open blockers, counted server-side including ones on boards this viewer cannot open, so the
+   * chip shows even when card detail can only say "blocked by N cards you can't access".
+   */
+  readonly blockedLabel = computed(() => blockedChipLabel(this.card()));
   readonly showCardWatchIndicator = computed(() => this.isWatchingCard() && !this.notifications.isWatchingBoard(this.card().boardId));
   readonly markCompleteLabel = $localize`:Aria label on a checklist item checkbox:Mark complete`;
   readonly markIncompleteLabel = $localize`:Aria label on a checklist item checkbox:Mark incomplete`;
@@ -206,9 +212,13 @@ export class CardComponent {
   private detailLoadSeq = 0;
   private readonly detailLoaded = signal(false);
 
+  // Keyed on the id alone: `card()` is replaced on every realtime update, and re-registering on each
+  // one closed an open menu (and any popover in it) whenever the card changed underneath it.
+  private readonly cardIdForMenu = computed(() => this.card().id);
+
   constructor() {
     effect((onCleanup) => {
-      const unregister = this.menuCoordinator.registerCardMenu(this.card().id, this.actionsMenuOpen);
+      const unregister = this.menuCoordinator.registerCardMenu(this.cardIdForMenu(), this.actionsMenuOpen);
       onCleanup(unregister);
     });
   }

@@ -94,7 +94,7 @@ async function runWithNotificationFanoutRetry(task: () => Promise<void>): Promis
   }
 }
 
-function notificationActorSuppressionId(activity: ActivityEvent): string | null {
+export function notificationActorSuppressionId(activity: ActivityEvent): string | null {
   // API keys borrow the creator's user id for tenancy/audit ownership, but the
   // trigger can be an external system. Keep the creator eligible for notifications
   // when they otherwise match as a watcher, assignee, or mention recipient.

@@ -75,6 +75,7 @@ import { BULK_CARD_STORE } from "../board/bulk-card-store";
 import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
 import { SaveViewPopover } from "./save-view.popover";
 import { TeamOverviewComponent } from "./team-overview.component";
+import { DependencyMapComponent } from "../dependencies/dependency-map.component";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
@@ -187,6 +188,7 @@ const MAX_UP_NEXT_ENTRIES = 50;
     TooltipDirective,
     WorkDoneViewComponent,
     TeamOverviewComponent,
+    DependencyMapComponent,
     UpNextPanelComponent,
     CardComposerDialogComponent,
     GlobalCardDetailHostComponent,
@@ -345,6 +347,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
         : []),
       option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),
       option("calendar", "calendar", $localize`:Display option:Calendar view`, $localize`:Short display option:Calendar`),
+      option("dependencies", "git-merge", $localize`:Display option; the view maps which cards block which:Dependencies view`, $localize`:Short display option for the view that maps which cards block which:Dependencies`),
       option("history", "history", $localize`:Display option:Work done`),
     ];
   });
@@ -357,9 +360,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
   // History has no offline query, and the team's queues are deliberately not cached (a stale
   // sequence reads as an instruction). The overview is built from both, so it falls back to the
-  // table over a cached snapshot.
+  // table over a cached snapshot. The dependency map reads its graph live, so it falls back too.
   readonly effectiveDisplay = computed<WorkDisplayMode>(() =>
-    this.state.cachedAt() && ["history", "overview"].includes(this.state.definition().display)
+    this.state.cachedAt() && ["history", "overview", "dependencies"].includes(this.state.definition().display)
       ? "table"
       : this.state.definition().display
   );
@@ -368,6 +371,17 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   );
   readonly overviewOfflineFallback = computed(() =>
     this.state.cachedAt() !== null && this.state.definition().display === "overview"
+  );
+  readonly dependenciesOfflineFallback = computed(() =>
+    this.state.cachedAt() !== null && this.state.definition().display === "dependencies"
+  );
+  /**
+   * The dependency map's seeds: the lens's open loaded cards, after scope, search and filters. The
+   * map walks out from them across boards, so a teammate's blocked card brings its blocker along
+   * even when someone outside the team owns it. Done cards never seed a chain; the server agrees.
+   */
+  readonly dependencySeedIds = computed(() =>
+    this.state.cards().filter((card) => !card.completedAt && !card.archivedAt).map((card) => card.id)
   );
   /** The overview is a whole-team display; teammate focus is only meaningful on card views. */
   readonly showTeammateFilter = computed(() =>
@@ -590,6 +604,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       showPrioritySetOnly: filters.prioritySetOnly,
       // Board-only: Global Work's cards are filtered on the server, which never sees reminders.
       showReminderSetOnly: false,
+      showBlockedOnly: filters.blockedOnly,
     };
   });
   // The completed-date range doubles as the "show completed" switch: an empty range means active
@@ -731,6 +746,15 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   // is pure chrome there, so the lanes render bare and take the page height like a normal board.
   // Collapse state is ignored in that mode because there is no header left to expand it again.
   readonly singleWorkspaceBoard = computed(() => !this.multiWorkspace());
+  // One expanded section on screen is a normal board too, even for a multi-workspace user whose
+  // result only lands in one workspace: the header stays (it names the workspace), but the lanes
+  // fill the remaining shell height so the horizontal scrollbar sits at the bottom of the frame
+  // instead of floating at a fixed 70dvh above an empty strip.
+  readonly fillsBoardFrame = computed(() => {
+    const workspaces = this.boardWorkspaces();
+    return workspaces.length === 1
+      && (this.singleWorkspaceBoard() || !this.isWorkspaceCollapsed(workspaces[0].id));
+  });
   // ── Table view bridge ──────────────────────────────────────────────────────────────────
   // The board Table view rendered over the cross-board query. Everything below adapts the work
   // catalog to the shapes it takes; nothing here is table-specific logic, and the sheet's own
@@ -1283,6 +1307,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       || filters.inactiveOnly
       || filters.inProgressOnly
       || filters.inProgressTooLongOnly
+      || filters.blockedOnly
       || filters.overdueOnly
       || filters.overdueChecklistOnly
       || filters.unreadOnly
@@ -1533,6 +1558,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       overdueOnly: value.showOverdueOnly,
       inactiveOnly: value.showInactiveOnly,
       inProgressOnly: value.showInProgressOnly,
+      blockedOnly: value.showBlockedOnly,
       prioritySetOnly: value.showPrioritySetOnly,
       customFieldConditions,
       ...(this.lens() === "portfolio" ? { assigneeIds: value.memberIds } : {}),
@@ -1598,6 +1624,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactiveOnly: false,
       inProgressOnly: false,
       inProgressTooLongOnly: false,
+      blockedOnly: false,
       unreadOnly: false,
       prioritySetOnly: false,
       archived: false,
@@ -2243,6 +2270,19 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     }).catch(() => {
       this.moveError.set($localize`We couldn’t move that separator. Its previous position has been restored.`);
     });
+  }
+
+  /** A map tile: loaded cards open in place; a chain's off-lens cards open the same drawer from their summary. */
+  openDependencyCard(card: WireCardSummary): void {
+    if (this.state.cards().some((candidate) => candidate.id === card.id)) {
+      this.openCardById(card.id);
+      return;
+    }
+    if (this.boardsById().has(card.boardId)) {
+      this.openHistoryCard(card);
+      return;
+    }
+    void this.router.navigate(["/b", card.boardId, "c", card.id], { browserUrl: cardPath(card.organisationKey, card.key) });
   }
 
   openBoard(boardId: string): void {

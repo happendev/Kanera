@@ -53,6 +53,14 @@ export interface ActivitySummaryMessages {
   attached: (fileName: string) => string;
   reactedToComment: string;
   reactedToAttachment: (fileName: string) => string;
+  /** A dependency on the watched card; the other card's key follows as the chip. */
+  markedBlockedBy: string;
+  markedBlocking: string;
+  relatedTo: string;
+  /** The assigned or watched card's last blocker closed; that blocker's key follows as the chip. */
+  clearedLastBlocker: string;
+  /** A blocker of the assigned or watched card was reopened; that blocker's key follows as the chip. */
+  reopenedBlocker: string;
   attachedFile: string;
   removedAttachment: string;
   assignedSelf: string;
@@ -118,6 +126,11 @@ export const ACTIVITY_SUMMARY_SOURCE_MESSAGES: ActivitySummaryMessages = {
   attached: (fileName) => `attached ${fileName}`,
   reactedToComment: "gave your comment a thumbs-up",
   reactedToAttachment: (fileName) => `gave ${fileName} a thumbs-up`,
+  markedBlockedBy: "marked this card as blocked by",
+  markedBlocking: "marked this card as blocking",
+  relatedTo: "related this card to",
+  clearedLastBlocker: "cleared the last blocker on this card",
+  reopenedBlocker: "reopened a blocker on this card",
   attachedFile: "attached a file",
   removedAttachment: "removed an attachment",
   assignedSelf: "assigned themself",
@@ -257,6 +270,18 @@ export function summariseActivityChange(
           else if (raw != null) to = JSON.stringify(raw);
           return { icon: "ti ti-forms", text: m.setFieldTo(name), value: shortName(to) ?? undefined };
         }
+        case "relation:added": {
+          // Key only: the drawer may be read by someone who cannot open the other card.
+          const value = shortName(payload["otherCardKey"]) ?? undefined;
+          if (payload["direction"] === "blocked_by") return { icon: "ti ti-lock", text: m.markedBlockedBy, value };
+          if (payload["direction"] === "blocks") return { icon: "ti ti-lock", text: m.markedBlocking, value };
+          return { icon: "ti ti-git-merge", text: m.relatedTo, value };
+        }
+        case "blockers:cleared":
+          // Key only, like relation:added: the recipient may not be able to open the blocker.
+          return { icon: "ti ti-lock-open", text: m.clearedLastBlocker, value: shortName(payload["otherCardKey"]) ?? undefined };
+        case "blockers:reopened":
+          return { icon: "ti ti-lock", text: m.reopenedBlocker, value: shortName(payload["otherCardKey"]) ?? undefined };
         case "cover_set":
           return { icon: "ti ti-photo", text: m.setCover };
         case "cover_removed":

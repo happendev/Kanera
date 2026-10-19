@@ -191,6 +191,8 @@ function createCardDetail(overrides: Partial<WireCardDetail> = {}): WireCardDeta
     checklists: [],
     appliedChecklistTemplateIds: [],
     linkedNotes: [],
+    relations: [],
+    hiddenBlockerCount: 0,
     ...overrides,
   };
 }
@@ -395,7 +397,7 @@ describe("CardDetailComponent realtime regressions", () => {
     api = {
       get: vi.fn((path: string) =>
         path.endsWith("/detail")
-          ? Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [] })
+          ? Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [], relations: [], hiddenBlockerCount: 0 })
           : path.endsWith("/mirrors")
             ? Promise.resolve({ asSource: [], asTarget: [] })
           : path === "/workspaces/workspace-1"
@@ -524,7 +526,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("renders inbound mirror provenance as non-interactive description metadata", async () => {
     api.get.mockImplementation((path: string) => path.endsWith("/detail")
-      ? Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [] })
+      ? Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [], relations: [], hiddenBlockerCount: 0 })
       : path.endsWith("/mirrors")
         ? Promise.resolve({
             asTarget: [{ mirrorId: "m1", cardId: "source-card", boardId: "source-board", boardName: "Client board", workspaceName: "Client", organisationName: "Acme" }],
@@ -627,7 +629,7 @@ describe("CardDetailComponent realtime regressions", () => {
       assigneeIds: [],
       attachments: [],
       checklists: [],
-      appliedChecklistTemplateIds: [], linkedNotes: [],
+      appliedChecklistTemplateIds: [], linkedNotes: [], relations: [], hiddenBlockerCount: 0,
     };
     const boardState = TestBed.inject(BoardState) as unknown as { detailForCard: ReturnType<typeof vi.fn> };
     boardState.detailForCard.mockReturnValue(restoredDetail);
@@ -3866,7 +3868,7 @@ describe("CardDetailComponent realtime regressions", () => {
     const nextPage = deferred<{ items: { type: "comment"; data: WireComment }[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {
       if (path.endsWith("/detail")) {
-        return Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [] });
+        return Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [], relations: [], hiddenBlockerCount: 0 });
       }
       if (path === "/cards/card-1/feed?limit=50") {
         return Promise.resolve({

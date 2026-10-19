@@ -6,6 +6,8 @@ import type {
   updateChecklistItemsBody,
 } from "@kanera/shared/dto";
 import type { createCardPriorityBody, moveCardPriorityBody, setCardReminderBody } from "@kanera/shared/dto";
+import type { addCardRelationBody, dependencyGraphBody } from "@kanera/shared/dto";
+import type { CardRelationDirection as SharedCardRelationDirection } from "@kanera/shared/card-relations";
 import type { createCommentBody } from "@kanera/shared/dto";
 import type { startAgentRunBody, updateAgentRunBody } from "@kanera/shared/dto";
 import type { createNoteBody, updateNoteBody } from "@kanera/shared/dto";
@@ -24,7 +26,7 @@ import type { StartRunInput, UpdateRunInput } from "./resources/runs.js";
 import type { SearchInput } from "./resources/search.js";
 import type { UpdateSeparatorInput } from "./resources/separators.js";
 import type { CreateWebhookEndpointInput, UpdateWebhookEndpointInput } from "./resources/webhook-endpoints.js";
-import type { CreateBoardInput, CreateWorkspaceInput, WorkFilters, WorkScope, WorkSort, WorkspaceTemplateId } from "./types.js";
+import type { CardRelationDirection, CreateBoardInput, CreateWorkspaceInput, WorkFilters, WorkScope, WorkSort, WorkspaceTemplateId } from "./types.js";
 
 /**
  * Compile-time drift guard.
@@ -52,6 +54,10 @@ type _TemplateIdBackward = AssertAssignable<SharedWorkspaceTemplateId, Workspace
 type _CreateCard = AssertAssignable<CreateCardInput, z.input<typeof createCardBody>>;
 type _BulkCreateCards = AssertAssignable<{ cards: BulkCreateCardInput[] }, z.input<typeof bulkCreateCardsBody>>;
 type _UpdateCard = AssertAssignable<UpdateCardInput, z.input<typeof updateCardBody>>;
+type _AddRelation = AssertAssignable<{ targetCardId: string; direction: CardRelationDirection }, z.input<typeof addCardRelationBody>>;
+type _RelationDirectionBackward = AssertAssignable<SharedCardRelationDirection, CardRelationDirection>;
+// dependencyGraph() sends its `cards` scope as resolved `cardIds`.
+type _DependencyGraphScope = AssertAssignable<{ boardId: string } | { workspaceId: string } | { cardIds: string[] }, z.input<typeof dependencyGraphBody>>;
 // move() translates its PositionAnchor into the anchor fields the API expects.
 type _MoveCard = AssertAssignable<{ listId: string; beforeCardId: string | null }, z.input<typeof moveCardBody>>;
 type _MoveCardBySeparator = AssertAssignable<

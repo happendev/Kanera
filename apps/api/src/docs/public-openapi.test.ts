@@ -33,8 +33,9 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
   {
     name: "Card",
     table: schema.cards,
-    // `url` is built from the organisation key and card key rather than stored.
-    synthetic: ["url"],
+    // `url` is built from the organisation key and card key rather than stored; `blockedByCount`
+    // is derived from the card's open blockers in `card_relation`.
+    synthetic: ["url", "blockedByCount"],
     // `clientToken` is idempotency bookkeeping, `searchVector` is a tsvector index column and
     // `listEnteredAt` is trigger bookkeeping behind `inProgressSince`; none is meaningful to an API
     // consumer.

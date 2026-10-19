@@ -62,6 +62,8 @@ export interface FilterValue {
    * the viewer's own; board-only, and saved filters stay in the viewer's own browser.
    */
   showReminderSetOnly: boolean;
+  /** Only cards with an open blocker. Board-only: Global Work filters on the server. */
+  showBlockedOnly: boolean;
 }
 
 /** Whether an operator carries no operand (drives whether the builder shows a value control). */

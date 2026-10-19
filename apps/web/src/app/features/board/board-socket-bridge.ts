@@ -116,16 +116,16 @@ export class BoardSocketBridge {
         if (eventBoardId === boardId && acceptsCard(cardId)) state.upsertAgentRun(run);
       },
 
-      [SERVER_EVENTS.CARD_CREATED]: ({ boardId: eventBoardId, card }) => {
+      [SERVER_EVENTS.CARD_CREATED]: ({ boardId: eventBoardId, card, blockedByCount }) => {
         if (eventBoardId !== boardId || !acceptsCard(card.id)) return;
-        state.addCard(expandWireCard(card));
+        state.addCard(expandWireCard(card), blockedByCount);
         // Work done lists creations, list moves and completions. Completions arrive as card:updated;
         // creations and moves only as these events, so each of the three must refresh the view.
         options.onWorkDoneChanged?.();
       },
-      [SERVER_EVENTS.CARD_UPDATED]: ({ boardId: eventBoardId, card }) => {
+      [SERVER_EVENTS.CARD_UPDATED]: ({ boardId: eventBoardId, card, blockedByCount }) => {
         if (eventBoardId !== boardId || !acceptsCard(card.id)) return;
-        state.updateCard(expandWireCard(card));
+        state.updateCard(expandWireCard(card), blockedByCount);
         state.noteCardDetailRealtimeMutation(card.id);
         options.onWorkDoneChanged?.();
       },

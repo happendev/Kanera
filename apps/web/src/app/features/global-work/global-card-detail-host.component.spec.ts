@@ -63,6 +63,7 @@ const catalog: WorkCatalog = {
     displayName: "Viewer",
     avatarUrl: null,
     boardIds: [card.boardId],
+    guestBoardIds: [],
   }],
 };
 

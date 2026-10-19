@@ -45,6 +45,8 @@ const initialAutomationTrigger = z.discriminatedUnion("type", [
   z.object({ type: z.literal("card_in_progress_too_long") }),
   z.object({ type: z.literal("all_checklist_items_complete") }),
   z.object({ type: z.literal("card_marked_complete") }),
+  z.object({ type: z.literal("card_unblocked") }),
+  z.object({ type: z.literal("card_blocked") }),
   z.object({
     type: z.literal("card_label_set"),
     labelName: z.string().trim().min(1).max(CARD_LABEL_NAME_MAX_LENGTH),

@@ -239,6 +239,112 @@ export async function enqueueReactionAddedNotifications(params: {
   });
 }
 
+/**
+ * Email and push for a new dependency on a card. `recipients` were already filtered to its people
+ * (watchers, plus the blocked card's assignees) who can open it; `otherReadableBy` says who may also see the other card's title,
+ * everyone else gets its key alone.
+ */
+export async function enqueueCardDependencyNotifications(params: {
+  tx: Tx;
+  mailer: Mailer;
+  webOrigin: string;
+  cardId: string;
+  actorId: string;
+  recipientUserIds: string[];
+  direction: "blocks" | "blocked_by";
+  other: { key: string; title: string };
+  otherReadableBy: ReadonlySet<string>;
+}): Promise<void> {
+  const recipients = await loadRecipients(params.tx, params.recipientUserIds, actorSuppressionId(params.actorId));
+  if (recipients.length === 0) return;
+  const [ctx, actorName] = await Promise.all([
+    loadCardEmailContext(params.tx, params.cardId),
+    resolveActorName(params.tx, params.actorId),
+  ]);
+  if (!ctx || !actorName) return;
+  const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
+  const cardUrlValue = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
+  const otherTitleFor = (userId: string) => (params.otherReadableBy.has(userId) ? params.other.title : null);
+  await Promise.all(recipients.map(async (recipient) => {
+    if (!allowsNotificationEmail(settings.get(recipient.id)!, "cardDependency", deliveryScope(rules, recipient.id, ctx))) return;
+    const locale = recipientLocale(recipient.locale);
+    await params.mailer.sendCardDependencyAdded(recipient.email, {
+      locale,
+      displayName: recipient.displayName,
+      actorName: actorName(locale),
+      cardTitle: ctx.cardTitle,
+      boardName: ctx.boardName,
+      cardUrl: cardUrlValue,
+      direction: params.direction,
+      otherCardKey: params.other.key,
+      otherCardTitle: otherTitleFor(recipient.id),
+    });
+  }));
+  // Push payloads are built per locale, not per person, so they name the other card by key only.
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardDependency", "dependency", (locale) => {
+    const m = serverMessages(locale).push.dependency;
+    const values = { actor: actorName(locale), card: ctx.cardTitle, other: params.other.key };
+    return {
+      kind: "card_dependency",
+      title: m.title,
+      body: params.direction === "blocked_by" ? m.blockedBy(values) : m.blocking(values),
+      url: cardUrlValue,
+      tag: `card:${ctx.cardId}:dependency`,
+    };
+  });
+}
+
+/**
+ * Email and push for a card whose last blocker closed (`cleared`: ready to start) or whose blocker
+ * was reopened (`reopened`: blocked again). `recipients` were already filtered to its assignees and
+ * watchers who can open the card, once each, minus whoever moved the blocker. The copy names no
+ * actor: the news is the card's state, and an automation or mirror may have moved the blocker with
+ * nobody behind it.
+ */
+export async function enqueueDependencyHandoffNotifications(params: {
+  tx: Tx;
+  mailer: Mailer;
+  webOrigin: string;
+  kind: "cleared" | "reopened";
+  cardId: string;
+  recipientUserIds: string[];
+  blocker: { key: string; title: string };
+  blockerReadableBy: ReadonlySet<string>;
+}): Promise<void> {
+  const recipients = await loadRecipients(params.tx, params.recipientUserIds, null);
+  if (recipients.length === 0) return;
+  const ctx = await loadCardEmailContext(params.tx, params.cardId);
+  if (!ctx) return;
+  const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
+  const cardUrlValue = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
+  await Promise.all(recipients.map(async (recipient) => {
+    if (!allowsNotificationEmail(settings.get(recipient.id)!, "cardDependency", deliveryScope(rules, recipient.id, ctx))) return;
+    await params.mailer.sendCardUnblocked(recipient.email, {
+      locale: recipientLocale(recipient.locale),
+      displayName: recipient.displayName,
+      cardTitle: ctx.cardTitle,
+      boardName: ctx.boardName,
+      cardUrl: cardUrlValue,
+      otherCardKey: params.blocker.key,
+      otherCardTitle: params.blockerReadableBy.has(recipient.id) ? params.blocker.title : null,
+      reblocked: params.kind === "reopened",
+    });
+  }));
+  // Push payloads are built per locale, not per person, so they name the blocker by key only.
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardDependency", "dependency", (locale) => {
+    const m = params.kind === "reopened" ? serverMessages(locale).push.reblocked : serverMessages(locale).push.unblocked;
+    return {
+      kind: params.kind === "reopened" ? "card_reblocked" : "card_unblocked",
+      title: m.title,
+      body: m.body({ card: ctx.cardTitle, other: params.blocker.key }),
+      url: cardUrlValue,
+      tag: `card:${ctx.cardId}:${params.kind === "reopened" ? "reblocked" : "unblocked"}`,
+    };
+  });
+}
+
 export async function enqueueDueDateChangedEmails(params: {
   tx: Tx;
   mailer: Mailer;

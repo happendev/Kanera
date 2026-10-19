@@ -45,6 +45,8 @@ import { storageWarningEmail } from "../lib/email-templates/storage-warning.js";
 import { checklistItemOverdueEmail } from "../lib/email-templates/card-checklist-item-overdue.js";
 import { commentMentionedEmail } from "../lib/email-templates/comment-mentioned.js";
 import { reactionAddedEmail } from "../lib/email-templates/reaction-added.js";
+import { cardDependencyAddedEmail } from "../lib/email-templates/card-dependency-added.js";
+import { cardUnblockedEmail } from "../lib/email-templates/card-unblocked.js";
 import { dailyDigestEmail } from "../lib/email-templates/daily-digest.js";
 import { inviteAcceptedEmail } from "../lib/email-templates/invite-accepted.js";
 import { passwordResetEmail } from "../lib/email-templates/password-reset.js";
@@ -241,6 +243,45 @@ const templates = [
       cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
       commentExcerpt: null,
       fileName: "checkout-redesign.png",
+    }),
+  },
+  {
+    name: "card-dependency-added",
+    html: cardDependencyAddedEmail({
+      locale,
+      displayName: "Amelia Hart",
+      actorName: "Jordan Lee",
+      cardTitle: "Launch checkout redesign",
+      boardName: "Website Refresh",
+      cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
+      direction: "blocked_by",
+      otherCardKey: "API-17",
+      otherCardTitle: "Ship payments v2 endpoint",
+    }),
+  },
+  {
+    name: "card-unblocked",
+    html: cardUnblockedEmail({
+      locale,
+      displayName: "Amelia Hart",
+      cardTitle: "Launch checkout redesign",
+      boardName: "Website Refresh",
+      cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
+      otherCardKey: "API-17",
+      otherCardTitle: "Ship payments v2 endpoint",
+    }),
+  },
+  {
+    name: "card-blocked-again",
+    html: cardUnblockedEmail({
+      locale,
+      displayName: "Amelia Hart",
+      cardTitle: "Launch checkout redesign",
+      boardName: "Website Refresh",
+      cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
+      otherCardKey: "API-17",
+      otherCardTitle: "Ship payments v2 endpoint",
+      reblocked: true,
     }),
   },
   {

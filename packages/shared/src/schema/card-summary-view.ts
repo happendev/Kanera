@@ -28,6 +28,7 @@ export const cardSummaryView = pgView("card_summary_view", {
   attachmentCount: integer("attachment_count").notNull(),
   checklistDoneCount: integer("checklist_done_count").notNull(),
   checklistTotalCount: integer("checklist_total_count").notNull(),
+  blockedByCount: integer("blocked_by_count").notNull(),
   labelIds: uuid("label_ids").array().notNull(),
   assigneeIds: uuid("assignee_ids").array().notNull(),
   customFieldValues: json("custom_field_values").$type<CardCustomFieldValue[]>().notNull(),
@@ -66,6 +67,7 @@ export const cardSummaryView = pgView("card_summary_view", {
     coalesce(attachment_counts.attachment_count, 0)::integer as attachment_count,
     coalesce(checklist_counts.done_count, 0)::integer as checklist_done_count,
     coalesce(checklist_counts.total_count, 0)::integer as checklist_total_count,
+    coalesce(blocker_counts.blocked_by_count, 0)::integer as blocked_by_count,
     coalesce(label_ids.label_ids, '{}'::uuid[]) as label_ids,
     coalesce(assignee_ids.assignee_ids, '{}'::uuid[]) as assignee_ids,
     coalesce(custom_field_values.custom_field_values, '[]'::json) as custom_field_values,
@@ -99,6 +101,17 @@ export const cardSummaryView = pgView("card_summary_view", {
     where cl.card_id = c.id
       and cl.parent_item_id is null
   ) checklist_counts on true
+  left join lateral (
+    -- Open blockers only, including ones on boards the viewer cannot open: the count reveals no
+    -- titles, and tiles must show "Blocked" either way. Keep in step with lib/card-relations.ts.
+    select count(*)::integer as blocked_by_count
+    from card_relation cr
+    inner join card blocker on blocker.id = cr.source_card_id
+    where cr.target_card_id = c.id
+      and cr.kind = 'blocks'
+      and blocker.completed_at is null
+      and blocker.archived_at is null
+  ) blocker_counts on true
   left join lateral (
     select array_agg(cla.label_id order by cla.assigned_at, cla.label_id) as label_ids
     from card_label_assignment cla

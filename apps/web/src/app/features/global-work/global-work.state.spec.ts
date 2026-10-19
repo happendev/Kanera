@@ -96,6 +96,7 @@ const catalog: WorkCatalog = {
     displayName: "Teammate",
     avatarUrl: null,
     boardIds: ["30000000-0000-4000-8000-000000000001"],
+    guestBoardIds: [],
   }],
 };
 
@@ -220,6 +221,7 @@ const cachedDefinition: WorkViewDefinition = {
     inactiveOnly: false,
     inProgressOnly: false,
     inProgressTooLongOnly: false,
+    blockedOnly: false,
     dueFrom: null,
     dueTo: null,
     overdueOnly: false,
@@ -1174,6 +1176,7 @@ describe("GlobalWorkState", () => {
         inactiveOnly: false,
         inProgressOnly: false,
         inProgressTooLongOnly: false,
+        blockedOnly: false,
         dueFrom: null,
         dueTo: null,
         overdueOnly: false,

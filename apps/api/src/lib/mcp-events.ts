@@ -133,12 +133,32 @@ export async function enqueueMcpEventDeliveries(event: EventOutbox, preloadedSub
   if (!["card:created", "card:updated", "card:moved", "comment:created"].includes(event.eventType)) return;
   const subscriptions = preloadedSubscriptions ?? await db.select().from(mcpEventSubscriptions).where(and(
     eq(mcpEventSubscriptions.workspaceId, event.workspaceId),
-    eq(mcpEventSubscriptions.name, event.eventType.replace(":", ".")),
+    inArray(mcpEventSubscriptions.name, eventNamesFor(event)),
     gt(mcpEventSubscriptions.expiresAt, new Date()), lte(mcpEventSubscriptions.startsAt, event.occurredAt),
   ));
   if (!subscriptions.length) return;
   const occurrence = await occurrenceFor(event);
   if (!occurrence) return;
+  for (const name of eventNamesFor(event)) {
+    // Different catalog events need distinct IDs even when they share an outbox row: a receiver
+    // subscribed to both card.updated and card.blocked may deduplicate globally by webhook-id.
+    const eventId = name === occurrence.name ? occurrence.eventId : `${occurrence.eventId}_${name}`;
+    await enqueueOccurrence(event, subscriptions, { ...occurrence, name, eventId });
+  }
+}
+
+// Dependency boundaries reuse card:updated so browsers retain their existing count consumer.
+// Only the transaction-stamped marker creates the specialized event; count refreshes never do.
+function eventNamesFor(event: EventOutbox): McpCardEventOccurrence["name"][] {
+  const names = [event.eventType.replace(":", ".") as McpCardEventOccurrence["name"]];
+  const payload = event.payload as { dependencyTransition?: string };
+  if (event.eventType === "card:updated" && (payload.dependencyTransition === "blocked" || payload.dependencyTransition === "unblocked")) {
+    names.push(`card.${payload.dependencyTransition}`);
+  }
+  return names;
+}
+
+async function enqueueOccurrence(event: EventOutbox, subscriptions: McpEventSubscription[], occurrence: BaseOccurrence) {
   const matching = subscriptions.filter((sub) => {
     if (sub.name !== occurrence.name || sub.expiresAt <= new Date() || sub.startsAt > event.occurredAt) return false;
     // The name matched a card event, so these are the workspace/board/list/card filter arguments.

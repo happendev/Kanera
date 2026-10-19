@@ -183,6 +183,19 @@ export default tseslint.config(
     },
   },
   {
+    files: ['apps/api/**/*.test.ts', 'apps/api/**/*.itest.ts'],
+    rules: {
+      // Injected HTTP responses and test doubles intentionally expose untyped payloads.
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      // node:test owns the promises returned by test registrations.
+      '@typescript-eslint/no-floating-promises': 'off',
+    },
+  },
+  {
     files: ['apps/web/**/*.spec.ts', 'apps/web/**/*.test.ts'],
     languageOptions: {
       globals: {

@@ -1,6 +1,6 @@
 <section
   class="work-page"
-  [class.is-single-workspace-board]="effectiveDisplay() === 'board' && singleWorkspaceBoard()"
+  [class.is-single-workspace-board]="effectiveDisplay() === 'board' && fillsBoardFrame()"
   [class.is-table-frame]="usesTableFrame()"
   [class.has-up-next-dock]="upNextOpen()"
   [class.has-empty-collection]="effectiveDisplay() === 'board' && state.cards().length === 0"
@@ -263,6 +263,7 @@
           [workDoneEventType]="workDoneEventType()"
           [showActivity]="effectiveDisplay() !== 'history'"
           [showPrioritySet]="showPrioritySetFilter()"
+          [showBlocked]="effectiveDisplay() !== 'history'"
           [showCompleted]="effectiveDisplay() !== 'history'"
           [showArchived]="effectiveDisplay() !== 'history'"
           [showHideCompleted]="effectiveDisplay() !== 'history'"
@@ -507,6 +508,7 @@
         <ng-container i18n="Offline banner">Showing a saved copy from {{ offlineStamp(cachedAt) // i18n(ph="time") }}. Reconnect to make changes.</ng-container>
         @if (historyOfflineFallback()) { <ng-container i18n="Offline banner">History will return after reconnecting.</ng-container> }
         @if (overviewOfflineFallback()) { <ng-container i18n="Offline banner">The team overview will return after reconnecting.</ng-container> }
+        @if (dependenciesOfflineFallback()) { <ng-container i18n="Offline banner">The dependency map will return after reconnecting.</ng-container> }
       </span>
     </div>
   } @else if (!state.sockets.displayedOnline()) {
@@ -693,6 +695,28 @@
           (focusChanged)="setOverviewFocus($event)"
           (upNextToggled)="toggleOverviewDock($event)"
         />
+      } @else if (effectiveDisplay() === "dependencies") {
+        <!-- Seeded with every loaded open card, so it waits for paging like the board display does;
+             say so when the load cap stopped short of every match. -->
+        @if (state.loadingMore()) {
+          <div class="board-priority-note">
+            <span class="spinner"></span>
+            <span i18n><strong>Loading all matching cards…</strong> Chains settle when the full set is ready.</span>
+          </div>
+        } @else if (state.canLoadMore()) {
+          <div class="board-priority-note overview-partial" role="status">
+            <i class="ti ti-alert-triangle"></i>
+            <span i18n><strong>Showing chains for {{ state.cards().length // i18n(ph="loaded") }} of {{ state.response().totals.cards // i18n(ph="total") }} matching cards.</strong> Narrow the scope or filters to map every chain.</span>
+          </div>
+        }
+        <k-dependency-map
+          [stacked]="true"
+          [cardIds]="dependencySeedIds()"
+          [preferenceScope]="'globalWork:' + lens()"
+          [selectedCardId]="selectedCard()?.id ?? null"
+          [refreshVersion]="state.reconciliationVersion()"
+          (cardOpened)="openDependencyCard($event)"
+        />
       } @else {
         <section class="totals-strip">
           <span i18n="Totals strip">{ state.response().totals.cards, plural, one {<strong>{{ state.response().totals.cards }}</strong> card} other {<strong>{{ state.response().totals.cards }}</strong> cards} }</span>
@@ -753,7 +777,7 @@
                 @if (singleWorkspaceBoard() || !isWorkspaceCollapsed(workspace.id)) {
                 <k-board
                   class="workspace-lanes"
-                  [class.is-bare]="singleWorkspaceBoard()"
+                  [class.fills-frame]="fillsBoardFrame()"
                   [attr.id]="'workspace-board-' + workspace.id"
                 >
                   @for (list of listsForWorkspace(workspace.id); track list.id) {

@@ -13,6 +13,7 @@ import {
   cardLabelAssignments,
   cardLabels,
   cardPriorities,
+  cardRelations,
   cards,
   clients,
   customFields,
@@ -1078,4 +1079,31 @@ void test("saved views are private by default, share read-only, and strip unavai
     payload: { name: "Hijacked" },
   });
   assert.equal(forbiddenUpdate.statusCode, 403);
+});
+
+void test("blockedOnly returns open cards with an open blocker, hidden blockers included, never completed cards", async () => {
+  const f = await seed();
+  await db.insert(cardRelations).values([
+    // The blocker sits on a board the viewer cannot read; the card still counts as blocked.
+    { workspaceId: f.homeWorkspace.id, sourceCardId: f.restrictedTeammate.id, targetCardId: f.mine.id, kind: "blocks", createdById: f.teammate.id },
+    // A completed blocker holds nothing up.
+    { workspaceId: f.homeWorkspace.id, sourceCardId: f.teammateCard.id, targetCardId: f.restrictedMine.id, kind: "blocks", createdById: f.teammate.id },
+  ]);
+  await db.update(cards).set({ completedAt: new Date() }).where(eq(cards.id, f.teammateCard.id));
+
+  const titles = async () => {
+    const response = await f.app.inject({
+      method: "POST",
+      url: "/work/cards/query",
+      headers: auth(f.viewerToken),
+      payload: { lens: "my", filters: { blockedOnly: true }, limit: 100 },
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    return response.json<WorkQueryResponse>().cards.map((item) => item.title);
+  };
+  assert.deepEqual(await titles(), ["My shared card"]);
+
+  // Done is done whatever blocked it, like the board's Blocked quick filter.
+  await db.update(cards).set({ completedAt: new Date() }).where(eq(cards.id, f.mine.id));
+  assert.deepEqual(await titles(), []);
 });

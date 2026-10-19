@@ -241,6 +241,7 @@ export function automationTriggerTargetLabel(automation: WireAutomation, lookups
   if (automation.triggerType === "card_in_progress_too_long") return null;
   if (automation.triggerType === "all_checklist_items_complete") return null;
   if (automation.triggerType === "card_marked_complete") return null;
+  if (automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked") return null;
   if (automation.triggerType === "card_label_set") {
     return automation.triggerLabelId ? automationTriggerLabelName(automation.triggerLabelId, lookups) : $localize`:Unconfigured automation trigger target:a label`;
   }

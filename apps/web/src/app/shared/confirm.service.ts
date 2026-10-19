@@ -7,6 +7,7 @@ export interface ConfirmOptions {
   confirmLabel?: string;
   danger?: boolean;
   confirmationText?: string;
+  checkbox?: { label: string; onConfirm: (checked: boolean) => void };
 }
 
 @Injectable({ providedIn: "root" })
@@ -20,6 +21,7 @@ export class ConfirmService {
       if (options.message) ref.setInput("message", options.message);
 
       ref.instance.result.subscribe((confirmed) => {
+        if (confirmed) options.checkbox?.onConfirm(ref.instance.checked());
         resolve(confirmed);
         this.unmount(ref);
       });
@@ -38,6 +40,7 @@ export class ConfirmService {
       const close = () => this.unmount(ref);
       ref.instance.result.subscribe((confirmed) => {
         closed = true;
+        if (confirmed) options.checkbox?.onConfirm(ref.instance.checked());
         resolve(confirmed);
         close();
       });
@@ -61,6 +64,7 @@ export class ConfirmService {
   private createDialog(options: ConfirmOptions): ComponentRef<ConfirmDialogComponent> {
     const ref = createComponent(ConfirmDialogComponent, { environmentInjector: this.injector });
     ref.setInput("title", options.title);
+    if (options.checkbox) ref.setInput("checkboxLabel", options.checkbox.label);
     if (options.confirmLabel) ref.setInput("confirmLabel", options.confirmLabel);
     if (options.danger !== undefined) ref.setInput("danger", options.danger);
     if (options.confirmationText !== undefined) ref.setInput("confirmationText", options.confirmationText);

@@ -1,3 +1,4 @@
+import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { MenuDirective } from "../../shared/menu.directive";
 import { ToastService } from "../../shared/toast.service";
 import {
@@ -20,12 +21,13 @@ import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover
 import { BoardState } from "./board-state";
 import { CardQuickEditPopover } from "./card-quick-edit.popover";
 import { ReminderPopoverComponent } from "./reminder-popover.component";
+import { CardRelationsPopoverComponent } from "./card-relations-popover.component";
 import type { DueDateSlotSelection } from "./due-date.util";
 
 @Component({
   selector: "k-card-actions-menu",
   standalone: true,
-  imports: [MenuDirective, BoardPickerPopover, CardQuickEditPopover, ReminderPopoverComponent],
+  imports: [MenuDirective, BoardPickerPopover, CardQuickEditPopover, ReminderPopoverComponent, CardRelationsPopoverComponent],
   hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -34,8 +36,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
         <i class="ti ti-external-link"></i>
         <span i18n>Open in new tab</span>
       </button>
-
-
+      <div class="cam-sep" role="separator"></div>
       <div class="cam-sub">
         <button type="button" class="k-menu-item cam-item" [class.is-active]="quickEditOpen()" (click)="toggleQuickEdit($event)">
           <i class="ti ti-pencil"></i>
@@ -64,6 +65,10 @@ import type { DueDateSlotSelection } from "./due-date.util";
         <span i18n="Card menu item">Mark complete</span>
         }
       </button>
+      <!-- Groups: open, change, follow, copy/move, share, archive. -->
+      @if (showCardWatchAction() || !archivedAt()) {
+        <div class="cam-sep" role="separator"></div>
+      }
       @if (showCardWatchAction()) {
       <button type="button" class="k-menu-item cam-item" (click)="toggleWatch($event)" [disabled]="savingWatch()">
         <i [class]="isWatchingCard() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
@@ -95,6 +100,28 @@ import type { DueDateSlotSelection } from "./due-date.util";
           />
         }
       </div>
+      }
+      <!-- Archived cards are read-only, and relations to or from them are refused. -->
+      @if (!archivedAt()) {
+      <div class="cam-sub">
+        <button type="button" class="k-menu-item cam-item" [class.is-active]="relationsOpen()" (click)="toggleRelations($event)">
+          <i class="ti ti-git-merge"></i>
+          <span i18n="Card menu item: set what blocks this card, what it blocks and related cards">Dependencies…</span>
+          <i class="ti ti-chevron-right cam-chev"></i>
+        </button>
+        @if (relationsOpen()) {
+          <k-card-relations-popover
+            [cardId]="cardId()"
+            [workspaceId]="workspaceId()"
+            [canEdit]="canEditRelations()"
+            [panelPlacement]="{ side: 'right', align: 'start', gap: 4 }"
+            (dismissed)="close.emit()"
+          />
+        }
+      </div>
+      }
+      @if (allowDuplicate() || (workspaceId() && (allowCopyToBoard() || canMoveToBoard()))) {
+        <div class="cam-sep" role="separator"></div>
       }
       @if (allowDuplicate()) {
       <button type="button" class="k-menu-item cam-item" (click)="duplicate($event)" [disabled]="duplicating()">
@@ -146,6 +173,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
         </div>
         }
       }
+      <div class="cam-sep" role="separator"></div>
       <button type="button" class="k-menu-item cam-item" (click)="copyCardLink($event)">
         <i class="ti ti-link"></i>
         <span i18n="Card menu item">Copy card link</span>
@@ -156,7 +184,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
         <span i18n="Card menu item: copy the card's short key, such as DEV-12">Copy key</span>
       </button>
       }
-      <div class="cam-sep"></div>
+      <div class="cam-sep" role="separator"></div>
       @if (archivedAt()) {
         <button type="button" class="k-menu-item cam-item" (click)="setArchived($event, false)" [disabled]="archiving()">
           <i class="ti ti-archive-off"></i>
@@ -186,7 +214,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
       box-shadow: var(--shadow-lg);
       padding: 4px;
       width: 100%;
-      max-height: var(--ap-max-height, 420px);
+      max-height: var(--ap-max-height, 640px);
       overflow-y: auto;
       overscroll-behavior: contain;
       display: flex;
@@ -201,9 +229,10 @@ import type { DueDateSlotSelection } from "./due-date.util";
     
 
     .cam-sep {
+      flex: none;
       height: 1px;
-      background: var(--overlay-separator);
-      margin: 3px 0;
+      background: var(--border-strong);
+      margin: 5px -4px;
     }
 
     .cam-confirm {
@@ -274,8 +303,17 @@ export class CardActionsMenuPopover {
   private readonly panel = inject(AnchoredPanelDirective);
   private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
+  private readonly completionWarning = inject(CompletionWarningService);
   private readonly router = inject(Router);
-  private readonly state = inject(BoardState, { optional: true });
+  protected readonly state = inject(BoardState, { optional: true });
+  /**
+   * Whether the viewer may edit this card, from a host that knows (the notifications panel has each
+   * row's board role). The board's own hosts leave it null and the route-scoped BoardState answers;
+   * a BoardState that happens to be in scope for another board (the notifications panel over a
+   * board) is not consulted. With neither, the menu offers the edit and the server has the last word.
+   */
+  readonly canEditCard = input<boolean | null>(null);
+  readonly canEditRelations = computed(() => this.canEditCard() ?? (this.state ? this.state.canEdit() : true));
   private readonly notifications = inject(NotificationsService);
 
   readonly cardId = input.required<string>();
@@ -303,6 +341,7 @@ export class CardActionsMenuPopover {
   readonly copyOpen = signal(false);
   readonly moveOpen = signal(false);
   readonly reminderOpen = signal(false);
+  readonly relationsOpen = signal(false);
   readonly hasPendingReminder = computed(() => {
     const reminder = this.notifications.reminderFor(this.cardId());
     return Boolean(reminder && !reminder.firedAt);
@@ -320,15 +359,27 @@ export class CardActionsMenuPopover {
       // A point anchor gets no gap (the menu should open under the cursor, not beside it), which the
       // primitive already handles.
       anchor: () => this.anchorPoint(),
-      // minHeight matches the menu's real height, so a menu with room for itself does not flip up.
-      placement: () => ({ align: "end", width: 220, gap: 4, minHeight: 200 }),
+      // minHeight is about the full menu's height, so it flips up rather than scrolling when there
+      // is more room above; maxHeight is above it so the menu only scrolls when the viewport is short.
+      placement: () => ({ align: "end", width: 220, gap: 4, minHeight: 480, maxHeight: 640 }),
       onDismiss: () => this.close.emit(),
     });
+  }
+
+  toggleRelations(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.quickEditOpen.set(false);
+    this.copyOpen.set(false);
+    this.moveOpen.set(false);
+    this.reminderOpen.set(false);
+    this.relationsOpen.update((v) => !v);
   }
 
   toggleReminder(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
+    this.relationsOpen.set(false);
     this.quickEditOpen.set(false);
     this.copyOpen.set(false);
     this.moveOpen.set(false);
@@ -338,6 +389,7 @@ export class CardActionsMenuPopover {
   toggleCopy(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
+    this.relationsOpen.set(false);
     this.quickEditOpen.set(false);
     this.moveOpen.set(false);
     this.reminderOpen.set(false);
@@ -347,6 +399,7 @@ export class CardActionsMenuPopover {
   toggleMove(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
+    this.relationsOpen.set(false);
     this.quickEditOpen.set(false);
     this.copyOpen.set(false);
     this.reminderOpen.set(false);
@@ -356,6 +409,7 @@ export class CardActionsMenuPopover {
   toggleQuickEdit(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
+    this.relationsOpen.set(false);
     this.copyOpen.set(false);
     this.moveOpen.set(false);
     this.reminderOpen.set(false);
@@ -404,6 +458,7 @@ export class CardActionsMenuPopover {
     if (this.savingCompletion()) return;
     this.savingCompletion.set(true);
     try {
+      if (!await this.completionWarning.allow(!this.completedAt(), { cardIds: [this.cardId()] })) return;
       const card = await this.api.patch<WireCard>(`/cards/${this.cardId()}/completion`, {
         completed: !this.completedAt(),
       });

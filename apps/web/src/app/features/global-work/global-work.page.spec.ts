@@ -37,6 +37,7 @@ const card = {
   attachmentCount: 0,
   checklistDoneCount: 0,
   checklistTotalCount: 0,
+  blockedByCount: 0,
   coverUrl: null,
   coverImageWidth: null,
   coverImageHeight: null,
@@ -224,7 +225,7 @@ describe("GlobalWorkPage card routing", () => {
         lists: [{ id: card.listId, workspaceId: card.workspaceId, name: "Doing", icon: null, color: null, position: "1" }],
         labels: [],
         customFields: [],
-        people: [{ userId: targetUserId, organisationId: "org", displayName: "Me", avatarUrl: null, boardIds: [card.boardId, otherBoardId] }],
+        people: [{ userId: targetUserId, organisationId: "org", displayName: "Me", avatarUrl: null, boardIds: [card.boardId, otherBoardId], guestBoardIds: [] }],
       }),
       interactionReady: signal(true),
       definition: signal({ filters: { assigneeIds: [] as string[] } }),
@@ -1414,7 +1415,7 @@ describe("GlobalWorkPage toolbar state", () => {
       TestBed.tick();
 
       expect(fixture.componentInstance.displayOptions().map((option) => option.id))
-        .toEqual(["board", "overview", "table", "calendar", "history"]);
+        .toEqual(["board", "overview", "table", "calendar", "dependencies", "history"]);
       expect(fixture.componentInstance.showTeammateFilter()).toBe(true);
       expect(fixture.componentInstance.showUpNextControl()).toBe(true);
 

@@ -88,6 +88,36 @@ await kanera.cards.move("MKT-42", {
 });
 ```
 
+## Dependencies
+
+Cards in the same workspace can block each other or simply be related. Direction reads from the
+first card's side, and a relation that would create a blocking cycle is rejected.
+
+```ts
+await kanera.cards.addRelation("API-12", "WEB-40", "blocks"); // WEB-40 is blocked by API-12
+
+const { relations, hiddenBlockerCount } = await kanera.cards.listRelations("WEB-40");
+const blocker = relations.find((relation) => relation.direction === "blocked_by");
+if (blocker) await kanera.cards.removeRelation("WEB-40", blocker.id);
+```
+
+`hiddenBlockerCount` counts open blockers on boards you cannot open; they are never listed.
+
+To see whole chains at once, across boards, read the dependency map for one card, a board or a
+workspace:
+
+```ts
+const map = await kanera.cards.dependencyGraph({ cards: ["WEB-40"] }); // or { boardId } / { workspaceId }
+const card = map.cards.find((entry) => entry.key === "WEB-40");
+const blockerIds = map.edges
+  .filter((edge) => edge.kind === "blocks" && edge.targetCardId === card?.id)
+  .map((edge) => edge.sourceCardId);
+```
+
+The map follows `blocks` relations both ways through open cards you can open, includes completed
+blockers where a chain reaches them, and stops at 400 cards (`truncated`). Cards on boards you
+cannot open are never included; `blockedByCount` still counts them.
+
 ## Card references
 
 Anywhere a card is named, you may pass a UUID, a human key such as `MKT-42`, or a canonical card

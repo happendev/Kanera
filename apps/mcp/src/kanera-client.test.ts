@@ -156,6 +156,31 @@ void test("maps network failures and client cancellation to actionable MCP error
   );
 });
 
+void test("maps interrupted response bodies with the same network, timeout and cancellation semantics", async () => {
+  // Fetch has delivered headers; failing the body stream exercises a different boundary from a
+  // rejected fetch promise. A raw rejection here would bypass batch partial-success handling.
+  for (const scenario of [
+    { error: new TypeError("socket terminated"), status: 503, code: "UPSTREAM_UNAVAILABLE", cancelled: false },
+    { error: new DOMException("timed out", "TimeoutError"), status: 504, code: "UPSTREAM_TIMEOUT", cancelled: false },
+    { error: new DOMException("aborted", "AbortError"), status: 499, code: "REQUEST_CANCELLED", cancelled: true },
+  ]) {
+    const controller = new AbortController();
+    const client = new KaneraClient({
+      baseUrl: "https://api.example.test",
+      apiKey: "kanera_live_test",
+      signal: controller.signal,
+      fetchImpl: async () => new Response(new ReadableStream({
+        pull(stream) {
+          if (scenario.cancelled) controller.abort();
+          stream.error(scenario.error);
+        },
+      }), { status: 200 }),
+    });
+    await assert.rejects(client.get("/api/v1/session"), (error) => error instanceof KaneraApiError
+      && error.status === scenario.status && error.code === scenario.code, scenario.code);
+  }
+});
+
 void test("aborts a stalled Kanera request at the configured upstream deadline", async () => {
   const client = new KaneraClient({
     baseUrl: "https://api.example.test",

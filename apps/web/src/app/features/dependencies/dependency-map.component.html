@@ -1,0 +1,359 @@
+<div class="dm-toolbar">
+  <!-- The summary doubles as the filter: each count narrows the map to chains holding such a card,
+       and pressing it again goes back to every chain, like the board overview's counts. -->
+  <div class="dm-stats" role="group" aria-label="Filter dependency chains" i18n-aria-label>
+    @for (stat of stats(); track stat.id) {
+    <button type="button" class="dm-stat" [class]="'dm-stat is-' + stat.id" [class.is-active]="filter() === stat.id"
+      [class.has-count]="stat.count > 0" [attr.aria-pressed]="filter() === stat.id" [disabled]="!response() || (stat.id !== 'all' && stat.count === 0 && filter() !== stat.id)"
+      [kTooltip]="stat.tooltip" (click)="setFilter(stat.id)">
+      <i [class]="'ti ti-' + stat.icon" aria-hidden="true"></i>
+      <strong>{{ stat.count }}</strong>
+      <span>{{ stat.label }}</span>
+    </button>
+    }
+  </div>
+
+  <div class="dm-controls">
+    @if (offersWorkspace()) {
+    <k-segmented [options]="scopeOptions" [value]="scopeMode()" [showLabels]="true" size="sm" ariaLabel="Dependencies scope" i18n-ariaLabel (valueChange)="setScope($event)" />
+    }
+    <button type="button" class="dm-toggle" [class.is-on]="density() === 'slim'" [attr.aria-pressed]="density() === 'slim'" (click)="toggleSlim()"
+      kTooltip="Show only each card's key and title" i18n-kTooltip>
+      <i class="ti ti-baseline-density-small" aria-hidden="true"></i>
+      &ngsp;<ng-container i18n="Dependencies view toggle: smaller cards without labels, fields, people or dates">Slim cards</ng-container>
+    </button>
+    <button type="button" class="dm-toggle" [class.is-on]="showRelated()" [attr.aria-pressed]="showRelated()" (click)="toggleRelated()"
+      kTooltip="Also show cards linked with “relates to”" i18n-kTooltip>
+      <i class="ti ti-link" aria-hidden="true"></i>
+      &ngsp;<ng-container i18n="Dependencies view toggle: also draw relates-to links">Related</ng-container>
+    </button>
+    <button type="button" class="dm-toggle" [class.is-on]="critical()" [attr.aria-pressed]="critical()" (click)="toggleCritical()"
+      kTooltip="Highlight the longest run of open work in each chain" i18n-kTooltip>
+      <i class="ti ti-route" aria-hidden="true"></i>
+      &ngsp;<ng-container i18n="Dependencies view toggle: highlight each chain's critical path">Critical path</ng-container>
+    </button>
+    <k-segmented [options]="layoutOptions" [value]="layoutMode()" size="sm" ariaLabel="Dependencies layout" i18n-ariaLabel (valueChange)="setLayout($event)" />
+  </div>
+</div>
+
+@if (topBottleneck(); as bottleneck) {
+@if (filter() === 'all') {
+<!-- One sentence, not a widget: the card whose completion frees the most work, and a way to it. -->
+<p class="dm-callout">
+  <i class="ti ti-bolt" aria-hidden="true"></i>
+  <span class="dm-callout-text">
+    <span i18n="Dependencies view callout: the card holding up the most open work">Biggest bottleneck:</span>
+    &ngsp;<a class="dm-callout-link" [href]="href(bottleneck)" (click)="open($event, bottleneck)"><span class="dm-key">{{ bottleneck.card.key }}</span>&ngsp;{{ bottleneck.card.title }}</a>
+    &ngsp;<span class="dm-callout-note">{{ holdsUpLabel(bottleneck) }}</span>
+  </span>
+</p>
+}
+}
+
+@if (linkDraft(); as draft) {
+@if (draft.mode === 'pick') {
+<!-- Tap or keyboard linking: the next card chosen becomes the dependent. -->
+<p class="dm-linking" role="status">
+  <i class="ti ti-arrow-right" aria-hidden="true"></i>
+  <span class="dm-linking-text">{{ pickingLabel(draft) }}</span>
+  <button type="button" class="dm-retry" (click)="cancelEditing()" i18n="Button: stop choosing the card a new dependency blocks">Cancel</button>
+</p>
+}
+}
+
+@if (response()?.truncated) {
+<p class="dm-note" role="status">
+  <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+  <span i18n="Dependencies view note when the map hit its card limit">This map stopped at 400 cards, so some chains are cut short. Narrow the scope to see them whole.</span>
+</p>
+}
+
+@if (!response()) {
+  @if (loadFailed()) {
+  <div class="dm-state" role="alert">
+    <span i18n="Error shown when the dependencies view could not load">Couldn't load dependencies.</span>
+    <button type="button" class="dm-retry" (click)="load()" i18n="Button: retry loading the dependencies view">Try again</button>
+  </div>
+  } @else {
+  <div class="dm-chains" aria-busy="true">
+    @for (_ of [1, 2, 3]; track $index) { <div class="dm-skeleton skeleton"></div> }
+  </div>
+  }
+} @else if (layout().chains.length === 0) {
+<k-empty-state icon="git-merge" title="No dependencies here yet" i18n-title
+  text="When a card is blocked by another, its chain shows up here. Add one from a card's Dependencies section, or right-click a card and choose Dependencies." i18n-text />
+} @else if (visibleChains().length === 0) {
+<k-empty-state icon="filter-off" title="No chains match" i18n-title text="Nothing on this map matches the current filters." i18n-text>
+  @if (filter() !== 'all') {
+  <button type="button" class="secondary" (click)="setFilter('all')" i18n="Button: clear the dependencies view filter">Show every chain</button>
+  }
+</k-empty-state>
+} @else {
+@let packed = layoutMode() === 'map' ? packing() : null;
+<!-- The map packs chain boxes into computed spots. The timeline stacks them as lanes on one shared
+     week axis that scrolls sideways as a whole, so a week stays lined up across every chain. The
+     step list just stacks them. -->
+<div class="dm-chains" [class.is-list]="layoutMode() === 'list'" [class.is-map]="packed" [class.is-timeline]="layoutMode() === 'timeline'"
+  [style.height.px]="packed?.height" [style.--dm-view-width.px]="viewWidth()" [attr.aria-busy]="loading()">
+  @for (chain of visibleChains(); track chain.id; let index = $index) {
+  @let place = packed?.placements?.[index];
+  <section class="dm-chain" [attr.aria-label]="goalTitle(chain)"
+    [style.left.px]="place?.x" [style.top.px]="place?.y" [style.width.px]="place?.width" [style.height.px]="place?.height">
+    <header class="dm-chain-head" [style.height.px]="layoutMode() !== 'list' ? chainHeadHeight : null">
+      <i class="ti ti-flag-3" aria-hidden="true"></i>
+      <span class="dm-chain-title">
+        <span class="dm-chain-goal">{{ goalTitle(chain) }}</span>
+        <span class="dm-chain-meta">{{ chainMeta(chain) }}</span>
+      </span>
+      @if (critical() && chain.critical.nodeIds.size) {
+      <span class="dm-pill is-critical">{{ criticalLabel(chain) }}</span>
+      }
+      @if (chain.counts.atRisk) {
+      <span class="dm-pill is-risk" i18n="Dependencies view chain badge">{ chain.counts.atRisk, plural, other {{{ chain.counts.atRisk }} at risk} }</span>
+      }
+      @if (chain.counts.blocked) {
+      <span class="dm-pill is-blocked" i18n="Dependencies view chain badge">{ chain.counts.blocked, plural, other {{{ chain.counts.blocked }} blocked} }</span>
+      }
+    </header>
+
+    @if (layoutMode() !== 'list') {
+    <!-- Sideways scroll, not stacking: a chain's meaning is its left-to-right order, so a wide chain
+         keeps its shape and scrolls inside its own box while the page stays put. -->
+    <div class="dm-scroll">
+      <div class="dm-canvas" [style.width.px]="chain.width" [style.height.px]="chain.height + stepLabelHeight" (click)="selectedEdge.set(null)">
+        @for (column of stepColumns(chain); track column.index) {
+        <span class="dm-step-band" [class.is-alt]="column.index % 2 === 1" [class.is-current]="column.tone === 'is-current'" [style.left.px]="column.bandX" [style.width.px]="column.last ? null : column.bandWidth" [style.right.px]="column.last ? 0 : null" aria-hidden="true"></span>
+        @if (column.skipsWeeks) {
+        <!-- Weeks with nothing due are left out; a dashed rule marks where. -->
+        <span class="dm-week-gap" [style.left.px]="column.bandX" aria-hidden="true"></span>
+        }
+        <span class="dm-step-label" [class]="'dm-step-label ' + column.tone" [style.left.px]="column.x" [style.width.px]="tileWidth">{{ column.label }}</span>
+        }
+        <svg class="dm-wires" [style.top.px]="stepLabelHeight" [attr.width]="chain.width" [attr.height]="chain.height" aria-hidden="true">
+          <defs>
+            @for (tone of ['plain', 'cleared', 'risk', 'lit', 'critical']; track tone) {
+            <marker [attr.id]="instanceId + '-arrow-' + tone" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" [attr.class]="'dm-arrow is-' + tone" />
+            </marker>
+            }
+          </defs>
+          @for (edge of chain.edges; track edge.id) {
+          <!-- A reversed edge is still drawn left to right, so its arrow goes on the start. -->
+          <path [attr.d]="edge.path" [attr.class]="wireClass(edge)" [attr.marker-end]="edge.reversed ? null : markerUrl(edge)" [attr.marker-start]="edge.reversed ? markerUrl(edge) : null" />
+          }
+          <!-- Wide invisible strokes over the connectors the viewer may remove, drawn last so they are on top. -->
+          @for (edge of chain.edges; track edge.id) {
+          @if (canRemove(edge)) {
+          <path class="dm-wire-hit" [attr.d]="edge.path" tabindex="0" role="button" [attr.aria-label]="edgeLabel(edge)"
+            (click)="selectEdge($event, chain, edge)" (keydown.enter)="selectEdge($event, chain, edge)" (keydown.space)="selectEdge($event, chain, edge)"
+            (mouseenter)="hoveredEdgeId.set(edge.id)" (mouseleave)="hoveredEdgeId.set(null)" />
+          }
+          }
+          @if (linkDraft()?.line; as line) {
+          @if (line.chainId === chain.id) {
+          <path class="dm-wire is-draft" [attr.d]="draftPath({ x1: line.x1, y1: line.y1 - stepLabelHeight, x2: line.x2, y2: line.y2 - stepLabelHeight })" [attr.marker-end]="'url(#' + instanceId + '-arrow-lit)'" />
+          }
+          }
+        </svg>
+        @for (node of chain.nodes; track node.id) {
+        @let linking = linkState(node);
+        <a class="dm-tile" [class]="'dm-tile is-' + node.status + (linking ? ' is-link-' + linking : '')" [class.is-context]="!node.inScope" [class.is-dim]="isDim(node.id)"
+          [class.is-critical]="isCritical(node.id)" [class.is-offpath]="isOffPath(node.id)" [attr.data-card-id]="node.id"
+          [class.is-match]="matchedIds()?.has(node.id)" [class.is-selected]="node.id === selectedCardId()" [class.is-risk]="node.atRisk"
+          [style.left.px]="node.x" [style.top.px]="node.y + stepLabelHeight" [class.is-slim]="density() === 'slim'" [style.width.px]="tileWidth" [style.height.px]="node.height"
+          [href]="href(node)" [attr.aria-label]="tileLabel(node)" (click)="open($event, node)"
+          (mouseenter)="focus(node.id)" (mouseleave)="releaseFocus()" (focus)="focus(node.id)" (blur)="releaseFocus()">
+          <span class="dm-tile-head">
+            <i class="ti dm-status-icon" [class]="'ti dm-status-icon ' + statusIcon(node)" aria-hidden="true"></i>
+            <span class="dm-key">{{ node.card.key }}</span>
+            @if (placeName(node); as place) {
+            <span class="dm-place" [class.is-board]="showsBoard(node)">
+              @if (showsBoard(node)) { <i [class]="'ti ti-' + boardIcon(node)" aria-hidden="true"></i> }
+              <span class="dm-place-name">{{ place }}</span>
+            </span>
+            }
+            @if (riskLabel(node); as risk) {
+            <i class="ti ti-alert-triangle dm-risk-icon" [kTooltip]="risk" aria-hidden="true"></i>
+            }
+            @if (density() === 'slim' && node.offMapBlockers) {
+            <span class="dm-offmap" [kTooltip]="offMapLabel(node.offMapBlockers)"><i class="ti ti-eye-off" aria-hidden="true"></i>{{ node.offMapBlockers }}</span>
+            }
+          </span>
+          <span class="dm-title">{{ node.card.title }}</span>
+          @if (density() === 'detailed') {
+          @let face = content(node);
+          @if (face.labels.length) {
+          <k-card-labels class="dm-labels" [labels]="face.labels" [limit]="3" [showOverflow]="true" [interactive]="false" />
+          }
+          @let fit = fitFields(node);
+          @if (fit.fields.length) {
+          <span class="dm-fields">
+            @for (field of fit.fields; track field.id) {
+            <span class="dm-field" [kTooltip]="field.name">
+              <i [class]="'ti ti-' + field.icon" aria-hidden="true"></i>
+              <span class="dm-field-name">{{ field.name }}</span>
+              @if (field.chips.length) {
+              @for (chip of field.chips; track chip.id) {
+              <span class="dm-chip" [class.has-color]="!!chip.color" [style.--option-color]="chip.color ? 'var(--color-' + chip.color + ')' : null">{{ chip.label }}</span>
+              }
+              } @else if (field.text !== null) {
+              <span class="dm-field-value">@if (field.people) {<i class="ti ti-user" aria-hidden="true"></i>}{{ field.text }}</span>
+              }
+            </span>
+            }
+            @if (fit.more) {
+            <span class="dm-field is-more">{{ moreFieldsLabel(fit.more) }}</span>
+            }
+          </span>
+          }
+          <span class="dm-foot">
+            @if (assignees(node); as people) {
+            @if (people.length) {
+            <span class="dm-avatars">
+              @for (person of people.slice(0, 3); track person.userId) {
+              <k-avatar [url]="person.avatarUrl" [name]="person.displayName" [size]="20" />
+              }
+              @if (people.length > 3) { <span class="dm-avatar-more">+{{ people.length - 3 }}</span> }
+            </span>
+            }
+            }
+            @if (dueLabel(node); as due) {
+            <span class="dm-due" [class.is-overdue]="isOverdue(node)"><i class="ti ti-calendar-due" aria-hidden="true"></i>{{ due }}</span>
+            }
+            <span class="dm-spacer"></span>
+            @if (node.offMapBlockers) {
+            <span class="dm-offmap" [kTooltip]="offMapLabel(node.offMapBlockers)"><i class="ti ti-eye-off" aria-hidden="true"></i>{{ node.offMapBlockers }}</span>
+            }
+            @if (statusLabel(node); as status) {
+            <span class="dm-status">{{ status }}</span>
+            }
+          </span>
+          }
+        </a>
+        @if (canLinkFrom(node)) {
+        <!-- A sibling, not a child: a button cannot sit inside the tile's link. -->
+        <button type="button" class="dm-link-handle" [class.is-shown]="focusedId() === node.id || linkDraft()?.fromId === node.id"
+          [style.left.px]="node.x + tileWidth" [style.top.px]="node.y + stepLabelHeight + node.height / 2"
+          [attr.aria-label]="linkHandleLabel(node)" [attr.aria-pressed]="linkDraft()?.fromId === node.id"
+          kTooltip="Drag to the card this one blocks" i18n-kTooltip [kTooltipDisabled]="!!linkDraft()"
+          (pointerdown)="startLink($event, chain, node)" (click)="handleKey($event, node)"
+          (mouseenter)="focus(node.id)" (mouseleave)="releaseFocus()">
+          <i class="ti ti-plus" aria-hidden="true"></i>
+        </button>
+        }
+        }
+        @if (selectedEdgeIn(chain); as picked) {
+        <button type="button" class="dm-wire-remove" [style.left.px]="picked.x" [style.top.px]="picked.y" (click)="removeSelectedEdge($event, chain)">
+          <i class="ti ti-unlink" aria-hidden="true"></i>
+          &ngsp;<ng-container i18n="Button on a selected Dependencies view connector: delete that dependency">Remove</ng-container>
+        </button>
+        }
+      </div>
+    </div>
+    } @else {
+    <!-- A numbered rail, one marker per step, so the order still reads without the map's wires.
+         Each row lays its parts out in columns on a wide chain and stacks them on a narrow one. -->
+    <ol class="dm-steps">
+      @for (step of steps(chain); track $index; let index = $index) {
+      @let state = stepState(step);
+      <li class="dm-step" [class]="'dm-step is-' + state">
+        <span class="dm-step-marker" aria-hidden="true">
+          @if (state === 'done') { <i class="ti ti-check"></i> } @else { {{ index + 1 }} }
+        </span>
+        <span class="dm-sr">{{ stepLabel(index) }}</span>
+        <ul class="dm-rows">
+          @for (node of step; track node.id) {
+          <li>
+            <a class="dm-row" [class]="'dm-row is-' + node.status" [class.is-match]="matchedIds()?.has(node.id)" [class.is-selected]="node.id === selectedCardId()" [class.is-risk]="node.atRisk"
+              [href]="href(node)" [attr.aria-label]="tileLabel(node)" (click)="open($event, node)">
+              <i class="ti dm-status-icon" [class]="'ti dm-status-icon ' + statusIcon(node)" aria-hidden="true"></i>
+              <span class="dm-row-main">
+                <span class="dm-title">{{ node.card.title }}</span>
+                <span class="dm-row-meta">
+                  <span class="dm-key">{{ node.card.key }}</span>
+                  @if (placeName(node); as place) {
+                  <span class="dm-place" [class.is-board]="showsBoard(node)">
+                    @if (showsBoard(node)) { <i [class]="'ti ti-' + boardIcon(node)" aria-hidden="true"></i> }
+                    <span class="dm-place-name">{{ place }}</span>
+                  </span>
+                  }
+                  @if (isCritical(node.id)) {
+                  <span class="dm-critical-tag"><i class="ti ti-route" aria-hidden="true"></i>&ngsp;<ng-container i18n="Dependencies view step list tag: the card is on its chain's critical path">Critical path</ng-container></span>
+                  }
+                </span>
+                @if (density() === 'detailed') {
+                @let face = content(node);
+                @if (face.labels.length || face.fields.length) {
+                <span class="dm-row-face">
+                  @if (face.labels.length) {
+                  <k-card-labels class="dm-row-labels" [labels]="face.labels" [interactive]="false" />
+                  }
+                  @for (field of face.fields; track field.id) {
+                  <span class="dm-field">
+                    <i [class]="'ti ti-' + field.icon" aria-hidden="true"></i>
+                    <span class="dm-field-name">{{ field.name }}</span>
+                    @if (field.chips.length) {
+                    @for (chip of field.chips; track chip.id) {
+                    <span class="dm-chip" [class.has-color]="!!chip.color" [style.--option-color]="chip.color ? 'var(--color-' + chip.color + ')' : null">{{ chip.label }}</span>
+                    }
+                    } @else if (field.text !== null) {
+                    <span class="dm-field-value">@if (field.people) {<i class="ti ti-user" aria-hidden="true"></i>}{{ field.text }}</span>
+                    }
+                  </span>
+                  }
+                </span>
+                }
+                }
+              </span>
+              <span class="dm-row-rels">
+                @if (waitingOn(node); as waiting) {
+                @if (waiting.length) {
+                <span class="dm-row-rel is-waiting"><i class="ti ti-lock" aria-hidden="true"></i><span><ng-container i18n="Dependencies view step list: the open cards this card waits on">Waiting on {{ keys(waiting) // i18n(ph="keys") }}</ng-container></span></span>
+                }
+                }
+                @if (unblocks(node); as next) {
+                @if (next.length) {
+                <span class="dm-row-rel"><i class="ti ti-arrow-right" aria-hidden="true"></i><span><ng-container i18n="Dependencies view step list: the open cards waiting on this card">Unblocks {{ keys(next) // i18n(ph="keys") }}</ng-container></span></span>
+                }
+                }
+                @if (riskLabel(node); as risk) {
+                <span class="dm-row-rel is-risk"><i class="ti ti-alert-triangle" aria-hidden="true"></i><span>{{ risk }}</span></span>
+                }
+                @if (node.offMapBlockers) {
+                <span class="dm-row-rel is-waiting"><i class="ti ti-eye-off" aria-hidden="true"></i><span>{{ offMapLabel(node.offMapBlockers) }}</span></span>
+                }
+              </span>
+              <span class="dm-row-due">
+                @if (dueLabel(node); as due) {
+                <span class="dm-due" [class.is-overdue]="isOverdue(node)"><i class="ti ti-calendar-due" aria-hidden="true"></i>{{ due }}</span>
+                }
+              </span>
+              <span class="dm-row-people">
+                @if (assignees(node); as people) {
+                @if (people.length) {
+                <span class="dm-avatars">
+                  @for (person of people.slice(0, 3); track person.userId) {
+                  <k-avatar [url]="person.avatarUrl" [name]="person.displayName" [size]="20" />
+                  }
+                  @if (people.length > 3) { <span class="dm-avatar-more">+{{ people.length - 3 }}</span> }
+                </span>
+                }
+                }
+              </span>
+              <span class="dm-row-status">
+                @if (statusLabel(node); as status) {
+                <span class="dm-status">{{ status }}</span>
+                }
+              </span>
+            </a>
+          </li>
+          }
+        </ul>
+      </li>
+      }
+    </ol>
+    }
+  </section>
+  }
+</div>
+}

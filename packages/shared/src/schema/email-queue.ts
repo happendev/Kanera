@@ -14,6 +14,8 @@ export const EMAIL_QUEUE_TYPES = [
   "card_comment_added",
   "comment_mentioned",
   "reaction_added",
+  "card_dependency_added",
+  "card_unblocked",
   "card_due_date_changed",
   "card_overdue",
   "checklist_item_overdue",
@@ -183,6 +185,32 @@ export type ReactionAddedEmailQueueData = {
   cardUrl: string;
   commentExcerpt: string | null;
   fileName: string | null;
+};
+
+export type CardDependencyAddedEmailQueueData = {
+  displayName: string;
+  actorName: string;
+  cardTitle: string;
+  boardName: string;
+  cardUrl: string;
+  /** From the watched card's side: it is now `blocked_by` the other card, or `blocks` it. */
+  direction: "blocks" | "blocked_by";
+  /** The other card's key, and its title only when the recipient can open it. */
+  otherCardKey: string;
+  otherCardTitle: string | null;
+};
+
+export type CardUnblockedEmailQueueData = {
+  displayName: string;
+  actorName: string;
+  cardTitle: string;
+  boardName: string;
+  cardUrl: string;
+  /** The blocker whose completion cleared the card; its title only when the recipient can open it. */
+  otherCardKey: string;
+  otherCardTitle: string | null;
+  /** Set when the blocker was reopened instead: the card is blocked again. Older rows have no flag. */
+  reblocked?: boolean;
 };
 
 export type CardDueDateChangedEmailQueueData = {
@@ -358,6 +386,8 @@ export type EmailQueueData =
   | { type: "card_comment_added"; data: CardCommentAddedEmailQueueData }
   | { type: "comment_mentioned"; data: CommentMentionedEmailQueueData }
   | { type: "reaction_added"; data: ReactionAddedEmailQueueData }
+  | { type: "card_dependency_added"; data: CardDependencyAddedEmailQueueData }
+  | { type: "card_unblocked"; data: CardUnblockedEmailQueueData }
   | { type: "card_due_date_changed"; data: CardDueDateChangedEmailQueueData }
   | { type: "card_overdue"; data: CardOverdueEmailQueueData }
   | { type: "checklist_item_overdue"; data: ChecklistItemOverdueEmailQueueData }

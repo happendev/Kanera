@@ -131,7 +131,7 @@
     @for (automation of settings.automations(); track automation.id) {
     @let expanded = settings.isAutomationExpanded(automation.id);
     @let failure = settings.automationFailureMessage(automation);
-    <div cdkDrag class="automation-card" [class.is-disabled]="!automation.enabled" [class.is-failing]="!!failure" [class.is-open]="expanded">
+    <div cdkDrag class="automation-card" [attr.data-automation-id]="automation.id" [class.is-disabled]="!automation.enabled" [class.is-failing]="!!failure" [class.is-open]="expanded">
       <div class="ac-head">
         <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
         <button class="ghost icon ac-expander" type="button" (click)="settings.toggleAutomationExpanded(automation.id)" [attr.aria-expanded]="expanded" [attr.aria-label]="expanded ? collapseLabel : expandLabel">
@@ -408,6 +408,12 @@
               }
               @case ('card_marked_complete') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs when a card is marked complete, on this board.} other {Runs when a card is marked complete, on every board in this workspace.} }</ng-container></p>
+              }
+              @case ('card_blocked') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Card blocked automation trigger">Runs when a card gains its first active blocker, including when a blocker is reopened or restored. Includes changes made by integrations and automations.</ng-container></p>
+              }
+              @case ('card_unblocked') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Card unblocked automation trigger">Runs when a card's last active blocker is completed, archived, deleted or removed. Includes changes made by integrations and automations.</ng-container></p>
               }
               @default never;
             }

@@ -23,6 +23,9 @@ import { Subject } from "rxjs";
             <input autofocus autocomplete="off" [value]="enteredText()" (input)="enteredText.set($any($event.target).value)" />
           </label>
         }
+        @if (checkboxLabel()) {
+          <label class="confirmation-choice"><input type="checkbox" [checked]="checked()" (change)="checked.set($any($event.target).checked)" />{{ checkboxLabel() }}</label>
+        }
         <div class="actions">
           <button type="button" class="ghost sm" (click)="cancel()" i18n="Confirm dialog button">Cancel</button>
           @if (!loading()) {
@@ -87,6 +90,9 @@ import { Subject } from "rxjs";
     .confirmation-field strong { color: var(--text); }
     .confirmation-field input { width: 100%; }
 
+    .confirmation-choice { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 13px; color: var(--text-muted); }
+    .confirmation-choice input { width: 16px; height: 16px; flex: none; }
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) { .confirmation-choice { min-height: 44px; } .actions button { min-height: 44px; } }
     .actions {
       display: flex;
       justify-content: flex-end;
@@ -111,6 +117,8 @@ export class ConfirmDialogComponent {
   readonly loading = input(false);
   readonly confirmationText = input<string | null>(null);
   readonly enteredText = signal("");
+  readonly checkboxLabel = input("");
+  readonly checked = signal(false);
 
   readonly result = new Subject<boolean>();
 

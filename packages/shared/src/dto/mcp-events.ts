@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { EVENT_OUTBOX_ACTOR_KINDS } from "../schema/event-outbox.js";
 
-export const MCP_CARD_EVENT_NAMES = ["card.created", "card.updated", "card.moved", "comment.created"] as const;
+export const MCP_CARD_EVENT_NAMES = ["card.created", "card.updated", "card.moved", "comment.created", "card.blocked", "card.unblocked"] as const;
 export const MCP_PRIORITY_EVENT_NAME = "priorities.changed";
 export const MCP_MY_DAY_EVENT_NAME = "my_day.ready";
 export const MCP_REMINDER_EVENT_NAME = "reminder.due";
@@ -122,6 +122,8 @@ export type McpEventOccurrence = McpCardEventOccurrence | McpPriorityEventOccurr
 const descriptions: Record<McpEventName, string> = {
   "card.created": "A card was created in the monitored workspace, board, or card scope.",
   "card.updated": "A card changed, including its title, description, completion or archive state. Read cards.get for the current full record.",
+  "card.blocked": "An active card gained its first open blocker, including a blocker being reopened or restored. Additional blockers do not repeat this event. Includes people, integrations, automations and mirrors; independent of configured automation rules.",
+  "card.unblocked": "An active card lost its last open blocker through completion, archive or unlinking, or the blocker's board or list being deleted. Includes people, integrations, automations and mirrors; independent of configured automation rules.",
   "card.moved": "A card moved within or between lists or boards. Includes its source and destination lists and previous position.",
   "comment.created": "A new comment was posted on a card. Includes a bounded text excerpt; use comments.list for the full comment.",
   "priorities.changed": "The connected user's own \"Up next\" priority queue may have changed: an entry was added, moved or removed, or a queued card was completed, archived, restored or reassigned. Carries no queue content; call priorities.list for the current ranking.",
