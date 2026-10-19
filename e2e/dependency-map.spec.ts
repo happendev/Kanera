@@ -88,11 +88,11 @@ test("the dependencies view maps a cross-board chain, updates live and opens car
 
     // The steps layout on a phone carries the same chain as a list.
     await viewer.setViewportSize({ width: 390, height: 900 });
-    await viewer.locator("k-dependency-map").getByRole("button", { name: "Steps", exact: true }).click();
+    await viewer.getByRole("group", { name: "Dependencies layout", exact: true }).getByRole("button", { name: "Steps", exact: true }).click();
     const row = viewer.locator("k-dependency-map .dm-row").filter({ hasText: followUp.title });
     await expect(row).toContainText(`Waiting on ${blocked.key}`);
     await viewer.screenshot({ path: test.info().outputPath("dependency-map-phone.png") });
-    await viewer.locator("k-dependency-map").getByRole("button", { name: "Map", exact: true }).click();
+    await viewer.getByRole("group", { name: "Dependencies layout", exact: true }).getByRole("button", { name: "Map", exact: true }).click();
     await viewer.setViewportSize({ width: 1280, height: 900 });
 
     // A tile opens the card in the board's drawer.
@@ -179,7 +179,7 @@ test("the dependencies map adds and removes dependencies in place, with critical
     // right, and an undated card stays in the first column.
     expect((await api.patch(`/api/cards/${first.id}`, { data: { dueDateLocalDate: "2099-06-19", dueDateSlot: "anyTime" } })).ok()).toBe(true);
     expect((await api.patch(`/api/cards/${last.id}`, { data: { dueDateLocalDate: "2099-06-02", dueDateSlot: "anyTime" } })).ok()).toBe(true);
-    await map.getByRole("button", { name: "Timeline" }).click();
+    await page.getByRole("group", { name: "Dependencies layout", exact: true }).getByRole("button", { name: "Timeline", exact: true }).click();
     await expect(chain.locator(".dm-step-label").first()).toHaveText("No due date");
     // One calendar for every chain: each lane has the same week headings in the same places, and
     // the years of empty weeks before 2099 collapse behind a dashed marker.
@@ -193,7 +193,7 @@ test("the dependencies map adds and removes dependencies in place, with critical
     const dependentBox = (await mapTile(page, last.title).boundingBox())!;
     expect(blockerBox.x).toBeGreaterThan(dependentBox.x);
     await page.screenshot({ path: test.info().outputPath("dependency-map-timeline.png") });
-    await map.getByRole("button", { name: "Map", exact: true }).click();
+    await page.getByRole("group", { name: "Dependencies layout", exact: true }).getByRole("button", { name: "Map", exact: true }).click();
   } finally {
     for (const card of created) {
       expect((await api.patch(`/api/cards/${card.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
@@ -246,7 +246,7 @@ test("dependency layouts keep titles, badges and touch controls usable across sc
       for (const width of [1024, 1440, 768, 640, 390, 320]) {
         await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
         for (const layout of ["Steps", "Map", "Timeline"]) {
-          await map.getByRole("button", { name: layout, exact: true }).tap();
+          await page.getByRole("group", { name: "Dependencies layout", exact: true }).getByRole("button", { name: layout, exact: true }).tap();
           const layoutClass = { Steps: "list", Map: "map", Timeline: "timeline" }[layout];
           await expect(map.locator(".dm-chains")).toHaveClass(new RegExp(`is-${layoutClass}`));
           if (layout === "Steps") {

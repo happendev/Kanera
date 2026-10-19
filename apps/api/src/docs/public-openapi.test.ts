@@ -68,10 +68,12 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
     name: "User",
     table: schema.users,
     synthetic: ["clientRole"],
-    // Credentials, per-user UI preferences, and soft-deletion bookkeeping are never public.
+    // Credentials, per-user UI preferences (including onboarding progress), and soft-deletion
+    // bookkeeping are never public.
     omitted: [
       "activeClientId", "emailVerifiedAt", "passwordHash", "timezone", "showCardKeys",
       "showScratchpad", "theme", "accent", "locale", "lastOnlineAt", "deletedAt", "needsOrganisationOnLoginAt",
+      "gettingStartedHiddenAt", "gettingStartedDismissedAt", "gettingStartedUsed",
     ],
   },
   {

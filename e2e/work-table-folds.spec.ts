@@ -27,7 +27,7 @@ test("Global Work table folds survive saving a view, reloading and realtime refr
     const row = page.locator(`.tv-row[data-card-id="${card.id}"]`);
     await expect(row).toBeVisible();
     await page.locator("button.k-toolbar-trigger").filter({ has: page.locator(".ti-layout-rows") }).click();
-    await page.locator("k-anchored-picker").getByRole("button", { name: /Workspace$/ }).click();
+    await page.locator("k-anchored-picker").getByRole("option", { name: /Workspace$/ }).click();
     const collapse = page.getByRole("button", { name: `Collapse ${workspaceName}`, exact: true });
     const expand = page.getByRole("button", { name: `Expand ${workspaceName}`, exact: true });
     await collapse.click();
