@@ -1,3 +1,4 @@
+import { ToastService } from "../../../shared/toast.service";
 import { NgTemplateOutlet } from "@angular/common";
 import { MenuDirective } from "../../../shared/menu.directive";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
@@ -221,6 +222,7 @@ interface GroupByOption {
   styleUrl: "./board-table-view.component.scss",
 })
 export class BoardTableViewComponent implements OnDestroy {
+  private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly pendingCustomFieldIds = new PendingCustomFieldIds();
   private readonly state = inject(BoardState);
@@ -2274,13 +2276,15 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   exportCsv() {
-    this.moreOpen.set(false);
-    const columns = [TITLE_COLUMN_ID, ...this.visibleColumns()];
-    const rows = [
-      columns.map((column) => this.csvCell(this.exportColumnLabel(column))),
-      ...this.exportRows().map((card) => columns.map((column) => this.csvCell(this.exportCell(card, column)))),
-    ];
-    downloadTextFile(rows.map((row) => row.join(",")).join("\n"), "text/csv;charset=utf-8", this.exportFileName("csv"));
+    return this.runExport(() => {
+      this.moreOpen.set(false);
+      const columns = [TITLE_COLUMN_ID, ...this.visibleColumns()];
+      const rows = [
+        columns.map((column) => this.csvCell(this.exportColumnLabel(column))),
+        ...this.exportRows().map((card) => columns.map((column) => this.csvCell(this.exportCell(card, column)))),
+      ];
+      downloadTextFile(rows.map((row) => row.join(",")).join("\n"), "text/csv;charset=utf-8", this.exportFileName("csv"));
+    });
   }
 
   /**
@@ -2289,9 +2293,11 @@ export class BoardTableViewComponent implements OnDestroy {
    * script can read, rather than a grid a script has to parse back out of.
    */
   exportJson() {
-    this.moreOpen.set(false);
-    const payload = this.buildExportPayload();
-    downloadTextFile(JSON.stringify(payload, null, 2), "application/json", this.exportFileName("json"));
+    return this.runExport(() => {
+      this.moreOpen.set(false);
+      const payload = this.buildExportPayload();
+      downloadTextFile(JSON.stringify(payload, null, 2), "application/json", this.exportFileName("json"));
+    });
   }
 
   /**
@@ -2303,19 +2309,34 @@ export class BoardTableViewComponent implements OnDestroy {
    * Loaded on demand. write-excel-file is ~100kB and most sessions never export.
    */
   async exportExcel() {
-    this.moreOpen.set(false);
-    const payload = this.buildExportPayload();
-    const { default: writeXlsxFile } = await import("write-excel-file/browser");
-    const sheets = buildWorkbookExport(payload).sheets;
-    await writeXlsxFile(
-      sheets.map((sheet) => ({
-        data: styledSheetData(sheet),
-        sheet: sheet.name,
-        columns: sheet.columnWidths.map((width) => ({ width })),
-        // Every sheet puts its title block above a header row at row 4.
-        stickyRowsCount: 4,
-      })),
-    ).toFile(this.exportFileName("xlsx"));
+    return this.runExport(async () => {
+      this.moreOpen.set(false);
+      const payload = this.buildExportPayload();
+      const { default: writeXlsxFile } = await import("write-excel-file/browser");
+      const sheets = buildWorkbookExport(payload).sheets;
+      await writeXlsxFile(
+        sheets.map((sheet) => ({
+          data: styledSheetData(sheet),
+          sheet: sheet.name,
+          columns: sheet.columnWidths.map((width) => ({ width })),
+          // Every sheet puts its title block above a header row at row 4.
+          stickyRowsCount: 4,
+        })),
+      ).toFile(this.exportFileName("xlsx"));
+    });
+  }
+
+  private async runExport(operation: () => void | Promise<void>) {
+    try {
+      await this.toasts.promise(operation, {
+        loading: $localize`Preparing export…`,
+        success: $localize`Export downloaded.`,
+        error: $localize`Couldn't export. Try again.`,
+        icon: "download",
+      });
+    } catch {
+      // The toast owns export failure feedback; do not leak a rejected UI event handler.
+    }
   }
 
   setAggregate(fieldId: string, metric: AggregateMetric | null) {

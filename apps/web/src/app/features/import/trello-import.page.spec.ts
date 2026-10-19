@@ -5,6 +5,7 @@ import type { AnalyzeCsvImportResponse, AnalyzeImportResponse, AnalyzeKaneraBoar
 import type { WorkspaceMember } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
+import { ToastService } from "../../shared/toast.service";
 import { ImportNavigationGuardService } from "./import-navigation-guard.service";
 import { TrelloImportPage } from "./trello-import.page";
 
@@ -263,6 +264,7 @@ describe("TrelloImportPage", () => {
     expect(fixture.componentInstance.step()).toBe("result");
     expect(fixture.componentInstance.result()?.createdBoardId).toBe(importResult().createdBoardId);
     expect(fixture.componentInstance.error()).toBeNull();
+    expect(TestBed.inject(ToastService).messages().map((toast) => toast.variant)).toEqual(["success"]);
   });
 
   it("maps CSV columns before initializing workspace mappings", async () => {

@@ -69,9 +69,11 @@
         <div class="board-overview-head">
           <div><strong i18n="Panel heading">Board overview</strong><span i18n>Card counts and upcoming work</span></div>
         </div>
-        <div class="board-overview-metrics">
+        <div class="board-overview-metrics" [class.has-progress]="state.inProgressEnabled()">
           <button type="button" [class.is-active]="boardCardFilter() === null" (click)="setBoardCardFilter(null)" kTooltip="Show all active cards" i18n-kTooltip><strong>{{ overview.active }}</strong><span i18n="Board overview count: cards not yet completed">Active</span></button>
           <button type="button" [class.needs-attention]="overview.overdue > 0" [class.is-active]="boardCardFilter() === 'overdue'" [disabled]="overview.overdue === 0" (click)="setBoardCardFilter('overdue')" kTooltip="Show overdue cards" i18n-kTooltip><strong>{{ overview.overdue }}</strong><span i18n="Board overview count: cards past their due date">Overdue</span></button>
+          <button type="button" [class.needs-attention]="overview.blocked > 0" [class.is-active]="boardCardFilter() === 'blocked'" [disabled]="overview.blocked === 0" (click)="setBoardCardFilter('blocked')" kTooltip="Show cards waiting on another open card" i18n-kTooltip="Tooltip on the Blocked count in the board overview"><strong>{{ overview.blocked }}</strong><span i18n="Board overview count: open cards waiting on another open card">Blocked</span></button>
+          <button type="button" [class.needs-follow-up]="!!overview.atRisk" [class.is-active]="boardCardFilter() === 'atRisk'" [disabled]="!overview.atRisk" (click)="setBoardCardFilter('atRisk')" kTooltip="Show cards whose blocker is overdue or due after them" i18n-kTooltip="Tooltip on the At risk count in the board overview"><strong>{{ overview.atRisk ?? '–' }}</strong><span i18n="Board overview count: cards whose blocker is overdue or due after them (keep it short)">At risk</span></button>
           <button type="button" [class.is-active]="boardCardFilter() === 'unassigned'" [disabled]="overview.unassigned === 0" (click)="setBoardCardFilter('unassigned')" kTooltip="Show unassigned cards" i18n-kTooltip><strong>{{ overview.unassigned }}</strong><span i18n="Board overview count: cards with no assignee">Unassigned</span></button>
           <button type="button" [class.is-active]="boardCardFilter() === 'inactive'" [disabled]="overview.inactive === 0" (click)="setBoardCardFilter('inactive')" [kTooltip]="inactiveCardsTooltip()"><strong>{{ overview.inactive }}</strong><span i18n="Board overview count: cards with no recent activity">Inactive</span></button>
           @if (state.inProgressEnabled()) {
@@ -377,7 +379,7 @@
   } @else if (state.visibleLists().length === 0) {
   <!-- A board with no lists renders nothing at all, which reads as broken rather than new. Lists are
        workspace-scoped, so the fix lives in settings; admins get taken straight there. -->
-  <k-empty-state class="board-empty" icon="columns-3" title="This board has no lists yet" i18n-title [text]="state.viewerIsWorkspaceAdmin() ? noListsAdminText : noListsMemberText">
+  <k-empty-state class="board-empty" raised icon="columns-3" title="This board has no lists yet" i18n-title [text]="state.viewerIsWorkspaceAdmin() ? noListsAdminText : noListsMemberText">
     @if (state.viewerIsWorkspaceAdmin() && listsSettingsUrl(); as url) {
     <a class="button" [routerLink]="url"><i class="ti ti-settings"></i> <ng-container i18n>Set up lists</ng-container></a>
     }

@@ -9,6 +9,7 @@ import type { WireCardLabel, WireCustomField } from "@kanera/shared/events";
 import type { List, WorkspaceMember } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
+import { ToastService } from "../../shared/toast.service";
 import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { ImportNavigationGuardService } from "./import-navigation-guard.service";
@@ -121,6 +122,7 @@ const SOURCE_COPY: Record<ImportSource, { title: string; hint: string; upload: s
 })
 export class TrelloImportPage implements OnDestroy {
   private readonly api = inject(ApiClient);
+  private readonly toasts = inject(ToastService);
   private readonly analytics = inject(AnalyticsService);
   private readonly importNavigationGuard = inject(ImportNavigationGuardService);
   private importStatusPollId: number | null = null;
@@ -517,17 +519,32 @@ export class TrelloImportPage implements OnDestroy {
     }, 30_000);
     try {
       if (this.source() === "trello" && this.trelloAttachmentCopyEnabled()) this.startImportStatusPolling(importId);
-      const body = this.buildCommitBody();
-      const endpoint = this.source() === "kanera"
-        ? `/imports/kanera-board/${importId}/commit`
-        : this.source() === "csv" ? `/imports/csv/${importId}/commit` : `/imports/${importId}/commit`;
-      const headers = new Headers();
-      if (this.source() === "trello" && this.trelloToken()) headers.set("X-Trello-Token", this.trelloToken()!);
-      const result = await this.api.request<ImportResultSummary>(endpoint, { method: "POST", body: JSON.stringify(body), headers });
-      this.result.set(result);
-      this.step.set("result");
+      await this.toasts.promise(async () => {
+        try {
+          const body = this.buildCommitBody();
+          const endpoint = this.source() === "kanera"
+            ? `/imports/kanera-board/${importId}/commit`
+            : this.source() === "csv" ? `/imports/csv/${importId}/commit` : `/imports/${importId}/commit`;
+          const headers = new Headers();
+          if (this.source() === "trello" && this.trelloToken()) headers.set("X-Trello-Token", this.trelloToken()!);
+          const result = await this.api.request<ImportResultSummary>(endpoint, { method: "POST", body: JSON.stringify(body), headers });
+          this.result.set(result);
+          this.step.set("result");
+        } catch (error) {
+          // A lost response can follow a durable import. Reconcile before settling the toast.
+          if (this.source() === "trello" && await this.applyTerminalImportStatus(importId)) {
+            if (this.result()) return;
+            throw new Error(this.error() ?? this.describeError(error), { cause: error });
+          }
+          throw error;
+        }
+      }, {
+        loading: $localize`Importing board…`,
+        success: $localize`Board imported.`,
+        error: (error) => this.describeError(error),
+        icon: "download",
+      });
     } catch (error) {
-      if (this.source() === "trello" && await this.applyTerminalImportStatus(importId)) return;
       this.error.set(this.describeError(error));
     } finally {
       window.clearTimeout(slowTimer);

@@ -5,7 +5,7 @@ import { Injectable, computed, signal } from "@angular/core";
  * Visual tone of a toast. Only the icon colour changes between variants so a stack of mixed toasts
  * still reads as one system; the copy carries the meaning.
  */
-export type ToastVariant = "success" | "error" | "info";
+export type ToastVariant = "success" | "error" | "info" | "loading";
 
 export interface Toast {
   id: number;
@@ -44,6 +44,15 @@ export interface UndoableToastOptions {
   undoLabel?: string;
 }
 
+export interface PromiseToastOptions<T> {
+  loading: string;
+  success: string | ((value: T) => string);
+  error: string | ((error: unknown) => string);
+  icon?: string;
+  /** Starts the undo window only after the operation succeeds. */
+  undo?: () => void | Promise<void>;
+}
+
 /** Lifetime of a plain confirmation or error toast. */
 const TOAST_LIFETIME_MS = 6000;
 
@@ -63,6 +72,7 @@ export const UNDO_WINDOW_MS = 10000;
 @Injectable({ providedIn: "root" })
 export class ToastService implements OnDestroy {
   private nextId = 0;
+  private destroyed = false;
   private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
   private readonly exitTimers = new Map<number, ReturnType<typeof setTimeout>>();
   private readonly commits = new Map<number, () => void | Promise<void>>();
@@ -97,6 +107,29 @@ export class ToastService implements OnDestroy {
     this.push({ message, icon, variant: "info" }, TOAST_LIFETIME_MS);
   }
 
+  /** Tracks one operation in one stack slot, preserving its value or rejection for the caller. */
+  async promise<T>(operation: Promise<T> | (() => T | Promise<T>), options: PromiseToastOptions<T>): Promise<T> {
+    const id = this.push({ message: options.loading, icon: "loader-2", variant: "loading" });
+    try {
+      const value = await (typeof operation === "function" ? operation() : operation);
+      const message = typeof options.success === "function" ? options.success(value) : options.success;
+      this.settle(id, {
+        message, icon: options.icon ?? "circle-check", variant: "success",
+        ...(options.undo ? { action: {
+          label: $localize`:Toast button that reverses the action just taken:Undo`,
+          run: () => this.undo(id, options.undo!),
+        } } : {}),
+      }, options.undo ? UNDO_WINDOW_MS : TOAST_LIFETIME_MS);
+      return value;
+    } catch (error) {
+      this.settle(id, {
+        message: typeof options.error === "function" ? options.error(error) : options.error,
+        icon: "alert-circle", variant: "error",
+      }, TOAST_LIFETIME_MS);
+      throw error;
+    }
+  }
+
   /**
    * Success toast with an Undo button. Undo dismisses the toast and skips `commit`; expiry or the
    * close button commits. Returns the toast id so a caller can force an early commit if the same
@@ -126,17 +159,25 @@ export class ToastService implements OnDestroy {
   };
 
   ngOnDestroy() {
+    this.destroyed = true;
     if (typeof window !== "undefined") window.removeEventListener("pagehide", this.flushPending);
     this.flushPending();
     for (const timer of this.timers.values()) clearTimeout(timer);
     for (const timer of this.exitTimers.values()) clearTimeout(timer);
   }
 
-  private push(toast: Omit<Toast, "id">, lifetimeMs: number): number {
+  private push(toast: Omit<Toast, "id">, lifetimeMs?: number): number {
     const id = ++this.nextId;
     this.all.update((toasts) => [...toasts, { ...toast, id, leaving: false }]);
-    this.timers.set(id, setTimeout(() => this.dismiss(id), lifetimeMs));
+    if (lifetimeMs !== undefined) this.timers.set(id, setTimeout(() => this.dismiss(id), lifetimeMs));
     return id;
+  }
+
+  private settle(id: number, toast: Omit<Toast, "id">, lifetimeMs: number) {
+    // Dismissal belongs to the user: a late response must never resurrect a closed toast.
+    if (this.destroyed || !this.messages().some((entry) => entry.id === id)) return;
+    this.all.update((toasts) => toasts.map((entry) => entry.id === id ? { ...toast, id, leaving: false } : entry));
+    this.timers.set(id, setTimeout(() => this.dismiss(id), lifetimeMs));
   }
 
   private remove(id: number) {

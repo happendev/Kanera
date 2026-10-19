@@ -706,6 +706,10 @@ tbody tr:last-child td {
         --heat-color: var(--danger);
       }
 
+      &[data-tone="warning"] {
+        --heat-color: var(--color-amber);
+      }
+
       &[data-tone="success"] {
         --heat-color: var(--success);
       }

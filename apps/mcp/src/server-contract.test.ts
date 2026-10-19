@@ -815,21 +815,22 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // and labels/assignees/due date on cards.create) adds roughly 6k; the schema budget was 185k and
     // the OAuth-inclusive ceiling keeps its margin above it (raised 1k for card dependencies:
     // cards.set_relations semantics and the blockedOnly work filter). cards.dependency_graph adds
-    // roughly 1.4k so agents can read blocking chains in one call; both ceilings move by 1k.
+    // roughly 1.4k so agents can read blocking chains in one call; both ceilings move by 1k. The
+    // atRiskOnly work filter adds ~0.1k, so the totals move by 0.5k and the per-tool ceiling by 0.1k.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
     // OAuth declarations add a fixed per-tool cost. Preserve the original routing/schema
     // budget independently, and bound the extra auth metadata rather than granting schema growth.
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
     // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
-    assert.ok(schemaCatalogLength <= 186_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 195_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
-    // No single tool may dominate the catalog: work.query_cards is the largest at ~8k because its
+    assert.ok(schemaCatalogLength <= 186_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 195_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    // No single tool may dominate the catalog: work.query_cards is the largest at ~8.5k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.
     for (const tool of withoutAuthMetadata) {
       const size = JSON.stringify(tool).length;
-      assert.ok(size <= 8_500, `${tool.name} schema stays under the per-tool ceiling (received ${size})`);
+      assert.ok(size <= 8_600, `${tool.name} schema stays under the per-tool ceiling (received ${size})`);
     }
     assert.doesNotMatch(
       JSON.stringify(tools),

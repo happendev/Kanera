@@ -1081,6 +1081,49 @@ void test("saved views are private by default, share read-only, and strip unavai
   assert.equal(forbiddenUpdate.statusCode, 403);
 });
 
+void test("atRiskOnly and the portfolio At risk count follow the Dependencies view's rule over visible blockers", async () => {
+  const f = await seed();
+  await db.update(cards).set({ dueDateLocalDate: "2099-01-10", dueDateSlot: "anyTime", dueDateTimezone: "UTC" }).where(eq(cards.id, f.mine.id));
+  await db.update(cards).set({ dueDateLocalDate: "2099-01-05", dueDateSlot: "anyTime", dueDateTimezone: "UTC" }).where(eq(cards.id, f.teammateCard.id));
+  // Overdue, but on a restricted board the viewer cannot see: blocked, never at risk.
+  await db.update(cards).set({ dueDateLocalDate: "2020-01-01", dueDateSlot: "anyTime", dueDateTimezone: "UTC" }).where(eq(cards.id, f.restrictedTeammate.id));
+  await db.insert(cardRelations).values([
+    { workspaceId: f.homeWorkspace.id, sourceCardId: f.teammateCard.id, targetCardId: f.mine.id, kind: "blocks", createdById: f.teammate.id },
+    { workspaceId: f.homeWorkspace.id, sourceCardId: f.restrictedTeammate.id, targetCardId: f.restrictedMine.id, kind: "blocks", createdById: f.teammate.id },
+  ]);
+
+  const atRisk = async () => {
+    const [query, summary] = await Promise.all([
+      f.app.inject({ method: "POST", url: "/work/cards/query", headers: auth(f.viewerToken), payload: { lens: "my", filters: { atRiskOnly: true }, limit: 100 } }),
+      f.app.inject({ method: "POST", url: "/work/portfolio/query", headers: auth(f.viewerToken), payload: { days: 30 } }),
+    ]);
+    assert.equal(query.statusCode, 200, query.body);
+    assert.equal(summary.statusCode, 200, summary.body);
+    const totals = summary.json<PortfolioSummary>().totals;
+    return { titles: query.json<WorkQueryResponse>().cards.map((item) => item.title), total: totals.atRisk, blocked: totals.blocked };
+  };
+  // The blocker is due before its dependent: on track.
+  assert.deepEqual(await atRisk(), { titles: [], total: 0, blocked: 2 });
+
+  // Due after the card it blocks: at risk.
+  await db.update(cards).set({ dueDateLocalDate: "2099-02-01" }).where(eq(cards.id, f.teammateCard.id));
+  assert.deepEqual(await atRisk(), { titles: ["My shared card"], total: 1, blocked: 2 });
+
+  // Same day, but a later slot is still "due after".
+  await db.update(cards).set({ dueDateLocalDate: "2099-01-10", dueDateSlot: "endOfWorkDay" }).where(eq(cards.id, f.teammateCard.id));
+  await db.update(cards).set({ dueDateSlot: "morning" }).where(eq(cards.id, f.mine.id));
+  assert.deepEqual(await atRisk(), { titles: ["My shared card"], total: 1, blocked: 2 });
+
+  // An overdue blocker puts even an undated card at risk.
+  await db.update(cards).set({ dueDateLocalDate: "2020-01-01" }).where(eq(cards.id, f.teammateCard.id));
+  await db.update(cards).set({ dueDateLocalDate: null, dueDateSlot: null }).where(eq(cards.id, f.mine.id));
+  assert.deepEqual(await atRisk(), { titles: ["My shared card"], total: 1, blocked: 2 });
+
+  // A completed blocker holds nothing up.
+  await db.update(cards).set({ completedAt: new Date() }).where(eq(cards.id, f.teammateCard.id));
+  assert.deepEqual(await atRisk(), { titles: [], total: 0, blocked: 1 });
+});
+
 void test("blockedOnly returns open cards with an open blocker, hidden blockers included, never completed cards", async () => {
   const f = await seed();
   await db.insert(cardRelations).values([
@@ -1101,9 +1144,23 @@ void test("blockedOnly returns open cards with an open blocker, hidden blockers 
     assert.equal(response.statusCode, 200, response.body);
     return response.json<WorkQueryResponse>().cards.map((item) => item.title);
   };
+  // The portfolio Blocked count is the drill-down's row count, so the tile never disagrees with its table.
+  const portfolioBlocked = async () => {
+    const response = await f.app.inject({
+      method: "POST",
+      url: "/work/portfolio/query",
+      headers: auth(f.viewerToken),
+      payload: { days: 30 },
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    const summary = response.json<PortfolioSummary>();
+    return { total: summary.totals.blocked, boards: summary.buckets.filter((bucket) => bucket.blocked > 0).map((bucket) => bucket.boardId) };
+  };
   assert.deepEqual(await titles(), ["My shared card"]);
+  assert.deepEqual(await portfolioBlocked(), { total: 1, boards: [f.mine.boardId] });
 
   // Done is done whatever blocked it, like the board's Blocked quick filter.
   await db.update(cards).set({ completedAt: new Date() }).where(eq(cards.id, f.mine.id));
   assert.deepEqual(await titles(), []);
+  assert.deepEqual(await portfolioBlocked(), { total: 0, boards: [] });
 });

@@ -50,6 +50,7 @@ const workFilters = z.strictObject({
   inProgressOnly: z.boolean().optional().describe("Only open cards in a list flagged In progress (running time-in-progress stint)."),
   inProgressTooLongOnly: z.boolean().optional().describe("Only open cards whose in-progress stint has passed the workspace's inProgressAlertDays (never when that is 0)."),
   blockedOnly: z.boolean().optional().describe("Only open cards with an open blocker."),
+  atRiskOnly: z.boolean().optional().describe("Only open cards whose blocker is overdue or due after them."),
   dueFrom: localDateInput.nullable().optional().describe("Inclusive due-date lower bound: YYYY-MM-DD or a phrase such as \"today\"."),
   dueTo: localDateInput.nullable().optional().describe("Inclusive due-date upper bound: YYYY-MM-DD or a phrase such as \"end of week\"."),
   overdueOnly: z.boolean().optional().describe("Only overdue active cards."),
@@ -2385,7 +2386,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     cursor: z.string().min(1).max(500_000).optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }, (a, api) => api.post("/api/v1/work/cards/query", a), ctx, workCardsOutputSchema);
-  registerKaneraTool(server, "work.portfolio_summary", "Get bounded organisation, workspace, and board rollups across accessible work, including active, overdue, due-soon, unassigned, inactive, in-progress, in-progress-too-long, completed, and overdue-checklist counts plus recent activity buckets. Boards in sidebar order; activity oldest day first.", {
+  registerKaneraTool(server, "work.portfolio_summary", "Get bounded organisation, workspace, and board rollups across accessible work, including active, overdue, due-soon, unassigned, inactive, in-progress, in-progress-too-long, blocked, at-risk, completed, and overdue-checklist counts plus recent activity buckets. Boards in sidebar order; activity oldest day first.", {
     scope: workScope,
     filters: workFilters,
     days: z.number().int().min(1).max(60).default(30),

@@ -4,12 +4,14 @@ import { cardPath } from "@kanera/shared/card-links";
 import type { CardRelationSummary, DependencyGraphBody, DependencyGraphResponse } from "@kanera/shared/dto";
 import { expandCardSummary, SERVER_EVENTS, type WireCardSummary, type WireCustomField } from "@kanera/shared/events";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { AuthService } from "../../core/auth/auth.service";
+import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { icu } from "../../core/i18n/icu";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { localDateKey } from "../../shared/day-key.util";
-import { formatDate } from "../../shared/date-format";
+import { formatDate, formatRelativeTime } from "../../shared/date-format";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { ToastService } from "../../shared/toast.service";
@@ -132,6 +134,8 @@ let nextInstanceId = 0;
 export class DependencyMapComponent implements OnInit {
   private readonly api = inject(ApiClient);
   private readonly sockets = inject(SocketService);
+  private readonly auth = inject(AuthService);
+  private readonly offlineCache = inject(OfflineCacheService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly toasts = inject(ToastService);
@@ -189,6 +193,12 @@ export class DependencyMapComponent implements OnInit {
   private readonly hostWidth = signal(0);
 
   readonly response = signal<DependencyGraphResponse | null>(null);
+  /** Set while the map is an offline snapshot; cleared by the next successful read. */
+  readonly cachedAt = signal<string | null>(null);
+  readonly offlineCopyLabel = computed(() => {
+    const cachedAt = this.cachedAt();
+    return cachedAt ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(cachedAt)}:time:` : "";
+  });
   readonly loading = signal(false);
   readonly loadFailed = signal(false);
   private loadSeq = 0;
@@ -443,6 +453,12 @@ export class DependencyMapComponent implements OnInit {
     socket.on(SERVER_EVENTS.CARD_LABELS_SET, cardChanged);
     socket.on(SERVER_EVENTS.CARD_ASSIGNEES_SET, cardChanged);
     socket.on(SERVER_EVENTS.CARD_LINKS_CHANGED, linksChanged);
+    // Tiles show custom fields, and a card shared with or withdrawn from this viewer joins or
+    // leaves the map (or turns into an off-map blocker), so both need a fresh read.
+    socket.on(SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, cardChanged);
+    socket.on(SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, cardChanged);
+    socket.on(SERVER_EVENTS.CARD_VISIBILITY_GRANTED, linksChanged);
+    socket.on(SERVER_EVENTS.CARD_VISIBILITY_REVOKED, linksChanged);
     socket.on("connect", reconnected);
     this.destroyRef.onDestroy(() => {
       socket.off(SERVER_EVENTS.CARD_UPDATED, updated);
@@ -451,6 +467,10 @@ export class DependencyMapComponent implements OnInit {
       socket.off(SERVER_EVENTS.CARD_LABELS_SET, cardChanged);
       socket.off(SERVER_EVENTS.CARD_ASSIGNEES_SET, cardChanged);
       socket.off(SERVER_EVENTS.CARD_LINKS_CHANGED, linksChanged);
+      socket.off(SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, cardChanged);
+      socket.off(SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, cardChanged);
+      socket.off(SERVER_EVENTS.CARD_VISIBILITY_GRANTED, linksChanged);
+      socket.off(SERVER_EVENTS.CARD_VISIBILITY_REVOKED, linksChanged);
       socket.off("connect", reconnected);
       if (this.refreshTimer) clearTimeout(this.refreshTimer);
       if (this.focusReleaseTimer) clearTimeout(this.focusReleaseTimer);
@@ -465,17 +485,44 @@ export class DependencyMapComponent implements OnInit {
     const seq = ++this.loadSeq;
     this.loading.set(true);
     this.loadFailed.set(false);
+    const cacheKey = this.cacheKey();
     try {
       const response = await this.api.post<DependencyGraphResponse>("/cards/dependency-graph", request);
       if (seq !== this.loadSeq) return;
       this.response.set(response);
+      this.cachedAt.set(null);
       this.syncRooms(response.boards.map((board) => board.id));
+      void cacheKey.then((key) => key ? this.offlineCache.saveDependencyGraph(key, response) : undefined).catch(() => undefined);
     } catch {
-      // A re-read keeps the map it has; only a first load with nothing to show reports the failure.
-      if (seq === this.loadSeq && !this.response()) this.loadFailed.set(true);
+      // Offline (or the read failed): fall back to this exact map's last snapshot. Its board rooms
+      // are joined so the reconnect refresh replaces it as soon as the socket is back.
+      const key = await cacheKey.catch(() => null);
+      const cached = key ? await this.offlineCache.loadDependencyGraph(key).catch(() => null) : null;
+      if (seq !== this.loadSeq) return;
+      if (cached) {
+        this.response.set(cached.response);
+        this.cachedAt.set(cached.cachedAt);
+        this.syncRooms(cached.response.boards.map((board) => board.id));
+      } else if (!this.response()) {
+        // A re-read keeps the map it has; only a first load with nothing to show reports the failure.
+        this.loadFailed.set(true);
+      }
     } finally {
       if (seq === this.loadSeq) this.loading.set(false);
     }
+  }
+
+  /**
+   * Per user (the graph is filtered to what they may open) and per request. A card-set request can
+   * name 2000 cards, so the request part is hashed rather than stored as the key itself.
+   */
+  private async cacheKey(): Promise<string | null> {
+    const user = this.auth.user();
+    const requestKey = this.requestKey();
+    if (!user || !requestKey || typeof crypto === "undefined" || !crypto.subtle) return null;
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(requestKey));
+    const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${user.clientId}:${user.id}:${hash}`;
   }
 
   private scheduleRefresh(): void {

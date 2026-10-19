@@ -2,7 +2,7 @@ import { NgTemplateOutlet } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
 import { appLocale } from "../core/i18n/locale";
 
-export type StatTileTone = "neutral" | "danger" | "success";
+export type StatTileTone = "neutral" | "danger" | "warning" | "success";
 
 /**
  * A label-over-number stat tile, optionally acting as a jump target.
@@ -41,6 +41,7 @@ export type StatTileTone = "neutral" | "danger" | "success";
         type="button"
         class="stat-tile"
         [class.danger]="tone() === 'danger'"
+        [class.warning]="tone() === 'warning'"
         [class.success]="tone() === 'success'"
         [class.is-active]="active()"
         [attr.aria-pressed]="pressable() ? active() : null"
@@ -52,6 +53,7 @@ export type StatTileTone = "neutral" | "danger" | "success";
       <div
         class="stat-tile is-static"
         [class.danger]="tone() === 'danger'"
+        [class.warning]="tone() === 'warning'"
         [class.success]="tone() === 'success'"
       >
         <ng-container [ngTemplateOutlet]="body" />

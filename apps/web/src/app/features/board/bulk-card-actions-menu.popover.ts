@@ -670,6 +670,15 @@ export class BulkCardActionsMenuPopover {
     const batches = this.cardIdBatchesByBoard();
     const setArchived = async (archived: boolean) => {
       for (const [boardId, cardIds] of batches) {
+        // Bulk archive accepts only archived:true. Restore through the single-card endpoint,
+        // using the captured ids even after archive removes the selection and destroys this menu.
+        if (!archived) {
+          for (const cardId of cardIds) {
+            const card = await this.api.patch<WireCard>(`/cards/${cardId}/archive`, { archived: false });
+            this.state.updateCard(card);
+          }
+          continue;
+        }
         const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/archive`, { cardIds, archived });
         for (const card of result.cards ?? []) this.state.updateCard(card);
       }
@@ -682,17 +691,21 @@ export class BulkCardActionsMenuPopover {
     this.saving.set(true);
     const count = this.cardIds().length;
     try {
-      await fn();
-      // Emit once after every board batch succeeds, never from realtime echoes.
-      if (count > 0) {
-        const text = message(count);
-        if (undo) this.toasts.undoable({ message: text, icon, undo });
-        else this.toasts.success(text, icon);
-      }
+      if (count === 0) return;
+      // One confirmation after every board batch succeeds; a partial failure must not offer Undo.
+      await this.toasts.promise(fn, {
+        loading: $localize`Updating cards…`,
+        success: message(count),
+        error: $localize`Couldn't update all selected cards. Refresh to see the current state.`,
+        icon,
+        undo,
+      });
       if (closeAfter) {
         this.done.emit();
         this.dismissed.emit();
       }
+    } catch {
+      // The promise toast reports failure; retain selection so the user can inspect or retry.
     } finally {
       this.saving.set(false);
     }

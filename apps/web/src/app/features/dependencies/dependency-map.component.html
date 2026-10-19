@@ -1,6 +1,8 @@
 <div class="dm-toolbar">
   <!-- The summary doubles as the filter: each count narrows the map to chains holding such a card,
        and pressing it again goes back to every chain, like the board overview's counts. -->
+  <!-- Hidden on a failed first load: a row of zeros would read as "no dependencies" beside the error. -->
+  @if (response() || !loadFailed()) {
   <div class="dm-stats" role="group" aria-label="Filter dependency chains" i18n-aria-label>
     @for (stat of stats(); track stat.id) {
     <button type="button" class="dm-stat" [class]="'dm-stat is-' + stat.id" [class.is-active]="filter() === stat.id"
@@ -12,6 +14,7 @@
     </button>
     }
   </div>
+  }
 
   <div class="dm-controls">
     @if (offersWorkspace()) {
@@ -61,6 +64,13 @@
 }
 }
 
+@if (cachedAt()) {
+<p class="dm-note" role="status">
+  <i class="ti ti-cloud-off" aria-hidden="true"></i>
+  <span>{{ offlineCopyLabel() }}</span>
+</p>
+}
+
 @if (response()?.truncated) {
 <p class="dm-note" role="status">
   <i class="ti ti-alert-triangle" aria-hidden="true"></i>
@@ -70,20 +80,20 @@
 
 @if (!response()) {
   @if (loadFailed()) {
-  <div class="dm-state" role="alert">
-    <span i18n="Error shown when the dependencies view could not load">Couldn't load dependencies.</span>
-    <button type="button" class="dm-retry" (click)="load()" i18n="Button: retry loading the dependencies view">Try again</button>
-  </div>
+  <k-empty-state class="dm-empty" raised icon="alert-circle" title="Couldn’t load dependencies" i18n-title="Error state title on the Dependencies view"
+    text="Check your connection and try again." i18n-text="Error state text on the Dependencies view" role="alert">
+    <button type="button" class="secondary" [disabled]="loading()" (click)="load()" i18n="Button: retry loading">Try again</button>
+  </k-empty-state>
   } @else {
   <div class="dm-chains" aria-busy="true">
     @for (_ of [1, 2, 3]; track $index) { <div class="dm-skeleton skeleton"></div> }
   </div>
   }
 } @else if (layout().chains.length === 0) {
-<k-empty-state icon="git-merge" title="No dependencies here yet" i18n-title
+<k-empty-state class="dm-empty" raised icon="git-merge" title="No dependencies here yet" i18n-title
   text="When a card is blocked by another, its chain shows up here. Add one from a card's Dependencies section, or right-click a card and choose Dependencies." i18n-text />
 } @else if (visibleChains().length === 0) {
-<k-empty-state icon="filter-off" title="No chains match" i18n-title text="Nothing on this map matches the current filters." i18n-text>
+<k-empty-state class="dm-empty" raised icon="filter-off" title="No chains match" i18n-title text="Nothing on this map matches the current filters." i18n-text>
   @if (filter() !== 'all') {
   <button type="button" class="secondary" (click)="setFilter('all')" i18n="Button: clear the dependencies view filter">Show every chain</button>
   }

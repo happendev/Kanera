@@ -2794,7 +2794,9 @@
     "description": "Browser notification permission state",
     "x-files": [
       "src/app/core/notifications/browser-push.service.ts",
-      "src/app/features/dependencies/dependency-map.component.ts"
+      "src/app/features/board/board.page.html",
+      "src/app/features/dependencies/dependency-map.component.ts",
+      "src/app/features/global-work/global-work.page.ts"
     ]
   },
   "2921347786783741410": "Not asked yet",
@@ -8683,6 +8685,29 @@
       "src/app/shared/user-profile/user-profile-popover.component.html"
     ]
   },
+  "3554284544203774311": "Show cards waiting on another open card",
+  "@3554284544203774311": {
+    "description": "Tooltip on the Blocked count in the board overview",
+    "x-files": [
+      "src/app/features/board/board.page.html"
+    ]
+  },
+  "8408051157355593241": "Show cards whose blocker is overdue or due after them",
+  "@8408051157355593241": {
+    "description": "Tooltip on the At risk count in the board overview",
+    "x-files": [
+      "src/app/features/board/board.page.html"
+    ]
+  },
+  "239883740512866888": "At risk",
+  "@239883740512866888": {
+    "description": "Board overview count: cards whose blocker is overdue or due after them (keep it short)",
+    "x-files": [
+      "src/app/features/board/board.page.html",
+      "src/app/features/dependencies/dependency-map.component.ts",
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
   "62814732093089536": "Show unassigned cards",
   "@62814732093089536": {
     "x-files": [
@@ -9081,7 +9106,8 @@
   "@7380438472091699995": {
     "description": "Toast; a relative time such as \"5 minutes ago\" follows",
     "x-files": [
-      "src/app/features/board/board.page.ts"
+      "src/app/features/board/board.page.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
   "3756150389690952207": "{count, plural, one {# board member} other {# board members}}",
@@ -9158,6 +9184,30 @@
     "description": "Keyboard shortcut",
     "x-files": [
       "src/app/features/board/board.page.ts"
+    ]
+  },
+  "2174284193609483488": "Preparing export…",
+  "@2174284193609483488": {
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/board/table-view/board-table-view.component.ts",
+      "src/app/features/completed-cards/completed-cards-panel.component.ts"
+    ]
+  },
+  "7945700064012172493": "Export downloaded.",
+  "@7945700064012172493": {
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/board/table-view/board-table-view.component.ts",
+      "src/app/features/completed-cards/completed-cards-panel.component.ts"
+    ]
+  },
+  "5753202624498398139": "Couldn't export. Try again.",
+  "@5753202624498398139": {
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/board/table-view/board-table-view.component.ts",
+      "src/app/features/completed-cards/completed-cards-panel.component.ts"
     ]
   },
   "1365372602653623849": "{count, plural, other {# cards moved.}}",
@@ -9374,6 +9424,18 @@
   "8814541128616247689": "{count, plural, one {# card archived.} other {# cards archived.}}",
   "@8814541128616247689": {
     "description": "Toast after a bulk action",
+    "x-files": [
+      "src/app/features/board/bulk-card-actions-menu.popover.ts"
+    ]
+  },
+  "4742038089517866413": "Updating cards…",
+  "@4742038089517866413": {
+    "x-files": [
+      "src/app/features/board/bulk-card-actions-menu.popover.ts"
+    ]
+  },
+  "1607837845924070671": "Couldn't update all selected cards. Refresh to see the current state.",
+  "@1607837845924070671": {
     "x-files": [
       "src/app/features/board/bulk-card-actions-menu.popover.ts"
     ]
@@ -11964,8 +12026,7 @@
   "@3825851172372934119": {
     "description": "Error shown when the dependencies popover could not load a card's relations",
     "x-files": [
-      "src/app/features/board/card-relations-popover.component.ts",
-      "src/app/features/dependencies/dependency-map.component.html"
+      "src/app/features/board/card-relations-popover.component.ts"
     ]
   },
   "6650633628037596693": "Try again",
@@ -15138,6 +15199,20 @@
       "src/app/features/dependencies/dependency-map.component.html"
     ]
   },
+  "84253380482925429": "Couldn’t load dependencies",
+  "@84253380482925429": {
+    "description": "Error state title on the Dependencies view",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "3660632916771561809": "Check your connection and try again.",
+  "@3660632916771561809": {
+    "description": "Error state text on the Dependencies view",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
   "5496864972633087474": "No dependencies here yet",
   "@5496864972633087474": {
     "x-files": [
@@ -15235,13 +15310,6 @@
   "5133669317878143440": "Cards waiting on a blocker that is still open",
   "@5133669317878143440": {
     "description": "Tooltip on the Dependencies view Blocked count",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "239883740512866888": "At risk",
-  "@239883740512866888": {
-    "description": "Dependencies view summary - cards whose blocker is overdue or due after them",
     "x-files": [
       "src/app/features/dependencies/dependency-map.component.ts"
     ]
@@ -18770,6 +18838,18 @@
   },
   "8641914417193996096": "Mapped custom fields must use compatible field types.",
   "@8641914417193996096": {
+    "x-files": [
+      "src/app/features/import/trello-import.page.ts"
+    ]
+  },
+  "1998169978791208851": "Importing board…",
+  "@1998169978791208851": {
+    "x-files": [
+      "src/app/features/import/trello-import.page.ts"
+    ]
+  },
+  "7558260041253338095": "Board imported.",
+  "@7558260041253338095": {
     "x-files": [
       "src/app/features/import/trello-import.page.ts"
     ]

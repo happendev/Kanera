@@ -1,7 +1,7 @@
 import { DUE_DATE_SLOT_RANK, DUE_DATE_SLOT_TIMES } from "@kanera/shared/due-date-slots";
 import { cards, cardChecklistItems, cardSummaryView } from "@kanera/shared/schema";
 import { and, inArray, notInArray, or, sql, type SQL } from "drizzle-orm";
-import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { alias, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { assignedCardVisibility } from "./access.js";
 import type { AccessibleBoard } from "./accessible-boards.js";
 
@@ -193,4 +193,48 @@ export function cardAccessCondition(
         )
       : undefined,
   )!;
+}
+
+/** The instant a card falls due: its local date at the slot's cut-off, in the card's own zone. */
+function dueInstantSql(columns: CardDueColumns): SQL {
+  return sql`((${columns.dueDateLocalDate} + ${slotCutoffCaseSql(columns.dueDateSlot)}) at time zone coalesce(nullif(${columns.dueDateTimezone}, ''), 'UTC'))`;
+}
+
+const riskBlocker = alias(cards, "risk_blocker");
+const riskBlockerColumns: CardDueColumns = {
+  id: riskBlocker.id,
+  boardId: riskBlocker.boardId,
+  listId: riskBlocker.listId,
+  title: riskBlocker.title,
+  dueDateLocalDate: riskBlocker.dueDateLocalDate,
+  dueDateSlot: riskBlocker.dueDateSlot,
+  dueDateTimezone: riskBlocker.dueDateTimezone,
+  completedAt: riskBlocker.completedAt,
+  archivedAt: riskBlocker.archivedAt,
+  createdAt: riskBlocker.createdAt,
+  updatedAt: riskBlocker.updatedAt,
+  inProgressSince: riskBlocker.inProgressSince,
+};
+
+/**
+ * An at-risk dependency, the Dependencies view's rule (`edgeRisk` in the web dependency map): an
+ * open blocker that is already overdue, or due after the card it blocks, so that card cannot finish
+ * on time even if the blocker does. Unlike the Blocked count, only blockers the viewer can see
+ * count: the map can only judge the blockers it draws, and a hidden card's due date is not the
+ * viewer's to infer. Callers add the "dependent not completed" condition.
+ */
+export function dependencyAtRiskSql(authUserId: string, visibleBoards: AccessibleBoard[], dependent: CardDueColumns): SQL {
+  return sql`exists (
+    select 1 from card_relation risk_link
+    inner join card risk_blocker on ${riskBlocker.id} = risk_link.source_card_id
+    where risk_link.target_card_id = ${dependent.id}
+      and risk_link.kind = 'blocks'
+      and ${riskBlocker.completedAt} is null
+      and ${riskBlocker.archivedAt} is null
+      and ${cardAccessCondition(authUserId, visibleBoards, riskBlockerColumns)}
+      and (
+        ${overdueSql(riskBlockerColumns)}
+        or (${dependent.dueDateLocalDate} is not null and ${dueInstantSql(riskBlockerColumns)} > ${dueInstantSql(dependent)})
+      )
+  )`;
 }

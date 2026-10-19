@@ -96,7 +96,7 @@ type ChecklistGroup = {
 };
 /** Which toolbar/header popover is open. Only one at a time, so opening one dismisses the rest. */
 type WorkMenu = "save" | "display" | "source" | "team" | "view" | "group" | "sort" | "period";
-type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong" | "completed" | "overdueChecklistItems";
+type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong" | "blocked" | "atRisk" | "completed" | "overdueChecklistItems";
 type PortfolioRow = {
   id: string;
   level: "organisation" | "workspace" | "board";
@@ -118,13 +118,17 @@ type PortfolioRow = {
   inactive: number;
   inProgress: number;
   inProgressTooLong: number;
+  blocked: number;
+  atRisk: number;
   completed: number;
   overdueChecklistItems: number;
 };
 /** Number columns of the portfolio table, in render order, with the tone their heat tint uses. */
-const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" | "success" | "neutral" }[] = [
+const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" | "warning" | "success" | "neutral" }[] = [
   { key: "active", label: $localize`:Portfolio table column, cards not completed:Active`, tone: "neutral" },
   { key: "overdue", label: $localize`:Portfolio table column, overdue cards:Overdue`, tone: "danger" },
+  { key: "blocked", label: $localize`:Portfolio table column, open cards waiting on another open card:Blocked`, tone: "danger" },
+  { key: "atRisk", label: $localize`:Portfolio table column, cards whose blocker is overdue or due after them:At risk`, tone: "warning" },
   { key: "dueSoon", label: $localize`:Portfolio table column, cards due in the next 7 days:Next 7 days`, tone: "neutral" },
   { key: "unassigned", label: $localize`:Portfolio table column, cards with no assignee:Unassigned`, tone: "neutral" },
   { key: "inactive", label: $localize`:Portfolio table column, cards untouched for 14 days (keep it short):Inactive 14d`, tone: "neutral" },
@@ -1017,14 +1021,17 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     key: PortfolioMetric;
     label: string;
     icon: string;
-    tone: "danger" | "success" | null;
+    tone: "danger" | "warning" | "success" | null;
     value: number;
   }[]>(() => {
     const totals = this.state.portfolio()?.totals;
     if (!totals) return [];
-    const metrics: { key: PortfolioMetric; label: string; icon: string; tone: "danger" | "success" | null; value: number }[] = [
+    const metrics: { key: PortfolioMetric; label: string; icon: string; tone: "danger" | "warning" | "success" | null; value: number }[] = [
       { key: "active", label: $localize`:Portfolio stat tile, cards not completed:Active`, icon: "player-play", tone: null, value: totals.cards - totals.completed },
       { key: "overdue", label: $localize`:Portfolio stat tile, overdue cards:Overdue`, icon: "alert-triangle", tone: "danger", value: totals.overdue },
+      // Older offline snapshots predate the blocked count; show none until the next refresh.
+      { key: "blocked", label: $localize`:Portfolio stat tile, open cards waiting on another open card:Blocked`, icon: "lock", tone: "danger", value: totals.blocked ?? 0 },
+      { key: "atRisk", label: $localize`:Portfolio stat tile, cards whose blocker is overdue or due after them:At risk`, icon: "alert-octagon", tone: "warning", value: totals.atRisk ?? 0 },
       { key: "dueSoon", label: $localize`:Portfolio stat tile:Due next 7 days`, icon: "calendar-due", tone: null, value: totals.dueSoon },
       { key: "unassigned", label: $localize`:Portfolio stat tile, cards with no assignee:Unassigned`, icon: "user-question", tone: null, value: totals.unassigned },
       { key: "inactive", label: $localize`:Portfolio stat tile, cards untouched for 14 days:Inactive 14 days`, icon: "clock-pause", tone: null, value: totals.inactive },
@@ -1109,6 +1116,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
             inactive: bucket.inactive ?? 0,
             inProgress: bucket.inProgress ?? 0,
             inProgressTooLong: bucket.inProgressTooLong ?? 0,
+            blocked: bucket.blocked ?? 0,
+            atRisk: bucket.atRisk ?? 0,
             completed: bucket.completed,
             overdueChecklistItems: bucket.overdueChecklistItems,
           });
@@ -1308,6 +1317,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       || filters.inProgressOnly
       || filters.inProgressTooLongOnly
       || filters.blockedOnly
+      || filters.atRiskOnly
       || filters.overdueOnly
       || filters.overdueChecklistOnly
       || filters.unreadOnly
@@ -1625,6 +1635,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inProgressOnly: false,
       inProgressTooLongOnly: false,
       blockedOnly: false,
+      atRiskOnly: false,
       unreadOnly: false,
       prioritySetOnly: false,
       archived: false,
@@ -2413,6 +2424,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactiveOnly: metric === "inactive",
       inProgressOnly: metric === "inProgress",
       inProgressTooLongOnly: metric === "inProgressTooLong",
+      blockedOnly: metric === "blocked",
+      atRiskOnly: metric === "atRisk",
       overdueChecklistOnly: metric === "overdueChecklistItems",
       dueFrom: metric === "dueSoon" ? today : null,
       dueTo: metric === "dueSoon" ? localDateKey(nextSeven) : null,
@@ -2435,6 +2448,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactiveOnly: false,
       inProgressOnly: false,
       inProgressTooLongOnly: false,
+      blockedOnly: false,
+      atRiskOnly: false,
       overdueChecklistOnly: false,
       dueFrom: null,
       dueTo: null,
@@ -2454,6 +2469,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactive: $localize`:Portfolio drill-down, cards untouched for 14 days:Inactive 14 days`,
       inProgress: $localize`:Portfolio drill-down, open cards whose time-in-progress clock is running:In progress`,
       inProgressTooLong: $localize`:Portfolio drill-down, cards in progress past their workspace's alert:In progress too long`,
+      blocked: $localize`:Portfolio drill-down, open cards waiting on another open card:Blocked`,
+      atRisk: $localize`:Portfolio drill-down, cards whose blocker is overdue or due after them:At risk`,
       completed: $localize`:Portfolio drill-down, cards completed in the last N days (d = days, keep it short):Completed (${this.state.definition().portfolioDays}:days:d)`,
       overdueChecklistItems: $localize`:Portfolio drill-down:Overdue checklist items`,
     } as Record<string, string>)[metric] ?? metric;
@@ -2589,6 +2606,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactive: row.inactive + (bucket.inactive ?? 0),
       inProgress: row.inProgress + (bucket.inProgress ?? 0),
       inProgressTooLong: row.inProgressTooLong + (bucket.inProgressTooLong ?? 0),
+      blocked: row.blocked + (bucket.blocked ?? 0),
+      atRisk: row.atRisk + (bucket.atRisk ?? 0),
       completed: row.completed + bucket.completed,
       overdueChecklistItems: row.overdueChecklistItems + bucket.overdueChecklistItems,
     }), {
@@ -2609,6 +2628,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactive: 0,
       inProgress: 0,
       inProgressTooLong: 0,
+      blocked: 0,
+      atRisk: 0,
       completed: 0,
       overdueChecklistItems: 0,
     });

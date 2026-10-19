@@ -72,9 +72,11 @@
     background: var(--surface-hover);
   }
 
+  // Dim the glyph, not the button, so a board's background gradient never shows through the fill.
   &:disabled {
     cursor: default;
-    opacity: 0.55;
+    opacity: 1;
+    color: color-mix(in srgb, var(--text-muted) 70%, var(--surface));
   }
 }
 
@@ -176,26 +178,6 @@
   color: var(--text-muted);
   font-size: 14px;
   text-align: center;
-}
-
-// The panel itself is k-empty-state; only its width within the view is local.
-.wd-empty-panel {
-  width: min(400px, 100%);
-  margin: 0 auto;
-}
-
-// Light mode's panel needs a cast shadow to lift off the page gray; the dark themes rely on
-// their own elevated fill. Declared for both light-family themes plus the pre-boot window before
-// index.html stamps [data-theme].
-:host-context([data-theme="light"]) .wd-empty-panel,
-:host-context([data-theme="paper"]) .wd-empty-panel {
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12), 0 1px 3px rgba(15, 23, 42, 0.08);
-}
-
-@media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme])) .wd-empty-panel {
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12), 0 1px 3px rgba(15, 23, 42, 0.08);
-  }
 }
 
 @keyframes wd-shimmer {

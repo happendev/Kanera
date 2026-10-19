@@ -6,8 +6,8 @@ All notable changes to Kanera are documented here.
 
 ### Added
 
-- **Card dependencies:** link cards as **blocked by**, **blocking** or **related**, including across boards in the same workspace. Manage links from card detail or the right-click menu, see blocked status live, use the **Blocked** filter on boards, My Cards and Team Cards, and see blocked counts in the board overview and Portfolio.
-  - **Dependencies view:** explore blocking chains across boards with a visual map, Timeline or Steps. Spot bottlenecks, at-risk work and the critical path; add or remove dependencies directly on the map with undo and redo.
+- **Card dependencies:** link cards as **blocked by**, **blocking** or **related**, including across boards in the same workspace. Manage links from card detail or the right-click menu, see blocked status live, use the **Blocked** filter on boards, My Cards and Team Cards, and see Blocked and At risk counts in the board overview and Portfolio.
+  - **Dependencies view:** explore blocking chains across boards with a visual map, Timeline or Steps. Spot bottlenecks, at-risk work and the critical path; add or remove dependencies directly on the map with undo and redo. Works offline from your last saved copy.
   - **Notifications and handoffs:** assignees and watchers hear when work becomes blocked or ready to start, with configurable inbox, email and push notifications.
   - **Automations:** use the new **Card blocked** and **Card unblocked** triggers to act when work gets held up or becomes ready. Completing blocked work shows a warning you can override.
   - **AI agents and integrations:** manage dependencies, query blocking chains and filter blocked work through MCP, the CLI, SDK and public API.
