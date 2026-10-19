@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { PANEL_INPUT_STYLES } from "./anchored-panel";
 import { AutofocusDirective } from "./autofocus.directive";
 import { AvatarComponent } from "./avatar.component";
+import { ListboxNav } from "./listbox-nav";
+import { MatchHighlightComponent } from "./match-highlight.component";
 
 /** One selectable row. Icons/colours/avatars mirror how the entity renders elsewhere in the app. */
 export interface PickerOption {
@@ -69,7 +71,7 @@ export interface PickerGroup {
 @Component({
   selector: "k-picker-list",
   standalone: true,
-  imports: [AutofocusDirective, AvatarComponent],
+  imports: [AutofocusDirective, AvatarComponent, MatchHighlightComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (showSearch()) {
@@ -77,15 +79,24 @@ export interface PickerGroup {
         class="ap-input pl-search"
         type="text"
         autofocus
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded="true"
+        [attr.aria-controls]="nav.listId"
+        [attr.aria-activedescendant]="nav.activeDescendant()"
+        [attr.aria-label]="searchPlaceholder()"
         [placeholder]="searchPlaceholder()"
         [value]="query()"
-        (input)="query.set($any($event.target).value)"
+        (input)="onQuery($any($event.target).value)"
+        (keydown)="onKeydown($event)"
       />
     }
-    <div class="pl-list">
+    <!-- Keydown here only fires for focused rows (the search sits outside the list): with no search
+         box the rows keep their tab stops and the arrows move focus between them. -->
+    <div class="pl-list" role="listbox" [id]="nav.listId" (keydown)="onKeydown($event)">
       @for (group of renderedGroups(); track group.id) {
         @if (group.showParent && group.parent; as parent) {
-          <div class="pl-parent">
+          <div class="pl-parent" role="presentation">
             @if (parent.icon) {
               <i class="ti ti-{{ parent.icon }}" [style.color]="colorToken(parent.color)"></i>
             }
@@ -93,7 +104,7 @@ export interface PickerGroup {
           </div>
         }
         @if (group.label) {
-          <div class="pl-group" [class.has-parent]="!!group.parent">
+          <div class="pl-group" role="presentation" [class.has-parent]="!!group.parent">
             @if (group.icon) {
               <i class="ti ti-{{ group.icon }}" [style.color]="colorToken(group.color)"></i>
             }
@@ -104,6 +115,12 @@ export interface PickerGroup {
           <button
             type="button"
             class="pl-row"
+            role="option"
+            [id]="nav.optionId(keyFor(group, option))"
+            [attr.aria-selected]="isSelected(option.id)"
+            [attr.aria-disabled]="option.disabled ? true : null"
+            [attr.tabindex]="showSearch() ? -1 : null"
+            [class.is-active]="nav.isActive(keyFor(group, option))"
             [class.is-selected]="isSelected(option.id)"
             [class.is-grouped]="!!group.label"
             [class.is-nested]="!!group.parent"
@@ -111,6 +128,7 @@ export interface PickerGroup {
             [style.padding-left.px]="indentFor(group, option)"
             [disabled]="option.disabled"
             (click)="pick.emit(option.id)"
+            (pointermove)="nav.hover(keyFor(group, option), $event)"
           >
             @if (option.avatarName) {
               <k-avatar
@@ -127,7 +145,7 @@ export interface PickerGroup {
             }
             <span class="pl-text">
               @if (option.overline) { <small class="pl-overline">{{ option.overline }}</small> }
-              <span class="pl-label">{{ option.label }}</span>
+              <span class="pl-label"><k-match-highlight [text]="option.label" [query]="query()" /></span>
               @if (option.hint) { <small>{{ option.hint }}</small> }
             </span>
             @if (option.trailing) {
@@ -142,7 +160,7 @@ export interface PickerGroup {
           </button>
         }
       } @empty {
-        <p class="pl-empty">{{ emptyLabel() }}</p>
+        <p class="pl-empty" role="presentation">{{ emptyLabel() }}</p>
       }
     </div>
   `,
@@ -291,6 +309,13 @@ export interface PickerGroup {
          so the row under the pointer has to be obvious. */
       &:hover:not(:disabled) { background: var(--surface-hover); }
       &.is-selected { background: var(--surface-3); font-weight: 600; }
+      /* The keyboard's row (and the pointer's, which moves it too) wears the hover wash plus a quiet
+         inset ring, so it stays findable on a selected row whose fill is already tinted. A ring, not
+         an edge stripe, per the app's design language. */
+      &.is-active:not(:disabled) {
+        background: var(--surface-hover);
+        box-shadow: inset 0 0 0 1px var(--border-strong);
+      }
       &:disabled { opacity: 0.5; cursor: not-allowed; }
       &:focus-visible { outline: 2px solid var(--border-strong); outline-offset: -2px; }
     }
@@ -442,6 +467,15 @@ export class PickerListComponent {
 
   readonly query = signal("");
 
+  /** Every rendered row in display order, keyed per group: an option may appear under two groups. */
+  private readonly navItems = computed(() =>
+    this.filteredGroups().flatMap((group) =>
+      group.options.map((option) => ({ key: this.keyFor(group, option), disabled: option.disabled, id: option.id }))
+    )
+  );
+
+  readonly nav = new ListboxNav(this.navItems);
+
   readonly showSearch = computed(() =>
     this.groups().reduce((total, group) => total + group.options.length, 0) >= this.searchThreshold()
   );
@@ -482,6 +516,22 @@ export class PickerListComponent {
       showParent: !!group.parent && group.parent.id !== groups[index - 1]?.parent?.id,
     }))
   );
+
+  onQuery(value: string): void {
+    this.query.set(value);
+    this.nav.resetFor(value);
+  }
+
+  onKeydown(event: KeyboardEvent): void {
+    this.nav.onKeydown(event, (key) => {
+      const item = this.navItems().find((candidate) => candidate.key === key);
+      if (item && !item.disabled) this.pick.emit(item.id);
+    });
+  }
+
+  keyFor(group: PickerGroup, option: PickerOption): string {
+    return `${group.id}/${option.id}`;
+  }
 
   isSelected(id: string): boolean {
     return this.selectedIds().includes(id);

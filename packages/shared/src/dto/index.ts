@@ -36,6 +36,8 @@ export * from "./reminder-limits.js";
 export * from "./note-attachments.js";
 export * from "./notes.js";
 export * from "./notifications.js";
+export * from "./plan-usage.js";
+export * from "./plan-usage-limits.js";
 export * from "./push-subscriptions.js";
 export * from "./public-api.js";
 export * from "./scratchpad-notes.js";

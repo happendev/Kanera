@@ -2,7 +2,7 @@ import { createComponentFixture, type HtmlComponentFixture } from "../../../test
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { CardAttachmentRow } from "@kanera/shared/dto";
-import type { ActivityFeedEvent, CardFeedItem, WireBoardMemberUser, WireCard, WireCardChecklist, WireCardChecklistItem, WireCardDetail, WireChecklistTemplate, WireComment } from "@kanera/shared/events";
+import type { ActivityFeedEvent, CardFeedItem, WireBoardMemberUser, WireCard, WireCardChecklist, WireCardChecklistItem, WireCardDetail, WireCardLabel, WireChecklistTemplate, WireComment } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CustomField } from "@kanera/shared/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
@@ -509,6 +509,7 @@ describe("CardDetailComponent realtime regressions", () => {
             checklistTemplates: boardChecklistTemplates,
             coverAttachmentById,
             updateChecklistItem: vi.fn(),
+            cardLabels: signal<WireCardLabel[]>([]),
           },
         },
       ],
@@ -2353,6 +2354,34 @@ describe("CardDetailComponent realtime regressions", () => {
     await fixture.componentInstance.toggleAssignee("user-2");
 
     expect(api.put).toHaveBeenCalledWith("/cards/card-1/assignees", { userIds: ["user-1", "user-2"] });
+  });
+
+  it("lets only workspace admins create a label from the picker, then applies it to the card", async () => {
+    const created = { id: "label-new", workspaceId: "workspace-1", name: "Urgent", color: null, position: "9" } as WireCardLabel;
+    api.post.mockResolvedValue(created);
+    const fixture = createComponentFixture(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", ["label-1"]);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    expect(component.canCreateLabels()).toBe(false);
+    await component.createLabel("Urgent");
+    expect(api.post).not.toHaveBeenCalled();
+
+    viewerIsWorkspaceAdmin.set(true);
+    expect(component.canCreateLabels()).toBe(true);
+    await component.createLabel("Urgent");
+
+    expect(api.post).toHaveBeenCalledWith("/workspaces/workspace-1/card-labels", { name: "Urgent" });
+    // Known to BoardState before the assignment echo, so that echo does not force a board resync.
+    expect(TestBed.inject(BoardState).cardLabels()).toEqual([created]);
+    expect(api.put).toHaveBeenCalledWith("/cards/card-1/labels", { labelIds: ["label-1", "label-new"] });
   });
 
   it("auto-opens a recovered card description draft and clears it after save", async () => {

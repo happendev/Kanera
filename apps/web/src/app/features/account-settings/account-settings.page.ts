@@ -202,14 +202,6 @@ function formatBuildDate(value: string) {
   return formatDateTime(value, "medium") || value;
 }
 
-function formatBytes(value: number): string {
-  const oneDecimal = (n: number) => new Intl.NumberFormat(appLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n);
-  if (value < 1024) return $localize`:File size in bytes:${new Intl.NumberFormat(appLocale()).format(value)}:size: B`;
-  if (value < 1024 * 1024) return $localize`:File size in kilobytes:${oneDecimal(value / 1024)}:size: KB`;
-  if (value < 1024 * 1024 * 1024) return $localize`:File size in megabytes:${oneDecimal(value / 1024 / 1024)}:size: MB`;
-  return $localize`:File size in gigabytes:${oneDecimal(value / 1024 / 1024 / 1024)}:size: GB`;
-}
-
 /** Display name of a personal notification channel. ntfy and Gotify are product names. */
 function personalChannelLabel(channel: PersonalNotificationChannel): string {
   return channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : $localize`:Notification channel name:Webhook`;
@@ -270,30 +262,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly personalNotificationChannelsAllowed = this.auth.webhooksAllowed;
   readonly buildVersion = buildInfo.version;
   readonly buildBuiltAt = formatBuildDate(buildInfo.builtAt);
-  readonly storageUsagePercent = computed(() => {
-    const usage = this.user()?.storageUsage;
-    if (!usage?.limited || !usage.quotaBytes) return 0;
-    return Math.min(100, Math.round((usage.usedBytes / usage.quotaBytes) * 100));
-  });
-  readonly storageUsageLabel = computed(() => {
-    const usage = this.user()?.storageUsage;
-    if (!usage) return "";
-    const used = formatBytes(usage.usedBytes);
-    return usage.limited && usage.quotaBytes !== null
-      ? $localize`:Storage usage, e.g. "1.2 GB of 5.0 GB used":${used}:used: of ${formatBytes(usage.quotaBytes)}:quota: used`
-      : $localize`:Storage usage, e.g. "1.2 GB used":${used}:used: used`;
-  });
-  readonly storageRemainingLabel = computed(() => {
-    const usage = this.user()?.storageUsage;
-    if (!usage?.limited || usage.remainingBytes === null) return $localize`Storage is unlimited on this deployment.`;
-    return $localize`:Storage left, e.g. "3.8 GB remaining":${formatBytes(usage.remainingBytes)}:size: remaining`;
-  });
-  // A paid org that has exhausted its pool can't self-serve an upgrade (it's already on the top tier),
-  // so the account-plan UI points it at support instead of an upgrade CTA.
-  readonly storageFull = computed(() => {
-    const usage = this.user()?.storageUsage;
-    return !!usage?.limited && usage.quotaBytes !== null && usage.usedBytes >= usage.quotaBytes;
-  });
 
   readonly selectedTab = signal<Tab>("profile");
   readonly notificationRows = NOTIFICATION_ROWS;

@@ -1,9 +1,9 @@
 import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { StorageFilesResponse, StorageOverviewResponse } from "@kanera/shared/dto";
+import type { PlanUsageResponse, StorageFilesResponse, StorageOverviewResponse } from "@kanera/shared/dto";
 import { STORAGE_WARNING_PERCENT } from "@kanera/shared/dto";
-import { activityEvents, boards, cardAttachments, cards, clients, emailQueue, lists, noteAttachments, notes } from "@kanera/shared/schema";
+import { activityEvents, automationMonthlyUsage, boards, cardAttachments, cards, clients, emailQueue, lists, noteAttachments, notes } from "@kanera/shared/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { hashPassword } from "../../auth/password.js";
 import { db } from "../../db.js";
@@ -145,6 +145,69 @@ void test("storage overview, listing and cleanup cover card and team-note files 
   await app.close();
 });
 
+void test("plan usage meters match Free enforcement, and self-hosted reports no meters", async () => {
+  const app = await buildIntegrationServer();
+  const owner = await signupOwner(app, { seed: "plan-usage" });
+  const clientId = owner.user.clientId;
+  const usage = async () => {
+    const response = await app.inject({ method: "GET", url: "/clients/me/plan-usage", headers: owner.auth });
+    assert.equal(response.statusCode, 200);
+    return response.json<PlanUsageResponse>();
+  };
+  const meter = (body: PlanUsageResponse, key: string) => body.meters.find((m) => m.key === key);
+
+  assert.deepEqual(await usage(), { tier: null, meters: [] });
+
+  const previousMode = env.KANERA_DEPLOYMENT_MODE;
+  env.KANERA_DEPLOYMENT_MODE = "hosted";
+  try {
+    await db.update(clients).set({ plan: "free", billingStatus: "none" }).where(eq(clients.id, clientId));
+    const created = await app.inject({ method: "POST", url: "/workspaces", headers: owner.auth, payload: { name: "Metered" } });
+    assert.equal(created.statusCode, 201);
+    const workspaceId = created.json<{ id: string }>().id;
+    const createBoard = (name: string) => app.inject({ method: "POST", url: `/workspaces/${workspaceId}/boards`, headers: owner.auth, payload: { name } });
+
+    const maxBoards = env.HOSTED_FREE_MAX_BOARDS;
+    const startingBoards = meter(await usage(), "boards")!.used!;
+    for (let i = startingBoards; i < maxBoards; i++) assert.equal((await createBoard(`Board ${i}`)).statusCode, 201);
+    // An archived board frees its slot for enforcement, so the meter must not count it either.
+    const [archived] = await db.select({ id: boards.id }).from(boards).where(eq(boards.workspaceId, workspaceId)).limit(1);
+    await db.update(boards).set({ archivedAt: new Date() }).where(eq(boards.id, archived!.id));
+    assert.deepEqual(meter(await usage(), "boards"), { key: "boards", used: maxBoards - 1, limit: maxBoards, resetsAt: null });
+
+    assert.equal((await createBoard("Last slot")).statusCode, 201);
+    assert.equal(meter(await usage(), "boards")!.used, maxBoards);
+    const refused = await createBoard("Over the cap");
+    assert.equal(refused.statusCode, 403, "a meter at its limit means the next create is refused");
+    assert.equal(refused.json<{ code: string }>().code, "PLAN_LIMIT");
+
+    const now = new Date();
+    const periodStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+    await db.insert(automationMonthlyUsage).values({ clientId, periodStart, executionCount: 7 });
+    const free = await usage();
+    assert.equal(free.tier, "free");
+    assert.deepEqual(meter(free, "members"), { key: "members", used: 1, limit: env.HOSTED_FREE_MAX_ORG_MEMBERS, resetsAt: null });
+    assert.deepEqual(meter(free, "activeAutomations"), { key: "activeAutomations", used: 0, limit: env.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS, resetsAt: null });
+    assert.deepEqual(meter(free, "automationExecutions"), {
+      key: "automationExecutions",
+      used: 7,
+      limit: env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY,
+      resetsAt: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString(),
+    });
+
+    // Pro lifts every cap except the purchased seat pool.
+    await db.update(clients).set({ plan: "paid", billingStatus: "active", seatLimit: 4 }).where(eq(clients.id, clientId));
+    const pro = await usage();
+    assert.equal(pro.tier, "paid");
+    assert.deepEqual(meter(pro, "seats"), { key: "seats", used: 1, limit: 4, resetsAt: null });
+    assert.equal(meter(pro, "boards")!.limit, null);
+    assert.deepEqual(meter(pro, "automationExecutions"), { key: "automationExecutions", used: null, limit: null, resetsAt: null });
+  } finally {
+    env.KANERA_DEPLOYMENT_MODE = previousMode;
+  }
+  await app.close();
+});
+
 void test("storage management is limited to organisation admins", async () => {
   const { app, owner } = await setupOrg("storage-admin-only");
   const [member] = await insertTestUsers(db, {
@@ -158,6 +221,7 @@ void test("storage management is limited to organisation admins", async () => {
 
   for (const request of [
     { method: "GET" as const, url: "/clients/me/storage" },
+    { method: "GET" as const, url: "/clients/me/plan-usage" },
     { method: "GET" as const, url: "/clients/me/storage/files" },
     { method: "POST" as const, url: "/clients/me/storage/files/delete", payload: { files: [{ kind: "card", id: "019ed5a7-8b12-7e60-8599-3f0069ce728f" }] } },
   ]) {

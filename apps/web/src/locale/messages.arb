@@ -3417,7 +3417,8 @@
   "@5376258449190300543": {
     "description": "Label: number of seats",
     "x-files": [
-      "src/app/features/account-settings/account-plan/account-plan.page.html"
+      "src/app/features/account-settings/account-plan/account-plan.page.html",
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
     ]
   },
   "403234217926479582": "{$USED} of {$TOTAL} used",
@@ -3502,18 +3503,56 @@
       "src/app/features/account-settings/account-plan/account-plan.page.html"
     ]
   },
+  "5209478800408085052": "Plan usage",
+  "@5209478800408085052": {
+    "description": "Heading above the plan usage meters",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "3377422512078297814": "Near limit",
+  "@3377422512078297814": {
+    "description": "Badge on a plan usage meter at 80% or more of its limit",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "3879752497004604417": "Limit reached",
+  "@3879752497004604417": {
+    "description": "Badge on a plan usage meter that has reached its limit",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "5024699618577775846": "All purchased seats are in use. Add seats above before you invite more people.",
+  "@5024699618577775846": {
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "4170699369782056926": "Your organisation has reached a Free plan limit. Upgrade to Pro to lift it.",
+  "@4170699369782056926": {
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "6825120156443511737": "Your organisation is close to a Free plan limit. Upgrade to Pro for unlimited boards, members, and automations.",
+  "@6825120156443511737": {
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "5175538612783076412": "Your organisation is close to its seat limit. Add seats above before you run out.",
+  "@5175538612783076412": {
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
   "8011944903389422386": "Storage usage",
   "@8011944903389422386": {
     "x-files": [
       "src/app/features/account-settings/account-plan/account-plan.page.html",
       "src/app/features/account-settings/storage/storage.page.html"
-    ]
-  },
-  "1285187689894749614": "{$REMAINING} — shared across your whole organisation. Files you upload to another organisation's board count against their storage, not yours.",
-  "@1285187689894749614": {
-    "description": "Starts with the remaining storage, e.g. '3.8 GB remaining'",
-    "x-files": [
-      "src/app/features/account-settings/account-plan/account-plan.page.html"
     ]
   },
   "8917102681674700841": "Manage storage",
@@ -3523,10 +3562,73 @@
       "src/app/features/account-settings/account-plan/account-plan.page.html"
     ]
   },
-  "4417750524340323633": "Your organisation has reached its storage limit. Contact {$START_LINK}support@kanera.app{$CLOSE_LINK} for more storage.",
-  "@4417750524340323633": {
+  "7107218117130409950": "Boards",
+  "@7107218117130409950": {
+    "description": "Plan usage meter label",
     "x-files": [
-      "src/app/features/account-settings/account-plan/account-plan.page.html"
+      "src/app/features/account-settings/account-plan/account-plan.page.ts",
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/global-work/global-work.page.html",
+      "src/app/features/shell/app-shell.component.html",
+      "src/app/features/workspace-settings/boards/boards.page.html",
+      "src/app/features/workspace-settings/guests/guests.page.html",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4691887509600985309": "Members",
+  "@4691887509600985309": {
+    "description": "Plan usage meter label",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts",
+      "src/app/features/board/bulk-card-actions-menu.popover.ts",
+      "src/app/features/board/card-quick-edit.popover.ts",
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/features/workspace-settings/automations/automation-action-fields.component.ts",
+      "src/app/features/workspace-settings/automations/automations.page.html",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1947060598987185107": "Active automations",
+  "@1947060598987185107": {
+    "description": "Plan usage meter label",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
+    ]
+  },
+  "8887037630189986582": "Automation executions this month",
+  "@8887037630189986582": {
+    "description": "Plan usage meter label",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
+    ]
+  },
+  "7450604306401445632": "{$used} of {$limit}",
+  "@7450604306401445632": {
+    "description": "Plan usage value, e.g. 2 of 3",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
+    ]
+  },
+  "5689164877630739284": "{$used} · Unlimited",
+  "@5689164877630739284": {
+    "description": "Plan usage value with no limit, e.g. 12 · Unlimited",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
+    ]
+  },
+  "240806681889331244": "Unlimited",
+  "@240806681889331244": {
+    "description": "Plan usage value when the plan has no limit",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
+    ]
+  },
+  "2352286574480757975": "Resets {$date}",
+  "@2352286574480757975": {
+    "description": "When the monthly allowance starts again",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
     ]
   },
   "3892825090402620438": "Two-factor authentication",
@@ -4024,71 +4126,6 @@
   "2378920110493464361": "Account defaults",
   "@2378920110493464361": {
     "description": "Workspace notification rule status — follows the account-wide settings",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts"
-    ]
-  },
-  "2344516588780022507": "{$size} B",
-  "@2344516588780022507": {
-    "description": "File size in bytes",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts",
-      "src/app/features/account-settings/storage/storage.page.ts",
-      "src/app/features/board/card-composer.dialog.ts",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
-  "6932227221782669858": "{$size} KB",
-  "@6932227221782669858": {
-    "description": "File size in kilobytes",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts",
-      "src/app/features/account-settings/storage/storage.page.ts",
-      "src/app/features/board/card-composer.dialog.ts",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
-  "8382345887776292209": "{$size} MB",
-  "@8382345887776292209": {
-    "description": "File size in megabytes",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts",
-      "src/app/features/account-settings/storage/storage.page.ts",
-      "src/app/features/board/card-composer.dialog.ts",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
-  "1800904542469245972": "{$size} GB",
-  "@1800904542469245972": {
-    "description": "File size in gigabytes",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts",
-      "src/app/features/account-settings/storage/storage.page.ts"
-    ]
-  },
-  "6823275219150478275": "{$used} of {$quota} used",
-  "@6823275219150478275": {
-    "description": "Storage usage, e.g. \"1.2 GB of 5.0 GB used\"",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts"
-    ]
-  },
-  "7721558890815728627": "{$used} used",
-  "@7721558890815728627": {
-    "description": "Storage usage, e.g. \"1.2 GB used\"",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts"
-    ]
-  },
-  "993979649125711182": "Storage is unlimited on this deployment.",
-  "@993979649125711182": {
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts"
-    ]
-  },
-  "7166187228810433597": "{$size} remaining",
-  "@7166187228810433597": {
-    "description": "Storage left, e.g. \"3.8 GB remaining\"",
     "x-files": [
       "src/app/features/account-settings/account-settings.page.ts"
     ]
@@ -6580,6 +6617,40 @@
   "3074935364464843762": "Older than a year",
   "@3074935364464843762": {
     "description": "File age filter option",
+    "x-files": [
+      "src/app/features/account-settings/storage/storage.page.ts"
+    ]
+  },
+  "2344516588780022507": "{$size} B",
+  "@2344516588780022507": {
+    "description": "File size in bytes",
+    "x-files": [
+      "src/app/features/account-settings/storage/storage.page.ts",
+      "src/app/features/board/card-composer.dialog.ts",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "6932227221782669858": "{$size} KB",
+  "@6932227221782669858": {
+    "description": "File size in kilobytes",
+    "x-files": [
+      "src/app/features/account-settings/storage/storage.page.ts",
+      "src/app/features/board/card-composer.dialog.ts",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "8382345887776292209": "{$size} MB",
+  "@8382345887776292209": {
+    "description": "File size in megabytes",
+    "x-files": [
+      "src/app/features/account-settings/storage/storage.page.ts",
+      "src/app/features/board/card-composer.dialog.ts",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "1800904542469245972": "{$size} GB",
+  "@1800904542469245972": {
+    "description": "File size in gigabytes",
     "x-files": [
       "src/app/features/account-settings/storage/storage.page.ts"
     ]
@@ -9139,19 +9210,6 @@
       "src/app/features/board/bulk-card-actions-menu.popover.ts",
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-quick-edit.popover.ts"
-    ]
-  },
-  "4691887509600985309": "Members",
-  "@4691887509600985309": {
-    "description": "Card members section label",
-    "x-files": [
-      "src/app/features/board/bulk-card-actions-menu.popover.ts",
-      "src/app/features/board/card-quick-edit.popover.ts",
-      "src/app/features/board/table-view/filter-bar.component.ts",
-      "src/app/features/shared/board-members-menu.popover.ts",
-      "src/app/features/workspace-settings/automations/automation-action-fields.component.ts",
-      "src/app/features/workspace-settings/automations/automations.page.html",
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
   "3348547714642337740": "No members",
@@ -12783,6 +12841,13 @@
       "src/app/features/board/label-picker.popover.ts"
     ]
   },
+  "8734217413240624023": "Create label “{$NAME}”",
+  "@8734217413240624023": {
+    "description": "Label picker row that creates a new workspace label from the search text and adds it to the card",
+    "x-files": [
+      "src/app/features/board/label-picker.popover.ts"
+    ]
+  },
   "7611855326498002481": "In progress list: each card shows its time in progress",
   "@7611855326498002481": {
     "description": "Tooltip on the marker beside an In progress list's name",
@@ -13927,18 +13992,6 @@
       "src/app/features/workspace-settings/automations/automations.page.ts"
     ]
   },
-  "7107218117130409950": "Boards",
-  "@7107218117130409950": {
-    "description": "Filter dimension",
-    "x-files": [
-      "src/app/features/board/table-view/filter-bar.component.ts",
-      "src/app/features/global-work/global-work.page.html",
-      "src/app/features/shell/app-shell.component.html",
-      "src/app/features/workspace-settings/boards/boards.page.html",
-      "src/app/features/workspace-settings/guests/guests.page.html",
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
   "2913525949208463386": "Activity type",
   "@2913525949208463386": {
     "description": "Filter dimension - the kind of work-done activity",
@@ -14309,6 +14362,7 @@
     "description": "Due-date group heading - cards due later this week",
     "x-files": [
       "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/completed-cards/date-range-picker.popover.ts",
       "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
@@ -14981,6 +15035,34 @@
   "5318611444910838698": "{days, plural, one {# day} other {# days}}",
   "@5318611444910838698": {
     "description": "Date range shortcut button selecting the last N days",
+    "x-files": [
+      "src/app/features/completed-cards/date-range-picker.popover.ts"
+    ]
+  },
+  "7591870443991978948": "Last week",
+  "@7591870443991978948": {
+    "description": "Date range preset button selecting the whole previous week",
+    "x-files": [
+      "src/app/features/completed-cards/date-range-picker.popover.ts"
+    ]
+  },
+  "842657237693374355": "This month",
+  "@842657237693374355": {
+    "description": "Date range preset button selecting the current month up to today",
+    "x-files": [
+      "src/app/features/completed-cards/date-range-picker.popover.ts"
+    ]
+  },
+  "4463380307954693363": "Last month",
+  "@4463380307954693363": {
+    "description": "Date range preset button selecting the whole previous calendar month",
+    "x-files": [
+      "src/app/features/completed-cards/date-range-picker.popover.ts"
+    ]
+  },
+  "5483339165629526387": "Last quarter",
+  "@5483339165629526387": {
+    "description": "Date range preset button selecting the whole previous calendar quarter",
     "x-files": [
       "src/app/features/completed-cards/date-range-picker.popover.ts"
     ]

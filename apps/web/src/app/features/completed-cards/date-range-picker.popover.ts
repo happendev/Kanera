@@ -6,8 +6,10 @@ import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { formatDate } from "../../shared/date-format";
 import { icu } from "../../core/i18n/icu";
-import { localDateKey, parseDateInputValue, startOfLocalDay } from "../../shared/day-key.util";
+import { parseDateInputValue } from "../../shared/day-key.util";
 import { buildMonthGrid, monthStart, shiftMonth } from "../../shared/month-grid";
+import type { DateRangeKeys, DateRangePreset } from "./date-range-presets";
+import { resolveDateRangePreset, resolveLastDays } from "./date-range-presets";
 
 type CalendarDay = {
   date: Date;
@@ -23,6 +25,11 @@ type CalendarDay = {
 type RangeShortcut = {
   label: string;
   days: number;
+};
+
+type NamedPreset = {
+  label: string;
+  preset: DateRangePreset;
 };
 
 /** Shortcut button that selects the last N days. */
@@ -54,6 +61,14 @@ function compareDateValue(a: string, b: string): number {
 
       <div class="drp-summary">
         <span>{{ draftLabel() }}</span>
+      </div>
+
+      <div class="drp-presets">
+        @for (preset of presets; track preset.preset) {
+        <button type="button" (click)="selectPreset(preset.preset)">
+          {{ preset.label }}
+        </button>
+        }
       </div>
 
       <div class="drp-shortcuts">
@@ -107,7 +122,7 @@ function compareDateValue(a: string, b: string): number {
     `
     .drp-panel {
       width: 100%;
-      max-height: var(--ap-max-height, 460px);
+      max-height: var(--ap-max-height, 560px);
       overflow-y: auto;
       padding: 10px;
       display: flex;
@@ -178,7 +193,23 @@ function compareDateValue(a: string, b: string): number {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 6px;
+    }
 
+    /* Named periods wrap as content-width chips rather than a fixed grid: their labels vary a lot in
+       length across languages ("Letztes Quartal" vs "先月") and must never truncate. */
+    .drp-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+
+      button {
+        flex: 1 1 auto;
+        white-space: nowrap;
+      }
+    }
+
+    .drp-shortcuts,
+    .drp-presets {
       button {
         height: 28px;
         padding: 0 6px;
@@ -195,6 +226,15 @@ function compareDateValue(a: string, b: string): number {
           background: var(--surface-hover);
           border-color: var(--border-strong);
         }
+      }
+    }
+
+    /* Touch: the range chips are the quickest path on a phone, so they get the app's 44px targets.
+       The panel clamps to the viewport and scrolls if that pushes it past a short screen. */
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .drp-shortcuts button,
+      .drp-presets button {
+        height: 44px;
       }
     }
 
@@ -330,16 +370,27 @@ export class DateRangePickerPopover implements OnInit {
     { label: lastDaysLabel(30), days: 30 },
     { label: lastDaysLabel(90), days: 90 },
   ];
+  readonly presets: NamedPreset[] = [
+    { label: $localize`:Date range preset button selecting the current week up to today:This week`, preset: "thisWeek" },
+    { label: $localize`:Date range preset button selecting the whole previous week:Last week`, preset: "lastWeek" },
+    { label: $localize`:Date range preset button selecting the current month up to today:This month`, preset: "thisMonth" },
+    { label: $localize`:Date range preset button selecting the whole previous calendar month:Last month`, preset: "lastMonth" },
+    {
+      label: $localize`:Date range preset button selecting the whole previous calendar quarter:Last quarter`,
+      preset: "lastQuarter",
+    },
+  ];
   readonly visibleMonth = signal(this.initialVisibleMonth());
   readonly draftFrom = signal(this.from());
   readonly draftTo = signal(this.to());
 
   constructor() {
     this.panel.configure({
-      // Sized so the whole picker — header, summary, shortcuts, six week rows and the Apply footer —
-      // fits without an inner scrollbar. The panel is ~420px tall at this width; anything lower hid
-      // the footer behind a scroll the user had to discover.
-      placement: () => ({ align: "end", width: 288, maxHeight: 460 }),
+      // Sized so the whole picker — header, summary, period presets, shortcuts, six week rows and the
+      // Apply footer — fits without an inner scrollbar. The panel is ~490px tall at this width (more
+      // when long translations wrap the presets onto a third row); anything lower hid the footer
+      // behind a scroll the user had to discover. Placement still clamps it to short viewports.
+      placement: () => ({ align: "end", width: 288, maxHeight: 560 }),
       inline: () => this.inline(),
       onDismiss: () => this.dismiss.emit(),
     });
@@ -396,12 +447,19 @@ export class DateRangePickerPopover implements OnInit {
   }
 
   selectLastDays(days: number) {
-    const end = startOfLocalDay(new Date());
-    const start = new Date(end);
-    start.setDate(start.getDate() - days + 1);
-    this.draftFrom.set(localDateKey(start));
-    this.draftTo.set(localDateKey(end));
-    this.visibleMonth.set(new Date(end.getFullYear(), end.getMonth(), 1));
+    this.selectRange(resolveLastDays(days, new Date()));
+  }
+
+  selectPreset(preset: DateRangePreset) {
+    this.selectRange(resolveDateRangePreset(preset, new Date()));
+  }
+
+  /** Applies a shortcut's range and shows the month it ends in, so the selection is visible. */
+  private selectRange(range: DateRangeKeys) {
+    this.draftFrom.set(range.from);
+    this.draftTo.set(range.to);
+    const end = parseDateInputValue(range.to);
+    if (end) this.visibleMonth.set(monthStart(end));
     this.emitIfInstant();
   }
 
