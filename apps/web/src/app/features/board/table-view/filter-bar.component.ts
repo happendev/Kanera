@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
   output,
   signal,
@@ -25,6 +26,7 @@ import {
 import { hasActiveFilter } from "./filter.util";
 import { formatDate } from "../../../shared/date-format";
 import { icu } from "../../../core/i18n/icu";
+import { GettingStartedService } from "../../../core/getting-started/getting-started.service";
 import type { AnyCustomField } from "./table-view.types";
 
 const CF_VALUE_DEBOUNCE_MS = 250;
@@ -899,6 +901,7 @@ export class FilterBarComponent implements OnDestroy {
   readonly workDoneEventType = input<WorkDoneEventType | null>(null);
 
   readonly valueChange = output<FilterValue>();
+  private readonly gettingStarted = inject(GettingStartedService);
   readonly completedChange = output<{ from: string; to: string }>();
   readonly completedClear = output<void>();
   readonly archivedChange = output<boolean>();
@@ -1021,7 +1024,17 @@ export class FilterBarComponent implements OnDestroy {
   // ---- Emitting ---------------------------------------------------------------------------
 
   private emit(patch: Partial<FilterValue>) {
+    this.noteFilterUsed();
     this.valueChange.emit({ ...this.value(), ...patch });
+  }
+
+  /**
+   * Every filter change the person makes ticks the "Use a filter" step. Hooked on these emitters
+   * rather than on an active filter, because filters are remembered per board and view: one can be
+   * active on load without anyone having touched it.
+   */
+  private noteFilterUsed() {
+    this.gettingStarted.noteUsed("useFilter");
   }
 
   private toggleInArray(arr: string[], id: string): string[] {
@@ -1050,14 +1063,17 @@ export class FilterBarComponent implements OnDestroy {
     this.emit({ showBlockedOnly: !this.value().showBlockedOnly });
   }
   toggleArchived() {
+    this.noteFilterUsed();
     this.archivedChange.emit(!this.archived());
   }
   selectWorkDoneEventType(type: WorkDoneEventType | null) {
+    this.noteFilterUsed();
     this.workDoneEventTypeChange.emit(type);
     this.go("menu");
   }
 
   onCompletedApply(range: { from: string; to: string }) {
+    this.noteFilterUsed();
     this.completedChange.emit(range);
     this.go("menu");
   }

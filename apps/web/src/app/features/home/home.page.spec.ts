@@ -2,17 +2,26 @@ import { provideZonelessChangeDetection, signal } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
-import type { HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
+import type { HomeGettingStartedResponse, HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
+
+/** Mirrors GETTING_STARTED_STEPS in @kanera/shared/dto; the web may import only types from it. */
+const GETTING_STARTED_STEPS = [
+  "createCard", "assignCard", "comment", "mention", "addDependency", "completeCard",
+  "quickEdit", "useFilter", "commandPalette", "viewWorkDone", "scratchpad", "saveNote",
+  "inviteTeam", "secondBoard", "createAutomation", "enablePush", "connectAgent",
+] as const;
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { PendingInvitationsService } from "../../core/board-invitations/pending-invitations.service";
-import { firstRunDismissedKey, organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
+import { GlobalSearchService } from "../../core/search/global-search.service";
+import { GettingStartedService } from "../../core/getting-started/getting-started.service";
 import { HomePage } from "./home.page";
 
 class SocketStub {
@@ -93,6 +102,9 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
   };
 }
 
+/** What home receives once the checklist is closed; the default so other tests never see it. */
+const CLOSED_CHECKLIST: HomeGettingStartedResponse = { dismissed: true, hidden: false, steps: [], teamTarget: null, notesWorkspaceId: null };
+
 const BOARD_SUMMARIES: Record<string, { name: string; icon: string | null; iconColor: string | null }> = {
   "board-1": { name: "Roadmap", icon: null, iconColor: null },
   "board-2": { name: "Hiring Plan", icon: null, iconColor: null },
@@ -118,6 +130,8 @@ describe("HomePage", () => {
     entitlements?: unknown;
     deploymentMode?: "hosted" | "self_hosted";
     role?: "owner" | "admin" | "member";
+    /** Defaults to a closed checklist, so tests about other sections never see it. */
+    gettingStarted?: HomeGettingStartedResponse;
     pendingInvitations?: Array<{
       id: string;
       orgName: string;
@@ -133,6 +147,9 @@ describe("HomePage", () => {
         if (options.apiFails) throw new Error("offline");
         return options.response ?? payload();
       }
+      if (path === "/home/getting-started") {
+        return options.gettingStarted ?? CLOSED_CHECKLIST;
+      }
       if (path === "/me/agent-connection-config") {
         return { mcpUrl: "https://mcp.example.test/mcp" };
       }
@@ -144,11 +161,13 @@ describe("HomePage", () => {
       return {};
     });
 
+    const patch = vi.fn(async () => ({}));
+
     await TestBed.configureTestingModule({
       imports: [HomePage],
       providers: [
         provideZonelessChangeDetection(),
-        { provide: ApiClient, useValue: { get } },
+        { provide: ApiClient, useValue: { get, patch } },
         {
           provide: AuthService,
           useValue: {
@@ -202,7 +221,7 @@ describe("HomePage", () => {
     fixture = TestBed.createComponent(HomePage);
     fixture.detectChanges();
     await settle();
-    return { get, socket };
+    return { get, patch, socket };
   }
 
   /**
@@ -498,7 +517,7 @@ describe("HomePage", () => {
     expect(text()).toContain("We couldn’t load your day.");
 
     get.mockImplementation(async (path: string) =>
-      path.startsWith("/home/today") ? payload() : {});
+      path.startsWith("/home/today") ? payload() : path === "/home/getting-started" ? CLOSED_CHECKLIST : {});
     host().querySelector<HTMLButtonElement>(".error-state button")!.click();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -748,32 +767,83 @@ describe("HomePage", () => {
     expect([...host().querySelectorAll(".recent-chip")].map((chip) => chip.textContent?.trim())).toEqual(["Roadmap"]);
   });
 
-  it("shows admins of a small organisation the first steps card and hides it on dismiss", async () => {
-    await render({ isOrgAdmin: true, response: payload({ boardCount: 1 }) });
-    expect(host().querySelector(".first-run")).not.toBeNull();
-    expect(text()).toContain("First steps");
+  function checklist(done: Partial<Record<HomeGettingStartedResponse["steps"][number]["key"], boolean>>): HomeGettingStartedResponse {
+    return {
+      dismissed: false,
+      hidden: false,
+      steps: GETTING_STARTED_STEPS.map((key) => ({ key, done: done[key] ?? false })),
+      teamTarget: { workspaceId: "ws-1" },
+      notesWorkspaceId: "ws-1",
+    };
+  }
 
-    host().querySelector<HTMLButtonElement>(".first-run-head button")!.click();
+  function row(title: string): HTMLElement {
+    return [...host().querySelectorAll<HTMLElement>(".gs-step")].find((step) => step.querySelector(".gs-label")?.textContent?.trim() === title)!;
+  }
+
+  it("guides through the first open step, opens others on demand, and hides into the account menu", async () => {
+    const { patch } = await render({
+      isOrgAdmin: true,
+      gettingStarted: checklist({ inviteTeam: true, secondBoard: true }),
+      registeredBoards: [{ id: "board-1", name: "Roadmap", icon: null, iconColor: null }],
+    });
+    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("2/17");
+    expect(host().querySelectorAll(".gs-step.is-done")).toHaveLength(2);
+    expect([...host().querySelectorAll(".gs-section-label")].map((label) => label.textContent?.trim())).toEqual(["The basics", "Work faster", "Notes", "Your team", "Your setup"]);
+    // One step open at a time: the first one not done, with its action pointing at a real board.
+    expect(host().querySelectorAll(".gs-detail")).toHaveLength(1);
+    expect(row("Create your first card").classList).toContain("is-open");
+    expect(row("Create your first card").querySelector("a.gs-action")?.getAttribute("href")).toBe("/b/board-1");
+    expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 17, percent: 12 });
+
+    row("Create an automation").querySelector<HTMLButtonElement>("button.gs-row")!.click();
     fixture.detectChanges();
-    expect(host().querySelector(".first-run")).toBeNull();
-    // Remembered on this device for this user and organisation.
-    expect(localStorage.getItem(firstRunDismissedKey("user-1", "client-1"))).toBe("1");
+    expect(row("Create your first card").classList).not.toContain("is-open");
+    expect(row("Create an automation").querySelector("a.gs-action")?.getAttribute("href")).toBe("/w/ws-1/settings/automations");
+
+    // Steps are left, so closing hides it (the account menu brings it back) rather than removing it.
+    host().querySelector<HTMLButtonElement>(".gs-close")!.click();
+    fixture.detectChanges();
+    expect(host().querySelector(".getting-started")).toBeNull();
+    expect(patch).toHaveBeenCalledWith("/home/getting-started", { hidden: true });
+    // The account menu shows it either way; hiding only takes it off home.
+    expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 17, percent: 12 });
   });
 
-  it("does not show the first steps card once it was dismissed on this device", async () => {
-    localStorage.setItem(firstRunDismissedKey("user-1", "client-1"), "1");
-    await render({ isOrgAdmin: true, response: payload({ boardCount: 1 }) });
-    expect(host().querySelector(".first-run")).toBeNull();
+  it("does not show a checklist hidden on another device", async () => {
+    await render({ isOrgAdmin: true, gettingStarted: { ...checklist({}), hidden: true } });
+    expect(host().querySelector(".getting-started")).toBeNull();
   });
 
-  it("keeps the first steps card away from members", async () => {
-    await render({ isOrgAdmin: false, response: payload({ boardCount: 1 }) });
-    expect(host().querySelector(".first-run")).toBeNull();
+  it("opens the palette from its step, ticks it without a reload, and moves on", async () => {
+    // Isolated because E2E can see the tick but not that it lands live: the overlay that stamps it
+    // belongs to the shell, so here the service call stands in for the overlay opening.
+    const { patch } = await render({ isOrgAdmin: true, gettingStarted: checklist({}) });
+    row("Try the command palette").querySelector<HTMLButtonElement>("button.gs-row")!.click();
+    fixture.detectChanges();
+    row("Try the command palette").querySelector<HTMLButtonElement>("button.gs-action")!.click();
+    expect(TestBed.inject(GlobalSearchService).isOpen()).toBe(true);
+
+    TestBed.inject(GettingStartedService).noteUsed("commandPalette");
+    TestBed.inject(GettingStartedService).noteUsed("commandPalette");
+    fixture.detectChanges();
+    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("1/17");
+    expect(row("Try the command palette").classList).toContain("is-done");
+    // The picked step let go once done; the guide falls back to the first open step.
+    expect(row("Create your first card").classList).toContain("is-open");
+    // One stamp per session, however often the palette opens.
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch).toHaveBeenCalledWith("/home/getting-started", { used: "commandPalette" });
   });
 
-  it("keeps the first steps card away from established organisations", async () => {
-    await render({ isOrgAdmin: true, response: payload({ boardCount: 4 }) });
-    expect(host().querySelector(".first-run")).toBeNull();
+  it("never shows a checklist that was already complete", async () => {
+    // An established team would otherwise get a "you're all set" card the day this shipped. E2E
+    // cannot reach this state: push needs a real browser subscription.
+    await render({
+      isOrgAdmin: true,
+      gettingStarted: { ...checklist({}), steps: checklist({}).steps.map((step) => ({ ...step, done: true })) },
+    });
+    expect(host().querySelector(".getting-started")).toBeNull();
   });
 
   it("blocks workspace creation and explains the board limit", async () => {

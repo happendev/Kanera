@@ -1,3 +1,4 @@
+import { GettingStartedService } from "../../../core/getting-started/getting-started.service";
 import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from "@angular/core";
 import type {
@@ -138,6 +139,7 @@ export class WorkDoneViewComponent {
   // The board and global-work hosts provide BoardState in this view's DI scope, so
   // label/custom-field filters resolve against the same workspace catalogs the live board cards use.
   private readonly state = inject(BoardState, { optional: true });
+  private readonly gettingStarted = inject(GettingStartedService);
 
   readonly scope = input.required<"board" | "global">();
   readonly boardId = input<string | null>(null);
@@ -210,6 +212,8 @@ export class WorkDoneViewComponent {
   readonly to = signal<Date>(startOfLocalDay(new Date()));
 
   constructor() {
+    // Boards and My Cards both render this view, so it ticks the "View Work done" step for either.
+    this.gettingStarted.noteUsed("viewWorkDone");
     // Restore remembered preferences once the scope input is available.
     effect(() => {
       const prefs = readWorkDonePreferences(this.scope());

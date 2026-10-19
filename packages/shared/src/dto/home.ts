@@ -123,6 +123,71 @@ export interface HomeProUsageSummary {
   guestCount: number;
 }
 
+/**
+ * The home "Getting started" checklist, in display order. Every step ticks itself off from server
+ * state the step creates, so there is no "mark as done" and nothing to reconcile across devices.
+ */
+export const GETTING_STARTED_STEPS = [
+  // The basics: the life of a card, in the order someone meets it.
+  "createCard",
+  "assignCard",
+  "comment",
+  "mention",
+  "addDependency",
+  "completeCard",
+  // Working faster.
+  "quickEdit",
+  "useFilter",
+  "commandPalette",
+  "viewWorkDone",
+  // Notes (each only where it is switched on).
+  "scratchpad",
+  "saveNote",
+  // Setting up the team (organisation admins).
+  "inviteTeam",
+  "secondBoard",
+  "createAutomation",
+  // Making Kanera reach you.
+  "enablePush",
+  "connectAgent",
+] as const;
+export type GettingStartedStep = (typeof GETTING_STARTED_STEPS)[number];
+
+/**
+ * The steps the web stamps on first use, because nothing they do leaves a row behind: opening the
+ * palette, applying a filter, viewing Work done, opening quick edit.
+ */
+export const GETTING_STARTED_USED_STEPS = ["commandPalette", "useFilter", "viewWorkDone", "quickEdit"] as const;
+export type GettingStartedUsedStep = (typeof GETTING_STARTED_USED_STEPS)[number];
+
+export interface HomeGettingStartedResponse {
+  /** Removed for good: neither home nor the account menu shows it again. */
+  dismissed: boolean;
+  /** Moved off home into the account menu, from where it can be brought back. */
+  hidden: boolean;
+  /**
+   * Only the steps this viewer can act on in the active organisation: members never see the admin
+   * steps, and push is left out where the deployment or organisation has it switched off.
+   */
+  steps: { key: GettingStartedStep; done: boolean }[];
+  /**
+   * Where the admin steps send people: the organisation's oldest standard workspace, whose settings
+   * hold board creation and automations, else a standalone board, which carries its own automations.
+   * Null for members and for an organisation with nothing yet.
+   */
+  teamTarget: { workspaceId: string } | { boardId: string } | null;
+  /** A workspace with notes switched on that the viewer can open; null leaves the notes step out. */
+  notesWorkspaceId: string | null;
+}
+
+/** `dismissed` and `used` are one-way; `hidden` toggles between home and the menu. */
+export const updateHomeGettingStartedBody = z.object({
+  dismissed: z.literal(true).optional(),
+  hidden: z.boolean().optional(),
+  used: z.enum(GETTING_STARTED_USED_STEPS).optional(),
+}).strict();
+export type UpdateHomeGettingStartedBody = z.infer<typeof updateHomeGettingStartedBody>;
+
 export interface HomeTodayResponse {
   /** The zone every calendar day in this payload was computed in. */
   timeZone: string;

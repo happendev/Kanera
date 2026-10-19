@@ -12,19 +12,17 @@ import { describeAcceptInvitationError, PendingInvitationsService } from "../../
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
-import { firstRunDismissedKey } from "../../core/browser/browser-contracts";
-import { TOUCH_ONLY_QUERY } from "../../core/browser/input-modality";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../shared/activity-strip.component";
 import { AgentConnectCardComponent } from "../../shared/agent-connect-card/agent-connect-card.component";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { StatTileComponent } from "../../shared/stat-tile.component";
-import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
 import { PriorityQueueComponent } from "../../shared/priority-queue/priority-queue.component";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { AgendaGroupComponent } from "./agenda-group.component";
+import { GettingStartedComponent } from "./getting-started.component";
 import { UpcomingRemindersComponent } from "./upcoming-reminders.component";
 import { HomeState } from "./home.state";
 import { icu } from "../../core/i18n/icu";
@@ -74,7 +72,7 @@ const HERO_SCATTER: readonly ScatterItem[] = [
 @Component({
   selector: "k-home",
   standalone: true,
-  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent, TooltipDirective, UpcomingRemindersComponent],
+  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, GettingStartedComponent, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent, UpcomingRemindersComponent],
   // BoardMenuCoordinator owns the shared "labels compressed" preference that k-card-labels reads.
   // It is deliberately not root-provided (it holds document listeners), so every surface rendering
   // board chips provides it — same as GlobalWorkPage.
@@ -129,50 +127,6 @@ export class HomePage implements OnInit {
    * the loading and error branches, because an unloaded payload also counts zero.
    */
   readonly hasNoBoards = computed(() => this.state.boardCount() === 0);
-
-  /**
-   * The "first steps" card: the only guidance between the onboarding wizard and a working team.
-   * Admins only, since every step is an admin action, and only while the organisation is small
-   * enough that the steps are plausibly undone — past three boards it is noise. Dismissal is
-   * per device (see firstRunDismissedKey); a fresh device shows it again, which is fine because
-   * the same small-org gate still applies.
-   */
-  private readonly firstRunDismissed = signal(this.readFirstRunDismissed());
-  readonly showFirstRun = computed(() =>
-    this.isOrgAdmin() && !this.hasNoBoards() && this.state.boardCount() <= 3 && !this.firstRunDismissed());
-  /** The board the first-run steps point at: most recently visited, else the first registered. */
-  readonly firstRunBoardId = computed(() => this.recentBoards()[0]?.id ?? null);
-  /** Lists and fields live on the workspace; a standalone board carries its own under /b/:id. */
-  readonly firstRunListsLink = computed<string[] | null>(() => {
-    const boardId = this.firstRunBoardId();
-    if (!boardId) return null;
-    const workspaceId = this.workspaceService.workspaceIdForBoard(boardId);
-    return workspaceId ? ["/w", workspaceId, "settings", "lists"] : ["/b", boardId, "settings", "lists"];
-  });
-
-  private firstRunKey(): string | null {
-    const user = this.auth.user();
-    return user ? firstRunDismissedKey(user.id, user.activeClientId ?? user.clientId) : null;
-  }
-
-  private readFirstRunDismissed(): boolean {
-    const key = this.firstRunKey();
-    try {
-      return !!key && localStorage.getItem(key) === "1";
-    } catch {
-      return false;
-    }
-  }
-
-  dismissFirstRun(): void {
-    this.firstRunDismissed.set(true);
-    const key = this.firstRunKey();
-    try {
-      if (key) localStorage.setItem(key, "1");
-    } catch {
-      // Storage blocked: the card comes back next visit, which is the harmless failure.
-    }
-  }
 
   /** The page title: a time-of-day greeting with the viewer's name, as one message per greeting. */
   readonly greeting = computed(() => {
@@ -337,6 +291,9 @@ export class HomePage implements OnInit {
     return recents.length > 0 ? recents : this.workspaceService.boards().slice(0, 5);
   });
 
+  /** Where the checklist's card steps send people: the board they were last on. */
+  readonly lastBoardId = computed(() => this.recentBoards().at(0)?.id ?? null);
+
   /**
    * Which focus tile is engaged, filtering the agenda below.
    *
@@ -365,7 +322,6 @@ export class HomePage implements OnInit {
 
   /** Narrow viewports halve the trend window; see TREND_DAYS_NARROW. */
   private readonly narrow = mediaQuerySignal(NARROW_QUERY);
-  readonly touchOnly = mediaQuerySignal(TOUCH_ONLY_QUERY);
   readonly visibleTrendDays = computed(() => (this.narrow() ? TREND_DAYS_NARROW : TREND_DAYS));
 
   /** Matches My Cards history: only completed cards count as completed work. */

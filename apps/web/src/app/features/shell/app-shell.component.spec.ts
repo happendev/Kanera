@@ -195,6 +195,8 @@ describe("AppShellComponent board search", () => {
       post: vi.fn().mockResolvedValue({ id: "board-2", position: "500.0000000000" }),
       get: vi.fn((path: string) => {
         if (path === "/home/boards") return Promise.resolve(response);
+        // A closed checklist keeps the account menu to the items these tests assert on.
+        if (path === "/home/getting-started") return Promise.resolve({ dismissed: true, hidden: false, steps: [], teamTarget: null, notesWorkspaceId: null });
         return Promise.resolve(notificationSettings);
       }),
       patch: vi.fn(() => Promise.resolve({ push: { enabled: true, registrationEnabled: true }, pushEnabled: true })),

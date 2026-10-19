@@ -1,0 +1,286 @@
+// A compact checklist under a progress header. Each step is one row with a ring that fills and ticks
+// when the step is done; done rows strike through and fade. One open row at a time shows what the
+// step teaches and the button that does it. Rows never reorder, so nothing jumps under the pointer
+// when the palette or a push prompt ticks a step off.
+:host {
+  display: block;
+}
+
+.getting-started {
+  // Sections sit side by side when the card is wide and stack when it is not. Measured on the card
+  // itself, because home's content column is narrower than the window beside an open sidebar.
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.gs-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.gs-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: var(--tracking-tight);
+}
+
+// The same progress ring as the account menu's entry, so the two read as one thing.
+.gs-ring-progress {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) calc(var(--gs-progress, 0) * 1%), var(--border-strong) 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+
+  .is-complete & {
+    background: var(--success);
+  }
+}
+
+.gs-count {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+
+  strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+}
+
+.gs-bar {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.gs-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  .is-complete & {
+    background: var(--success);
+  }
+}
+
+.gs-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.gs-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2) var(--space-5);
+  align-items: start;
+}
+
+.gs-section {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gs-section-label {
+  margin: var(--space-1) 0 2px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 550;
+}
+
+.gs-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gs-step {
+  min-width: 0;
+  border-radius: var(--radius);
+  transition: background-color var(--motion-fast);
+
+  &.is-open {
+    background: var(--surface-2);
+  }
+}
+
+// The row is a button on open steps and a plain div on done ones; both reset the global button
+// look (accent fill, fixed 36px height) so the list reads as a list. See the CSS traps in
+// apps/web/AGENTS.md for why the hover is restated.
+.gs-step .gs-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  height: auto;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 450;
+  text-align: left;
+  white-space: normal;
+}
+
+.gs-step button.gs-row:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.gs-label {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.35;
+
+  .is-done & {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+  }
+}
+
+.gs-ring {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--accent-fg);
+  font-size: 12px;
+
+  .is-open & {
+    border-color: var(--accent);
+  }
+
+  .is-done & {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .just-done & {
+    animation: gs-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+
+.gs-chevron {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity var(--motion-fast), transform var(--motion-fast);
+
+  .gs-row:hover &,
+  .gs-row:focus-visible & {
+    opacity: 1;
+  }
+
+  .is-open & {
+    opacity: 1;
+    transform: rotate(180deg);
+  }
+}
+
+.gs-detail {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  // Lines the text up under the label, past the ring and its gap.
+  padding: 0 8px 10px 36px;
+}
+
+.gs-text {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.gs-error {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+
+  .ti {
+    flex: none;
+    margin-top: 2px;
+  }
+}
+
+.gs-detail .gs-action {
+  text-decoration: none;
+}
+
+// Hover-revealed controls stay visible on touch, and rows and buttons grow to touch size.
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .gs-step .gs-row {
+    min-height: 44px;
+  }
+
+  .gs-chevron {
+    opacity: 1;
+  }
+
+  .gs-detail .gs-action {
+    height: 44px;
+    padding: 0 14px;
+  }
+
+  .gs-close {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@keyframes gs-pop {
+  0% {
+    transform: scale(0.6);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gs-bar-fill,
+  .gs-step,
+  .gs-chevron {
+    transition: none;
+  }
+
+  .just-done .gs-ring {
+    animation: none;
+  }
+}

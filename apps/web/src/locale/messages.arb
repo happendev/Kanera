@@ -175,6 +175,7 @@
       "src/app/features/account-settings/storage/storage.page.ts",
       "src/app/features/board/board.page.ts",
       "src/app/features/board/card-detail.component.ts",
+      "src/app/features/home/getting-started.component.ts",
       "src/app/features/notes/workspace-notes.page.ts",
       "src/app/features/search/global-search-overlay.component.ts",
       "src/app/features/shell/app-shell.component.html",
@@ -6852,7 +6853,8 @@
   "@3463797202358605584": {
     "description": "Column heading",
     "x-files": [
-      "src/app/features/account-settings/users/users.page.html"
+      "src/app/features/account-settings/users/users.page.html",
+      "src/app/features/home/getting-started.component.ts"
     ]
   },
   "1196063204965083742": "Workspaces",
@@ -7769,6 +7771,7 @@
       "src/app/features/global-work/save-view.popover.ts",
       "src/app/features/global-work/team-overview.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
+      "src/app/features/home/getting-started.component.html",
       "src/app/features/notes/notes-view.component.ts",
       "src/app/features/scratchpad/scratchpad-panel.component.html",
       "src/app/features/shell/organisation-action.dialog.ts",
@@ -16680,6 +16683,441 @@
       "src/app/features/home/agenda-group.component.ts"
     ]
   },
+  "2032543851461335019": "You're all set",
+  "@2032543851461335019": {
+    "description": "Getting started checklist heading once every step is done",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html"
+    ]
+  },
+  "5508024422979239599": "Getting started",
+  "@5508024422979239599": {
+    "description": "Getting started checklist heading",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html",
+      "src/app/features/shell/app-shell.component.html"
+    ]
+  },
+  "3372702640019176509": "Close getting started",
+  "@3372702640019176509": {
+    "description": "Button: close the getting started checklist for good",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html"
+    ]
+  },
+  "4142057738286268789": "Hide getting started",
+  "@4142057738286268789": {
+    "description": "Button: move the getting started checklist off home into the account menu",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html"
+    ]
+  },
+  "7644333902303166694": "Hide · reopen it from your account menu",
+  "@7644333902303166694": {
+    "description": "Tooltip: hide the getting started checklist, which stays available in the account menu",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html"
+    ]
+  },
+  "1386464914080783041": ", done",
+  "@1386464914080783041": {
+    "description": "Screen reader suffix on a completed getting started step",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html"
+    ]
+  },
+  "9068741667079861391": "The basics",
+  "@9068741667079861391": {
+    "description": "Getting started checklist section heading for the core card workflow",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "268127485535275184": "Work faster",
+  "@268127485535275184": {
+    "description": "Getting started checklist section heading for shortcuts, filters and views",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "9178759481896989482": "Your team",
+  "@9178759481896989482": {
+    "description": "Getting started checklist section heading for the organisation admin steps",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "6767937122776569230": "Your setup",
+  "@6767937122776569230": {
+    "description": "Getting started checklist section heading for push notifications and AI agents",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "6987011136556418173": "{done} of {total} steps done",
+  "@6987011136556418173": {
+    "description": "Getting started checklist progress for screen readers",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "53335246447361679": "Getting started is in your account menu whenever you want it.",
+  "@53335246447361679": {
+    "description": "Toast after hiding the getting started checklist from home",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "2868855223010339249": "Push notifications could not be turned on. Try again from notification settings.",
+  "@2868855223010339249": {
+    "description": "Getting started checklist error",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "596613040379865150": "Open a board",
+  "@596613040379865150": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5560994377600054525": "Create your first card",
+  "@5560994377600054525": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "964348372527382661": "Open a board and choose New card, or Add card at the foot of a list. Cards move through the lists as the work moves.",
+  "@964348372527382661": {
+    "description": "Getting started step text; New card and Add card are button labels on the board",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "1167905852064569963": "Open a board and press C, or choose New card. Cards move through the lists as the work moves.",
+  "@1167905852064569963": {
+    "description": "Getting started step text; C is the keyboard shortcut, New card is a button label on the board",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4199868641826340070": "Assign a card",
+  "@4199868641826340070": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4599579378765218277": "Open a card and choose Assignees, so everyone can see who owns it. Assigned cards gather in My Cards.",
+  "@4599579378765218277": {
+    "description": "Getting started step text; Assignees is a field label on the card and My Cards a page name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8342983898585679210": "Comment on a card",
+  "@8342983898585679210": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8147192106116617508": "Open a card and write a comment, so the conversation stays with the work instead of in chat.",
+  "@8147192106116617508": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "892482638615701510": "Mention someone",
+  "@892482638615701510": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3848623021770183127": "In a comment, type @ and pick a person. They are notified and can reply right on the card.",
+  "@3848623021770183127": {
+    "description": "Getting started step text; @ is the character typed to mention someone",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7068410431012753254": "Complete a card",
+  "@7068410431012753254": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5892731453440747912": "Open a card and choose Mark complete when the work is done. Completed cards show up in Work done.",
+  "@5892731453440747912": {
+    "description": "Getting started step text; Mark complete is a button label",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "6649175963172868414": "Quick edit a card",
+  "@6649175963172868414": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7877496257778676586": "Tap a card's actions button and choose Quick edit to change its title, people, labels or due date without opening it.",
+  "@7877496257778676586": {
+    "description": "Getting started step text; Quick edit is a menu item",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4739725498696129224": "Right-click a card and choose Quick edit to change its title, people, labels or due date without opening it.",
+  "@4739725498696129224": {
+    "description": "Getting started step text; Quick edit is a menu item",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5716020447373201058": "Use a filter",
+  "@5716020447373201058": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5686224175126400231": "Choose Filter on a board or in My Cards to narrow cards by person, label, due date and more.",
+  "@5686224175126400231": {
+    "description": "Getting started step text; Filter is a button label and My Cards a page name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7202378212385687634": "Open My Cards",
+  "@7202378212385687634": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts",
+      "src/app/features/priorities/my-priorities-panel.component.html"
+    ]
+  },
+  "2655051192620066373": "View Work done",
+  "@2655051192620066373": {
+    "description": "Getting started step title; Work done is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8508621174197406668": "See what has been finished, day by day, on any board or across your cards.",
+  "@8508621174197406668": {
+    "description": "Getting started step text; Work done is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "1578045483282131441": "Open Work done",
+  "@1578045483282131441": {
+    "description": "Getting started step button; Work done is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "1985748036701170667": "Write in your scratchpad",
+  "@1985748036701170667": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8993885334469838249": "Jot down quick thoughts in a private scratchpad that is one click away on every page.",
+  "@8993885334469838249": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "1134940187745242606": "Open scratchpad",
+  "@1134940187745242606": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts",
+      "src/app/features/shell/app-shell.component.ts"
+    ]
+  },
+  "4366001528336874776": "Save a note",
+  "@4366001528336874776": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "451869330344256004": "Keep specs, meeting notes and how-tos next to the boards they are about, where the whole team can find them.",
+  "@451869330344256004": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5664052109779517498": "Open notes",
+  "@5664052109779517498": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "2596353668630909784": "Link a dependency",
+  "@2596353668630909784": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3322252543020614776": "In a card's Dependencies, mark what it is blocked by. Its assignee hears when it is ready to start.",
+  "@3322252543020614776": {
+    "description": "Getting started step text; Dependencies is a section in card detail",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "2283912767959567698": "Invite your team",
+  "@2283912767959567698": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7141491141998033725": "Add people to the organisation, then give them the workspaces and boards they work on.",
+  "@7141491141998033725": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4341948927143064102": "Create a second board",
+  "@4341948927143064102": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "724300503195435556": "Boards in a workspace share its lists and fields, so a new one is ready to use straight away.",
+  "@724300503195435556": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5254919684312260732": "Give another project or team its own board.",
+  "@5254919684312260732": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4551184567681208389": "New board",
+  "@4551184567681208389": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts",
+      "src/app/features/home/home.page.html",
+      "src/app/features/onboarding/onboarding.page.html"
+    ]
+  },
+  "6792733980959743509": "Create an automation",
+  "@6792733980959743509": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "1897135382321605870": "Assign, label or move cards on their own when something happens on a board.",
+  "@1897135382321605870": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5674286808255988565": "Create",
+  "@5674286808255988565": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts",
+      "src/app/features/import/trello-import.page.html",
+      "src/app/features/workspace-settings/api/api.page.html"
+    ]
+  },
+  "4185773362590968492": "Connect an AI agent",
+  "@4185773362590968492": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts",
+      "src/app/shared/agent-connect-card/agent-connect-card.component.html"
+    ]
+  },
+  "465607310718150951": "Let Claude or another agent read and update your boards through MCP or the Kanera CLI.",
+  "@465607310718150951": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "813263746069473514": "Connect",
+  "@813263746069473514": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7125948080719352676": "Turn on push notifications",
+  "@7125948080719352676": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5345125979777642189": "Hear about assignments and mentions on this device, even with Kanera closed.",
+  "@5345125979777642189": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "663430187703981871": "Turn on",
+  "@663430187703981871": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4324385332051445418": "Try the command palette",
+  "@4324385332051445418": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4766776841547864429": "Search cards, notes and comments, and run commands, from one box.",
+  "@4766776841547864429": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8015588859464612084": "Press {$keys} to search cards, notes and comments, and run commands, from one box.",
+  "@8015588859464612084": {
+    "description": "Getting started step text; keys is a keyboard shortcut such as ⌘K or Ctrl+K",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7330497278645626593": "Try it",
+  "@7330497278645626593": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
   "3212270930387653490": "Your trial ends on {$DATE}.",
   "@3212270930387653490": {
     "description": "Trial banner",
@@ -16813,14 +17251,6 @@
       "src/app/features/home/home.page.html"
     ]
   },
-  "4551184567681208389": "New board",
-  "@4551184567681208389": {
-    "description": "Getting-started option heading",
-    "x-files": [
-      "src/app/features/home/home.page.html",
-      "src/app/features/onboarding/onboarding.page.html"
-    ]
-  },
   "3439421419867133635": "A board in this workspace, or a standalone one with its own lists and fields.",
   "@3439421419867133635": {
     "description": "Getting-started option: new board",
@@ -16886,77 +17316,6 @@
   "1988850832846843897": "Connection lost. Showing the last loaded day. Changes will refresh after reconnecting.",
   "@1988850832846843897": {
     "description": "Offline banner on the home page",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "8522270084976549870": "First steps",
-  "@8522270084976549870": {
-    "description": "Section heading",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "4198525626687726739": "Dismiss first steps",
-  "@4198525626687726739": {
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "1536087519743707362": "Dismiss",
-  "@1536087519743707362": {
-    "description": "Tooltip: dismiss the first steps card",
-    "x-files": [
-      "src/app/features/home/home.page.html",
-      "src/app/features/notes/note-editor.component.ts",
-      "src/app/shared/attachments/attachment-upload-list.component.ts"
-    ]
-  },
-  "3310319784022714322": "Shape your workflow",
-  "@3310319784022714322": {
-    "description": "First steps: step title",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "4761208646284537776": "Name the lists cards move through and add the fields your team tracks.",
-  "@4761208646284537776": {
-    "description": "First steps: step text",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "3357223898348691475": "Add your first cards",
-  "@3357223898348691475": {
-    "description": "First steps: step title",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "906612517964712074": "Open a board and press C to create a card. Drag it between lists as it moves.",
-  "@906612517964712074": {
-    "description": "First steps: step text; C is the keyboard shortcut",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "6328774783908839805": "Bring your team",
-  "@6328774783908839805": {
-    "description": "First steps: step title",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "8604925863893752265": "Invite people to the organisation, then add them to workspaces or single boards.",
-  "@8604925863893752265": {
-    "description": "First steps: step text",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "2457158531604491157": "Press {$START_TAG_KBD}?{$CLOSE_TAG_KBD} anywhere for keyboard shortcuts.",
-  "@2457158531604491157": {
-    "description": "Hint; ? is the key that opens the shortcuts list",
     "x-files": [
       "src/app/features/home/home.page.html"
     ]
@@ -17687,14 +18046,6 @@
     "description": "Suffix after a list's card count",
     "x-files": [
       "src/app/features/import/trello-import.page.html"
-    ]
-  },
-  "5674286808255988565": "Create",
-  "@5674286808255988565": {
-    "description": "Import mapping choice: create a new item",
-    "x-files": [
-      "src/app/features/import/trello-import.page.html",
-      "src/app/features/workspace-settings/api/api.page.html"
     ]
   },
   "5813867925497374051": "Map",
@@ -18505,6 +18856,14 @@
     "description": "Button: edit a note whose lock has expired",
     "x-files": [
       "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "1536087519743707362": "Dismiss",
+  "@1536087519743707362": {
+    "description": "Button label: dismiss an error banner",
+    "x-files": [
+      "src/app/features/notes/note-editor.component.ts",
+      "src/app/shared/attachments/attachment-upload-list.component.ts"
     ]
   },
   "6956486606046872920": "Copy note link",
@@ -20101,12 +20460,6 @@
       "src/app/features/priorities/my-priorities-panel.component.html"
     ]
   },
-  "7202378212385687634": "Open My Cards",
-  "@7202378212385687634": {
-    "x-files": [
-      "src/app/features/priorities/my-priorities-panel.component.html"
-    ]
-  },
   "9177411226369031967": "Up next ({count, plural, one {# card} other {# cards}})",
   "@9177411226369031967": {
     "description": "Up next trigger button label with its queued card count",
@@ -20780,6 +21133,20 @@
       "src/app/features/shell/app-shell.component.html"
     ]
   },
+  "3111091949322721840": "Remove getting started",
+  "@3111091949322721840": {
+    "description": "Account menu button: remove the getting started checklist for good",
+    "x-files": [
+      "src/app/features/shell/app-shell.component.html"
+    ]
+  },
+  "4820484162830557801": "Remove for good",
+  "@4820484162830557801": {
+    "description": "Tooltip: remove the getting started checklist for good",
+    "x-files": [
+      "src/app/features/shell/app-shell.component.html"
+    ]
+  },
   "6548636604923614716": "Organisations",
   "@6548636604923614716": {
     "description": "Menu name",
@@ -21006,6 +21373,13 @@
       "src/app/features/shell/app-shell.component.ts"
     ]
   },
+  "1685194753370781881": "Getting started, {done} of {total} steps done. Open it on home.",
+  "@1685194753370781881": {
+    "description": "Account menu item for the getting started checklist, read by screen readers",
+    "x-files": [
+      "src/app/features/shell/app-shell.component.ts"
+    ]
+  },
   "4944057561753398636": "Everywhere",
   "@4944057561753398636": {
     "description": "Keyboard shortcuts sheet section — shortcuts that work on every page",
@@ -21108,13 +21482,6 @@
   "3592230966174769162": "add task",
   "@3592230966174769162": {
     "description": "Extra search words for the \"Create a new card\" command palette action, space-separated",
-    "x-files": [
-      "src/app/features/shell/app-shell.component.ts"
-    ]
-  },
-  "1134940187745242606": "Open scratchpad",
-  "@1134940187745242606": {
-    "description": "Command palette action",
     "x-files": [
       "src/app/features/shell/app-shell.component.ts"
     ]
@@ -25756,13 +26123,6 @@
     "x-files": [
       "src/app/shared/activity-strip.component.ts",
       "src/app/shared/user-profile/user-profile-popover.component.html"
-    ]
-  },
-  "4185773362590968492": "Connect an AI agent",
-  "@4185773362590968492": {
-    "description": "Card heading",
-    "x-files": [
-      "src/app/shared/agent-connect-card/agent-connect-card.component.html"
     ]
   },
   "9023590373061364853": "Let Claude, Copilot, Codex, ChatGPT, or any other agent set up boards and manage work for you. Your AI Agent can do all the heavy lifting and get you productive faster.",

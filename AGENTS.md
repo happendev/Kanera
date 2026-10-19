@@ -127,7 +127,7 @@ Screenshot at desktop and phone width; small screens and the PWA are first-class
 - Comment the "why" where it isn't obvious from the code: product rules, tenancy and access decisions,
   realtime fanout, notification suppression, automation side effects, coalescing, ordering. Explain
   intent and constraints, not mechanics or history.
-- Add user-visible changes to `CHANGELOG.md`.
+- Add user-visible changes to `CHANGELOG.md`. Keep succinct.
 
 ## Done means
 

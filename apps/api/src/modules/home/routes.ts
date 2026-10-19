@@ -2,6 +2,7 @@ import { dto } from "@kanera/shared";
 import type {
   HomeCounts,
   HomeDueBucket,
+  HomeGettingStartedResponse,
   HomeItem,
   HomeItemLabel,
   HomeProUsageSummary,
@@ -38,6 +39,7 @@ import { cardAccessCondition, cardSummaryDueColumns, overdueChecklistItemSql, ov
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { activityCompletedPredicate, activityDayExpr } from "../../lib/work-done.js";
 import { getAutomationExecutionsRemaining } from "../../lib/tier-limits.js";
+import { loadGettingStarted, updateGettingStarted } from "./getting-started.js";
 
 
 /** Bucket precedence: overdue always wins, then the calendar buckets in date order. */
@@ -615,6 +617,20 @@ export async function homeRoutes(app: FastifyInstance) {
     });
 
     return response;
+  });
+
+  /**
+   * The "Getting started" checklist. Separate from /home/today because it changes on a different
+   * rhythm (rarely, and mostly from other pages) and once closed it is never asked for again,
+   * whereas /home/today polls and is cached for offline use.
+   */
+  app.get("/home/getting-started", async (req): Promise<HomeGettingStartedResponse> => loadGettingStarted(req.auth));
+
+  /** A personal UI flag, like the preferences on PATCH /auth/me: no activity row and no event. */
+  app.patch("/home/getting-started", async (req): Promise<HomeGettingStartedResponse> => {
+    const body = dto.updateHomeGettingStartedBody.parse(req.body ?? {});
+    await updateGettingStarted(req.auth.sub, body);
+    return loadGettingStarted(req.auth);
   });
 }
 
