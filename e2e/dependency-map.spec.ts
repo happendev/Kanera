@@ -1,6 +1,7 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import { expect, test } from "./support/fixtures";
 import { boardIdOf, openBoard } from "./support/ui";
+import { contextDefaults } from "./support/env";
 
 // The Dependencies view. The blocker lives on Mobile Experience and the chain is viewed from
 // Platform Delivery, so the map can only learn about it by walking across boards, and a second
@@ -197,5 +198,85 @@ test("the dependencies map adds and removes dependencies in place, with critical
     for (const card of created) {
       expect((await api.patch(`/api/cards/${card.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
     }
+  }
+});
+
+// These are rendered-layout regressions: CSS breakpoints, packed heights and pointer media queries
+// need a real browser. A DOM-only component test cannot catch the squeezed title or clipped header.
+test("dependency layouts keep titles, badges and touch controls usable across screen sizes", async ({ browser, signIn, apiAs, uniqueName, runtimeGuard }) => {
+  test.setTimeout(180_000);
+  const context = await browser.newContext({ ...contextDefaults, hasTouch: true });
+  runtimeGuard.watchContext(context, "responsive dependencies");
+  const page = await context.newPage();
+  const api = await apiAs("priya");
+  const created: CreatedCard[] = [];
+  try {
+    await signIn(page, "priya");
+    await openBoard(page, "Platform Delivery");
+    const boardUrl = page.url();
+    const first = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("Responsive dependency blocker"));
+    created.push(first);
+    const last = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("Responsive dependency goal"));
+    created.push(last);
+    const me = await (await api.get("/api/me")).json() as { id?: string; user?: { id: string } };
+    const teammateApi = await apiAs("marcus");
+    const teammate = await (await teammateApi.get("/api/me")).json() as { id?: string; user?: { id: string } };
+    // Team Cards excludes the viewer's own assignments, so both lenses need an assignee in scope.
+    for (const card of created) {
+      expect((await api.put(`/api/cards/${card.id}/assignees`, { data: { userIds: [me.user?.id ?? me.id!, teammate.user?.id ?? teammate.id!] } })).ok()).toBe(true);
+    }
+    // The blocker is due after its goal, so the header has critical, risk and blocked badges at once.
+    expect((await api.patch(`/api/cards/${first.id}`, { data: { dueDateLocalDate: "2020-06-19", dueDateSlot: "anyTime" } })).ok()).toBe(true);
+    expect((await api.patch(`/api/cards/${last.id}`, { data: { dueDateLocalDate: "2020-06-02", dueDateSlot: "anyTime" } })).ok()).toBe(true);
+    await block(api, first, last);
+
+    for (const [surface, url] of [["board", boardUrl], ["my-cards", "/my-cards"], ["team-cards", "/team-cards"]]) {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto(url!);
+      await page.getByRole("button", { name: "Dependencies view", exact: true }).click();
+      const map = page.locator("k-dependency-map");
+      const chain = map.locator(".dm-chain").filter({ hasText: last.title });
+      await expect(chain).toBeVisible();
+      const critical = map.getByRole("button", { name: "Critical path", exact: true });
+      if (await critical.getAttribute("aria-pressed") !== "true") await critical.tap();
+      await expect(chain.locator(".dm-pill.is-risk")).toBeVisible();
+      await expect(chain.locator(".dm-pill.is-blocked")).toBeVisible();
+      await expect(chain.locator(".dm-pill.is-critical")).toBeVisible();
+
+      for (const width of [1024, 1440, 768, 640, 390, 320]) {
+        await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
+        for (const layout of ["Steps", "Map", "Timeline"]) {
+          await map.getByRole("button", { name: layout, exact: true }).tap();
+          const layoutClass = { Steps: "list", Map: "map", Timeline: "timeline" }[layout];
+          await expect(map.locator(".dm-chains")).toHaveClass(new RegExp(`is-${layoutClass}`));
+          if (layout === "Steps") {
+            const title = chain.locator(".dm-row-main").first();
+            await expect.poll(async () => (await title.boundingBox())!.width, { message: `${surface} ${width}px: readable Steps title` }).toBeGreaterThanOrEqual(width >= 768 ? 200 : 100);
+          } else {
+            await expect.poll(async () => (await chain.locator(".dm-chain-goal").boundingBox())!.width, { message: `${surface} ${width}px: visible chain title` }).toBeGreaterThanOrEqual(100);
+            const header = chain.locator(".dm-chain-head");
+            expect(await header.evaluate((el) => el.scrollWidth - el.clientWidth), `${surface} ${width}px: badges fit header`).toBeLessThanOrEqual(1);
+            const boxes = await chain.locator(".dm-chain-head, .dm-canvas").evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }));
+            expect(boxes[1]!.top).toBeGreaterThanOrEqual(boxes[0]!.bottom - 1);
+            const chainBox = (await chain.boundingBox())!;
+            expect(boxes[1]!.bottom, "packing reserves the full header and canvas height").toBeLessThanOrEqual(chainBox.y + chainBox.height + 1);
+          }
+          const targets = await map.locator(".dm-controls button").evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { name: el.getAttribute("aria-label") ?? el.textContent, width: r.width, height: r.height }; }));
+          for (const target of targets) {
+            expect(target.width, `${target.name} touch width`).toBeGreaterThanOrEqual(44);
+            expect(target.height, `${target.name} touch height`).toBeGreaterThanOrEqual(44);
+          }
+          expect(await page.evaluate(() => document.documentElement.scrollWidth), `${surface} ${width}px: page stays within viewport`).toBeLessThanOrEqual(width);
+          if (width === 390 || width === 1024 && layout === "Steps" || width === 320 && layout !== "Steps") {
+            await page.screenshot({ path: test.info().outputPath(`${surface}-${width}-${layout.toLowerCase()}.png`) });
+          }
+        }
+      }
+    }
+  } finally {
+    for (const card of created) {
+      expect((await api.patch(`/api/cards/${card.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
+    }
+    await context.close();
   }
 });

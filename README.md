@@ -10,19 +10,20 @@
 
 See what is assigned, what changed, what is blocked, and what has been completed across every project, client, and team.
 
-[Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [Work with AI agents](#work-with-ai-agents-with-progress-you-can-see) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
+[Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [Explore dependencies](#dependencies-show-what-can-move-next) · [Work with AI agents](#work-with-ai-agents-with-progress-you-can-see) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
 
 </div>
 
 ![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg)
 
-Kanera coordinates assigned, active, blocked, and completed work across projects, clients, and teams from one fast, polished workspace. It brings boards, structured tasks, notes, assignments, progress history, automation, and integrations into one focused system—more visibility than a basic Kanban board without the overhead of a heavyweight work suite.
+Kanera coordinates assigned, active, blocked, and completed work across projects, clients, and teams from one fast, polished workspace. It brings boards, structured tasks, dependency maps and timelines, notes, assignments, progress history, automation, and integrations into one focused system—more visibility than a basic Kanban board without the overhead of a heavyweight work suite.
 
 Use the hosted service and get started in minutes, or self-host Kanera on your own infrastructure.
 
 ## One place for moving work forward
 
-- **Plan in the view that fits.** Move between Kanban, Table, Calendar, My Cards, Team Cards, Portfolio, and Work Done without duplicating work.
+- **Plan in the view that fits.** Move between Kanban, Table, Calendar, Dependencies, My Cards, Team Cards, Portfolio, and Work Done without duplicating work.
+- **See what unblocks the team.** Connect prerequisites across boards, trace the chain in Map, Timeline, or Steps, spot risks and bottlenecks, and edit blocking links directly on the map.
 - **Keep the details with the task.** Add descriptions, comments, attachments, labels, custom fields, watchers, and assignable checklist items to cards.
 - **Set clear priorities.** Use Home and a ranked Up next queue to keep urgent work visible across every board.
 - **Make progress visible.** Review what was created, moved, completed, or checked off without chasing another status update.
@@ -33,6 +34,22 @@ Use the hosted service and get started in minutes, or self-host Kanera on your o
 - **Get told what matters, where you want it.** Choose per notification type whether an update reaches email, browser push, ntfy, Gotify, or your own webhook, then add per-workspace exceptions so one busy board does not drown out the rest.
 - **Work together in real time.** Stay current with live updates, mentions, activity history, and controlled guest access.
 - **Work from any screen.** The full Kanera experience adapts to phones, tablets, and desktops, and installs as a PWA on iOS, Android, and desktop.
+
+## Dependencies show what can move next
+
+Connect cards with **Blocks**, **Blocked by**, or **Relates to** relationships, including across boards. Kanera makes blocked work visible and shows when the last active prerequisite clears, helping the next person pick up the handoff.
+
+Open **Dependencies** on a board, in **My Cards**, or in **Team Cards**. Follow the chain in **Map**, compare due weeks in **Timeline**, or read a numbered **Steps** list that adapts to your phone. On a workspace board, switch between the board's chains and the wider workspace while keeping each card's source and permissions intact.
+
+![Kanera Dependencies Map showing connected prerequisites, blocked cards, owners, and filters for Blocked, At risk, Start here, and Ready](docs/readme-assets/dependency-map.jpg)
+
+Find **Blocked**, **At risk**, **Start here**, and **Ready** work without losing the chain around it. The biggest bottleneck points to the card holding up the most open work; **Critical path** highlights the longest routes by number of open cards. Timeline aligns every chain to shared due-week columns and marks prerequisites due after their dependents in amber.
+
+![Kanera Dependencies Timeline aligning connected cards by due week and marking scheduling risks in amber](docs/readme-assets/dependency-timeline.jpg)
+
+In Map or Timeline, drag from a card's **+** handle to add a blocking link, or select a connector to remove it. Tap-to-link and keyboard controls work too, with **Undo** and **Redo** for your map edits. Changes update live, and agents can inspect the same chains through MCP, the CLI, SDK, or REST API.
+
+Read the [Dependencies view, timeline, and editing guide](https://www.kanera.app/docs/dependencies-view) or learn about [card relationships and blocking](https://www.kanera.app/docs/card-dependencies).
 
 ## Workspaces and standalone boards
 
@@ -151,7 +168,7 @@ Descriptions, custom fields, checklists, due dates, comments, attachments, and a
 
 ### Team Cards brings assigned work together across boards
 
-See the whole visible team or focus on one teammate without losing each card's board, list, fields, or permissions. Switch between Board, Team overview, Table, Calendar, and Work Done views to review ownership, workload, and execution order across projects.
+See the whole visible team or focus on one teammate without losing each card's board, list, fields, or permissions. Switch between Board, Team overview, Table, Calendar, Dependencies, and Work Done views to review ownership, workload, and execution order across projects.
 
 ![Kanera Team Cards focused on Ben Ortega with his ranked Up next queue beside assigned work across accessible boards](docs/readme-assets/team-cards.jpg)
 
