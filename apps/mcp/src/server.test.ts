@@ -520,3 +520,278 @@ void test("boards.create refuses a standalone backing workspace without writing"
   assert.equal(payload.error.code, "VALIDATION_ERROR");
   assert.match(payload.error.message, /boards.create_standalone/);
 });
+
+void test("cards.dependency_graph walks the focus card's chains and counts blockers that are not on the map", async () => {
+  // done → upstream → focus → next → last; upstream also blocks sibling, which is neither side of
+  // focus's chain. focus has one more open blocker on a board the caller cannot open.
+  const id = (n: number) => `${n}${n}${n}${n}${n}${n}${n}${n}-${n}${n}${n}${n}-4${n}${n}${n}-8${n}${n}${n}-${String(n).repeat(12)}`;
+  const [done, upstream, next, last, sibling, related] = [4, 5, 6, 7, 8, 9].map(id);
+  const card = (cardId: string, key: string, extra: Record<string, unknown> = {}) => ({
+    id: cardId, key, title: key, url: `https://board.example.test/o/${ORGANISATION_KEY}/c/${key}`, boardId: BOARD_ID, listId: WORKSPACE_ID, inScope: true, ...extra,
+  });
+  let body: unknown;
+  const result = await withFetchStub(async (_input, init) => {
+    body = JSON.parse(init?.body as string);
+    return new Response(JSON.stringify({
+      cards: [
+        card(done!, "API-1", { completedAt: "2026-10-01T00:00:00.000Z", inScope: false }),
+        card(upstream!, "API-2"),
+        card(CARD_ID, "API-3", { blockedByCount: 2, assigneeIds: [WORKSPACE_ID], labelIds: [BOARD_ID] }),
+        card(next!, "API-4", { blockedByCount: 1 }),
+        card(last!, "API-5", { blockedByCount: 1 }),
+        card(sibling!, "API-6", { blockedByCount: 1 }),
+        card(related!, "API-7"),
+      ],
+      edges: [
+        { id: id(1), sourceCardId: done, targetCardId: upstream, kind: "blocks" },
+        { id: id(2), sourceCardId: upstream, targetCardId: CARD_ID, kind: "blocks" },
+        { id: id(3), sourceCardId: CARD_ID, targetCardId: next, kind: "blocks" },
+        { id: id(4), sourceCardId: next, targetCardId: last, kind: "blocks" },
+        { id: id(5), sourceCardId: upstream, targetCardId: sibling, kind: "blocks" },
+        { id: id(6), sourceCardId: CARD_ID, targetCardId: related, kind: "relates_to" },
+      ],
+      boards: [{ id: BOARD_ID, name: "Platform", icon: null, iconColor: null }],
+      lists: [{ id: WORKSPACE_ID, name: "Doing" }],
+      labels: [{ id: BOARD_ID, name: "Risk", color: null }],
+      people: [{ userId: WORKSPACE_ID, displayName: "Priya", avatarUrl: null }],
+      truncated: false,
+    }), { status: 200 });
+  }, () => toolHandler("cards.dependency_graph")({ cardId: CARD_ID }));
+
+  assert.deepEqual(body, { cardIds: [CARD_ID] });
+  const output = parseToolText(result) as { focus: Record<string, unknown>; cards: Array<Record<string, unknown>> };
+  assert.deepEqual(output.focus, {
+    cardId: CARD_ID, onMap: true, blockedBy: [upstream], blocks: [next], upstream: [upstream, done], downstream: [next, last], relatedTo: [related],
+  });
+  const focus = output.cards.find((entry) => entry.id === CARD_ID)!;
+  assert.equal(focus.openBlockerCount, 2);
+  assert.equal(focus.offMapBlockerCount, 1, "the private blocker is counted, not shown");
+  assert.deepEqual([focus.boardName, focus.listName, focus.labels, focus.assignees], ["Platform", "Doing", ["Risk"], [{ userId: WORKSPACE_ID, displayName: "Priya" }]]);
+  // upstream's only blocker is completed, so nothing holds it up and nothing is off the map.
+  const upstreamCard = output.cards.find((entry) => entry.id === upstream)!;
+  assert.equal(upstreamCard.openBlockerCount, undefined);
+  assert.equal(upstreamCard.offMapBlockerCount, undefined);
+  assert.equal(output.cards.find((entry) => entry.id === sibling)!.offMapBlockerCount, undefined);
+});
+
+void test("cards.dependency_graph takes exactly one scope", async () => {
+  for (const args of [{}, { boardId: BOARD_ID, workspaceId: WORKSPACE_ID }]) {
+    const result = await withFetchStub(async () => {
+      throw new Error("an invalid scope must not reach the API");
+    }, () => toolHandler("cards.dependency_graph")(args));
+    assert.equal(result.isError, true);
+    assert.match(JSON.stringify(parseToolText(result)), /exactly one of cardId, boardId or workspaceId/u);
+  }
+});
+
+void test("cards.set_relations keeps going past a refused card and reports it beside the final relations", async () => {
+  const other1 = "44444444-4444-4444-8444-444444444444";
+  const other2 = "55555555-5555-4555-8555-555555555555";
+  const posted: string[] = [];
+  const result = await withFetchStub(async (input, init) => {
+    const url = fetchInputUrl(input);
+    if (init?.method === "POST") {
+      const body = JSON.parse(init.body as string) as { targetCardId: string };
+      posted.push(body.targetCardId);
+      if (body.targetCardId === other1) {
+        return new Response(JSON.stringify({ code: "RELATION_CYCLE", message: "would create a cycle" }), { status: 409 });
+      }
+      return new Response(JSON.stringify({ id: "r1" }), { status: 201 });
+    }
+    assert.match(url, /\/relations$/u);
+    return new Response(JSON.stringify({ relations: [{ id: "r1", direction: "blocks", card: { id: other2 } }] }), { status: 200 });
+  }, () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: [other1, other2], remove: false }));
+
+  // The refusal of the first card did not stop the second from being linked.
+  assert.deepEqual(posted, [other1, other2]);
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(parseToolText(result), {
+    relations: [{ id: "r1", direction: "blocks", card: { id: other2 } }],
+    failed: [{ cardId: other1, status: 409, code: "RELATION_CYCLE", message: "would create a cycle" }],
+  });
+});
+
+void test("cards.set_relations reports committed adds by id when the final read is rate limited", async () => {
+  const other1 = "44444444-4444-4444-8444-444444444444";
+  const other2 = "55555555-5555-4555-8555-555555555555";
+  const other3 = "66666666-6666-4666-8666-666666666666";
+  const result = await withFetchStub(async (input, init) => {
+    if (init?.method === "POST") {
+      const body = JSON.parse(init.body as string) as { targetCardId: string };
+      if (body.targetCardId === other1) return new Response(JSON.stringify({ id: "r1" }), { status: 201 });
+      return new Response(JSON.stringify({ code: "RATE_LIMITED", message: "slow down" }), { status: 429 });
+    }
+    assert.match(fetchInputUrl(input), /\/relations$/u);
+    return new Response(JSON.stringify({ code: "RATE_LIMITED", message: "slow down" }), { status: 429 });
+  }, () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: [other1, other2, other3], remove: false }));
+
+  // The first add is committed; the 429 stopped the batch and then failed the read too. Neither
+  // may hide what was linked.
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(parseToolText(result), {
+    addedCardIds: [other1],
+    failed: [{ cardId: other2, status: 429, code: "RATE_LIMITED", message: "slow down" }],
+    notAttemptedCardIds: [other3],
+    relationsUnavailable: { status: 429, code: "RATE_LIMITED", message: "slow down" },
+  });
+});
+
+void test("cards.set_relations is an error when no card could be linked", async () => {
+  const other1 = "44444444-4444-4444-8444-444444444444";
+  const result = await withFetchStub(
+    async () => new Response(JSON.stringify({ error: { code: "FORBIDDEN", message: "forbidden" } }), { status: 403 }),
+    () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: [other1], remove: false }),
+  );
+  assert.equal(result.isError, true);
+  assert.equal((parseToolText(result) as { error: { code: string } }).error.code, "FORBIDDEN");
+});
+
+// These exercise transport failures between independently committed removals. E2E cannot reliably
+// arrange a rate-limit boundary or a concurrent deletion between requests without timing races.
+void test("cards.set_relations reports removals committed before a batch rate limit", async () => {
+  const otherIds = ["44444444-4444-4444-8444-444444444444", "55555555-5555-4555-8555-555555555555", "66666666-6666-4666-8666-666666666666"];
+  const relations = otherIds.map((id, index) => ({ id: `r${index}`, direction: "blocks", card: { id } }));
+  const deleted: string[] = [];
+  let reads = 0;
+  const result = await withFetchStub(async (input, init) => {
+    if (init?.method === "DELETE") {
+      deleted.push(fetchInputUrl(input));
+      if (deleted.length === 1) return new Response(null, { status: 204 });
+    } else if (reads++ === 0) {
+      return new Response(JSON.stringify({ relations, hiddenBlockerCount: 0 }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ code: "RATE_LIMITED", message: "slow down" }), { status: 429 });
+  }, () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: otherIds, remove: true }));
+
+  assert.equal(deleted.length, 2, "the rate limit stops the remaining removals");
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(parseToolText(result), {
+    removedCardIds: [otherIds[0]],
+    failed: [{ cardId: otherIds[1], status: 429, code: "RATE_LIMITED", message: "slow down" }],
+    notAttemptedCardIds: [otherIds[2]],
+    relationsUnavailable: { status: 429, code: "RATE_LIMITED", message: "slow down" },
+  });
+});
+
+void test("cards.set_relations reports every committed removal when only the final read fails", async () => {
+  const otherIds = ["44444444-4444-4444-8444-444444444444", "55555555-5555-4555-8555-555555555555"];
+  let reads = 0;
+  const result = await withFetchStub(async (_input, init) => {
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    if (reads++ === 0) return new Response(JSON.stringify({ relations: otherIds.map((id, index) => ({ id: `r${index}`, direction: "blocks", card: { id } })), hiddenBlockerCount: 0 }), { status: 200 });
+    return new Response(JSON.stringify({ code: "UNAVAILABLE", message: "try later" }), { status: 503 });
+  }, () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: otherIds, remove: true }));
+
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(parseToolText(result), { removedCardIds: otherIds, relationsUnavailable: { status: 503, code: "UNAVAILABLE", message: "try later" } });
+});
+
+void test("cards.set_relations preserves removals when the final response body is interrupted", async () => {
+  const other = "44444444-4444-4444-8444-444444444444";
+  let reads = 0;
+  const result = await withFetchStub(async (_input, init) => {
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    if (reads++ === 0) return new Response(JSON.stringify({ relations: [{ id: "r1", direction: "blocks", card: { id: other } }], hiddenBlockerCount: 0 }), { status: 200 });
+    return new Response(new ReadableStream({ pull(stream) { stream.error(new TypeError("socket terminated")); } }), { status: 200 });
+  }, () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: [other], remove: true }));
+
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(parseToolText(result), {
+    removedCardIds: [other],
+    relationsUnavailable: { status: 503, code: "UPSTREAM_UNAVAILABLE", message: "Kanera is temporarily unavailable" },
+  });
+});
+
+void test("cards.set_relations preserves earlier removals when a later delete response body is interrupted", async () => {
+  const otherIds = ["44444444-4444-4444-8444-444444444444", "55555555-5555-4555-8555-555555555555", "66666666-6666-4666-8666-666666666666"];
+  const relations = otherIds.map((id, index) => ({ id: `r${index}`, direction: "blocks", card: { id } }));
+  let reads = 0;
+  let deletes = 0;
+  const result = await withFetchStub(async (_input, init) => {
+    if (init?.method === "DELETE") {
+      if (deletes++ === 0) return new Response(null, { status: 204 });
+      return new Response(new ReadableStream({ pull(stream) { stream.error(new TypeError("socket terminated")); } }), { status: 503 });
+    }
+    return new Response(JSON.stringify({ relations: reads++ === 0 ? relations : relations.slice(1), hiddenBlockerCount: 0 }), { status: 200 });
+  }, () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: otherIds, remove: true }));
+
+  assert.equal(deletes, 2);
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(parseToolText(result), {
+    relations: relations.slice(1), hiddenBlockerCount: 0, removedCardIds: [otherIds[0]],
+    failed: [{ cardId: otherIds[1], status: 503, code: "UPSTREAM_UNAVAILABLE", message: "Kanera is temporarily unavailable" }],
+    notAttemptedCardIds: [otherIds[2]],
+  });
+});
+
+void test("cards.set_relations continues after one removal is refused and reports both outcomes", async () => {
+  const otherIds = ["44444444-4444-4444-8444-444444444444", "55555555-5555-4555-8555-555555555555"];
+  const relations = otherIds.map((id, index) => ({ id: `r${index}`, direction: "blocks", card: { id } }));
+  let reads = 0;
+  const result = await withFetchStub(async (input, init) => {
+    if (init?.method === "DELETE") return fetchInputUrl(input).endsWith("/r0")
+      ? new Response(JSON.stringify({ code: "FORBIDDEN", message: "forbidden" }), { status: 403 })
+      : new Response(null, { status: 204 });
+    return new Response(JSON.stringify({ relations: reads++ === 0 ? relations : [relations[0]], hiddenBlockerCount: 0 }), { status: 200 });
+  }, () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: otherIds, remove: true }));
+
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(parseToolText(result), {
+    relations: [relations[0]], hiddenBlockerCount: 0, removedCardIds: [otherIds[1]],
+    failed: [{ cardId: otherIds[0], status: 403, code: "FORBIDDEN", message: "forbidden" }],
+  });
+});
+
+void test("cards.set_relations removes duplicate references once and preserves missing cards", async () => {
+  const other = "44444444-4444-4444-8444-444444444444";
+  const missing = "55555555-5555-4555-8555-555555555555";
+  let deletes = 0;
+  let reads = 0;
+  const result = await withFetchStub(async (_input, init) => {
+    if (init?.method === "DELETE") {
+      deletes++;
+      return new Response(null, { status: 204 });
+    }
+    return new Response(JSON.stringify({ relations: reads++ === 0 ? [{ id: "r1", direction: "blocks", card: { id: other } }] : [], hiddenBlockerCount: 2 }), { status: 200 });
+  }, () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: [other, missing, other, missing], remove: true }));
+
+  assert.equal(deletes, 1);
+  assert.deepEqual(parseToolText(result), { relations: [], hiddenBlockerCount: 2, removedCardIds: [other], notFoundCardIds: [missing] });
+});
+
+void test("cards.set_relations treats already missing removals as a no-op", async () => {
+  const other = "44444444-4444-4444-8444-444444444444";
+  let requests = 0;
+  const result = await withFetchStub(async (_input, init) => {
+    requests++;
+    assert.equal(init?.method, "GET");
+    return new Response(JSON.stringify({ relations: [], hiddenBlockerCount: 1 }), { status: 200 });
+  }, () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: [other, other], remove: true }));
+
+  assert.equal(requests, 1, "no writes need no follow-up read");
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(parseToolText(result), { relations: [], hiddenBlockerCount: 1, notFoundCardIds: [other] });
+});
+
+void test("cards.set_relations treats a concurrently removed relation as already absent", async () => {
+  const other = "44444444-4444-4444-8444-444444444444";
+  let reads = 0;
+  const result = await withFetchStub(async (_input, init) => {
+    if (init?.method === "DELETE") return new Response(JSON.stringify({ code: "NOT_FOUND", message: "relation not found" }), { status: 404 });
+    return new Response(JSON.stringify({ relations: reads++ === 0 ? [{ id: "r1", direction: "blocks", card: { id: other } }] : [], hiddenBlockerCount: 0 }), { status: 200 });
+  }, () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: [other], remove: true }));
+
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(parseToolText(result), { relations: [], hiddenBlockerCount: 0, notFoundCardIds: [other] });
+});
+
+void test("cards.set_relations is an error when every attempted removal is refused", async () => {
+  const other = "44444444-4444-4444-8444-444444444444";
+  const result = await withFetchStub(async (_input, init) => init?.method === "DELETE"
+    ? new Response(JSON.stringify({ code: "FORBIDDEN", message: "forbidden" }), { status: 403 })
+    : new Response(JSON.stringify({ relations: [{ id: "r1", direction: "blocks", card: { id: other } }], hiddenBlockerCount: 0 }), { status: 200 }),
+  () => toolHandler("cards.set_relations")({ cardId: CARD_ID, direction: "blocks", otherCardIds: [other], remove: true }));
+
+  assert.equal(result.isError, true);
+  assert.equal((parseToolText(result) as { error: { code: string } }).error.code, "FORBIDDEN");
+});

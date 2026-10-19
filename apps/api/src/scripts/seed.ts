@@ -23,6 +23,7 @@ try {
   console.log(`notes: ${summary.notes}`);
   console.log(`scratchpad notes: ${summary.scratchpadNotes}`);
   console.log(`internal links: ${summary.internalLinks}`);
+  console.log(`card relations: ${summary.cardRelations}`);
   console.log(`mentions: ${summary.mentions}`);
   console.log(`notifications: ${summary.notifications}`);
   console.log(`shared password: ${DEV_SEED_SHARED_PASSWORD}`);

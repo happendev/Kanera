@@ -1,3 +1,4 @@
+import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { computed, effect, inject, Injectable, signal } from "@angular/core";
 import { isOverdue } from "../../features/board/due-date.util";
 import { cardPath } from "@kanera/shared/card-links";
@@ -64,6 +65,7 @@ function personalQueue(response: WorkPrioritiesResponse): WorkPrioritiesResponse
 @Injectable({ providedIn: "root" })
 export class MyPrioritiesService {
   private readonly api = inject(ApiClient);
+  private readonly completionWarning = inject(CompletionWarningService);
   private readonly auth = inject(AuthService);
   private readonly sockets = inject(SocketService);
   private readonly cardDrag = inject(CardDragCoordinator);
@@ -307,6 +309,7 @@ export class MyPrioritiesService {
    * card's own completion state, which keeps the row from flashing "incomplete" until it does.
    */
   async setCardCompleted(cardId: string, completed: boolean): Promise<void> {
+    if (!await this.completionWarning.allow(completed, { cardIds: [cardId] })) return;
     const session = this.sessionVersion;
     const snapshot = this.queue();
     this.patchCard(cardId, (card) => ({ ...card, completedAt: completed ? new Date() : null }));
@@ -580,9 +583,11 @@ export class MyPrioritiesService {
       // Labels in particular cannot ride this event even if the field list grew: `WireCard` carries
       // no `labelIds` at all (that is `WireCardSummary`), and a row renders *resolved* names and
       // colours from `context`, which only a queue read produces. See CARD_LABELS_SET below.
-      [SERVER_EVENTS.CARD_UPDATED]: ({ card }) => {
+      [SERVER_EVENTS.CARD_UPDATED]: ({ card, blockedByCount }) => {
         this.patchCard(card.id, (current) => ({
           ...current,
+          // Present only when a blocker opened or closed; otherwise the row's count still holds.
+          ...(blockedByCount === undefined ? {} : { blockedByCount }),
           title: card.title,
           listId: card.listId,
           boardId: card.boardId,

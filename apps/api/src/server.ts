@@ -58,6 +58,7 @@ import { searchRoutes } from "./modules/search/routes.js";
 import { separatorRoutes } from "./modules/separators/routes.js";
 import { workspaceRoutes } from "./modules/workspaces/routes.js";
 import { homeRoutes } from "./modules/home/routes.js";
+import { dependencyGraphRoutes } from "./modules/cards/dependency-graph.routes.js";
 import { userRoutes } from "./modules/users/routes.js";
 import { scratchpadRoutes } from "./modules/scratchpad/routes.js";
 import { agentWorkRoutes, workRoutes } from "./modules/work/routes.js";
@@ -268,6 +269,8 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(listRoutes);
   await app.register(noteRoutes);
   await app.register(cardRoutes, { allowGlobalWorkLayoutMoves: true });
+  // Internal only (see the module): the Dependencies view's map, not a published contract.
+  await app.register(dependencyGraphRoutes);
   await app.register(separatorRoutes);
   await app.register(cardAttachmentRoutes);
   await app.register(cardAttachmentReactionRoutes);

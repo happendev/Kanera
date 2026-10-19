@@ -4,7 +4,7 @@
 
 <!-- Picks one teammate to look at: their panel alone, with their Up next docked beside it. A
      horizontal strip rather than a wrapping one, so on a phone it stays one row above the panels. -->
-@if (stripPeople().length > 1) {
+@if (stripPeople().length > 1 || guestCount()) {
   <nav class="person-strip" aria-label="Teammates" i18n-aria-label="Team overview person strip">
     <button
       type="button"
@@ -27,6 +27,21 @@
       >
         <k-avatar [url]="person.avatarUrl" [name]="person.displayName" [size]="22" [userId]="person.userId" />
         <span class="strip-name">{{ person.displayName.split(" ")[0] }}</span>
+      </button>
+    }
+    @if (guestCount()) {
+      <!-- Guests are people from client or partner organisations on shared boards; on a large
+           shared board they can outnumber the team the viewer actually wants to compare. -->
+      <button
+        type="button"
+        class="strip-chip strip-toggle"
+        [class.is-active]="hideGuests()"
+        [attr.aria-pressed]="hideGuests()"
+        [kTooltip]="hideGuestsTooltip()"
+        (click)="toggleHideGuests()"
+      >
+        <i class="ti ti-user-off"></i>
+        <span i18n="Team overview person strip toggle leaving guests out">Hide guests</span>
       </button>
     }
   </nav>
@@ -363,8 +378,13 @@
       </span>
       <!-- Chips get their own line: beside the title or context they either squeezed the text into
            an ellipsis or were squeezed out themselves. -->
-      @if (row.time || row.due || row.note) {
+      @if (row.blocked || row.time || row.due || row.note) {
         <span class="row-chips">
+          @if (row.blocked; as label) {
+            <span class="row-chip row-blocked" [kTooltip]="label" [attr.aria-label]="label">
+              <i class="ti ti-lock" aria-hidden="true"></i><ng-container i18n="card state|Tile chip - the card waits on another open card">Blocked</ng-container>
+            </span>
+          }
           @if (row.time; as time) {
             <span class="row-chip row-time" [class.is-running]="time.running" [class.is-aging]="time.alert" [kTooltip]="time.label" [attr.aria-label]="time.label">
               <i class="ti" [class.ti-progress]="time.running" [class.ti-clock]="!time.running"></i>{{ time.text }}

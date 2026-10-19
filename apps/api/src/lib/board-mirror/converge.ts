@@ -1,4 +1,4 @@
-import { inProgressClockOf, SERVER_EVENTS, type CardAttachmentRow, type WireCard } from "@kanera/shared/events";
+import { inProgressClockOf, SERVER_EVENTS, type CardAttachmentRow } from "@kanera/shared/events";
 import { cardPath } from "@kanera/shared/card-links";
 import {
   ACTIVITY_ACTION,
@@ -53,6 +53,9 @@ import { emitMirrorMetadataToBoards } from "./events.js";
 import { toWireCard } from "../wire-card.js";
 import { emitInternalLinksChanged, linkNeighbours } from "../internal-links.js";
 import { clearRemindersOnCompletedCards, emitClearedCardReminders } from "../card-follow.js";
+import { emitAutomationEffects, emitDependencyHandoffs, runCardBlockedAutomations, runCardUnblockedAutomations } from "../automations.js";
+import { recordBlockersCleared } from "../dependency-notifications.js";
+import { captureUnblockedDependents, captureBlockedDependents, emitDependentsChanged, emitRelationNeighboursChanged } from "../card-relations.js";
 
 // Facets always run in this order, regardless of the array-union order on a dirty row. In
 // particular comments must exist before attachment associations, and every entity mapping must
@@ -380,6 +383,8 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
     || unarchiving
     || shouldMove;
   const result = await db.transaction(async (tx) => {
+    const before = await captureBlockedDependents(tx, mirror.targetWorkspaceId, [target.id]);
+    const readyBefore = await captureUnblockedDependents(tx, mirror.targetWorkspaceId, [target.id]);
     let archiveComment: typeof comments.$inferSelect | null = null;
     let lifecycleActivity: ActivityEvent | null = null;
     let deletedNotifications: DeletedNotificationRef[] = [];
@@ -478,19 +483,39 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
     if (description !== target.description) await replaceCardMentions({ tx, boardId: mirror.targetBoardId, cardId: target.id, source: "description", markdown: description });
     // A mirrored completion completes the destination card too, so its reminders go like a native one's.
     const clearedReminders = source.completedAt && !target.completedAt ? await clearRemindersOnCompletedCards(tx, [target.id]) : [];
-    return { updated: updated!, rebalance, archiveComment, lifecycleActivity, deletedNotifications, clearedReminders };
+    // The mirror creator is durable attribution for the sync, not the person who completed or
+    // reopened the source card, so handoffs are recorded as Kanera's: with the creator as actor
+    // they would be suppressed as a self-notification and the creator, often an assignee of the
+    // copy, would never hear that their work is ready.
+    const handoffs = await recordBlockersCleared(tx, { before, actorId: null });
+    const unblockedEffects = await runCardUnblockedAutomations(tx, { handoffs, workspaceId: mirror.targetWorkspaceId, clientId: actor.cid, triggerActorId: actor.sub, handoffActorId: null });
+    const blockedEffects = await runCardBlockedAutomations(tx, { cardIds: readyBefore, workspaceId: mirror.targetWorkspaceId, clientId: actor.cid, triggerActorId: actor.sub, handoffActorId: null, blocker: updated! });
+    const dependencyEffects = { effects: [...unblockedEffects.effects, ...blockedEffects.effects] };
+    return { updated: updated!, rebalance, archiveComment, lifecycleActivity, deletedNotifications, clearedReminders, handoffs: [...handoffs, ...blockedEffects.handoffs], dependencyEffects };
   });
   // Rebalance must be visible before the corresponding move or clients can apply stale positions.
   if (result.rebalance && mapping) await emitLaneRebalanced(mirror.targetBoardId, mapping.targetListId, result.rebalance);
-  if (shouldMove && mapping) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_MOVED, { boardId: mirror.targetBoardId, cardId: target.id, fromListId: target.listId, toListId: mapping.targetListId, position: result.updated.position, prevPosition: target.position, ...inProgressClockOf(result.updated) });
+  if (shouldMove && mapping) {
+    await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_MOVED, { boardId: mirror.targetBoardId, cardId: target.id, fromListId: target.listId, toListId: mapping.targetListId, position: result.updated.position, prevPosition: target.position, ...inProgressClockOf(result.updated) });
+    await emitRelationNeighboursChanged([target.id]);
+  }
   // The CARD_UPDATED payload now carries archivedAt, so target boards add/remove the card exactly as
   // the native archive route does when the mirror flips its lifecycle state.
   emitDeletedNotifications(result.deletedNotifications);
   emitClearedCardReminders(result.clearedReminders);
+  await emitDependencyHandoffs(result.handoffs);
+  await emitAutomationEffects(result.dependencyEffects);
   if (cardChanged) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_UPDATED, { boardId: mirror.targetBoardId, card: toWireCard(result.updated, actor.cid) });
-  // A synced rename is a rename of the destination card: cards and notes linked to it show its title.
+  // The mirrored copy may itself block cards in the destination workspace; a synced completion or
+  // archive flips their Blocked badge just as a native one would.
+  if (source.completedAt?.getTime() !== target.completedAt?.getTime() || archiving || unarchiving) {
+    await emitDependentsChanged([target.id], actor.cid);
+  }
+  // A synced rename is a rename of the destination card: cards and notes linked to it, and cards
+  // related to it, show its title.
   if (cardChanged && source.title !== target.title) {
     await emitInternalLinksChanged(await linkNeighbours(mirror.targetWorkspaceId, "card", target.id));
+    await emitRelationNeighboursChanged([target.id]);
   }
   if (result.lifecycleActivity) await emitActivityFeedItem(mirror.targetBoardId, target.id, result.lifecycleActivity, { notify: false });
   if (result.archiveComment) {
@@ -516,6 +541,7 @@ async function convergeLabels(mirror: BoardMirror, sourceCardId: string, targetC
     if (added.length) await tx.insert(cardLabelAssignments).values(added.map((labelId) => ({ cardId: targetCardId, labelId })));
   });
   await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId: mirror.targetBoardId, cardId: targetCardId, labelIds });
+  await emitRelationNeighboursChanged([targetCardId]);
 }
 
 function stringArraysEqual(left: string[] | null, right: string[] | null): boolean {

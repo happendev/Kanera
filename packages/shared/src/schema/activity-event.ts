@@ -93,6 +93,19 @@ export const ACTIVITY_ACTIONS = [
   // System: the card's current in-progress stint passed its workspace's alert (payload inProgressSince,
   // alertDays). Recorded once per stint by the worker; it notifies assignees and watchers.
   "inProgress:tooLong",
+  // A card relation was added to / removed from the card (payload relationId, direction, otherCardId,
+  // otherCardKey). Recorded on both cards, each from its own side; the other card is named by key
+  // only, since a card's feed may be read by people who cannot open the other card.
+  "relation:added",
+  "relation:removed",
+  // The card's last open blocker was completed or archived, so it is ready to start (payload
+  // otherCardId, otherCardKey: the blocker that cleared it). Recorded on the dependent card, by the
+  // person who closed the blocker; it carries the handoff notification to assignees and watchers.
+  "blockers:cleared",
+  // A blocker of the card was reopened or restored while the card had no other open blocker, so it
+  // is blocked again (payload otherCardId, otherCardKey). Recorded on the dependent card; it carries
+  // the "blocked again" notification to its assignees and watchers.
+  "blockers:reopened",
   // Thumbs-up on a comment (entity `comment`) or an attachment (entity `card`, payload.attachmentId).
   // Recorded hidden from feeds: it exists to carry the author's "reacted" notification.
   "reaction:added",
@@ -146,6 +159,10 @@ export const ACTIVITY_ACTION = {
   AGENT_RUN_ENDED: "agentRun:ended",
   IN_PROGRESS_TIME_SET: "inProgressTime:set",
   IN_PROGRESS_TOO_LONG: "inProgress:tooLong",
+  RELATION_ADDED: "relation:added",
+  RELATION_REMOVED: "relation:removed",
+  BLOCKERS_CLEARED: "blockers:cleared",
+  BLOCKERS_REOPENED: "blockers:reopened",
 } as const satisfies Record<string, ActivityAction>;
 
 export const ACTIVITY_COALESCE_KEYS = [

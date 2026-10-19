@@ -1189,6 +1189,7 @@ void test("accepted board guest invitation notifies host organisation owners and
   assert.equal(rows[0]!.toEmail, "board-notify-owner@gmail.com");
   assert.deepEqual(rows[0]!.data, {
     context: "board",
+    locale: "en-GB",
     displayName: "Host Owner",
     acceptedByName: "Guest User",
     acceptedByEmail: "board-notify-guest@gmail.com",
@@ -1265,6 +1266,7 @@ void test("signup through board invite token notifies host organisation owners",
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0]!.data, {
     context: "board",
+    locale: "en-GB",
     displayName: "Host Owner",
     acceptedByName: "New Guest",
     acceptedByEmail: "board-signup-notify-guest@shared-company.test",
@@ -1324,6 +1326,7 @@ void test("directly adding an existing external user to a board does not send in
   assert.equal(accessRows.length, 1);
   assert.equal(accessRows[0]?.toEmail, "b@b.com");
   assert.deepEqual(accessRows[0]?.data, {
+    locale: "en-GB",
     displayName: "Guest User",
     boardName: "Direct Board",
     orgName: "Direct Add Host",
@@ -2084,7 +2087,7 @@ void test("board open returns workspace boards and rejects unauthenticated reque
   assert.equal(denied.statusCode, 401);
 });
 
-void test("bulk list completion updates every non-archived card in the workspace list", async () => {
+void test("bulk list completion updates every non-archived card of the invoking board in the workspace list", async () => {
   const app = await buildIntegrationServer();
 
   const { accessToken, user } = await signupOwner(app, { orgName: "Acme Bulk", email: "bulk-owner@example.com", displayName: "Owner" });
@@ -2128,11 +2131,13 @@ void test("bulk list completion updates every non-archived card in the workspace
     payload: { completed: true },
   });
   assert.equal(res.statusCode, 200);
-  assert.equal(res.json<{ updated: number }>().updated, 2);
+  // Lists are workspace-scoped, but a whole-list action acts on the board it was invoked from: a
+  // board editor must not complete another board's cards that happen to share the list.
+  assert.equal(res.json<{ updated: number }>().updated, 1);
 
   const rows = await db.select().from(cards);
   assert.ok(rows.find((c) => c.id === firstCard.id)?.completedAt);
-  assert.ok(rows.find((c) => c.id === secondCard.id)?.completedAt);
+  assert.equal(rows.find((c) => c.id === secondCard.id)?.completedAt, null);
   assert.equal(rows.find((c) => c.id === archivedCard.id)?.completedAt, null);
 });
 

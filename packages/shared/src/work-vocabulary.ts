@@ -34,8 +34,11 @@ export const WORK_SORT_VALUES = [
  * open cards by due date and their recent completions, plus in-progress work nobody owns. It composes
  * the card query, the priority batch and the team work-done feed on the client, so it adds no
  * endpoint of its own.
+ *
+ * `dependencies` maps the blocking chains the lens's loaded cards sit in, across boards: the same
+ * view a board offers, seeded with the loaded cards instead of one board's.
  */
-export const WORK_DISPLAY_MODES = ["board", "table", "calendar", "priorities", "overview", "history", "summary"] as const;
+export const WORK_DISPLAY_MODES = ["board", "table", "calendar", "priorities", "overview", "history", "summary", "dependencies"] as const;
 /**
  * Completion filters for work queries.
  *

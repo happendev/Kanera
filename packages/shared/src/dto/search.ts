@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CARD_RELATION_DIRECTIONS } from "../lib/card-relations.js";
 import { workScopeSchema } from "./work.js";
 
 export const SEARCH_RESULT_TYPES = ["card", "comment", "note", "attachment"] as const;
@@ -7,6 +8,12 @@ export type SearchResultType = (typeof SEARCH_RESULT_TYPES)[number];
 export const searchQuery = z.object({
   q: z.string().min(1).max(200),
   limit: z.coerce.number().int().min(1).max(20).optional(),
+  workspaceId: z.uuid().optional(),
+  relationCardId: z.uuid().optional(),
+  relationDirection: z.enum(CARD_RELATION_DIRECTIONS).optional(),
+}).refine((query) => !query.relationCardId || query.relationDirection, {
+  message: "relationDirection is required with relationCardId",
+  path: ["relationDirection"],
 });
 export type SearchQuery = z.infer<typeof searchQuery>;
 

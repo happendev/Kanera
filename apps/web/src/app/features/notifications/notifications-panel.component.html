@@ -235,7 +235,7 @@
         </div>
         @if (actionsMenuNotificationId() === n.id && n.cardId && n.boardId) {
         <k-card-actions-menu [cardId]="n.cardId" [cardKey]="n.cardKey" [organisationKey]="n.organisationKey" [boardId]="n.boardId" [workspaceId]="n.workspaceId" [title]="n.cardTitle ?? untitledCardLabel" [dueDateLocalDate]="n.cardDueDateLocalDate" [dueDateSlot]="n.cardDueDateSlot"
-          [dueDateTimezone]="n.cardDueDateTimezone" [completedAt]="n.cardCompletedAt" [archivedAt]="n.cardArchivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="false" [allowCopyToBoard]="false" [allowMoveToBoard]="false"
+          [dueDateTimezone]="n.cardDueDateTimezone" [completedAt]="n.cardCompletedAt" [archivedAt]="n.cardArchivedAt" [canEditCard]="n.viewerRole !== 'observer'" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="false" [allowCopyToBoard]="false" [allowMoveToBoard]="false"
           (close)="closeActionsMenu()" />
         }
       </li>
@@ -353,7 +353,7 @@
         @if (actionsMenuNotificationId() === cluster.head.id && cluster.head.cardId && cluster.head.boardId) {
         <k-card-actions-menu [cardId]="cluster.head.cardId" [cardKey]="cluster.head.cardKey" [organisationKey]="cluster.head.organisationKey" [boardId]="cluster.head.boardId" [workspaceId]="cluster.head.workspaceId"
           [title]="cluster.head.cardTitle ?? untitledCardLabel" [dueDateLocalDate]="cluster.head.cardDueDateLocalDate" [dueDateSlot]="cluster.head.cardDueDateSlot" [dueDateTimezone]="cluster.head.cardDueDateTimezone"
-          [completedAt]="cluster.head.cardCompletedAt" [archivedAt]="cluster.head.cardArchivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="false" [allowCopyToBoard]="false" [allowMoveToBoard]="false"
+          [completedAt]="cluster.head.cardCompletedAt" [archivedAt]="cluster.head.cardArchivedAt" [canEditCard]="cluster.head.viewerRole !== 'observer'" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="false" [allowCopyToBoard]="false" [allowMoveToBoard]="false"
           (close)="closeActionsMenu()" />
         }
       </li>

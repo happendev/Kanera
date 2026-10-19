@@ -21,7 +21,8 @@ export function hasActiveFilter(v: FilterValue): boolean {
     v.showInactiveOnly ||
     v.showInProgressOnly ||
     v.showPrioritySetOnly ||
-    v.showReminderSetOnly
+    v.showReminderSetOnly ||
+    v.showBlockedOnly
   );
 }
 

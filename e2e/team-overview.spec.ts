@@ -239,8 +239,13 @@ test("Team overview focuses one teammate with their Up next docked, curated from
   await expect(page.locator("k-team-overview section.person")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Show everyone instead of Marcus Cole" }).first()).toHaveAttribute("aria-pressed", "true");
   // Search, scope and Filter stay together in the query bar; the strip is a row of its own.
-  const searchBox = (await page.getByRole("searchbox", { name: "Search cards" }).boundingBox())!;
-  const strip = (await page.locator("k-team-overview .person-strip").boundingBox())!;
+  // boundingBox() does not wait, so settle both first or a re-render reads as null.
+  const searchInput = page.getByRole("searchbox", { name: "Search cards" });
+  const stripNav = page.locator("k-team-overview .person-strip");
+  await expect(searchInput).toBeVisible();
+  await expect(stripNav).toBeVisible();
+  const searchBox = (await searchInput.boundingBox())!;
+  const strip = (await stripNav.boundingBox())!;
   expect(strip.y).toBeGreaterThan(searchBox.y + searchBox.height);
   const queueRow = (title: string) => dock.locator("k-priority-queue .panel-row").filter({ hasText: title });
   const notQueuedRow = (title: string) => dock.locator(".not-queued-row").filter({ hasText: title });
@@ -327,4 +332,34 @@ test("Team overview focuses one teammate with their Up next docked, curated from
   for (const toggle of await sectionToggles.all()) await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("button", { name: "Expand all sections" }).first().click();
   for (const toggle of await sectionToggles.all()) await expect(toggle).toHaveAttribute("aria-expanded", "true");
+});
+
+test("Team overview hides guests from other organisations on request, and remembers it", async ({ page, signIn }) => {
+  // Maya is a cross-organisation guest on Mobile Experience; Marcus is a member of Amelia's organisation.
+  await signIn(page, "amelia");
+  await page.goto("/team-cards");
+  await page.getByRole("button", { name: "Team overview" }).click();
+  const strip = page.locator("k-team-overview .person-strip");
+  const toggle = strip.getByRole("button", { name: "Hide guests" });
+  await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toHaveCount(0);
+  await expect(page.locator("k-team-overview .person-name", { hasText: "Maya Chen" })).toHaveCount(0);
+  await expect(strip.locator(".strip-chip", { hasText: "Marcus" })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("team-overview-hide-guests.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  // On a phone the strip scrolls sideways; the toggle at its far end must still be reachable.
+  await toggle.scrollIntoViewIfNeeded();
+  await expect(toggle).toBeInViewport();
+  await page.screenshot({ path: test.info().outputPath("team-overview-hide-guests-phone.png") });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toHaveCount(0);
+
+  await toggle.click();
+  await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toBeVisible();
 });

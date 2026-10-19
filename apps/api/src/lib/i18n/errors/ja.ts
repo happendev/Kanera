@@ -878,4 +878,9 @@ export const ja: ErrorCatalog = {
     "この添付ファイルには{variant}画像がありません。",
   "work-done history is limited to the last {days} days":
     "完了した作業の履歴は過去{days}日分に限られます。",
+  "a card cannot be related to itself": "カードを自分自身に関連付けることはできません。",
+  "a completed card cannot block another card": "完了したカードは他のカードをブロックできません。",
+  "cards must be in the same workspace to be related": "関連付けるカードは同じワークスペースにある必要があります。",
+  "relation not found": "関係が見つかりません。",
+  "this relation would create a blocking cycle": "この関係はブロックの循環を作ります。",
 };

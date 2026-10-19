@@ -3,7 +3,7 @@ import { inProgressClockOf, SERVER_EVENTS, type InProgressClock } from "@kanera/
 import { ACTIVITY_ACTION, automationActions, automationDueDateRuns, automationInactiveRuns, automationInProgressRuns, automationRunStats, automationRuns, automations, boardMembers, boards, cardAssignees, cardCustomFieldValues, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, comments, customFieldOptions, customFields, lists, users, webhookEndpoints, workspaceMembers, workspaces, type ActivityEvent, type Automation, type AutomationAction, type AutomationRunStats, type AutomationTriggerCustomFieldValue, type Card, type CardCustomFieldValue, type CustomField, type AutomationTriggerType } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
-import { db, type Db, type Tx } from "../db.js";
+import { db, type Db, type Tx, type TxOnly } from "../db.js";
 import { env } from "../env.js";
 import { emitToBoard } from "../realtime/emit.js";
 import { publishAsAutomation } from "../realtime/outbox.js";
@@ -24,6 +24,8 @@ import { startSweepScheduler } from "./sweep-scheduler.js";
 import { absoluteCardUrl } from "./wire-card.js";
 import { customFieldValueEquals, emptyValueColumns, type CustomFieldValueColumns } from "./custom-fields.js";
 import { clearRemindersOnCompletedCards, emitClearedCardReminders, type ClearedCardReminder } from "./card-follow.js";
+import { blockedByCounts, captureUnblockedDependents, recordDependencyTransition, captureBlockedDependents, emitDependentsChanged, emitRelationNeighboursChanged, lockWorkspaceRelations } from "./card-relations.js";
+import { notifyDependencyHandoffs, recordBlockersCleared, recordBlockersReopened, type DependencyHandoff } from "./dependency-notifications.js";
 import { executableAutomationAction, type ExecutableAutomationAction } from "./automation-action.js";
 
 interface AutomationEffectMetadata {
@@ -40,7 +42,9 @@ export type AutomationEffect =
   // queueLifecycleChanged marks a completion flip: the emit pass must also ping any "Up next"
   // queue holding the card, which plain field updates (e.g. the due-date action) never require.
   // clearedReminders: completing the card cleared these personal reminders (see card-follow.ts).
-  | ({ type: "cardUpdated"; boardId: string; card: WireCard; activity: ActivityEvent; notify?: boolean; queueLifecycleChanged?: boolean; clearedReminders?: ClearedCardReminder[] } & AutomationEffectMetadata)
+  // completionClientId marks the same flip for the cards this one blocks, whose Blocked badge must
+  // be re-announced on their own boards (the id signs their descriptions for the event payload).
+  | ({ type: "cardUpdated"; boardId: string; card: WireCard; activity: ActivityEvent; notify?: boolean; queueLifecycleChanged?: boolean; clearedReminders?: ClearedCardReminder[]; completionClientId?: string; handoffs?: DependencyHandoff[]; dependentEffects?: AutomationEffects } & AutomationEffectMetadata)
   | ({ type: "commentCreated"; boardId: string; cardId: string; comment: WireComment; activity: ActivityEvent } & AutomationEffectMetadata)
   // The webhook is not called here. The emit pass publishes this to the board outbox and the
   // webhook enqueue step turns it into exactly one delivery row for `endpointId`, so the call
@@ -98,6 +102,9 @@ interface AutomationRunContext {
   fireDateLocalDate: string;
   fireDate: Date;
   triggerActorId?: string | null;
+  // Mirrors retain a creator for comment ownership, but their dependency handoffs are system
+  // actions. Preserve an explicit null through nested completions instead of falling back to it.
+  handoffActorId?: string | null;
   commentAuthorId?: string | null;
   templateContexts?: Map<string, { list: { id: string; name: string } | null; boardName: string; workspaceName: string }>;
 }
@@ -681,6 +688,8 @@ async function applyDueDateAction(tx: Tx, ctx: AutomationRunContext, action: Exe
 async function applyCompletionAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"set_completion">): Promise<AutomationEffect | null> {
   const { completed } = action.config;
   if (Boolean(ctx.card.completedAt) === completed) return null;
+  const before = await captureBlockedDependents(tx as TxOnly, ctx.workspaceId, [ctx.card.id]);
+  const readyBefore = completed ? [] : await captureUnblockedDependents(tx as TxOnly, ctx.workspaceId, [ctx.card.id]);
   const completedAt = completed ? new Date() : null;
   const [card] = await tx.update(cards).set({ completedAt, updatedAt: new Date() }).where(eq(cards.id, ctx.card.id)).returning();
   ctx.card = card!;
@@ -697,7 +706,18 @@ async function applyCompletionAction(tx: Tx, ctx: AutomationRunContext, action: 
     action: completed ? ACTIVITY_ACTION.COMPLETED : ACTIVITY_ACTION.UNCOMPLETED,
     payload: { completedAt, automationActionId: action.id },
   });
-  return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, notify: completed, queueLifecycleChanged: true, clearedReminders, suppressNotificationUserId: ctx.triggerActorId };
+  // Automated completion has the same handoff as a direct edit; the trigger runner bounds chains.
+  // Reopening by automation blocks the dependents again, with the same "blocked again" handoff.
+  const handoffs: DependencyHandoff[] = completed
+    ? await recordBlockersCleared(tx as TxOnly, { before, actorId: ctx.handoffActorId === undefined ? ctx.triggerActorId ?? null : ctx.handoffActorId })
+    : [];
+  const dependentEffects = await publishAsAutomation(async () => {
+    if (completed) return runCardUnblockedAutomations(tx, { handoffs, workspaceId: ctx.workspaceId, clientId: ctx.clientId, triggerActorId: ctx.triggerActorId, handoffActorId: ctx.handoffActorId });
+    const run = await runCardBlockedAutomations(tx, { cardIds: readyBefore, workspaceId: ctx.workspaceId, clientId: ctx.clientId, triggerActorId: ctx.triggerActorId, handoffActorId: ctx.handoffActorId, blocker: card! });
+    handoffs.push(...run.handoffs);
+    return run;
+  });
+  return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, dependentEffects, notify: completed, queueLifecycleChanged: true, clearedReminders, completionClientId: ctx.clientId, handoffs, suppressNotificationUserId: ctx.triggerActorId };
 }
 
 async function applyMoveAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"move_to_list" | "move_to_top" | "move_to_bottom">): Promise<AutomationEffect | null> {
@@ -1008,6 +1028,9 @@ async function applyAutomationActions(tx: Tx, ctx: AutomationRunContext, actions
 }
 
 async function applyAutomationActionsAndRecordStats(tx: Tx, automationId: string, ctx: AutomationRunContext, actions: AutomationAction[]): Promise<AutomationEffects> {
+  // Keep graph locks ahead of quota/stat writes: completion-triggered and scheduled automations
+  // must acquire these shared locks in the same order.
+  await lockWorkspaceRelations(tx as TxOnly, ctx.workspaceId);
   // Reaching the free monthly quota suppresses automation effects without blocking the card change
   // that triggered them. Paid, trial, and self-hosted organisations always claim successfully.
   if (!await claimAutomationExecution(ctx.clientId, tx, ctx.fireDate)) return EMPTY_EFFECTS;
@@ -1039,7 +1062,7 @@ async function applyAutomationActionsAndRecordStats(tx: Tx, automationId: string
 async function applyTriggeredAutomations(
   tx: Tx,
   rows: (typeof automations.$inferSelect)[],
-  opts: { cardId: string; boardId: string; workspaceId: string; clientId: string; triggerActorId?: string | null },
+  opts: { cardId: string; boardId: string; workspaceId: string; clientId: string; triggerActorId?: string | null; handoffActorId?: string | null },
   cardGate: (card: typeof cards.$inferSelect) => boolean = () => true,
 ): Promise<AutomationEffects> {
   const actions = await tx
@@ -1063,6 +1086,7 @@ async function applyTriggeredAutomations(
     fireDateLocalDate: localDateInTimezone(new Date(), card.dueDateTimezone || "UTC"),
     fireDate: new Date(),
     triggerActorId: opts.triggerActorId,
+    handoffActorId: opts.handoffActorId,
   };
   const effects: AutomationEffect[] = [];
   for (const automation of rows) {
@@ -1205,6 +1229,86 @@ export async function runCardMarkedCompleteAutomations(
   return applyTriggeredAutomations(tx, rows, opts, (card) => card.completedAt !== null);
 }
 
+// One dependent runs at most once per transaction, even if actions reopen or complete other cards.
+// This permits useful dependency chains without recursive automation loops.
+const unblockedRuns = new WeakMap<Tx, Set<string>>();
+
+export async function runCardUnblockedAutomations(
+  tx: Tx,
+  opts: { handoffs: readonly DependencyHandoff[]; workspaceId: string; clientId: string; triggerActorId?: string | null; handoffActorId?: string | null },
+): Promise<AutomationEffects> {
+  if (opts.handoffs.length === 0) return EMPTY_EFFECTS;
+  // A hosted downgrade hides boards without archiving their cards. Their retained graph must not
+  // run rules or publish active-work transitions while direct access to those boards is disabled.
+  const activeBoards = new Set((await tx.select({ id: boards.id }).from(boards).where(and(
+    inArray(boards.id, opts.handoffs.map(({ dependent }) => dependent.boardId)), isNull(boards.archivedAt),
+  ))).map((board) => board.id));
+  const rows = await enabledAutomationsFor(tx, opts.workspaceId, eq(automations.triggerType, "card_unblocked"));
+  const visited = unblockedRuns.get(tx) ?? new Set<string>();
+  unblockedRuns.set(tx, visited);
+  const effects: AutomationEffect[] = [];
+  for (const { dependent } of opts.handoffs) {
+    if (!activeBoards.has(dependent.boardId) || visited.has(dependent.id)) continue;
+    visited.add(dependent.id);
+    await recordDependencyTransition(tx, dependent, opts.clientId, "unblocked", 0);
+    if (!rows.length) continue;
+    const result = await applyTriggeredAutomations(tx, rows, {
+      cardId: dependent.id,
+      boardId: dependent.boardId,
+      workspaceId: opts.workspaceId,
+      clientId: opts.clientId,
+      triggerActorId: opts.triggerActorId,
+      handoffActorId: opts.handoffActorId,
+    }, (card) => !card.completedAt && !card.archivedAt);
+    effects.push(...result.effects);
+  }
+  return { effects };
+}
+
+const blockedRuns = new WeakMap<Tx, Set<string>>();
+
+/**
+ * Candidates were ready before the write; only a zero-to-positive boundary fires. Pass `blocker`
+ * when the boundary comes from reopening or restoring that card: each newly blocked dependent then
+ * gets a `blockers:reopened` handoff (feed row plus "blocked again" notification). Adding a relation
+ * passes none, because `notifyDependencyAdded` tells both sides about that itself.
+ */
+export async function runCardBlockedAutomations(
+  tx: Tx,
+  opts: {
+    cardIds: readonly string[]; workspaceId: string; clientId: string; triggerActorId?: string | null;
+    blocker?: DependencyHandoff["blocker"];
+    /** Who the "blocked again" handoff is attributed to; `null` records it as Kanera's. Defaults to the trigger actor. */
+    handoffActorId?: string | null;
+  },
+): Promise<AutomationEffects & { handoffs: DependencyHandoff[] }> {
+  if (!opts.cardIds.length) return { ...EMPTY_EFFECTS, handoffs: [] };
+  const counts = await blockedByCounts(tx, opts.cardIds);
+  const candidates = await tx.select({ card: cards }).from(cards).innerJoin(boards, eq(boards.id, cards.boardId))
+    .where(and(inArray(cards.id, [...opts.cardIds]), eq(cards.workspaceId, opts.workspaceId), isNull(cards.completedAt), isNull(cards.archivedAt), isNull(boards.archivedAt)));
+  const rows = await enabledAutomationsFor(tx, opts.workspaceId, eq(automations.triggerType, "card_blocked"));
+  // Both directions have their own guard: a chain can block and then unblock a card once each.
+  const visited = blockedRuns.get(tx) ?? new Set<string>();
+  blockedRuns.set(tx, visited);
+  const effects: AutomationEffect[] = [];
+  const handoffs: DependencyHandoff[] = [];
+  for (const { card } of candidates) {
+    const count = counts.get(card.id) ?? 0;
+    if (!count || visited.has(card.id)) continue;
+    visited.add(card.id);
+    await recordDependencyTransition(tx, card, opts.clientId, "blocked", count);
+    // Recorded before the automations so the dependent's feed reads "blocked again" first.
+    if (opts.blocker) handoffs.push(...await recordBlockersReopened(tx as TxOnly, { dependents: [card], blocker: opts.blocker, actorId: opts.handoffActorId === undefined ? opts.triggerActorId ?? null : opts.handoffActorId }));
+    if (!rows.length) continue;
+    const result = await applyTriggeredAutomations(tx, rows, {
+      cardId: card.id, boardId: card.boardId, workspaceId: opts.workspaceId,
+      clientId: opts.clientId, triggerActorId: opts.triggerActorId, handoffActorId: opts.handoffActorId,
+    }, (current) => !current.completedAt && !current.archivedAt);
+    effects.push(...result.effects);
+  }
+  return { effects, handoffs };
+}
+
 export async function runCardAssignedAutomations(
   tx: Tx,
   opts: { cardId: string; addedUserIds: string[]; boardId: string; workspaceId: string; clientId: string; triggerActorId?: string | null },
@@ -1235,6 +1339,21 @@ export async function runCardLabelSetAutomations(
   return applyTriggeredAutomations(tx, rows, opts);
 }
 
+/** Effects emit after commit, outside any request, so they queue mail on the shared pool. */
+function automationMailer() {
+  return createMailer({
+    db,
+    resolveSmtpConfig,
+    webOrigin: env.WEB_ORIGIN,
+    log: { info() { }, error() { }, warn() { }, debug() { } } as never,
+  });
+}
+
+export async function emitDependencyHandoffs(handoffs: readonly DependencyHandoff[]): Promise<void> {
+  await notifyDependencyHandoffs({ handoffs, mailer: automationMailer(), webOrigin: env.WEB_ORIGIN })
+    .catch((err: unknown) => console.warn("blockers-cleared notifications failed", { err }));
+}
+
 export function emitAutomationEffects(effects: AutomationEffects): Promise<void> {
   // Outbox rows from these emits are attributed to the automation, not the triggering credential.
   return publishAsAutomation(() => emitAutomationEffectsInScope(effects));
@@ -1244,12 +1363,16 @@ async function emitAutomationEffectsInScope(effects: AutomationEffects): Promise
   for (const effect of effects.effects) {
     // Awaits here preserve authored automation effect order in the durable outbox/webhook replay.
     // emitToBoard/emitActivityFeedItem still log publish failures and resolve, so realtime remains fail-open.
+    // Labels, assignees and list are shown by related cards' Dependencies sections, which must
+    // re-read them like the routes do (emitRelationNeighboursChanged).
     if (effect.type === "labelsSet") {
       await emitToBoard(effect.boardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId: effect.boardId, cardId: effect.cardId, labelIds: effect.labelIds });
       await emitActivityFeedItem(effect.boardId, effect.cardId, effect.activity, { suppressNotificationUserId: effect.suppressNotificationUserId });
+      await emitRelationNeighboursChanged([effect.cardId]);
     } else if (effect.type === "assigneesSet") {
       await emitToBoard(effect.boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId: effect.boardId, cardId: effect.cardId, assigneeIds: effect.assigneeIds });
       await emitActivityFeedItem(effect.boardId, effect.cardId, effect.activity, { suppressNotificationUserId: effect.suppressNotificationUserId });
+      await emitRelationNeighboursChanged([effect.cardId]);
       // A remove_assignees automation drops a queued card out of the target's live "Up next" queue
       // (and add_assignees can restore a dormant entry) without touching card_priorities rows.
       await invalidateQueuesForCards([effect.cardId]);
@@ -1287,6 +1410,12 @@ async function emitAutomationEffectsInScope(effects: AutomationEffects): Promise
       // the same fanout the completion routes owe (see card-priority-invalidation.ts).
       if (effect.queueLifecycleChanged) await invalidateQueuesForCards([effect.card.id]);
       if (effect.clearedReminders) emitClearedCardReminders(effect.clearedReminders);
+      if (effect.dependentEffects) await emitAutomationEffects(effect.dependentEffects);
+      if (effect.completionClientId) await emitDependentsChanged([effect.card.id], effect.completionClientId);
+      if (effect.handoffs?.length) {
+        await notifyDependencyHandoffs({ handoffs: effect.handoffs, mailer: automationMailer(), webOrigin: env.WEB_ORIGIN })
+          .catch((err: unknown) => console.warn("blockers-cleared notifications failed", { cardId: effect.card.id, err }));
+      }
     } else {
       if (effect.rebalancedPositions) {
         await emitCardRebalancedByBoard(effect.toListId, effect.rebalancedPositions);
@@ -1301,6 +1430,7 @@ async function emitAutomationEffectsInScope(effects: AutomationEffects): Promise
         ...effect.clock,
       });
       if (effect.activity) await emitActivityFeedItem(effect.boardId, effect.cardId, effect.activity, { suppressNotificationUserId: effect.suppressNotificationUserId });
+      await emitRelationNeighboursChanged([effect.cardId]);
     }
   }
 }
@@ -1544,6 +1674,9 @@ export async function runDueDateApproachingAutomationSweep(
         if (today < approachDate || today >= candidate.card.dueDateLocalDate) continue;
         try {
           const effects = await db.transaction(async (tx) => {
+            // Graph lock before the card row, like every other automation-running transaction: a
+            // completion holding the graph lock and waiting for this row would otherwise deadlock.
+            await lockWorkspaceRelations(tx as TxOnly, candidate.workspaceId);
             const [card] = await tx.select().from(cards).where(eq(cards.id, candidate.card.id)).for("update").limit(1);
             if (!card?.dueDateLocalDate || card.archivedAt || card.completedAt) return EMPTY_EFFECTS;
             const currentLocalDate = localDateInTimezone(now, card.dueDateTimezone || "UTC");
@@ -1668,6 +1801,8 @@ export async function runInactivityAutomationSweep(
           const effects = await db.transaction(async (tx) => {
             // Serialize the boundary check with both user edits and sibling inactivity rules. An
             // earlier rule may make the card active again, in which case later rules must not fire.
+            // Graph lock first (see the due-date sweep).
+            await lockWorkspaceRelations(tx as TxOnly, candidate.workspaceId);
             const [card] = await tx.select().from(cards).where(eq(cards.id, candidate.card.id)).for("update").limit(1);
             if (!card || card.archivedAt || card.completedAt) return EMPTY_EFFECTS;
             const [workspace] = await tx
@@ -1792,6 +1927,8 @@ export async function runInProgressAlertAutomationSweep(
           const effects = await db.transaction(async (tx) => {
             // Re-check under the card's row lock: a move out of progress, a completion or an earlier
             // sibling rule (say, one that moves the card back to the backlog) ends the stint.
+            // Graph lock first (see the due-date sweep).
+            await lockWorkspaceRelations(tx as TxOnly, candidate.workspaceId);
             const [card] = await tx.select().from(cards).where(eq(cards.id, candidate.card.id)).for("update").limit(1);
             if (!card || card.archivedAt || card.completedAt || !card.inProgressSince) return EMPTY_EFFECTS;
             const [workspace] = await tx

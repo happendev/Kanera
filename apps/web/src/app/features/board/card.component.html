@@ -111,9 +111,17 @@
     <span class="card-title-text">{{ card().title }}</span>
   </div>
 
-  @if (showCardWatchIndicator() || reminderLabel() || hasDescription() || checklistTotalCount() || commentCount() || attachmentCount() || assignees().length || hasDueDate() || timeInProgress() || hasVisibleCustomFieldBadges()) {
+  @if (blockedLabel() || showCardWatchIndicator() || reminderLabel() || hasDescription() || checklistTotalCount() || commentCount() || attachmentCount() || assignees().length || hasDueDate() || timeInProgress() || hasVisibleCustomFieldBadges()) {
   <div class="card-footer">
     <div class="card-footer-left">
+      <!-- First in the footer, styled like the due-date chip: it is the same kind of "can I work on
+           this?" signal, and beside the title it broke the title's wrap and crowded its marks. -->
+      @if (blockedLabel(); as label) {
+      <span class="card-blocked" [kTooltip]="label" [attr.aria-label]="label">
+        <i class="ti ti-lock" aria-hidden="true"></i>
+        <span i18n="card state|Tile chip - the card waits on another open card">Blocked</span>
+      </span>
+      }
       @if (hasDueDate()) {
       <span class="card-due" [class.overdue]="dueDateOverdue()" [class.due-soon]="dueDateDueSoon()">
         <i class="ti ti-calendar-event"></i>

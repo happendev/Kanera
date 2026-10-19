@@ -169,6 +169,7 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
     inactiveOnly: filters["inactiveOnly"] === true,
     inProgressOnly: filters["inProgressOnly"] === true,
     inProgressTooLongOnly: filters["inProgressTooLongOnly"] === true,
+    blockedOnly: filters["blockedOnly"] === true,
     dueFrom: nullableDate(filters["dueFrom"]),
     dueTo: nullableDate(filters["dueTo"]),
     overdueOnly: filters["overdueOnly"] === true,
@@ -314,8 +315,8 @@ export function sanitizeGlobalWorkDefinition(
   const allowedDisplays = lens === "portfolio"
     ? new Set(["summary", "table"])
     : lens === "team"
-      ? new Set(["board", "table", "calendar", "overview", "history"])
-      : new Set(["board", "table", "calendar", "history"]);
+      ? new Set(["board", "table", "calendar", "overview", "dependencies", "history"])
+      : new Set(["board", "table", "calendar", "dependencies", "history"]);
   // The retired team Up next lanes display lands on its successor: the overview, whose dock now
   // curates each teammate's queue. Saved views and remembered preferences may still name it.
   const requestedDisplay = lens === "team" && definition.display === "priorities" ? "overview" : definition.display;

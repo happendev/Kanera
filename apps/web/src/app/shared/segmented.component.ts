@@ -217,22 +217,24 @@ export type SegmentedOption<T extends string = string> = {
 
       /* Coarse pointers get the shared 44px floor; see toolbar-styles.scss. The sm variant stops at
          36px: it sits in a dense drawer grid where a 44px control would push the rows below it off
-         a phone screen, and it is never the only way to reach what it filters. */
+         a phone screen, and it is never the only way to reach what it filters. Standalone toolbars
+         can set --sg-touch-track-height / --sg-touch-target-size to keep full 44px button targets. */
       @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
         .sg-track {
-          height: 44px;
+          height: var(--sg-touch-track-height, 44px);
         }
 
         .sg-btn {
-          min-width: 44px;
+          min-width: var(--sg-touch-target-size, 44px);
+          min-height: var(--sg-touch-target-size, 0px);
         }
 
         .sg-track.is-sm {
-          height: 36px;
+          height: var(--sg-touch-track-height, 36px);
         }
 
         .sg-track.is-sm .sg-btn {
-          min-width: 36px;
+          min-width: var(--sg-touch-target-size, 36px);
         }
       }
     `,

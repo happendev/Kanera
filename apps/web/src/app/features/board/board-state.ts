@@ -17,7 +17,7 @@ import type {
   WireSeparator,
 } from "@kanera/shared/events";
 import type { Board, BoardRole, BoardSeparator, Card, CardAssignee, CardCustomFieldValue, CardLabel, CardLabelAssignment, CustomField, List } from "@kanera/shared/schema";
-import type { LinkedInternalSummary } from "@kanera/shared/dto";
+import type { CardRelationsResponse, LinkedInternalSummary } from "@kanera/shared/dto";
 import type { OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -921,12 +921,14 @@ export class BoardState {
     this.bumpCardMutationSeq();
   }
 
-  addCard(card: AnyCard) {
+  /** `blockedByCount` arrives with a card moved in from another board; a new card has none. */
+  addCard(card: AnyCard, blockedByCount?: number) {
     let added = false;
     this.cards.update((cs) => {
       if (cs.some((c) => c.id === card.id)) return cs;
       added = true;
-      return [...cs, this.summaryFromCard(card)];
+      const summary = this.summaryFromCard(card);
+      return [...cs, blockedByCount === undefined || !("hasDescription" in summary) ? summary : { ...summary, blockedByCount }];
     });
     // Only track a genuine append (not a deduped echo of a card we already show), so hydrate
     // retention protects it against a racing stale refresh until the server catches up.
@@ -963,8 +965,16 @@ export class BoardState {
     return retained;
   }
 
-  updateCard(card: AnyCard) {
-    this.cards.update((cs) => cs.map((c) => (c.id === card.id ? this.summaryFromCard(card, c) : c)));
+  /**
+   * `blockedByCount` comes from `card:updated` only when the server knows it changed; otherwise the
+   * tile keeps its current count, since a full card row carries none.
+   */
+  updateCard(card: AnyCard, blockedByCount?: number) {
+    this.cards.update((cs) => cs.map((c) => {
+      if (c.id !== card.id) return c;
+      const next = this.summaryFromCard(card, c);
+      return blockedByCount === undefined || !("hasDescription" in next) ? next : { ...next, blockedByCount };
+    }));
     this.bumpCardMutationSeq();
     if (!("hasDescription" in card)) {
       this.detailedCards.update((cards) => {
@@ -1060,6 +1070,16 @@ export class BoardState {
       if (!detail) return cards;
       const next = new Map(cards);
       next.set(cardId, { ...detail, linkedNotes });
+      return next;
+    });
+  }
+
+  setCardRelations(cardId: string, response: CardRelationsResponse) {
+    this.detailedCards.update((cards) => {
+      const detail = cards.get(cardId);
+      if (!detail) return cards;
+      const next = new Map(cards);
+      next.set(cardId, { ...detail, relations: response.relations, hiddenBlockerCount: response.hiddenBlockerCount });
       return next;
     });
   }
@@ -1224,6 +1244,7 @@ export class BoardState {
       attachmentCount: "attachmentCount" in (previous ?? {}) ? (previous as WireCardSummary).attachmentCount : this.attachmentCountForCard(card.id),
       checklistDoneCount: "checklistDoneCount" in (previous ?? {}) ? (previous as WireCardSummary).checklistDoneCount : 0,
       checklistTotalCount: "checklistTotalCount" in (previous ?? {}) ? (previous as WireCardSummary).checklistTotalCount : 0,
+      blockedByCount: "blockedByCount" in (previous ?? {}) ? (previous as WireCardSummary).blockedByCount : 0,
       coverUrl: (() => {
         if (!card.coverAttachmentId) return null;
         const row = this.coverAttachmentById().get(card.coverAttachmentId);

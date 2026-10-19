@@ -159,6 +159,7 @@ const NOTIFICATION_ROWS: { key: NotificationSettingType; label: string }[] = [
   { key: "cardOverdue", label: $localize`:Notification type:Card overdue` },
   { key: "cardReminder", label: $localize`:Notification type:Your card reminders` },
   { key: "reactionAdded", label: $localize`:Notification type; someone gave your comment or uploaded file a thumbs-up:Thumbs-up on your comment or file` },
+  { key: "cardDependency", label: $localize`:Notification type - a card you watch became blocked by another card or started blocking one, or a card assigned to you or that you watch lost its last blocker:Card blocked, blocking or ready to start` },
 ];
 
 interface NotificationBoardOption {
@@ -912,6 +913,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         reactionAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardDependency: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       },
     };
   }
@@ -1025,6 +1027,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         cardOverdue: { ...rule.types.cardOverdue },
         cardReminder: { ...rule.types.cardReminder },
         reactionAdded: { ...rule.types.reactionAdded },
+        cardDependency: { ...rule.types.cardDependency },
       },
     };
   }

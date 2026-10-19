@@ -366,6 +366,26 @@
         "cards.set_assignees",
         "scratchpad.capture"
       ]
+    },
+    {
+      "id": "blocking-chain-for-card",
+      "category": "indirect",
+      "prompt": "What is holding up WEB-40, and what else is waiting on it?",
+      "expectedTools": [
+        "cards.dependency_graph"
+      ],
+      "expectedArguments": {
+        "cards.dependency_graph": {
+          "cardId": "WEB-40"
+        }
+      },
+      "forbiddenTools": [
+        "search.content"
+      ],
+      "forbiddenCapabilities": [
+        "browser",
+        "computer-use"
+      ]
     }
   ]
 }

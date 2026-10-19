@@ -6,7 +6,7 @@ import { cards } from "./card.js";
 import { lists } from "./list.js";
 import { workspaces } from "./workspace.js";
 
-export const AUTOMATION_TRIGGER_TYPES = ["card_enters_list", "card_leaves_list", "due_date_arrives", "due_date_approaching", "card_becomes_inactive", "card_in_progress_too_long", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set", "custom_field_value_changed"] as const;
+export const AUTOMATION_TRIGGER_TYPES = ["card_enters_list", "card_leaves_list", "due_date_arrives", "due_date_approaching", "card_becomes_inactive", "card_in_progress_too_long", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set", "custom_field_value_changed", "card_unblocked", "card_blocked"] as const;
 export type AutomationTriggerType = (typeof AUTOMATION_TRIGGER_TYPES)[number];
 
 export type AutomationTriggerCustomFieldValue = AutomationTriggerCustomFieldValueDto;

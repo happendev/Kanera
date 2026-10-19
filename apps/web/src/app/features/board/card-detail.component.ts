@@ -1,3 +1,4 @@
+import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { CdkTrapFocus } from "@angular/cdk/a11y";
 import { formatTrackedDuration, hasTimeInProgress, timeInProgressChip, type ReportedInProgressClock, type TimeInProgressChip } from "./time-in-progress.util";
 import { MinuteClockService } from "../../shared/minute-clock.service";
@@ -30,7 +31,7 @@ import {
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
 import { cardPath } from "@kanera/shared/card-links";
-import type { CardLinkedItemsResponse, CardMirrorStatus, LinkedInternalSummary } from "@kanera/shared/dto";
+import type { CardLinkedItemsResponse, CardMirrorStatus, CardRelationCard, CardRelationsResponse, LinkedInternalSummary } from "@kanera/shared/dto";
 import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type WireAgentRun, type ServerToClientEvents, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CardLabel } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
@@ -64,6 +65,8 @@ import { DatePickerPopover } from "./date-picker.popover";
 import { DescriptionEditorComponent } from "./description-editor.component";
 import { DescriptionViewerComponent } from "./description-viewer.component";
 import { isPlainPrimaryClick } from "./card-navigation.util";
+import { CardRelationsComponent } from "./card-relations.component";
+import { blockerStatus, hiddenBlockersLabel } from "./card-relations.util";
 import {
   dueDateInputValue,
   dueDateSlotFor,
@@ -80,6 +83,7 @@ import { SelectPickerPopover } from "./select-picker.popover";
 import { ReminderPopoverComponent } from "./reminder-popover.component";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
+import { icu } from "../../core/i18n/icu";
 import { appLocale } from "../../core/i18n/locale";
 import { formatDate, formatDateTime, formatFeedTime } from "../../shared/date-format";
 import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
@@ -111,7 +115,7 @@ const SIZE_FORMAT = new Intl.NumberFormat(appLocale(), { minimumFractionDigits: 
 @Component({
   selector: "k-card-detail",
   standalone: true,
-  imports: [CdkTrapFocus, 
+  imports: [CdkTrapFocus, CardRelationsComponent, 
     NgOptimizedImage,
     NgTemplateOutlet,
     CdkDropList,
@@ -144,6 +148,7 @@ const SIZE_FORMAT = new Intl.NumberFormat(appLocale(), { minimumFractionDigits: 
 export class CardDetailComponent {
   private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
+  private readonly completionWarning = inject(CompletionWarningService);
   private readonly auth = inject(AuthService);
   private readonly editorDrafts = inject(EditorDrafts);
   private readonly unsavedWork = inject(UnsavedWorkService);
@@ -361,6 +366,50 @@ export class CardDetailComponent {
   readonly checklists = input<WireCardChecklist[]>([]);
   readonly appliedChecklistTemplateIds = input<string[]>([]);
   readonly linkedNotes = input<LinkedInternalSummary[]>([]);
+  // Relations live on the card detail in BoardState (both hosts provide one) and are re-read on
+  // card:links:changed, so they need no input of their own.
+  readonly relations = computed(() => this.state.detailForCard(this.card().id)?.relations ?? []);
+  readonly hiddenBlockerCount = computed(() => this.state.detailForCard(this.card().id)?.hiddenBlockerCount ?? 0);
+  /**
+   * The dependency summary for the status row above the description, beside the time in progress:
+   * whether the card can be started, and what else hangs off it, is read before anything else. The
+   * Dependencies section further down lists the cards; each chip jumps there. Done work (completed or
+   * archived) is not waiting on anything, matching the board tile's Blocked chip, so its blocker
+   * status is left out rather than shown as blocked.
+   */
+  readonly dependencyChips = computed(() => {
+    const card = this.card();
+    const relations = this.relations();
+    const chips: { kind: "blocked" | "clear" | "blocking" | "blocks" | "related"; icon: string; label: string; tooltip: string }[] = [];
+    const status = blockerStatus(relations, this.hiddenBlockerCount());
+    if (status && !(status.blocked && (card.completedAt || card.archivedAt))) {
+      const hidden = this.hiddenBlockerCount();
+      chips.push({
+        kind: status.blocked ? "blocked" : "clear",
+        icon: status.blocked ? "ti-lock" : "ti-lock-open",
+        label: status.title,
+        tooltip: hidden ? `${status.title} · ${hiddenBlockersLabel(hidden)}` : status.title,
+      });
+    }
+    // Amber while this card is open and others wait on it: finishing it unblocks work, so it is a
+    // nudge (the due-soon hue), not a fault (red stays for a card that is itself blocked). Once this
+    // card is done it holds nothing up, so the fact goes neutral like Related.
+    const blocks = relations.filter((relation) => relation.direction === "blocks").length;
+    if (blocks) {
+      const label = icu($localize`:Card detail status chip - this card blocks other cards:{count, plural, one {Blocks 1 card} other {Blocks # cards}}`, { count: blocks });
+      chips.push({ kind: card.completedAt || card.archivedAt ? "blocks" : "blocking", icon: "ti-hand-stop", label, tooltip: label });
+    }
+    const related = relations.filter((relation) => relation.direction === "relates_to").length;
+    if (related) {
+      const label = icu($localize`:Card detail status chip - cards related to this one without an order:{count, plural, one {Related to 1 card} other {Related to # cards}}`, { count: related });
+      chips.push({ kind: "related", icon: "ti-arrows-left-right", label, tooltip: label });
+    }
+    return chips;
+  });
+
+  scrollToDependencies() {
+    this.detailScroller()?.nativeElement.querySelector("k-card-relations")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   // Runs live on BoardState (the tile chip reads them too); detail projects only the card's live
   // slice. Finished, failed, cancelled, and stalled runs are history, and history belongs in the
   // activity feed (the agentRun:ended row), not in a second list above the fields.
@@ -456,6 +505,14 @@ export class CardDetailComponent {
       return;
     }
     void this.router.navigateByUrl(this.linkedItemHref(item));
+  }
+
+  openRelatedCard(card: CardRelationCard) {
+    const sameBoard = card.boardId === this.boardId();
+    void this.router.navigate(["/b", card.boardId, "c", card.id], {
+      ...(sameBoard && { queryParams: { cardId: null, lightboxAttachmentId: null }, queryParamsHandling: "merge" as const }),
+      browserUrl: cardPath(card.organisationKey, card.key),
+    });
   }
 
   linkedItemIcon(item: LinkedInternalSummary): string {
@@ -679,6 +736,7 @@ export class CardDetailComponent {
     if (!this.canEdit() || this.savingCompletion()) return;
     this.savingCompletion.set(true);
     try {
+      if (!await this.completionWarning.allow(!this.card().completedAt, { cardIds: [this.card().id] })) return;
       const card = await this.api.patch<WireCard>(`/cards/${this.card().id}/completion`, {
         completed: !this.card().completedAt,
       });
@@ -869,6 +927,7 @@ export class CardDetailComponent {
   private detailLoadSeq = 0;
   private mirrorLoadSeq = 0;
   private linkedItemsLoadSeq = 0;
+  private relationsLoadSeq = 0;
   // Passed to the description viewer so its link chips re-resolve on card:links:changed.
   readonly linkRevision = signal(0);
   readonly mirrorStatus = signal<CardMirrorStatus | null>(null);
@@ -1000,7 +1059,21 @@ export class CardDetailComponent {
         [SERVER_EVENTS.CARD_LINKS_CHANGED]: ({ cardId: changedCardId }) => {
           if (changedCardId !== cardId) return;
           this.refreshLinkedItems(cardId);
+          this.refreshRelations(cardId);
           this.linkRevision.update((revision) => revision + 1);
+        },
+        // The Dependencies section names each related card's list, board and labels, and a rename of
+        // one of those is a catalogue event, not a card event: nothing tells the related cards to
+        // re-read. The open card is the only place showing the stale name, so it re-reads itself,
+        // and only when a shown card is affected (lists are workspace-scoped, so any relation may be).
+        [SERVER_EVENTS.LIST_UPDATED]: ({ workspaceId }) => {
+          if (workspaceId === this.card().workspaceId && this.relations().length) this.refreshRelations(cardId);
+        },
+        [SERVER_EVENTS.CARD_LABEL_UPDATED]: ({ cardLabel }) => {
+          if (this.relations().some((relation) => relation.card.labels.some((label) => label.id === cardLabel.id))) this.refreshRelations(cardId);
+        },
+        [SERVER_EVENTS.BOARD_UPDATED]: ({ board }) => {
+          if (this.relations().some((relation) => relation.card.boardId === board.id)) this.refreshRelations(cardId);
         },
         [SERVER_EVENTS.BOARD_MIRROR_CREATED]: () => this.refreshMirrorStatus(cardId),
         [SERVER_EVENTS.BOARD_MIRROR_UPDATED]: () => this.refreshMirrorStatus(cardId),
@@ -1211,6 +1284,16 @@ export class CardDetailComponent {
     void this.api.get<CardLinkedItemsResponse>(`/cards/${cardId}/linked-items`)
       .then(({ linkedItems }) => {
         if (seq === this.linkedItemsLoadSeq && cardId === this.cardId()) this.state.setCardLinkedItems(cardId, linkedItems);
+      })
+      .catch(() => undefined);
+  }
+
+  /** Same reasoning as `refreshLinkedItems`: re-read only the relations, never the whole detail. */
+  refreshRelations(cardId = this.cardId()) {
+    const seq = ++this.relationsLoadSeq;
+    void this.api.get<CardRelationsResponse>(`/cards/${cardId}/relations`)
+      .then((response) => {
+        if (seq === this.relationsLoadSeq && cardId === this.cardId()) this.state.setCardRelations(cardId, response);
       })
       .catch(() => undefined);
   }

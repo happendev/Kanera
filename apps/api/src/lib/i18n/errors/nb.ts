@@ -438,5 +438,10 @@ export const nb: ErrorCatalog = {
   "invalid {provider} credentials": "Ugyldig legitimasjon for {provider}",
   "remindAt must be within {days} days": "remindAt må være innen {days} dager",
   "this attachment has no {variant} image": "Dette vedlegget har ikke noe {variant}-bilde",
-  "work-done history is limited to the last {days} days": "Historikken for utført arbeid er begrenset til de siste {days} dagene"
+  "work-done history is limited to the last {days} days": "Historikken for utført arbeid er begrenset til de siste {days} dagene",
+  "a card cannot be related to itself": "Et kort kan ikke relateres til seg selv",
+  "a completed card cannot block another card": "Et fullført kort kan ikke blokkere et annet kort",
+  "cards must be in the same workspace to be related": "Kortene må være i samme arbeidsområde for å kunne relateres",
+  "relation not found": "Fant ikke relasjonen",
+  "this relation would create a blocking cycle": "Denne relasjonen ville skapt en blokkeringssyklus",
 };

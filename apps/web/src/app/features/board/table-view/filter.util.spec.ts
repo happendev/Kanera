@@ -186,6 +186,7 @@ describe("matchesCfConditions", () => {
       showInProgressOnly: false,
       showPrioritySetOnly: false,
       showReminderSetOnly: false,
+      showBlockedOnly: false,
     };
     it("is false when nothing is set", () => {
       expect(hasActiveFilter(empty)).toBe(false);

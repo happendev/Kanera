@@ -438,5 +438,10 @@ export const nl: ErrorCatalog = {
   "invalid {provider} credentials": "ongeldige {provider} inloggegevens",
   "remindAt must be within {days} days": "reminderAt moet binnen {days} dagen zijn",
   "this attachment has no {variant} image": "deze bijlage heeft geen {variant} afbeelding",
-  "work-done history is limited to the last {days} days": "De geschiedenis van het uitgevoerde werk is beperkt tot de afgelopen {days} dagen"
+  "work-done history is limited to the last {days} days": "De geschiedenis van het uitgevoerde werk is beperkt tot de afgelopen {days} dagen",
+  "a card cannot be related to itself": "een kaart kan niet aan zichzelf worden gerelateerd",
+  "a completed card cannot block another card": "een voltooide kaart kan geen andere kaart blokkeren",
+  "cards must be in the same workspace to be related": "kaarten moeten in dezelfde werkruimte staan om te worden gerelateerd",
+  "relation not found": "relatie niet gevonden",
+  "this relation would create a blocking cycle": "deze relatie zou een blokkeringscyclus veroorzaken",
 };

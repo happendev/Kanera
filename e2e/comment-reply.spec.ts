@@ -1,5 +1,5 @@
 import { expect, test } from "./support/fixtures";
-import { createCard, openBoard, openCard } from "./support/ui";
+import { createCard, expectCardTileMounted, openBoard, openCard } from "./support/ui";
 
 test("replying to a comment puts the caret below the quote so the reply can be typed straight away", async ({ page, signIn, pageAs, uniqueName }) => {
   const title = uniqueName("E2E reply card");
@@ -10,6 +10,8 @@ test("replying to a comment puts the caret below the quote so the reply can be t
   // Reply is offered only on someone else's comment, so a second member posts the original.
   const author = await pageAs("marcus");
   await openBoard(author, "Platform Delivery");
+  // Earlier specs can push this card past the lane's initial render window for a fresh viewer.
+  await expectCardTileMounted(author, title);
   const authorDetail = await openCard(author, title);
   await authorDetail.getByRole("button", { name: /Comments/ }).click();
   await authorDetail.getByRole("button", { name: "Write a comment..." }).click();

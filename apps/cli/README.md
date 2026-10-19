@@ -65,6 +65,8 @@ kanera commands          # everything this CLI can do (works before login)
 kanera work              # your assignments across every accessible board
 kanera card MKT-42       # a card, by key, id, or URL
 kanera card done MKT-42  # mark it complete
+kanera card block API-12 WEB-40   # API-12 blocks WEB-40 (unblock / relate work the same way)
+kanera deps WEB-40       # what blocks WEB-40 and what it holds up, across boards (--boardId <id> maps a board)
 kanera comment MKT-42 "Shipped."
 kanera separator create <boardId> <listId> "This week" --color blue
 kanera separator move <separatorId> <listId> --anchor.side before --anchor.item.type card --anchor.item.id <cardId>

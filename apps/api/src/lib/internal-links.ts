@@ -337,6 +337,14 @@ function linkedEntityAccess(claims: AuthClaims) {
   };
 }
 
+/**
+ * The subset of these cards the viewer may open: board access plus the assigned-items-only rule,
+ * the same check card detail applies. Inaccessible rows are dropped, never an error.
+ */
+export function readableCardIds(claims: AuthClaims, rows: { id: string; boardId: string }[]): Promise<Set<string>> {
+  return linkedEntityAccess(claims).readableCardIds(rows);
+}
+
 export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string, workspaceId: string): Promise<LinkedInternalSummary[]> {
   // Both directions in one OR: the planner resolves this with a BitmapOr across the two directional
   // indexes (internal_links_workspace_source_idx / _target_idx), so it is already index-served —

@@ -18,6 +18,7 @@ const EMPTY: FilterValue = {
   showInProgressOnly: false,
   showPrioritySetOnly: false,
   showReminderSetOnly: false,
+  showBlockedOnly: false,
 };
 
 

@@ -49,6 +49,8 @@ export function describeWorkspaceTemplateAutomation(automation: WorkspaceTemplat
     : trigger.type === "card_in_progress_too_long" ? "When a card has been in progress too long"
     : trigger.type === "all_checklist_items_complete" ? "When every checklist item is complete"
     : trigger.type === "card_marked_complete" ? "When a card is marked complete"
+    : trigger.type === "card_unblocked" ? "When a card's last blocker is cleared"
+    : trigger.type === "card_blocked" ? "When a card gains its first open blocker"
     : `When the ${trigger.labelName} label is set`;
   return `${when}: ${automation.actions.map(describeAutomationAction).join("; ")}`;
 }

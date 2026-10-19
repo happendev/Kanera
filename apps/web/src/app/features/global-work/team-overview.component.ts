@@ -25,11 +25,29 @@ import { priorityRankHeat } from "../../shared/priority-rank";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { dueDateTimestamp, formatDueDate, isDueSoon, isOverdue } from "../board/due-date.util";
 import { isInProgressTooLong, timeInProgressChip, type TimeInProgressChip } from "../board/time-in-progress.util";
+import { blockedChipLabel } from "../board/card-relations.util";
 
 /** The per-person sections a viewer can fold. Folding one folds it in every panel at once. */
 type OverviewSection = "inProgress" | "recent" | "upNext" | "assigned" | "done";
 const OVERVIEW_SECTIONS: readonly OverviewSection[] = ["inProgress", "recent", "upNext", "assigned", "done"];
 const COLLAPSED_SECTIONS_KEY = viewPreferenceKey("collapsedSections", "teamOverview");
+const HIDE_GUESTS_KEY = viewPreferenceKey("hideGuests", "teamOverview");
+
+function storedHideGuests(): boolean {
+  try {
+    return localStorage.getItem(HIDE_GUESTS_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A guest on every board they share with this scope: someone from a client or partner organisation
+ * rather than the team. A member of any in-scope board's organisation is never one.
+ */
+function isGuest(person: WorkCatalogPerson): boolean {
+  return person.boardIds.length > 0 && person.boardIds.every((boardId) => person.guestBoardIds.includes(boardId));
+}
 
 /** Viewer-local and best-effort: private windows and blocked storage simply start expanded. */
 function storedCollapsedSections(): ReadonlySet<OverviewSection> {
@@ -67,6 +85,8 @@ type OverviewRow = {
   /** Tracked time in progress: running (accent), past its workspace alert (amber) or stopped (muted). */
   time: TimeInProgressChip | null;
   due: { text: string; tone: DueTone } | null;
+  /** Tooltip for the Blocked chip while the card waits on an open card; null otherwise. */
+  blocked: string | null;
   /** What the person did and when ("Moved 2h ago", "Done yesterday"), for activity-derived rows. */
   note: string | null;
   rank?: number;
@@ -174,6 +194,34 @@ export class TeamOverviewComponent {
   readonly activityError = signal<string | null>(null);
   readonly activityLoading = signal(false);
   readonly showQuiet = signal(false);
+
+  /** Viewer-local, like the folds: whether to leave guests out of the strip and the panels. */
+  readonly hideGuests = signal(storedHideGuests());
+  readonly guestCount = computed(() => this.people().filter(isGuest).length);
+  private readonly shownPeople = computed(() =>
+    this.hideGuests() ? this.people().filter((person) => !isGuest(person)) : this.people()
+  );
+
+  toggleHideGuests(): void {
+    const next = !this.hideGuests();
+    this.hideGuests.set(next);
+    try {
+      localStorage.setItem(HIDE_GUESTS_KEY, String(next));
+    } catch {
+      // Storage can be unavailable in privacy mode; the choice still applies for this visit.
+    }
+    // A focused guest would otherwise leave their Up next docked beside a panel that is gone.
+    const focused = this.people().find((person) => person.userId === this.focusedUserId());
+    if (next && focused && isGuest(focused)) this.focusChanged.emit(null);
+  }
+
+  /** Says what a press does and to whom, since "guest" alone does not say which side of the line they are. */
+  readonly hideGuestsTooltip = computed(() => {
+    const count = this.guestCount();
+    return this.hideGuests()
+      ? icu($localize`:Tooltip on the pressed Team overview toggle; pressing shows guests again:{count, plural, one {Show # guest from another organisation} other {Show # guests from other organisations}}`, { count })
+      : icu($localize`:Tooltip on the Team overview toggle hiding guests:{count, plural, one {Hide # guest from another organisation} other {Hide # guests from other organisations}}`, { count });
+  });
 
   /**
    * Folded sections, shared by every panel: comparing one kind of work across the team ("what is
@@ -314,7 +362,7 @@ export class TeamOverviewComponent {
     const openByPerson = this.openCardsByPerson();
     const { touches, completions, lastActive } = this.activity();
 
-    return this.people().map((person) => {
+    return this.shownPeople().map((person) => {
       const assigned = openByPerson.get(person.userId) ?? [];
 
       // Longest-running first: the card that has been "in progress" for two weeks is the one to
@@ -576,6 +624,7 @@ export class TeamOverviewComponent {
       due: withDue && card.dueDateLocalDate
         ? { text: formatDueDate(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone) ?? "", tone: dueTone(card) }
         : null,
+      blocked: blockedChipLabel(card),
       note,
     };
   }

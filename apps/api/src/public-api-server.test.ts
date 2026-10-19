@@ -51,6 +51,7 @@ interface PublicOpenApiTestDocument {
     "/boards/{id}/work-done/summary": { get: object };
     "/search": { get: object; post: object };
     "/work/history/query": { post: object };
+    "/cards/dependency-graph": { post: { description?: string } };
     "/me/work-history": { post: object };
     "/me/current-work": { post: object };
     "/work/priority-targets": { get: { description?: string } };
@@ -275,6 +276,10 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.equal(app.hasRoute({ method: "PATCH", url: "/api/v1/automations/:id" }), true);
   assert.equal(app.hasRoute({ method: "GET", url: "/api/v1/automations/:id/executions" }), true);
   assert.equal(app.hasRoute({ method: "DELETE", url: "/api/v1/automations/:id" }), true);
+  // The dependency map is shared with the web app; the route and its documentation ship together.
+  assert.equal(app.hasRoute({ method: "POST", url: "/api/v1/cards/dependency-graph" }), true);
+  assert.match(spec.paths["/cards/dependency-graph"].post.description ?? "", /never returned or walked through/i);
+  assert.ok(spec.components.schemas.DependencyGraph?.properties?.edges);
   assert.equal(spec.paths["/workspaces"].get.security[0]?.BearerAuth.length, 0);
   assert.match(spec.tags.find((tag) => tag.name === "Webhooks")?.description ?? "", /HMAC-SHA256/);
   assert.ok(spec.components.schemas.Checklist?.properties?.parentItemId);

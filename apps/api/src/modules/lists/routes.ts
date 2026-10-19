@@ -1,9 +1,12 @@
+import { env } from "../../env.js";
+import { EMPTY_EFFECTS, runCardUnblockedAutomations } from "../../lib/automations.js";
+import { recordBlockersCleared, notifyDependencyHandoffs } from "../../lib/dependency-notifications.js";
 import { dto } from "@kanera/shared";
 import { inProgressClockOf, type InProgressClock } from "@kanera/shared/events";
 import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import type { DeletionImpactResponse } from "@kanera/shared/dto";
 import { cards, lists } from "@kanera/shared/schema";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess, assignedCardVisibility } from "../../lib/access.js";
@@ -17,6 +20,7 @@ import { between, workspaceNeighbourPositions } from "../../lib/position.js";
 import { rebalanceLists } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { emitToBoard, emitToWorkspace } from "../../realtime/emit.js";
+import { captureBlockedDependents, emitBlockedByCountChanged, emitDependentsChanged, emitRelationNeighboursChanged, lockWorkspaceRelations, relationNeighbourIds } from "../../lib/card-relations.js";
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full list scan.
@@ -131,7 +135,25 @@ export async function listRoutes(app: FastifyInstance) {
     const storage = await getStorageForClient(req.auth.cid);
     await deleteAttachmentFiles(storage, listCards.map((c) => c.id));
 
-    await db.delete(lists).where(eq(lists.id, id));
+    // Cards outside this list blocked by its cards lose those blockers in the cascade. The card set
+    // and the snapshot are both read under the graph lock inside the transaction, so a card moved
+    // into the list, or a relation added, while this request waited for the lock is seen too.
+    const { handoffs, effects, survivingDependents, neighbours } = await db.transaction(async (tx) => {
+      await lockWorkspaceRelations(tx, current.workspaceId);
+      const listCardIds = new Set((await tx.select({ id: cards.id }).from(cards).where(eq(cards.listId, id))).map((c) => c.id));
+      const before = await captureBlockedDependents(tx, current.workspaceId, [...listCardIds]);
+      const survivingDependents = [...new Set(before.map((row) => row.dependentId))].filter((cardId) => !listCardIds.has(cardId));
+      // Every surviving related card loses a row from its Dependencies section.
+      const neighbours = await relationNeighbourIds(tx, [...listCardIds]);
+      await tx.delete(lists).where(eq(lists.id, id));
+      const handoffs = await recordBlockersCleared(tx, { before, actorId: req.auth.sub });
+      const effects = await runCardUnblockedAutomations(tx, { handoffs, workspaceId: current.workspaceId, clientId: req.auth.cid, triggerActorId: req.auth.sub });
+      return { handoffs, effects, survivingDependents, neighbours };
+    });
+    await notifyDependencyHandoffs({ handoffs, mailer: app.mailer, webOrigin: env.WEB_ORIGIN })
+      .catch((err: unknown) => req.log.warn({ err }, "failed to send blockers-cleared notifications"));
+    await emitAutomationEffects(effects);
+    await emitRelationNeighboursChanged([], neighbours.filter((cardId) => !survivingDependents.includes(cardId)));
     await recordActivity(db, {
       boardId: null,
       workspaceId: current.workspaceId,
@@ -142,6 +164,7 @@ export async function listRoutes(app: FastifyInstance) {
       payload: { name: current.name },
     });
     await emitToWorkspace(current.workspaceId, "list:deleted", { workspaceId: current.workspaceId, listId: id });
+    await emitBlockedByCountChanged(survivingDependents, req.auth.cid);
     return reply.status(204).send();
   });
 
@@ -210,6 +233,8 @@ export async function listRoutes(app: FastifyInstance) {
     // so a "when a card enters this list" rule must fire for each moved card or the same user
     // action behaves differently depending on which entry point performed it.
     const automationEffects = await db.transaction(async (tx) => {
+      // Graph lock first, like the card routes: list-entry automations may complete a blocker.
+      await lockWorkspaceRelations(tx, source.workspaceId);
       const collected: AutomationEffects[] = [];
       for (const m of moves) {
         const [written] = await tx.update(cards)
@@ -269,6 +294,8 @@ export async function listRoutes(app: FastifyInstance) {
     // After the board rooms so clients apply the move before any automation-driven follow-up
     // (completion, label, assignee) lands on the same card.
     for (const effects of automationEffects) await emitAutomationEffects(effects);
+    // Related cards show these cards' list in their Dependencies section.
+    await emitRelationNeighboursChanged(moves.map((m) => m.id));
     return { moved: moves.length };
   });
 
@@ -298,19 +325,19 @@ export async function listRoutes(app: FastifyInstance) {
       body.boardId ? eq(cards.boardId, body.boardId) : undefined,
       assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined,
     );
-    const listCards = await db
-      .select({ id: cards.id, boardId: cards.boardId, title: cards.title })
-      .from(cards)
-      .where(archiveFilter);
-
-    if (listCards.length === 0) return { archived: 0 };
-
     const archivedAt = new Date();
-    const { updatedCards, deletedNotifications } = await db.transaction(async (tx) => {
+    const { updatedCards, deletedNotifications, handoffs, effects } = await db.transaction(async (tx) => {
+      // Moves also take the graph lock. Select after acquiring it, then archive that exact set, so
+      // a blocker arriving while this request waits cannot be archived without its handoff.
+      await lockWorkspaceRelations(tx, current.workspaceId);
+      const listCards = await tx.select({ id: cards.id }).from(cards).where(archiveFilter);
+      if (listCards.length === 0) return { updatedCards: [], deletedNotifications: [], handoffs: [], effects: EMPTY_EFFECTS };
+      const cardIds = listCards.map((card) => card.id);
+      const before = await captureBlockedDependents(tx, current.workspaceId, cardIds);
       const updated = await tx
         .update(cards)
         .set({ archivedAt, updatedAt: archivedAt })
-        .where(archiveFilter)
+        .where(inArray(cards.id, cardIds))
         .returning();
 
       await recordActivity(tx, {
@@ -320,10 +347,12 @@ export async function listRoutes(app: FastifyInstance) {
         entityType: "list",
         entityId: id,
         action: "updated",
-        payload: { cardsArchived: listCards.length },
+        payload: { cardsArchived: updated.length },
       });
       const deletedNotifications = await clearNotificationsForCards(tx, updated.map((card) => card.id));
-      return { updatedCards: updated, deletedNotifications };
+      const handoffs = await recordBlockersCleared(tx, { before, actorId: req.auth.sub });
+      const effects = await runCardUnblockedAutomations(tx, { handoffs, workspaceId: current.workspaceId, clientId: req.auth.cid, triggerActorId: req.auth.sub });
+      return { updatedCards: updated, deletedNotifications, handoffs, effects };
     });
     emitDeletedNotifications(deletedNotifications);
 
@@ -338,11 +367,15 @@ export async function listRoutes(app: FastifyInstance) {
         await emitToBoard(boardId, "card:updated", { boardId, card });
       }
     }
+    await emitDependentsChanged(updatedCards.map((card) => card.id), req.auth.cid);
+    await notifyDependencyHandoffs({ handoffs, mailer: app.mailer, webOrigin: env.WEB_ORIGIN })
+      .catch((err: unknown) => req.log.warn({ err }, "failed to send blockers-cleared notifications"));
+    await emitAutomationEffects(effects);
     // Archiving removes cards from "Up next" queues without touching their rows, so the queue
     // audiences must be pinged separately from the board rooms above.
     await invalidateQueuesForCards(updatedCards.map((card) => card.id));
 
-    return { archived: listCards.length };
+    return { archived: updatedCards.length };
   });
 
   app.post("/lists/:id/move", async (req) => {

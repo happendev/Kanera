@@ -112,7 +112,7 @@ describe("CardActionsMenuPopover", () => {
 
   it("supports notification-context completion and archive without a board state provider", async () => {
     const api = {
-      post: vi.fn(),
+      post: vi.fn().mockResolvedValue({ blockedCardCount: 0 }),
       patch: vi.fn((path: string, body: unknown) => Promise.resolve({
         id: "card-1",
         boardId: "board-1",

@@ -878,4 +878,9 @@ export const ptBR: ErrorCatalog = {
     "Este anexo não tem uma imagem {variant}.",
   "work-done history is limited to the last {days} days":
     "O histórico de trabalho concluído é limitado aos últimos {days} dias.",
+  "a card cannot be related to itself": "Um cartão não pode ser relacionado a si mesmo.",
+  "a completed card cannot block another card": "Um cartão concluído não pode bloquear outro cartão.",
+  "cards must be in the same workspace to be related": "Os cartões precisam estar no mesmo espaço de trabalho para serem relacionados.",
+  "relation not found": "Relação não encontrada.",
+  "this relation would create a blocking cycle": "Esta relação criaria um ciclo de bloqueio.",
 };

@@ -6,7 +6,7 @@ import { offsetPagedQuery } from "./_pagination.js";
 import { dueDateSlot } from "./cards.js";
 
 export const automationTriggerType = z.enum(AUTOMATION_TRIGGER_TYPES).describe(
-  "Automation trigger event. card_leaves_list matches the source list of a move. custom_field_value_changed fires only on a transition into the selected typed value. due_date_approaching is scheduled and fires once per due date and lead-time setting before the due day. card_becomes_inactive is scheduled and fires once per inactivity boundary. card_in_progress_too_long is scheduled and fires once per in-progress stint when its time in progress passes the workspace's inProgressAlertDays (never while that setting is 0).",
+  "Automation trigger event. card_leaves_list matches the source list of a move. custom_field_value_changed fires only on a transition into the selected typed value. due_date_approaching is scheduled and fires once per due date and lead-time setting before the due day. card_becomes_inactive is scheduled and fires once per inactivity boundary. card_in_progress_too_long is scheduled and fires once per in-progress stint when its time in progress passes the workspace's inProgressAlertDays (never while that setting is 0). card_blocked fires when an active card goes from zero to one or more open blockers, through cards.set_relations or reopening/restoring a blocker. card_unblocked fires when its last open blocker is completed, archived or unlinked, or removed with its board or list. Both include changes by people, integrations, automations and mirrors; each trigger runs at most once per card per transaction to bound chains.",
 );
 export type AutomationTriggerTypeDto = z.infer<typeof automationTriggerType>;
 

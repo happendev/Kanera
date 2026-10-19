@@ -79,6 +79,8 @@ export type WorkspaceSeedAutomationTrigger =
   | { type: "due_date_arrives" }
   | { type: "all_checklist_items_complete" }
   | { type: "card_marked_complete" }
+  | { type: "card_unblocked" }
+  | { type: "card_blocked" }
   | { type: "card_label_set"; labelName: string }
   | { type: "card_becomes_inactive" }
   | { type: "card_in_progress_too_long" };
@@ -292,6 +294,11 @@ export interface Card {
   updatedAt: Timestamp;
   /** Canonical browser link to the card. */
   url: string;
+  /**
+   * On board and work card listings only: open (not completed, not archived) cards that block this
+   * one, counting blockers on boards you cannot open. Omitted when zero; `listRelations` names them.
+   */
+  blockedByCount?: number;
 }
 
 export interface Attachment {
@@ -358,7 +365,7 @@ export interface CardReminderListItem extends CardReminder {
 export interface NotificationInboxItem {
   id: Uuid;
   createdAt: string;
-  reason: "assigned" | "watching" | "mentioned" | "overdue" | "checklist_item_overdue" | "board_member_left" | "reminder" | "reacted";
+  reason: "assigned" | "watching" | "mentioned" | "overdue" | "checklist_item_overdue" | "board_member_left" | "reminder" | "reacted" | "dependency";
   read: boolean;
   summary: string;
   action: string | null;
@@ -391,6 +398,114 @@ export interface CardDetail {
   attachments: Attachment[];
   checklists: Checklist[];
   linkedNotes: { id: Uuid; title: string }[];
+  relations: CardRelation[];
+  /** Open blockers on cards you cannot open: counted, never listed. */
+  hiddenBlockerCount: number;
+}
+
+/**
+ * How a relation reads from the card it was fetched for: `blocks` (this card blocks `card`),
+ * `blocked_by` (`card` blocks this card) or `relates_to`.
+ */
+export type CardRelationDirection = "blocks" | "blocked_by" | "relates_to";
+
+export interface CardRelation {
+  id: Uuid;
+  direction: CardRelationDirection;
+  createdAt: Timestamp;
+  card: {
+    id: Uuid;
+    organisationKey: string;
+    key: string;
+    title: string;
+    boardId: Uuid;
+    boardName: string;
+    listName: string;
+    completedAt: Timestamp | null;
+    archivedAt: Timestamp | null;
+    labels: { id: Uuid; name: string; color: ColorToken | null }[];
+    assignees: { userId: Uuid; displayName: string; avatarUrl: string | null }[];
+  };
+}
+
+export interface CardRelations {
+  relations: CardRelation[];
+  hiddenBlockerCount: number;
+}
+
+/** A card on a dependency map. Optional fields are omitted when empty, zero or null. */
+export interface DependencyGraphCard {
+  id: Uuid;
+  workspaceId: Uuid;
+  organisationKey: string;
+  number: number;
+  key: string;
+  boardId: Uuid;
+  listId: Uuid;
+  title: string;
+  position: string;
+  /** Canonical browser link to the card. */
+  url: string;
+  /** True for cards the request scoped; false for cards a chain pulled in from elsewhere. */
+  inScope: boolean;
+  completedAt?: Timestamp;
+  dueDateLocalDate?: LocalDate;
+  dueDateSlot?: DueDateSlot;
+  inProgressSince?: Timestamp;
+  /**
+   * Open blockers, counting blockers on boards you cannot open. Blockers counted here but missing
+   * from `edges` are private to you or beyond the map's edge.
+   */
+  blockedByCount?: number;
+  labelIds?: Uuid[];
+  assigneeIds?: Uuid[];
+  /** Values of the map's `customFields` only. */
+  customFieldValues?: DependencyGraphFieldValue[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** A card-face field value on the dependency map; only the column that is set is present. */
+export interface DependencyGraphFieldValue {
+  cardId: Uuid;
+  fieldId: Uuid;
+  updatedAt: Timestamp;
+  valueText?: string;
+  /** Decimal as a string. */
+  valueNumber?: string;
+  valueCheckbox?: boolean;
+  valueDate?: LocalDate;
+  valueUrl?: string;
+  valueOptionIds?: Uuid[];
+  valueUserIds?: Uuid[];
+}
+
+export interface DependencyGraphEdge {
+  id: Uuid;
+  /** For `blocks`, the blocker. */
+  sourceCardId: Uuid;
+  /** For `blocks`, the blocked card. */
+  targetCardId: Uuid;
+  kind: "blocks" | "relates_to";
+}
+
+/**
+ * Blocking chains around a scope, as you may see them. Cards on boards you cannot open are never
+ * included or walked through. The lookups name what the returned cards reference.
+ */
+export interface DependencyGraph {
+  cards: DependencyGraphCard[];
+  /** Relations whose two cards are both on the map. */
+  edges: DependencyGraphEdge[];
+  /** `canEdit`: you may add and remove dependencies of this board's cards. False for a read-only credential. */
+  boards: { id: Uuid; name: string; icon: string | null; iconColor: ColorToken | null; canEdit: boolean }[];
+  lists: { id: Uuid; name: string }[];
+  labels: { id: Uuid; name: string; color: ColorToken | null }[];
+  people: { userId: Uuid; displayName: string; avatarUrl: string | null }[];
+  /** Custom fields shown on card faces in the workspaces of cards on the map. */
+  customFields: CustomField[];
+  /** The walk stopped at 400 cards; the map is a partial view of the chains it reached. */
+  truncated: boolean;
 }
 
 export type CommentAuthorKind = "user" | "apiKey" | "agent" | "system";
@@ -590,6 +705,8 @@ export interface WorkFilters {
   inProgressOnly?: boolean;
   /** Open cards whose current in-progress stint has passed the workspace alert. */
   inProgressTooLongOnly?: boolean;
+  /** Only open cards with at least one open blocker (`blockedByCount` > 0). */
+  blockedOnly?: boolean;
   dueFrom?: LocalDate | null;
   dueTo?: LocalDate | null;
   overdueOnly?: boolean;

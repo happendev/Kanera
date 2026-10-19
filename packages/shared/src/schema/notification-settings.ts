@@ -63,6 +63,12 @@ export const notificationSettings = pgTable("notification_settings", {
   reactionAddedNtfy: boolean("reaction_added_ntfy").notNull().default(true),
   reactionAddedGotify: boolean("reaction_added_gotify").notNull().default(true),
   reactionAddedWebhook: boolean("reaction_added_webhook").notNull().default(true),
+  // A watched card became blocked by, or started blocking, another card.
+  cardDependencyEmail: boolean("card_dependency_email").notNull().default(true),
+  cardDependencyPush: boolean("card_dependency_push").notNull().default(true),
+  cardDependencyNtfy: boolean("card_dependency_ntfy").notNull().default(true),
+  cardDependencyGotify: boolean("card_dependency_gotify").notNull().default(true),
+  cardDependencyWebhook: boolean("card_dependency_webhook").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

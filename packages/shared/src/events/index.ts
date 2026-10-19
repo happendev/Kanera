@@ -42,6 +42,7 @@ import type {
   StandaloneBoardGroup,
 } from "../schema/index.js";
 import type { LinkedInternalSummary } from "../dto/internal-links.js";
+import type { CardRelationSummary } from "../dto/card-relations.js";
 
 export type { ActivityFeedEvent, CardAttachmentRow, CardFeedItem, CommentRow, NoteAttachmentRow };
 
@@ -158,6 +159,12 @@ export type WireCardSummary = Pick<
   attachmentCount: number;
   checklistDoneCount: number;
   checklistTotalCount: number;
+  /**
+   * Open (not completed, not archived) cards that block this one, counting blockers on boards the
+   * viewer cannot open. The count is viewer-independent, so it can ride board-room events; titles of
+   * hidden blockers never do.
+   */
+  blockedByCount: number;
   coverUrl: string | null;
   coverImageWidth: number | null;
   coverImageHeight: number | null;
@@ -248,6 +255,7 @@ export function compactCardSummary(
   if (card.attachmentCount) out.attachmentCount = card.attachmentCount;
   if (card.checklistDoneCount) out.checklistDoneCount = card.checklistDoneCount;
   if (card.checklistTotalCount) out.checklistTotalCount = card.checklistTotalCount;
+  if (card.blockedByCount) out.blockedByCount = card.blockedByCount;
   if (card.labelIds.length) out.labelIds = card.labelIds;
   if (card.assigneeIds.length) out.assigneeIds = card.assigneeIds;
   if (card.customFieldValues.length) out.customFieldValues = card.customFieldValues.map(compactCardCustomFieldValue);
@@ -284,6 +292,7 @@ export function expandCardSummary(card: CompactCardSummary): WireCardSummary {
     attachmentCount: card.attachmentCount ?? 0,
     checklistDoneCount: card.checklistDoneCount ?? 0,
     checklistTotalCount: card.checklistTotalCount ?? 0,
+    blockedByCount: card.blockedByCount ?? 0,
     labelIds: card.labelIds ?? [],
     assigneeIds: card.assigneeIds ?? [],
     customFieldValues: (card.customFieldValues ?? []).map(expandCardCustomFieldValue),
@@ -299,6 +308,8 @@ export interface WireCardDetail {
   checklists: WireCardChecklist[];
   appliedChecklistTemplateIds: string[];
   linkedNotes: LinkedInternalSummary[];
+  relations: CardRelationSummary[];
+  hiddenBlockerCount: number;
 }
 // agentGrantId is an internal audit link; clients only need agentName to label agent-written comments.
 export type WireComment = Omit<Comment, "searchVector" | "agentGrantId"> & {
@@ -500,8 +511,15 @@ export interface ServerToClientEvents {
     list: { id: string; name: string } | null;
   }) => void;
 
-  "card:created": (payload: { boardId: string; card: CompactWireCard }) => void;
-  "card:updated": (payload: { boardId: string; card: CompactWireCard }) => void;
+  // `blockedByCount` rides along when the card already exists elsewhere and arrives on this board
+  // (move to board): a brand-new card has no blockers, but a moved one keeps its Blocked chip.
+  "card:created": (payload: { boardId: string; card: CompactWireCard; blockedByCount?: number }) => void;
+  // `blockedByCount` is present only when the emit knows the card's open-blocker count changed (a
+  // relation was added or removed, or one of its blockers was completed, reopened, archived or
+  // deleted). Absent means unchanged: the card row itself does not carry the count.
+  // dependencyTransition marks an actual zero/open-blocker boundary, captured with the mutation.
+  // Count refreshes omit it; MCP uses it to identify card.blocked/card.unblocked occurrences.
+  "card:updated": (payload: { boardId: string; card: CompactWireCard; blockedByCount?: number; dependencyTransition?: "blocked" | "unblocked" }) => void;
   "card:moved": (payload: {
     boardId: string;
     cardId: string;
@@ -593,10 +611,11 @@ export interface ServerToClientEvents {
   "card:assignees:set": (payload: { boardId: string; cardId: string; assigneeIds: string[] }) => void;
   "card:visibility:granted": (payload: { boardId: string; cardId: string }) => void;
   "card:visibility:revoked": (payload: { boardId: string; cardId: string }) => void;
-  // Invalidation only: a card's linked items changed — a link to or from it was added or removed, or a
-  // linked card/note was renamed. Linked items are filtered per viewer by board/note access, so the
-  // board room cannot be sent one shared list; clients showing the card re-read
-  // GET /cards/:id/linked-items and re-resolve the link chips in its description.
+  // Invalidation only: a card's linked items changed — a link to or from it was added or removed, a
+  // linked card/note was renamed, or a card relation (blocks / relates to) involving it changed.
+  // Linked items and relations are filtered per viewer by board/note access, so the board room
+  // cannot be sent one shared list; clients showing the card re-read GET /cards/:id/linked-items and
+  // GET /cards/:id/relations, and re-resolve the link chips in its description.
   "card:links:changed": (payload: { boardId: string; cardId: string }) => void;
   "card:attachment:created": (payload: { boardId: string; cardId: string; attachment: CardAttachmentRow }) => void;
   "card:attachment:deleted": (payload: { boardId: string; cardId: string; attachmentId: string }) => void;

@@ -88,7 +88,7 @@ export { Boards, Lists, type BoardDetail, type OpenBoardOptions } from "./resour
 export {
   BulkCards, CardAttachments, Cards, Checklists,
   type BulkCreateCardInput, type ChecklistItemUpdate, type CreateCardInput, type CreateChecklistInput, type CreateChecklistItemInput,
-  type CustomFieldValueInput, type MoveCardInput, type NewChecklistItemInput, type NewSubChecklistInput,
+  type CustomFieldValueInput, type DependencyGraphScope, type MoveCardInput, type NewChecklistItemInput, type NewSubChecklistInput,
   type NewSubChecklistItemInput, type UpdateAllChecklistItemsInput, type UpdateCardInput, type UpdateChecklistItemInput,
 } from "./resources/cards.js";
 export { Comments } from "./resources/comments.js";

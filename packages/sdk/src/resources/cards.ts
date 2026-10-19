@@ -1,7 +1,7 @@
 import { paginateCursor, type PageIterator } from "../pagination.js";
 import type {
-  Attachment, BulkArchiveResult, BulkCardResult, Card, CardDetail, CardFollowState, CardReminderListItem, Checklist, NotificationInboxPage, ChecklistItem, CreatedChecklist, CreatedChecklistItem,
-  DueDateSlot, LocalDate,
+  Attachment, BulkArchiveResult, BulkCardResult, Card, CardDetail, CardRelation, CardRelationDirection, CardRelations, CardFollowState, CardReminderListItem, Checklist, NotificationInboxPage, ChecklistItem, CreatedChecklist, CreatedChecklistItem,
+  DependencyGraph, DueDateSlot, LocalDate,
   LaneItemReference, LanePositionAnchor, PositionAnchor, Uuid,
 } from "../types.js";
 import type { CallOptions, ResourceContext } from "./base.js";
@@ -32,6 +32,12 @@ export interface BulkCreateCardInput {
   dueDateLocalDate?: LocalDate;
   dueDateSlot?: DueDateSlot;
 }
+
+/**
+ * What `dependencyGraph` maps: one board, one workspace, or specific cards by UUID, key (MKT-42)
+ * or URL. Pass a single card to see what blocks it and what it holds up.
+ */
+export type DependencyGraphScope = { boardId: Uuid } | { workspaceId: Uuid } | { cards: string[] };
 
 export interface UpdateCardInput {
   title?: string;
@@ -200,6 +206,39 @@ export class Cards {
   /** Replaces the whole set; pass the full list of label ids you want on the card. */
   async setLabels(card: string, labelIds: Uuid[], options: CallOptions = {}): Promise<void> {
     return this.ctx.http.put<void>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/labels`, { labelIds }, options);
+  }
+
+  /** Blocks, blocked-by and relates-to relations you can see, plus a count of hidden open blockers. */
+  async listRelations(card: string, options: CallOptions = {}): Promise<CardRelations> {
+    return this.ctx.http.get<CardRelations>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/relations`, options);
+  }
+
+  /**
+   * Relate `card` to `other` in the same workspace. `direction` reads from `card`'s side:
+   * `addRelation("API-1", "API-2", "blocks")` means API-1 blocks API-2. Idempotent; a relation that
+   * would create a blocking cycle is rejected.
+   */
+  async addRelation(card: string, other: string, direction: CardRelationDirection, options: CallOptions = {}): Promise<CardRelation> {
+    const [cardId, targetCardId] = await Promise.all([this.ctx.resolveCard(card), this.ctx.resolveCard(other)]);
+    return this.ctx.http.post<CardRelation>(`/api/v1/cards/${cardId}/relations`, { targetCardId, direction }, options);
+  }
+
+  /**
+   * Blocking chains around a scope, across boards: the scope's open cards with relations, every
+   * open card that blocks them or that they block (transitively), and completed blockers where a
+   * chain reaches them. Cards on boards you cannot open are left out and only counted in
+   * `blockedByCount`. Stops at 400 cards and sets `truncated`.
+   */
+  async dependencyGraph(scope: DependencyGraphScope, options: CallOptions = {}): Promise<DependencyGraph> {
+    const body = "cards" in scope
+      ? { cardIds: await Promise.all(scope.cards.map((card) => this.ctx.resolveCard(card))) }
+      : scope;
+    return this.ctx.http.post<DependencyGraph>("/api/v1/cards/dependency-graph", body, options);
+  }
+
+  /** Remove a relation by its id (from `listRelations` or `get(...).relations`). Either card may remove it. */
+  async removeRelation(card: string, relationId: Uuid, options: CallOptions = {}): Promise<void> {
+    return this.ctx.http.delete<void>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/relations/${relationId}`, options);
   }
 
   async setAssignees(card: string, userIds: Uuid[], options: CallOptions = {}): Promise<void> {

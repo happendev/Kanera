@@ -1,5 +1,5 @@
 import { ACTIVITY_ACTION, activityEvents, boardMembers, boards, cards, clientMembers, notifications, workspaces, type CommentReactionType } from "@kanera/shared/schema";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { assignedCardVisibility } from "./access.js";
 import { recordActivity } from "./activity.js";
@@ -31,7 +31,12 @@ async function reactionActivities(actorId: string, cardId: string, target: React
 // The inbox's own access rule (notification-visibility.ts): an active organisation owner/admin, or a
 // board member who can see this card. Checked before sending because push and email carry the card
 // title with no later check; the inbox re-applies the full rule when it reads.
-async function recipientCanSeeCard(userId: string, clientId: string, boardId: string, cardId: string): Promise<boolean> {
+export async function recipientCanSeeCard(userId: string, clientId: string, boardId: string, cardId: string): Promise<boolean> {
+  // Plan-archived boards keep their cards and grants, but neither direct reads nor inbox entries
+  // expose them. Check before the administrator override so email/push use the same visibility.
+  const [activeBoard] = await db.select({ id: boards.id }).from(boards)
+    .where(and(eq(boards.id, boardId), isNull(boards.archivedAt))).limit(1);
+  if (!activeBoard) return false;
   const [admin] = await db
     .select({ userId: clientMembers.userId })
     .from(clientMembers)
@@ -50,6 +55,19 @@ async function recipientCanSeeCard(userId: string, clientId: string, boardId: st
     .where(and(eq(boardMembers.boardId, boardId), eq(boardMembers.userId, userId)))
     .limit(1);
   if (!member) return false;
+  // Board membership survives suspension or removal from the organisation (a board row is kept so
+  // access can be restored), but the person is denied at the door (access.ts), so nothing may be
+  // sent to them either. Only no organisation membership at all is true guest access.
+  const [inactive] = await db
+    .select({ userId: clientMembers.userId })
+    .from(clientMembers)
+    .where(and(
+      eq(clientMembers.clientId, clientId),
+      eq(clientMembers.userId, userId),
+      or(isNotNull(clientMembers.suspendedAt), isNotNull(clientMembers.removedAt)),
+    ))
+    .limit(1);
+  if (inactive) return false;
   if (!member.assignedItemsOnly) return true;
   const [visible] = await db
     .select({ ok: assignedCardVisibility(userId, sql`${cardId}::uuid`) })

@@ -541,6 +541,41 @@
       "src/app/core/i18n/activity-summary.messages.ts"
     ]
   },
+  "938948771222701412": "marked this card as blocked by",
+  "@938948771222701412": {
+    "description": "Notification line after a person's name; the other card's key follows as a chip",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "512731139798600147": "marked this card as blocking",
+  "@512731139798600147": {
+    "description": "Notification line after a person's name; the other card's key follows as a chip",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "1799775615968858749": "related this card to",
+  "@1799775615968858749": {
+    "description": "Notification line after a person's name; the other card's key follows as a chip",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "3130308082742656902": "cleared the last blocker on this card",
+  "@3130308082742656902": {
+    "description": "Notification line after a person's name - they finished the last card blocking a card the viewer is assigned to or watches; that blocker's key follows as a chip",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "8541045662289630671": "reopened a blocker on this card",
+  "@8541045662289630671": {
+    "description": "Notification line after a person's name - they reopened a card that blocks a card the viewer is assigned to or watches, so it is blocked again; that blocker's key follows as a chip",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
   "894073162382631591": "removed an attachment",
   "@894073162382631591": {
     "description": "Notification line after a person's name",
@@ -2757,7 +2792,8 @@
   "@9081463435738465430": {
     "description": "Browser notification permission state",
     "x-files": [
-      "src/app/core/notifications/browser-push.service.ts"
+      "src/app/core/notifications/browser-push.service.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
   "2921347786783741410": "Not asked yet",
@@ -3941,6 +3977,13 @@
       "src/app/features/account-settings/account-settings.page.ts"
     ]
   },
+  "1895727772335044053": "Card blocked, blocking or ready to start",
+  "@1895727772335044053": {
+    "description": "Notification type - a card you watch became blocked by another card or started blocking one, or a card assigned to you or that you watch lost its last blocker",
+    "x-files": [
+      "src/app/features/account-settings/account-settings.page.ts"
+    ]
+  },
   "4768749765465246664": "Email",
   "@4768749765465246664": {
     "description": "Notification channel name",
@@ -4243,6 +4286,7 @@
       "src/app/features/account-settings/notifications/notifications.page.html",
       "src/app/features/account-settings/profile/profile.page.html",
       "src/app/features/account-settings/users/users.page.html",
+      "src/app/features/dependencies/dependency-map.component.html",
       "src/app/features/workspace-settings/members/members.page.html"
     ]
   },
@@ -5405,6 +5449,7 @@
     "description": "Button: close the editor",
     "x-files": [
       "src/app/features/account-settings/notifications/notifications.page.html",
+      "src/app/features/dependencies/dependency-map.component.ts",
       "src/app/features/workspace-settings/integrations/integrations.page.html"
     ]
   },
@@ -5869,9 +5914,11 @@
       "src/app/features/board/card-actions-menu.popover.ts",
       "src/app/features/board/card-composer.dialog.html",
       "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-relations.component.ts",
       "src/app/features/board/description-editor-toolbar.component.ts",
       "src/app/features/board/description-editor.component.ts",
       "src/app/features/board/separator.component.ts",
+      "src/app/features/dependencies/dependency-map.component.html",
       "src/app/features/global-work/save-view.popover.ts",
       "src/app/features/oauth/oauth-authorize.page.ts",
       "src/app/features/onboarding/onboarding.page.html",
@@ -6243,6 +6290,7 @@
       "src/app/features/account-settings/storage/storage.page.html",
       "src/app/features/board/table-view/board-table-view.component.ts",
       "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/dependencies/dependency-map.component.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/home/home.page.html",
       "src/app/features/notifications/notifications-panel.component.ts",
@@ -6312,6 +6360,7 @@
     "description": "Badge: the file's card or note is archived",
     "x-files": [
       "src/app/features/account-settings/storage/storage.page.html",
+      "src/app/features/board/card-relations.component.ts",
       "src/app/features/board/table-view/filter-bar.component.ts",
       "src/app/features/import/trello-import.page.html",
       "src/app/features/import/trello-import.page.ts"
@@ -7822,7 +7871,8 @@
   "@6560628004996061180": {
     "description": "Mirror direction diagram: source side, shown as This board → other boards",
     "x-files": [
-      "src/app/features/board-mirrors/board-mirrors.dialog.ts"
+      "src/app/features/board-mirrors/board-mirrors.dialog.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
   "6308382795480302505": "other boards",
@@ -8747,6 +8797,7 @@
     "x-files": [
       "src/app/features/board/board.page.html",
       "src/app/features/board/calendar-view/board-calendar-view.component.html",
+      "src/app/features/board/card-relations.component.ts",
       "src/app/features/board/card.component.html",
       "src/app/features/board/table-view/board-table-view.component.html",
       "src/app/features/board/table-view/filter-bar.component.ts",
@@ -8838,6 +8889,14 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
+  "7951990705316063153": "Dependencies view",
+  "@7951990705316063153": {
+    "description": "View switch label; the view maps which cards block which",
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
   "1358239534403218079": "Table",
   "@1358239534403218079": {
     "description": "Short view switch label",
@@ -8851,6 +8910,17 @@
     "description": "Short view switch label",
     "x-files": [
       "src/app/features/board/board.page.ts",
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
+  "4045087308145757242": "Dependencies",
+  "@4045087308145757242": {
+    "description": "Short view switch label for the view that maps which cards block which",
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/board/card-relations-popover.component.ts",
+      "src/app/features/board/card-relations.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts",
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
@@ -9561,6 +9631,13 @@
   "3545775965995734542": "Remind me…",
   "@3545775965995734542": {
     "description": "Card menu item",
+    "x-files": [
+      "src/app/features/board/card-actions-menu.popover.ts"
+    ]
+  },
+  "918607953824146461": "Dependencies…",
+  "@918607953824146461": {
+    "description": "Card menu item: set what blocks this card, what it blocks and related cards",
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts"
     ]
@@ -10396,6 +10473,62 @@
       "src/app/features/board/card-activity.component.ts"
     ]
   },
+  "4058242425028173518": "marked this card as blocking {$card}",
+  "@4058242425028173518": {
+    "description": "Card activity after a person's name - another card now waits on this one",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "2845804152058318619": "removed that this card blocks {$card}",
+  "@2845804152058318619": {
+    "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "1307680219758902645": "marked this card as blocked by {$card}",
+  "@1307680219758902645": {
+    "description": "Card activity after a person's name - this card now waits on another card",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "2558573303780016197": "removed that this card is blocked by {$card}",
+  "@2558573303780016197": {
+    "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "6538635025314048827": "related this card to {$card}",
+  "@6538635025314048827": {
+    "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "435584341190998532": "removed the relation to {$card}",
+  "@435584341190998532": {
+    "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "6941204478043830582": "cleared the last blocker on this card, {$card}",
+  "@6941204478043830582": {
+    "description": "Card activity after a person's name - they completed or archived the named card, which left this one with no open blockers",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "2809214848386919909": "reopened a blocker on this card, {$card}",
+  "@2809214848386919909": {
+    "description": "Card activity after a person's name - they reopened or restored the named card, so this one is blocked again",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
   "3992937414900539657": "{status, select, succeeded {marked {agent}'s run as finished} failed {marked {agent}'s run as failed} cancelled {marked {agent}'s run as cancelled} stalled {marked {agent}'s run as stalled} other {marked {agent}'s run as ended}}",
   "@3992937414900539657": {
     "description": "Card activity after a system name; agent is an AI agent's name",
@@ -10808,6 +10941,7 @@
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-quick-edit.popover.ts",
       "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/dependencies/dependency-map.component.ts",
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
@@ -11111,6 +11245,7 @@
     "description": "Button: add the checklist item",
     "x-files": [
       "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-relations.component.ts",
       "src/app/features/workspace-settings/api/api.page.html",
       "src/app/features/workspace-settings/members/members.page.html",
       "src/app/features/workspace-settings/templates/templates.page.html"
@@ -11541,6 +11676,20 @@
       "src/app/features/board/card-detail.component.ts"
     ]
   },
+  "7066158261752155843": "{count, plural, one {Blocks 1 card} other {Blocks # cards}}",
+  "@7066158261752155843": {
+    "description": "Card detail status chip - this card blocks other cards",
+    "x-files": [
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "7279359510491840239": "{count, plural, one {Related to 1 card} other {Related to # cards}}",
+  "@7279359510491840239": {
+    "description": "Card detail status chip - cards related to this one without an order",
+    "x-files": [
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
   "4016774570903735270": "Working",
   "@4016774570903735270": {
     "description": "AI agent run status",
@@ -11750,6 +11899,141 @@
       "src/app/features/board/card-quick-edit.popover.ts"
     ]
   },
+  "3825851172372934119": "Couldn't load dependencies.",
+  "@3825851172372934119": {
+    "description": "Error shown when the dependencies popover could not load a card's relations",
+    "x-files": [
+      "src/app/features/board/card-relations-popover.component.ts",
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "6650633628037596693": "Try again",
+  "@6650633628037596693": {
+    "description": "Button: retry loading the dependencies popover",
+    "x-files": [
+      "src/app/features/board/card-relations-popover.component.ts",
+      "src/app/features/dependencies/dependency-map.component.html",
+      "src/app/features/global-work/global-work.page.html",
+      "src/app/features/home/home.page.html",
+      "src/app/features/priorities/my-priorities-panel.component.html",
+      "src/app/features/scratchpad/scratchpad-panel.component.html",
+      "src/app/shared/user-profile/user-profile-popover.component.html"
+    ]
+  },
+  "1097198734129597775": "Loading dependencies…",
+  "@1097198734129597775": {
+    "description": "Loading state in the dependencies popover",
+    "x-files": [
+      "src/app/features/board/card-relations-popover.component.ts"
+    ]
+  },
+  "3095755724292513950": "Relation type",
+  "@3095755724292513950": {
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "5345787254924859679": "Search cards by title or key",
+  "@5345787254924859679": {
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "8800964130889754465": "Matching cards",
+  "@8800964130889754465": {
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "6753446340779489453": "Couldn't search cards. Check your connection and try again.",
+  "@6753446340779489453": {
+    "description": "Error shown when the dependency card search request failed",
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "5975773280506024171": "No matching cards in this workspace",
+  "@5975773280506024171": {
+    "description": "Empty state when no card matches the dependency search",
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "3280068633834472023": "Remove relation",
+  "@3280068633834472023": {
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "6413715799452176235": "Blocked by",
+  "@6413715799452176235": {
+    "description": "Relation type choice - the chosen card blocks this card",
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "6948786787037977434": "Blocks",
+  "@6948786787037977434": {
+    "description": "Relation type choice - this card blocks the chosen card",
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "205185437898386193": "Relates to",
+  "@205185437898386193": {
+    "description": "Relation type choice - the cards are related without an order",
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "3724475073526050715": "Related",
+  "@3724475073526050715": {
+    "description": "Dependencies group heading - related cards",
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts",
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "5614981310882834456": "Couldn't add the relation. Try again.",
+  "@5614981310882834456": {
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "2306974308629469613": "Couldn't remove the relation. Try again.",
+  "@2306974308629469613": {
+    "x-files": [
+      "src/app/features/board/card-relations.component.ts"
+    ]
+  },
+  "6965310531340972037": "{count, plural, one {Blocked by 1 open card} other {Blocked by # open cards}}",
+  "@6965310531340972037": {
+    "description": "Tooltip on a card's Blocked chip",
+    "x-files": [
+      "src/app/features/board/card-relations.util.ts"
+    ]
+  },
+  "1197258205308021593": "No active blockers",
+  "@1197258205308021593": {
+    "description": "Card detail status when every blocker is completed or archived",
+    "x-files": [
+      "src/app/features/board/card-relations.util.ts"
+    ]
+  },
+  "6411476923206682566": "{count, plural, one {Blocked by 1 active card} other {Blocked by # active cards}}",
+  "@6411476923206682566": {
+    "description": "Card detail status line - this card cannot start until its open blockers are completed or archived",
+    "x-files": [
+      "src/app/features/board/card-relations.util.ts"
+    ]
+  },
+  "1719258820612610234": "{count, plural, one {Blocked by 1 card you can't access} other {Blocked by # cards you can't access}}",
+  "@1719258820612610234": {
+    "description": "Card detail note about blockers on boards the viewer cannot open",
+    "x-files": [
+      "src/app/features/board/card-relations.util.ts"
+    ]
+  },
   "1731257233256809660": "Add to Up next",
   "@1731257233256809660": {
     "x-files": [
@@ -11772,6 +12056,15 @@
       "src/app/features/priorities/my-priorities-panel.component.html",
       "src/app/features/priorities/my-priorities-panel.component.ts",
       "src/app/features/shell/app-shell.component.ts"
+    ]
+  },
+  "3406674546225707827": "Blocked",
+  "@3406674546225707827": {
+    "description": "Tile chip - the card waits on another open card",
+    "x-files": [
+      "src/app/features/board/card.component.html",
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "8963212795250670706": "Has attachments",
@@ -12043,7 +12336,8 @@
   "@4221042196936324014": {
     "description": "Editor toolbar button",
     "x-files": [
-      "src/app/features/board/description-editor-toolbar.component.ts"
+      "src/app/features/board/description-editor-toolbar.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
   "5124788951506605116": "Couldn't insert the uploaded file",
@@ -13576,6 +13870,13 @@
       "src/app/features/notifications/notifications-panel.component.ts"
     ]
   },
+  "7415383129880187194": "Cards waiting on another card",
+  "@7415383129880187194": {
+    "description": "Quick filter description - cards waiting on another open card",
+    "x-files": [
+      "src/app/features/board/table-view/filter-bar.component.ts"
+    ]
+  },
   "5990900349861391823": "No activity for 14 days",
   "@5990900349861391823": {
     "x-files": [
@@ -14004,7 +14305,8 @@
   "@5073473933031004097": {
     "description": "Due-date group heading - cards due later this week",
     "x-files": [
-      "src/app/features/board/table-view/table-view.types.ts"
+      "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
   "9026083618139453880": "Later",
@@ -14687,6 +14989,395 @@
       "src/app/features/completed-cards/date-range-picker.popover.ts"
     ]
   },
+  "5703705840354938825": "Filter dependency chains",
+  "@5703705840354938825": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "3894901210129428470": "Dependencies scope",
+  "@3894901210129428470": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "6628703802101496074": "Show only each card's key and title",
+  "@6628703802101496074": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "6131549314898590713": "Slim cards",
+  "@6131549314898590713": {
+    "description": "Dependencies view toggle: smaller cards without labels, fields, people or dates",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "4731474423781984587": "Also show cards linked with “relates to”",
+  "@4731474423781984587": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "6842868336344024219": "Highlight the longest run of open work in each chain",
+  "@6842868336344024219": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "583155944513136531": "Critical path",
+  "@583155944513136531": {
+    "description": "Dependencies view toggle: highlight each chain's critical path",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "3168241265899648027": "Dependencies layout",
+  "@3168241265899648027": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "2251886683352741815": "Biggest bottleneck:",
+  "@2251886683352741815": {
+    "description": "Dependencies view callout: the card holding up the most open work",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "8231763422742114033": "This map stopped at 400 cards, so some chains are cut short. Narrow the scope to see them whole.",
+  "@8231763422742114033": {
+    "description": "Dependencies view note when the map hit its card limit",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "5496864972633087474": "No dependencies here yet",
+  "@5496864972633087474": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "4380466659852007054": "When a card is blocked by another, its chain shows up here. Add one from a card's Dependencies section, or right-click a card and choose Dependencies.",
+  "@4380466659852007054": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "2843188841977642613": "No chains match",
+  "@2843188841977642613": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "5314784080117316403": "Nothing on this map matches the current filters.",
+  "@5314784080117316403": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "8936108170679837205": "Show every chain",
+  "@8936108170679837205": {
+    "description": "Button: clear the dependencies view filter",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html",
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "8949899175799066154": "{VAR_PLURAL, plural, other {{INTERPOLATION} at risk}}",
+  "@8949899175799066154": {
+    "description": "Dependencies view chain badge",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "1582001143071859700": "{VAR_PLURAL, plural, other {{INTERPOLATION} blocked}}",
+  "@1582001143071859700": {
+    "description": "Dependencies view chain badge",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "4665317682357260405": "Drag to the card this one blocks",
+  "@4665317682357260405": {
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "1951308628967215921": "Waiting on {$KEYS}",
+  "@1951308628967215921": {
+    "description": "Dependencies view step list: the open cards this card waits on",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "2892078507011417826": "Unblocks {$KEYS}",
+  "@2892078507011417826": {
+    "description": "Dependencies view step list: the open cards waiting on this card",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "6869587862671945558": "Map",
+  "@6869587862671945558": {
+    "description": "Dependencies view layout - chains drawn as a map with connectors",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "6814295386768519176": "Timeline",
+  "@6814295386768519176": {
+    "description": "Dependencies view layout - cards placed in columns by the week they are due",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "1534367694207535197": "Steps",
+  "@1534367694207535197": {
+    "description": "Dependencies view layout - chains listed step by step",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "134944425477703133": "{count, plural, one {chain} other {chains}}",
+  "@134944425477703133": {
+    "description": "Dependencies view summary - number of dependency chains shown",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "5133669317878143440": "Cards waiting on a blocker that is still open",
+  "@5133669317878143440": {
+    "description": "Tooltip on the Dependencies view Blocked count",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "239883740512866888": "At risk",
+  "@239883740512866888": {
+    "description": "Dependencies view summary - cards whose blocker is overdue or due after them",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "142895741984092869": "Cards whose blocker is overdue or due after them",
+  "@142895741984092869": {
+    "description": "Tooltip on the Dependencies view At risk count",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "7371876698116446308": "Start here",
+  "@7371876698116446308": {
+    "description": "Dependencies view summary - unblocked cards that other open work waits on",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "8859982526780086055": "Nothing blocks these, and other open work waits on them",
+  "@8859982526780086055": {
+    "description": "Tooltip on the Dependencies view Start here count",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "6423210280939340786": "Ready",
+  "@6423210280939340786": {
+    "description": "Dependencies view summary - cards whose blockers are all done",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "1096682603203864418": "Every blocker is done, so these can start",
+  "@1096682603203864418": {
+    "description": "Tooltip on the Dependencies view Ready count",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "3284337502869609416": "Undo the last dependency change",
+  "@3284337502869609416": {
+    "description": "Keyboard shortcut description on the Dependencies view",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "8105569059279052987": "Redo the dependency change",
+  "@8105569059279052987": {
+    "description": "Keyboard shortcut description on the Dependencies view",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "2552769914687537374": "{count, plural, one {1 card on the critical path} other {# cards on the critical path}}",
+  "@2552769914687537374": {
+    "description": "Dependencies view chain badge - how many cards are on the chain's critical path",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "4553136156424490747": "Couldn't add the dependency. Try again.",
+  "@4553136156424490747": {
+    "description": "Error toast when adding a dependency on the Dependencies view fails",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "4209938104125933255": "Couldn't remove the dependency. Try again.",
+  "@4209938104125933255": {
+    "description": "Error toast when removing a dependency on the Dependencies view fails",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "6475787099629584387": "{$dependent} now waits on {$blocker}",
+  "@6475787099629584387": {
+    "description": "Toast after adding a dependency on the Dependencies view",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "2649813765697960708": "{$dependent} no longer waits on {$blocker}",
+  "@2649813765697960708": {
+    "description": "Toast after removing a dependency on the Dependencies view",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "8712868294228071141": "{$first} now relates to {$second}",
+  "@8712868294228071141": {
+    "description": "Toast after restoring a relates-to link on the Dependencies view",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "9025169617975008681": "{$first} and {$second} are no longer related",
+  "@9025169617975008681": {
+    "description": "Toast after removing a relates-to link on the Dependencies view",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "8848428756723019115": "{$blocker} blocks {$dependent}",
+  "@8848428756723019115": {
+    "description": "Screen reader label on a Dependencies view connector, which selects it for removal",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "804983143062772820": "{$first} relates to {$second}",
+  "@804983143062772820": {
+    "description": "Screen reader label on a Dependencies view related-cards connector, which selects it for removal",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "5558171257481944803": "Add a card that {$key} blocks",
+  "@5558171257481944803": {
+    "description": "Label on the handle that adds a dependency from a card on the Dependencies view",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "4143736693087762193": "Choose the card that {$key} blocks.",
+  "@4143736693087762193": {
+    "description": "Dependencies view banner while choosing the card a new dependency blocks",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "2393654075050881798": "Week of {$date}",
+  "@2393654075050881798": {
+    "description": "Dependencies view timeline column heading - cards due in the week starting on this date",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "9134762658332420463": "{count, plural, one {+1 more field} other {+# more fields}}",
+  "@9134762658332420463": {
+    "description": "Dependencies view tile - card-face fields that did not fit on the tile",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "5127168466557486958": "{count, plural, one {Unblocks 1} other {Unblocks #}}",
+  "@5127168466557486958": {
+    "description": "Dependencies view tile status - how many open cards wait on this unblocked card",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "2385208695700002912": "A blocker is overdue",
+  "@2385208695700002912": {
+    "description": "Dependencies view warning on a card - one of its blockers is past its due date",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "2342118337417863411": "A blocker is due after this card",
+  "@2342118337417863411": {
+    "description": "Dependencies view warning on a card - one of its blockers is due after it",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "7830616245841248281": "{count, plural, one {Blocked by 1 card not on this map} other {Blocked by # cards not on this map}}",
+  "@7830616245841248281": {
+    "description": "Dependencies view note on a card - open blockers on boards the viewer can't open, or past the map's limit",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "8573865702165463817": "{count, plural, one {1 open card waits on this} other {# open cards wait on this}}",
+  "@8573865702165463817": {
+    "description": "Dependencies view - how many open cards wait on this card, directly or further down its chain",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "4964460281983329916": "Waiting on {$keys}",
+  "@4964460281983329916": {
+    "description": "Screen reader text on a Dependencies view card - the cards it waits on",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "8460954236322266099": "Blocks {$keys}",
+  "@8460954236322266099": {
+    "description": "Screen reader text on a Dependencies view card - the cards waiting on it",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "1784732636796957027": "On the critical path",
+  "@1784732636796957027": {
+    "description": "Screen reader text on a Dependencies view card on its chain's critical path",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "2755805239209428200": "{title} and {count, plural, one {1 more} other {# more}}",
+  "@2755805239209428200": {
+    "description": "Dependencies view chain heading - the card the chain leads to, plus how many other end cards",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "6703873701228360695": "{cards, plural, one {1 card} other {# cards}} · {steps, plural, one {1 step} other {# steps}}",
+  "@6703873701228360695": {
+    "description": "Dependencies view chain subheading",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "5743746919842220241": "Step {$number}",
+  "@5743746919842220241": {
+    "description": "Dependencies view column heading - the order cards can be worked in",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
   "5986498242615699419": "Onboarding and account tips",
   "@5986498242615699419": {
     "description": "Heading: the email list being unsubscribed from",
@@ -14871,6 +15562,13 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
+  "6610186532908963141": "The dependency map will return after reconnecting.",
+  "@6610186532908963141": {
+    "description": "Offline banner",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
   "7669586489275293002": "Connection lost. Showing the last loaded view from {$TIME}. Changes are paused.",
   "@7669586489275293002": {
     "description": "Offline banner",
@@ -14889,17 +15587,6 @@
   "@2559848334566452330": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "6650633628037596693": "Try again",
-  "@6650633628037596693": {
-    "description": "Button: retry loading",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html",
-      "src/app/features/home/home.page.html",
-      "src/app/features/priorities/my-priorities-panel.component.html",
-      "src/app/features/scratchpad/scratchpad-panel.component.html",
-      "src/app/shared/user-profile/user-profile-popover.component.html"
     ]
   },
   "7064055694235100796": "Organisation, workspace and board",
@@ -14923,6 +15610,18 @@
   },
   "6493429101232832178": "{$START_TAG_STRONG}Showing {$LOADED} of {$TOTAL} matching cards.{$CLOSE_TAG_STRONG} Counts and the longest-running work cover only these. Narrow the scope or filters for a complete overview.",
   "@6493429101232832178": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "1322380274988329022": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} Chains settle when the full set is ready.",
+  "@1322380274988329022": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "501884771398118773": "{$START_TAG_STRONG}Showing chains for {$LOADED} of {$TOTAL} matching cards.{$CLOSE_TAG_STRONG} Narrow the scope or filters to map every chain.",
+  "@501884771398118773": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -15507,6 +16206,13 @@
       "src/app/features/global-work/team-overview.component.html"
     ]
   },
+  "2121545912223040930": "Hide guests",
+  "@2121545912223040930": {
+    "description": "Team overview person strip toggle leaving guests out",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
   "3498944575911784027": "In progress with no assignee",
   "@3498944575911784027": {
     "x-files": [
@@ -15660,6 +16366,20 @@
   "2450973332099804953": "Other open cards they moved, created or ticked items on in the last {$days} days",
   "@2450973332099804953": {
     "description": "Team overview section tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "3244432084933368224": "{count, plural, one {Show # guest from another organisation} other {Show # guests from other organisations}}",
+  "@3244432084933368224": {
+    "description": "Tooltip on the pressed Team overview toggle; pressing shows guests again",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "7711376106754764691": "{count, plural, one {Hide # guest from another organisation} other {Hide # guests from other organisations}}",
+  "@7711376106754764691": {
+    "description": "Tooltip on the Team overview toggle hiding guests",
     "x-files": [
       "src/app/features/global-work/team-overview.component.ts"
     ]
@@ -22199,6 +22919,20 @@
       "src/app/features/workspace-settings/automations/automations.page.html"
     ]
   },
+  "2884304190489484523": "Runs when a card gains its first active blocker, including when a blocker is reopened or restored. Includes changes made by integrations and automations.",
+  "@2884304190489484523": {
+    "description": "Help for the Card blocked automation trigger",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "6011408436362045642": "Runs when a card's last active blocker is completed, archived, deleted or removed. Includes changes made by integrations and automations.",
+  "@6011408436362045642": {
+    "description": "Help for the Card unblocked automation trigger",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
   "6408870772587289662": "Do",
   "@6408870772587289662": {
     "description": "Automation editor step heading: the actions",
@@ -22421,6 +23155,36 @@
   },
   "2690252463913182606": "The card's completed state is turned on",
   "@2690252463913182606": {
+    "description": "Help text under an automation event option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts"
+    ]
+  },
+  "3871725793027682844": "Card blocked",
+  "@3871725793027682844": {
+    "description": "Automation event (trigger) option - the card gains its first open blocker",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "3507269865172922916": "Its first active blocker is added, reopened or restored",
+  "@3507269865172922916": {
+    "description": "Help text under an automation event option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts"
+    ]
+  },
+  "2867349105333655925": "Card unblocked",
+  "@2867349105333655925": {
+    "description": "Automation event (trigger) option - the card no longer waits on any open card",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "532246969310572966": "Its last active blocker is completed, archived or removed",
+  "@532246969310572966": {
     "description": "Help text under an automation event option",
     "x-files": [
       "src/app/features/workspace-settings/automations/automations.page.ts"
@@ -25264,6 +26028,34 @@
     "description": "Tooltip on the colour picker button when no colour is set",
     "x-files": [
       "src/app/shared/color-picker.component.ts"
+    ]
+  },
+  "2568039434984256446": "Complete blocked work?",
+  "@2568039434984256446": {
+    "description": "Completion warning title",
+    "x-files": [
+      "src/app/shared/completion-warning.service.ts"
+    ]
+  },
+  "645634400966468412": "Some selected work still has active blockers. You can complete it anyway.",
+  "@645634400966468412": {
+    "description": "Completion warning",
+    "x-files": [
+      "src/app/shared/completion-warning.service.ts"
+    ]
+  },
+  "6866823291275274101": "Complete anyway",
+  "@6866823291275274101": {
+    "description": "Completion warning action",
+    "x-files": [
+      "src/app/shared/completion-warning.service.ts"
+    ]
+  },
+  "5928575046040990063": "Don't warn again this session",
+  "@5928575046040990063": {
+    "description": "Completion warning preference",
+    "x-files": [
+      "src/app/shared/completion-warning.service.ts"
     ]
   },
   "8675306423292568030": "To confirm, type {$START_TAG_STRONG}{$TEXT}{$CLOSE_TAG_STRONG}",

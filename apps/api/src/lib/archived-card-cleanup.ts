@@ -3,6 +3,7 @@ import { and, eq, inArray, isNotNull, lt } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
 import { collectAttachmentFileKeys, deleteStorageFiles } from "./attachment-cleanup.js";
+import { emitRelationNeighboursChanged, relationNeighbourIds } from "./card-relations.js";
 import { getStorageForClient } from "./storage/index.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 
@@ -45,7 +46,11 @@ export async function runArchivedCardCleanup({ db, log }: ArchivedCardCleanupDep
   // is strictly safer than a dangling reference. Delete by the captured ids so a card archived
   // between the select and the delete isn't swept without its keys collected.
   const cardIds = rows.map((row) => row.id);
+  // Archived cards block nothing, but still appear in related cards' Dependencies sections; those
+  // rows go with the cascade, so the neighbours are read first and told to re-read afterwards.
+  const neighbours = await relationNeighbourIds(db, cardIds);
   await db.delete(cards).where(inArray(cards.id, cardIds));
+  await emitRelationNeighboursChanged([], neighbours);
 
   for (const [clientId, keys] of fileKeysByClient) {
     if (keys.length === 0) continue;

@@ -878,4 +878,9 @@ export const de: ErrorCatalog = {
     "Dieser Anhang hat kein {variant}-Bild.",
   "work-done history is limited to the last {days} days":
     "Der Verlauf erledigter Arbeit ist auf die letzten {days} Tage begrenzt.",
+  "a card cannot be related to itself": "Eine Karte kann nicht mit sich selbst verknüpft werden.",
+  "a completed card cannot block another card": "Eine abgeschlossene Karte kann keine andere Karte blockieren.",
+  "cards must be in the same workspace to be related": "Karten müssen im selben Arbeitsbereich liegen, um verknüpft zu werden.",
+  "relation not found": "Beziehung nicht gefunden.",
+  "this relation would create a blocking cycle": "Diese Beziehung würde einen Blockierungszyklus erzeugen.",
 };
