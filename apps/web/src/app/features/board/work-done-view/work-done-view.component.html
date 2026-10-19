@@ -68,7 +68,7 @@
       @if (!loading()) {
       <span class="wd-summary">{{ summaryParts() }}</span>
       }
-      @if (cardCount()) {
+      @if (cardCount() || report()) {
       <button
         type="button"
         class="wd-icon-btn"
@@ -84,6 +84,8 @@
     </div>
   </div>
 
+  <!-- The report draws its own daily chart over the visible period, so the navigator strip stands down. -->
+  @if (layout() !== 'report') {
   <div class="wd-strip">
     <k-activity-strip
       [series]="activitySeries()"
@@ -94,11 +96,37 @@
       (daySelected)="onStripDaySelected($event)"
     />
   </div>
+  }
 
   @if (error()) {
   <div class="wd-empty">
     <k-empty-state raised icon="alert-circle" [title]="error()!" text="Try changing the period or refreshing the page." i18n-text />
   </div>
+  } @else if (layout() === 'report' && reportAvailable()) {
+  <!-- Rendered as soon as the first events arrive, then kept up (dimmed) across refreshes. -->
+  @if (report(); as rep) {
+  <div class="wd-stream wd-report">
+    <k-work-done-report
+      [report]="rep"
+      [refreshing]="loading()"
+      [workspaceId]="workspaceId()"
+      [membersById]="reportMembersById()"
+      [inProgressEnabled]="inProgressEnabled()"
+      [partial]="reportSource()?.partial ?? false"
+      (cardOpened)="cardOpened.emit($event)"
+    />
+  </div>
+  } @else {
+  <div class="wd-stream wd-skeleton-stream" aria-label="Loading report" i18n-aria-label>
+    @for (row of skeletonRows; track row) {
+    <div class="wd-skeleton-row">
+      <div class="wd-skeleton wd-skeleton-icon"></div>
+      <div class="wd-skeleton wd-skeleton-body"></div>
+      <div class="wd-skeleton wd-skeleton-actor"></div>
+    </div>
+    }
+  </div>
+  }
   } @else if (loading()) {
   <div class="wd-stream wd-skeleton-stream" aria-label="Loading work done" i18n-aria-label>
     @for (row of skeletonRows; track row) {
@@ -115,7 +143,7 @@
   </div>
   } @else {
   <!-- Days with no activity are simply absent; the strip above shows where the gaps are. -->
-  <div class="wd-stream" [class.wd-stream-grid]="layout() === 'grid'">
+  <div class="wd-stream">
     @for (day of days(); track day.dateKey) {
     <k-work-done-day
       [day]="day"

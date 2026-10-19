@@ -6,7 +6,6 @@ import { expandCardSummary, SERVER_EVENTS, type WireCardSummary, type WireCustom
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
-import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { icu } from "../../core/i18n/icu";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AvatarComponent } from "../../shared/avatar.component";
@@ -38,14 +37,13 @@ import {
   type MapEdge,
   type MapNode,
 } from "./dependency-map.layout";
+import { readDependencyPreference, updateDependencyPreference, type DependencyLayout } from "./dependency-layout";
 import { tileContent, tileFields, tileHeight, type TileContent, type TileDensity } from "./dependency-map.tile";
 
 type ScopeMode = "board" | "workspace";
-type LayoutMode = "map" | "timeline" | "list";
 
 interface StoredPreference {
   scope?: ScopeMode;
-  layout?: LayoutMode;
   showRelated?: boolean;
   slim?: boolean;
   critical?: boolean;
@@ -71,7 +69,6 @@ interface EdgeSelection {
   y: number;
 }
 
-const LAYOUT_MODES: readonly LayoutMode[] = ["map", "timeline", "list"];
 /**
  * One dependency the viewer changed on this map, with what it takes to reverse it: `added` says
  * whether the change created the relation or removed it. `source`/`target` are the blocker and the
@@ -101,8 +98,6 @@ const REFRESH_DEBOUNCE_MS = 400;
  * would otherwise undim the whole chain for a frame and dim it again: a flicker on every move.
  */
 const FOCUS_RELEASE_MS = 120;
-/** The narrowest viewport that opens on the map by default; below it the step list reads better. */
-const MAP_MIN_VIEWPORT = 720;
 
 const EMPTY_TILE: TileContent = { labels: [], fields: [] };
 
@@ -146,8 +141,10 @@ export class DependencyMapComponent implements OnInit {
   readonly workspaceId = input<string | null>(null);
   /** Card scope, for Global Work: the lens's loaded cards. Takes precedence over `boardId`. */
   readonly cardIds = input<readonly string[] | null>(null);
-  /** Key for the remembered scope, layout and related toggle. */
+  /** Key for the remembered scope and toggles. */
   readonly preferenceScope = input.required<string>();
+  /** Map, Timeline or Steps. The host owns the switch, in its toolbar (see `dependencyLayoutState`). */
+  readonly layoutMode = input.required<DependencyLayout>();
   /**
    * The host's search and filter result over its own cards, or null when nothing narrows it.
    * A chain stays on the map while any of its in-scope cards matches; cards from elsewhere in the
@@ -168,9 +165,6 @@ export class DependencyMapComponent implements OnInit {
   readonly stepLabelHeight = STEP_LABEL_HEIGHT;
 
   readonly scopeMode = signal<ScopeMode>("board");
-  readonly layoutMode = signal<LayoutMode>("map");
-  /** Only a layout the viewer picked is remembered; otherwise each device keeps its own default. */
-  private layoutChosen = false;
   readonly showRelated = signal(false);
   /** Detailed tiles carry labels and card-face fields like a board card; slim ones only key and title. */
   readonly density = signal<TileDensity>("detailed");
@@ -228,11 +222,6 @@ export class DependencyMapComponent implements OnInit {
   readonly scopeOptions: SegmentedOption<ScopeMode>[] = [
     { id: "board", icon: "layout-kanban", label: $localize`:Dependencies view scope switch - only chains that touch this board:This board` },
     { id: "workspace", icon: "building", label: $localize`:Dependencies view scope switch - every chain in the board's workspace:Workspace` },
-  ];
-  readonly layoutOptions: SegmentedOption<LayoutMode>[] = [
-    { id: "map", icon: "git-merge", label: $localize`:dependency map layout|Dependencies view layout - chains drawn as a map with connectors:Map` },
-    { id: "timeline", icon: "calendar-week", label: $localize`:Dependencies view layout - cards placed in columns by the week they are due:Timeline` },
-    { id: "list", icon: "list-numbers", label: $localize`:Dependencies view layout - chains listed step by step:Steps` },
   ];
 
   readonly boardsById = computed(() => new Map((this.response()?.boards ?? []).map((board) => [board.id, board])));
@@ -403,12 +392,22 @@ export class DependencyMapComponent implements OnInit {
       const scope = this.preferenceScope();
       const stored = readPreference(scope);
       untracked(() => {
-        this.scopeMode.set(stored?.scope === "workspace" ? "workspace" : "board");
-        this.showRelated.set(stored?.showRelated === true);
-        this.density.set(stored?.slim ? "slim" : "detailed");
-        this.critical.set(stored?.critical === true);
-        this.layoutChosen = Boolean(stored?.layout);
-        this.layoutMode.set(stored?.layout ?? (viewportWidth() < MAP_MIN_VIEWPORT ? "list" : "map"));
+        this.scopeMode.set(stored.scope === "workspace" ? "workspace" : "board");
+        this.showRelated.set(stored.showRelated === true);
+        this.density.set(stored.slim ? "slim" : "detailed");
+        this.critical.set(stored.critical === true);
+      });
+    });
+    // A focus or a half-drawn link belongs to the layout it started in; switching drops both.
+    let shownLayout: DependencyLayout | null = null;
+    effect(() => {
+      const layout = this.layoutMode();
+      untracked(() => {
+        if (shownLayout !== null && shownLayout !== layout) {
+          this.focusedId.set(null);
+          this.cancelEditing();
+        }
+        shownLayout = layout;
       });
     });
     effect(() => {
@@ -552,14 +551,6 @@ export class DependencyMapComponent implements OnInit {
     this.persist();
   }
 
-  setLayout(layout: LayoutMode): void {
-    this.layoutMode.set(layout);
-    this.layoutChosen = true;
-    this.focusedId.set(null);
-    this.cancelEditing();
-    this.persist();
-  }
-
   toggleCritical(): void {
     this.critical.update((value) => !value);
     this.persist();
@@ -584,7 +575,6 @@ export class DependencyMapComponent implements OnInit {
   private persist(): void {
     writePreference(this.preferenceScope(), {
       scope: this.scopeMode(),
-      ...(this.layoutChosen ? { layout: this.layoutMode() } : {}),
       showRelated: this.showRelated(),
       ...(this.density() === "slim" ? { slim: true } : {}),
       ...(this.critical() ? { critical: true } : {}),
@@ -1108,33 +1098,19 @@ function contentWidth(element: HTMLElement): number {
   return Math.max(0, element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
 }
 
-function viewportWidth(): number {
-  return typeof window === "undefined" ? 1280 : window.visualViewport?.width ?? window.innerWidth;
-}
-
-function readPreference(scope: string): StoredPreference | null {
-  try {
-    const raw = localStorage.getItem(viewPreferenceKey("dependencyMap", scope));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      ...(parsed["scope"] === "workspace" || parsed["scope"] === "board" ? { scope: parsed["scope"] } : {}),
-      ...(LAYOUT_MODES.includes(parsed["layout"] as LayoutMode) ? { layout: parsed["layout"] as LayoutMode } : {}),
-      showRelated: parsed["showRelated"] === true,
-      slim: parsed["slim"] === true,
-      critical: parsed["critical"] === true,
-    };
-  } catch {
-    return null;
-  }
+function readPreference(scope: string): StoredPreference {
+  const parsed = readDependencyPreference(scope);
+  return {
+    ...(parsed["scope"] === "workspace" || parsed["scope"] === "board" ? { scope: parsed["scope"] } : {}),
+    showRelated: parsed["showRelated"] === true,
+    slim: parsed["slim"] === true,
+    critical: parsed["critical"] === true,
+  };
 }
 
 function writePreference(scope: string, value: StoredPreference): void {
-  try {
-    localStorage.setItem(viewPreferenceKey("dependencyMap", scope), JSON.stringify(value));
-  } catch {
-    // Storage can be unavailable in privacy mode or over quota; the in-memory choice still applies.
-  }
+  // Explicit falses clear a toggle the merge would otherwise keep.
+  updateDependencyPreference(scope, { slim: false, critical: false, ...value });
 }
 
 /** The API's own message (already in the viewer's language, e.g. the loop rejection), else a fallback. */

@@ -1,0 +1,971 @@
+// Series colours are fixed hexes rather than the theme accent: the accent is orange on Paper and
+// blue on Carbon, where "completed" would either clash with "created" or stop meaning anything.
+// Validated as a categorical pair (CVD separation, lightness band, 3:1 against the surface) on every
+// theme's surface. Completed is the same teal everywhere; created is a lighter blue on dark surfaces.
+:host {
+  --rp-created: #4e94f8;
+  --rp-completed: #0d9488;
+  // Single-series marks (list bars, label bars, the meter, the heatmap) carry no identity against
+  // another series, so they wear the theme accent like every other emphasis in the app.
+  --rp-single: var(--accent);
+  --rp-other: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  --rp-grid: color-mix(in srgb, var(--border) 70%, transparent);
+  display: block;
+}
+
+:host-context([data-theme="light"]),
+:host-context([data-theme="paper"]) {
+  --rp-created: #2563eb;
+}
+
+.rp {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  // Refetch keeps the frame: the last report stays legible while the new one lands.
+  transition: opacity var(--motion-base);
+
+  &.is-refreshing {
+    opacity: 0.6;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Headline
+
+.rp-headline {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+
+  > i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    font-size: 16px;
+  }
+
+  p {
+    margin: 0;
+    padding-top: 3px;
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
+}
+
+// Sentences are inline so the paragraph wraps as prose, with a space between them.
+.rp-sentence + .rp-sentence::before {
+  content: " ";
+}
+
+.rp-partial {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+// ---------------------------------------------------------------------------------------------
+// KPI row: auto-fit so the content column decides the count, never the viewport.
+
+.rp-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+
+  // Six tiles never leave one orphaned on its own row: one row, two of three, or three of two.
+  &.has-six {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .rp-kpis.has-six {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .rp-kpis.has-six {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Panels
+
+.rp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 12px;
+  align-items: stretch;
+
+  // A lone panel fills the row rather than leaving a hole beside it.
+  > :only-child {
+    grid-column: 1 / -1;
+  }
+}
+
+.rp-grid--breakdowns {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.rp-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  // Bar rows size against the panel, not the viewport: the breakdown grid packs three panels wide
+  // on a desktop, where a full-width row's name and hint tracks would leave the bar no room at all.
+  container-type: inline-size;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.rp-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  span {
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+}
+
+.rp-head-icon {
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.rp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 12px;
+
+  li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+}
+
+.rp-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+
+  &--created {
+    background: var(--rp-created);
+  }
+
+  &--completed {
+    background: var(--rp-completed);
+  }
+
+  &--other {
+    background: var(--rp-other);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Daily flow: grouped columns, one per day, in plain HTML.
+
+// The flow panel stretches to its grid row, so the plot area takes whatever height the panel beside
+// it leaves; the label band below is fixed and the panel never ends in dead space.
+.rp-flow {
+  min-height: 240px;
+}
+
+.rp-plot {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 160px;
+}
+
+// Top padding is headroom for the highest tick's label, which sits above its gridline and would
+// otherwise print over the panel heading.
+.rp-plot-area {
+  position: relative;
+  flex: 1;
+  min-height: 152px;
+  padding-top: 14px;
+}
+
+.rp-gridlines {
+  position: absolute;
+  inset: 14px 0 0;
+  pointer-events: none;
+}
+
+.rp-axis {
+  display: flex;
+  gap: 4px;
+  padding-top: 6px;
+
+  .rp-col-label {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &.is-weekend {
+      opacity: 0.6;
+    }
+
+    &.is-today {
+      color: var(--text);
+      font-weight: 650;
+    }
+  }
+}
+
+.rp-gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--rp-grid);
+
+  span {
+    position: absolute;
+    right: 0;
+    bottom: 2px;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+}
+
+.rp-columns {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 100%;
+  border-bottom: 1px solid var(--border);
+}
+
+.rp-col {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  cursor: default;
+  outline: none;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--surface-subtle);
+  }
+
+  &:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--ring);
+  }
+}
+
+.rp-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+}
+
+// Thin marks: never thicker than 24px; a 4px rounded data end, square at the baseline.
+.rp-bar {
+  flex: 1 1 0;
+  max-width: 24px;
+  min-height: 0;
+  border-radius: 4px 4px 0 0;
+  transition: height var(--motion-base) var(--ease-out);
+
+  &--created {
+    background: var(--rp-created);
+  }
+
+  &--completed {
+    background: var(--rp-completed);
+  }
+
+  // The hovered mark lifts so the reader sees it respond; the tooltip sits on the column.
+  .rp-col:hover &,
+  .rp-col:focus-visible & {
+    filter: brightness(1.18);
+  }
+}
+
+.is-dense {
+  .rp-columns,
+  .rp-axis {
+    gap: 2px;
+  }
+
+  .rp-bars {
+    gap: 1px;
+  }
+
+  .rp-bar {
+    border-radius: 2px 2px 0 0;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Horizontal bars: name · bar · value (· hint). One hue; identity rides the swatch beside the name.
+
+.rp-hbars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rp-hbar {
+  display: grid;
+  grid-template-columns: minmax(6rem, 11rem) minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+
+  // A reserved hint track keeps every value in the same column whether or not its row has a hint.
+  .has-hints & {
+    grid-template-columns: minmax(6rem, 11rem) minmax(0, 1fr) 2.5rem 6.5rem;
+  }
+
+  &.is-zero {
+    color: var(--text-muted);
+  }
+
+  &:hover .rp-hbar-fill {
+    filter: brightness(1.18);
+  }
+}
+
+// A workspace heading inside a cross-workspace list chart; the lists beneath it are that workspace's.
+.rp-hbar-group {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+.rp-hbar-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+
+  > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  > i.ti {
+    flex: none;
+    font-size: 15px;
+    color: var(--text-muted);
+  }
+}
+
+.rp-hbar-flag {
+  color: var(--text-muted);
+  font-size: 13px !important;
+}
+
+.rp-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.rp-hbar-track {
+  position: relative;
+  display: block;
+  height: 10px;
+  border-radius: 3px;
+  // The unfilled track is a lighter step of the same hue, so the whole bar reads as one scale.
+  background: color-mix(in srgb, var(--rp-single) 10%, transparent);
+  overflow: hidden;
+}
+
+.rp-hbar-fill {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: 0 3px 3px 0;
+  background: var(--rp-single);
+  transition: width var(--motion-base) var(--ease-out);
+}
+
+.rp-hbar-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.rp-hbar-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Needs attention
+
+.rp-attention-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+// Container-style buttons: opt out of the global 36px height and accent hover fill.
+.rp-attention-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.rp-attention-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  height: auto;
+  min-width: 0;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+
+  i {
+    color: var(--text-muted);
+    font-size: 15px;
+  }
+
+  strong {
+    font-size: 20px;
+    font-weight: 650;
+    line-height: 1.1;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  span {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--border-strong);
+    outline-offset: 2px;
+  }
+
+  // Engaged: a ring, as the app does elsewhere, never a side stripe.
+  &.is-active {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 2px var(--ring);
+  }
+
+  &.is-danger i,
+  &.is-danger strong {
+    color: var(--danger);
+  }
+
+  &.is-warning i,
+  &.is-warning strong {
+    color: var(--color-amber);
+  }
+}
+
+.rp-cards {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+
+  li + li {
+    border-top: 1px solid var(--border);
+  }
+}
+
+.rp-card {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: auto;
+  padding: 8px 10px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--ring);
+  }
+}
+
+.rp-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 15px;
+
+  &.is-danger {
+    color: var(--danger);
+    background: var(--danger-bg);
+  }
+
+  &.is-warning {
+    color: var(--color-amber);
+    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
+  }
+}
+
+.rp-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rp-card-title {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-card-key {
+  margin-right: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rp-card-detail {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.rp-card-labels {
+  margin-top: 2px;
+}
+
+.rp-card-people {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rp-more-pill,
+.rp-cards-more {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rp-cards-more {
+  padding: 7px 10px 7px 48px;
+  background: var(--surface-subtle);
+}
+
+// ---------------------------------------------------------------------------------------------
+// People
+
+.rp-people-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// Fixed tracks for the three readouts, so the numbers form columns down the list instead of each row
+// ending wherever its own text happens to.
+.rp-person {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr) 12.5rem 4rem 6rem;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+  font-size: 13px;
+
+  &.is-idle .rp-person-activity {
+    color: var(--text-muted);
+  }
+
+  &:hover .rp-person-seg {
+    filter: brightness(1.18);
+  }
+}
+
+.rp-person-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rp-person-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-agent-mark {
+  color: var(--accent-violet);
+  font-size: 12px;
+}
+
+.rp-person-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+}
+
+.rp-person-seg {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  transition: width var(--motion-base) var(--ease-out);
+
+  &--completed {
+    background: var(--rp-completed);
+  }
+
+  &--other {
+    background: var(--rp-other);
+  }
+
+  &[style*="width: 0%"] {
+    display: none;
+  }
+}
+
+.rp-person-activity,
+.rp-person-open,
+.rp-person-overdue {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-person-activity {
+  color: var(--text);
+}
+
+.rp-person-overdue.is-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  color: var(--danger);
+}
+
+// Who worked when: the same cell levels as the activity strip, one row per person.
+.rp-heat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.rp-heat-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.rp-heat-head {
+  margin-bottom: 2px;
+
+  .rp-heat-name {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+}
+
+.rp-heat-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+
+  > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.rp-heat-cells {
+  display: flex;
+  gap: 3px;
+}
+
+.rp-heat-col-label {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-align: center;
+  white-space: nowrap;
+
+  &.is-weekend {
+    opacity: 0.6;
+  }
+}
+
+.rp-heat-cell {
+  flex: 1 1 0;
+  height: 16px;
+  min-width: 0;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--rp-single) 8%, transparent);
+  outline: none;
+  transition: filter var(--motion-fast);
+
+  &[data-level="1"] { background: color-mix(in srgb, var(--rp-single) 30%, transparent); }
+  &[data-level="2"] { background: color-mix(in srgb, var(--rp-single) 52%, transparent); }
+  &[data-level="3"] { background: color-mix(in srgb, var(--rp-single) 76%, transparent); }
+  &[data-level="4"] { background: var(--rp-single); }
+
+  &:hover,
+  &:focus-visible {
+    filter: brightness(1.25);
+    box-shadow: 0 0 0 2px var(--ring);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Checklist meter
+
+.rp-meter-value {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: var(--tracking-tight);
+}
+
+.rp-meter {
+  height: 10px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--rp-single) 10%, transparent);
+  overflow: hidden;
+}
+
+.rp-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 3px 3px 0;
+  background: var(--rp-single);
+  transition: width var(--motion-base) var(--ease-out);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Narrow: panels stack, rows reflow so the bar never squeezes the name to nothing.
+
+// A narrow panel (three-up breakdowns, phones) keeps the bar legible by shedding the hint track.
+@container (max-width: 440px) {
+  .rp-hbar,
+  .has-hints .rp-hbar {
+    grid-template-columns: minmax(5rem, 9rem) minmax(0, 1fr) 2rem;
+
+    .rp-hbar-hint {
+      display: none;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .rp-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .rp-headline p {
+    font-size: 14px;
+  }
+
+  .rp-hbar,
+  .has-hints .rp-hbar {
+    grid-template-columns: minmax(5rem, 7rem) minmax(0, 1fr) 2rem;
+
+    .rp-hbar-hint {
+      display: none;
+    }
+  }
+
+  // Name and workload share the first line; the bar and the activity text sit beneath.
+  .rp-person {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+  }
+
+  .rp-person-who {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .rp-person-open,
+  .rp-person-overdue {
+    grid-row: 1;
+    grid-column: 2;
+    display: inline-flex;
+    justify-content: flex-end;
+    gap: 3px;
+  }
+
+  // Open and overdue share the one trailing slot on a phone: overdue is the louder of the two.
+  .rp-person-overdue.is-danger ~ .rp-person-open,
+  .rp-person-open:has(+ .rp-person-overdue.is-danger) {
+    display: none;
+  }
+
+  .rp-heat-row {
+    grid-template-columns: minmax(0, 6rem) minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .is-idle .rp-person-bar {
+    display: none;
+  }
+
+  .rp-person-bar {
+    grid-column: 1 / -1;
+  }
+
+  .rp-person-activity {
+    grid-column: 1 / -1;
+    color: var(--text-muted);
+    text-align: left;
+  }
+
+  .rp-card-people {
+    display: none;
+  }
+
+  .rp-cards-more {
+    padding-left: 10px;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .rp-card {
+    min-height: 44px;
+  }
+
+  .rp-attention-tile {
+    min-height: 44px;
+  }
+}

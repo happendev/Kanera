@@ -1,0 +1,327 @@
+@let r = report();
+<div class="rp" [class.is-refreshing]="refreshing()">
+  <!-- The headline is the report: everything below is evidence for these sentences. -->
+  <section class="rp-headline" aria-label="Summary" i18n-aria-label="Report section label">
+    <i class="ti ti-report-analytics" aria-hidden="true"></i>
+    <p>
+      @for (sentence of r.headline; track $index) {
+      <span class="rp-sentence">{{ sentence }}</span>
+      }
+    </p>
+  </section>
+
+  @if (partial()) {
+  <!-- Cross-board hosts page cards in; say so rather than letting the counts quietly grow. -->
+  <p class="rp-partial" role="status">
+    <span class="spinner" aria-hidden="true"></span>
+    <span i18n="Notice on the report while the host is still loading cards">Loading all matching cards… the right-now counts settle when the full set is ready.</span>
+  </p>
+  }
+
+  <div class="rp-kpis" [class.has-six]="r.kpis.length === 6">
+    @for (kpi of r.kpis; track kpi.key) {
+    <k-stat-tile [label]="kpi.label" [icon]="kpi.icon" [value]="kpi.value" [tone]="kpi.tone" [interactive]="false" [delta]="kpi.delta" [deltaSuffix]="deltaSuffix()" />
+    }
+  </div>
+
+  <div class="rp-grid">
+    @if (hasFlow()) {
+    <section class="rp-panel rp-flow">
+      <header class="rp-panel-head">
+        <div>
+          <strong i18n="Report chart heading: cards created and completed per day">Daily flow</strong>
+          <span i18n="Report chart subtitle">Cards started and finished each day</span>
+        </div>
+        <!-- Two series, so the legend is mandatory; the swatch, not the text, carries the colour. -->
+        <ul class="rp-legend" aria-label="Series" i18n-aria-label="Chart legend label">
+          <li><i class="rp-swatch rp-swatch--created"></i><ng-container i18n="Chart legend: cards created">Created</ng-container></li>
+          <li><i class="rp-swatch rp-swatch--completed"></i><ng-container i18n="Chart legend: cards completed">Completed</ng-container></li>
+        </ul>
+      </header>
+      <div class="rp-plot" [class.is-dense]="r.flow.length > 14">
+        <div class="rp-plot-area">
+          <div class="rp-gridlines" aria-hidden="true">
+            @for (tick of r.flowTicks; track tick) {
+            <div class="rp-gridline" [style.bottom.%]="(tick / (r.flowPeak || 1)) * 100"><span>{{ tick }}</span></div>
+            }
+          </div>
+          <div class="rp-columns" role="list">
+            @for (day of r.flow; track day.dateKey) {
+            <div class="rp-col" role="listitem" tabindex="0" [class.is-weekend]="day.weekend" [class.is-today]="day.isToday" [kTooltip]="day.tooltip" [attr.aria-label]="day.tooltip">
+              <div class="rp-bars">
+                <i class="rp-bar rp-bar--created" [style.height.%]="(day.created / (r.flowPeak || 1)) * 100"></i>
+                <i class="rp-bar rp-bar--completed" [style.height.%]="(day.completed / (r.flowPeak || 1)) * 100"></i>
+              </div>
+            </div>
+            }
+          </div>
+        </div>
+        <div class="rp-axis" aria-hidden="true">
+          @for (day of r.flow; track day.dateKey) {
+          <span class="rp-col-label" [class.is-weekend]="day.weekend" [class.is-today]="day.isToday">{{ day.label }}</span>
+          }
+        </div>
+      </div>
+    </section>
+    }
+
+    @if (openByListVisible()) {
+    <section class="rp-panel rp-lists">
+      <header class="rp-panel-head">
+        <div>
+          <strong i18n="Report chart heading: open cards per list">Where open work sits</strong>
+          <span>{{ openCountLabel() }}</span>
+        </div>
+      </header>
+      <ul class="rp-hbars">
+        @for (bar of r.lists; track bar.id; let i = $index) {
+        @if (bar.group && bar.group !== r.lists[i - 1]?.group) {
+        <li class="rp-hbar-group">{{ bar.group }}</li>
+        }
+        <li class="rp-hbar" [class.is-zero]="bar.value === 0" [kTooltip]="barTooltip(bar.name, bar.value, bar.hint)">
+          <span class="rp-hbar-name">
+            <i class="ti ti-{{ bar.icon }}" [style.color]="bar.color ? 'var(--color-' + bar.color + ')' : null" aria-hidden="true"></i>
+            <span>{{ bar.name }}</span>
+            @if (bar.inProgress && inProgressEnabled()) {
+            <i class="ti ti-progress rp-hbar-flag" aria-label="In progress list" i18n-aria-label="Marker on a list that tracks time in progress"></i>
+            }
+          </span>
+          <span class="rp-hbar-track"><i class="rp-hbar-fill" [style.width.%]="bar.share * 100"></i></span>
+          <strong class="rp-hbar-value">{{ bar.value }}</strong>
+        </li>
+        }
+      </ul>
+    </section>
+    }
+  </div>
+
+  @if (r.attention.length) {
+  <section class="rp-panel rp-attention">
+    <header class="rp-panel-head">
+      <div>
+        <strong i18n="Report section heading: cards that need a coordinator's attention">Needs attention</strong>
+        <span i18n="Report section subtitle">Right now, not just this period</span>
+      </div>
+    </header>
+    <div class="rp-attention-tiles">
+      @for (group of r.attention; track group.kind) {
+      <button type="button" class="rp-attention-tile" [class.is-active]="activeAttention()?.kind === group.kind" [class.is-danger]="group.tone === 'danger'" [class.is-warning]="group.tone === 'warning'" [attr.aria-pressed]="activeAttention()?.kind === group.kind" (click)="pickAttention(group.kind)">
+        <span class="rp-attention-count"><i class="ti ti-{{ group.icon }}" aria-hidden="true"></i><strong>{{ group.count }}</strong></span>
+        <span>{{ group.label }}</span>
+      </button>
+      }
+    </div>
+    @if (activeAttention(); as group) {
+    <ol class="rp-cards" [attr.aria-label]="group.label">
+      @for (entry of group.cards; track entry.card.id) {
+      <li>
+        <button type="button" class="rp-card" (click)="cardOpened.emit(entry.card.id)">
+          <i class="ti ti-{{ group.icon }} rp-card-icon" [class.is-danger]="group.tone === 'danger'" [class.is-warning]="group.tone === 'warning'" aria-hidden="true"></i>
+          <span class="rp-card-main">
+            <span class="rp-card-title">
+              @if (showCardKeys()) {
+              <span class="rp-card-key">{{ entry.card.key }}</span>
+              }
+              {{ entry.card.title }}
+            </span>
+            <span class="rp-card-detail">{{ entry.detail }}</span>
+            @if (entry.labels.length) {
+            <k-card-labels class="rp-card-labels" [labels]="entry.labels" [limit]="4" [showOverflow]="true" [interactive]="false" />
+            }
+          </span>
+          <span class="rp-card-people">
+            @for (member of assigneesFor(entry.assigneeIds).slice(0, maxRowAssignees); track member.userId) {
+            <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [userId]="member.userId" [size]="20" [workspaceId]="workspaceId()" />
+            }
+            @if (entry.assigneeIds.length > maxRowAssignees) {
+            <span class="rp-more-pill">+{{ entry.assigneeIds.length - maxRowAssignees }}</span>
+            }
+          </span>
+        </button>
+      </li>
+      }
+      @if (moreCount(group) > 0) {
+      <li class="rp-cards-more">{{ moreLabel(group) }}</li>
+      }
+    </ol>
+    }
+  </section>
+  }
+
+  @if (peopleVisible()) {
+  <section class="rp-panel rp-people">
+    <header class="rp-panel-head">
+      <div>
+        <strong i18n="Report section heading: activity and workload per person">People</strong>
+        <span i18n="Report section subtitle">What each person did this period, and what they hold now</span>
+      </div>
+      <ul class="rp-legend" aria-label="Series" i18n-aria-label="Chart legend label">
+        <li><i class="rp-swatch rp-swatch--completed"></i><ng-container i18n="Chart legend: cards completed">Completed</ng-container></li>
+        <li><i class="rp-swatch rp-swatch--other"></i><ng-container i18n="Chart legend: created, moved and checklist actions">Other activity</ng-container></li>
+      </ul>
+    </header>
+    <ul class="rp-people-rows">
+      @for (person of r.people; track person.key) {
+      <li class="rp-person" [class.is-idle]="person.completed + person.other === 0">
+        <span class="rp-person-who">
+          <k-avatar [url]="person.avatarUrl" [name]="person.name" [userId]="person.userId" [size]="24" [showTooltip]="false" [workspaceId]="workspaceId()" />
+          <span class="rp-person-name">
+            {{ person.name }}
+            @if (person.agentName) {
+            <i class="ti ti-sparkles rp-agent-mark" aria-hidden="true"></i>
+            }
+          </span>
+        </span>
+        <span class="rp-person-bar" [kTooltip]="personActivityLabel(person)">
+          <i class="rp-person-seg rp-person-seg--completed" [style.width.%]="completedShare(person)"></i>
+          <i class="rp-person-seg rp-person-seg--other" [style.width.%]="otherShare(person)"></i>
+        </span>
+        <span class="rp-person-activity">{{ personActivityLabel(person) }}</span>
+        <span class="rp-person-open">@if (person.open) { {{ personWorkloadLabel(person) }} }</span>
+        <span class="rp-person-overdue" [class.is-danger]="person.overdue > 0">@if (person.overdue) { <i class="ti ti-alarm" aria-hidden="true"></i>{{ personOverdueLabel(person) }} }</span>
+      </li>
+      }
+    </ul>
+
+    @if (r.heat.length) {
+    <!-- Who worked when: one row per active person, one cell per day, darkest for the busiest day. -->
+    <div class="rp-heat" role="table" aria-label="Who worked when" i18n-aria-label="Heatmap label - activity per person per day">
+      <div class="rp-heat-row rp-heat-head" role="row">
+        <span class="rp-heat-name" i18n="Heatmap heading - activity per person per day">Who worked when</span>
+        <div class="rp-heat-cells" aria-hidden="true">
+          @for (column of r.heatColumns; track column.dateKey) {
+          <span class="rp-heat-col-label" [class.is-weekend]="column.weekend">{{ column.label }}</span>
+          }
+        </div>
+      </div>
+      @for (row of r.heat; track row.personKey) {
+      <div class="rp-heat-row" role="row">
+        <span class="rp-heat-name" role="rowheader">
+          <k-avatar [url]="row.avatarUrl" [name]="row.name" [userId]="row.userId" [size]="18" [showTooltip]="false" [workspaceId]="workspaceId()" />
+          <span>{{ row.name }}</span>
+        </span>
+        <div class="rp-heat-cells">
+          @for (cell of row.cells; track cell.dateKey) {
+          <i class="rp-heat-cell" role="cell" tabindex="0" [attr.data-level]="cell.level" [kTooltip]="cell.tooltip" [attr.aria-label]="cell.tooltip"></i>
+          }
+        </div>
+      </div>
+      }
+    </div>
+    }
+  </section>
+  }
+
+  @if (r.workspaces.length || r.boards.length || r.labels.length || r.fields.length || r.checklist) {
+  <div class="rp-grid rp-grid--breakdowns">
+    @if (byWorkspaceVisible()) {
+    <section class="rp-panel rp-workspaces">
+      <header class="rp-panel-head">
+        <div>
+          <strong i18n="Report chart heading: open cards per workspace">Open cards by workspace</strong>
+          <span i18n="Report chart subtitle">With how many in each were completed this period</span>
+        </div>
+      </header>
+      <ul class="rp-hbars has-hints">
+        @for (bar of r.workspaces; track bar.id) {
+        <li class="rp-hbar" [class.is-zero]="bar.value === 0" [kTooltip]="barTooltip(bar.name, bar.value, bar.hint)">
+          <span class="rp-hbar-name">
+            <i class="ti ti-{{ bar.icon }}" [style.color]="bar.color ? 'var(--color-' + bar.color + ')' : null" aria-hidden="true"></i>
+            <span>{{ bar.name }}</span>
+          </span>
+          <span class="rp-hbar-track"><i class="rp-hbar-fill" [style.width.%]="bar.share * 100"></i></span>
+          <strong class="rp-hbar-value">{{ bar.value }}</strong>
+          <span class="rp-hbar-hint">{{ bar.hint ?? "" }}</span>
+        </li>
+        }
+      </ul>
+    </section>
+    }
+    @if (byBoardVisible()) {
+    <section class="rp-panel rp-boards">
+      <header class="rp-panel-head">
+        <div>
+          <strong i18n="Report chart heading: open cards per board">Open cards by board</strong>
+          <span i18n="Report chart subtitle">With how many on each were completed this period</span>
+        </div>
+      </header>
+      <ul class="rp-hbars has-hints">
+        @for (bar of r.boards; track bar.id) {
+        <li class="rp-hbar" [class.is-zero]="bar.value === 0" [kTooltip]="barTooltip(bar.name, bar.value, bar.hint)">
+          <span class="rp-hbar-name">
+            <i class="ti ti-{{ bar.icon }}" [style.color]="bar.color ? 'var(--color-' + bar.color + ')' : null" aria-hidden="true"></i>
+            <span>{{ bar.name }}</span>
+          </span>
+          <span class="rp-hbar-track"><i class="rp-hbar-fill" [style.width.%]="bar.share * 100"></i></span>
+          <strong class="rp-hbar-value">{{ bar.value }}</strong>
+          <span class="rp-hbar-hint">{{ bar.hint ?? "" }}</span>
+        </li>
+        }
+      </ul>
+    </section>
+    }
+
+    @if (r.labels.length) {
+    <section class="rp-panel">
+      <header class="rp-panel-head">
+        <div>
+          <strong i18n="Report chart heading: open cards per label">Open cards by label</strong>
+          <span i18n="Report chart subtitle">With how many of each were completed this period</span>
+        </div>
+      </header>
+      <ul class="rp-hbars has-hints">
+        @for (bar of r.labels; track bar.id) {
+        <li class="rp-hbar" [class.is-zero]="bar.value === 0" [kTooltip]="barTooltip(bar.name, bar.value, bar.hint)">
+          <span class="rp-hbar-name">
+            <i class="rp-dot" [style.background]="bar.color ? 'var(--color-' + bar.color + ')' : 'var(--border-strong)'" aria-hidden="true"></i>
+            <span>{{ bar.name }}</span>
+          </span>
+          <span class="rp-hbar-track"><i class="rp-hbar-fill" [style.width.%]="bar.share * 100"></i></span>
+          <strong class="rp-hbar-value">{{ bar.value }}</strong>
+          <span class="rp-hbar-hint">{{ bar.hint ?? "" }}</span>
+        </li>
+        }
+      </ul>
+    </section>
+    }
+
+    @for (field of r.fields; track field.id) {
+    <section class="rp-panel">
+      <header class="rp-panel-head">
+        <div>
+          <strong><i class="ti ti-{{ field.icon }} rp-head-icon" aria-hidden="true"></i>{{ field.name }}</strong>
+          <span>{{ unsetLabel(field.unset) }}</span>
+        </div>
+      </header>
+      <ul class="rp-hbars">
+        @for (bar of field.bars; track bar.id) {
+        <li class="rp-hbar" [kTooltip]="barTooltip(bar.name, bar.value, null)">
+          <span class="rp-hbar-name">
+            <i class="rp-dot" [style.background]="bar.color ? 'var(--color-' + bar.color + ')' : 'var(--border-strong)'" aria-hidden="true"></i>
+            <span>{{ bar.name }}</span>
+          </span>
+          <span class="rp-hbar-track"><i class="rp-hbar-fill" [style.width.%]="bar.share * 100"></i></span>
+          <strong class="rp-hbar-value">{{ bar.value }}</strong>
+        </li>
+        }
+      </ul>
+    </section>
+    }
+
+    @if (r.checklist; as checklist) {
+    <section class="rp-panel rp-checklist">
+      <header class="rp-panel-head">
+        <div>
+          <strong i18n="Report meter heading: checklist items done on open cards">Checklist progress</strong>
+          <span>{{ checklistLabel() }}</span>
+        </div>
+        <strong class="rp-meter-value">{{ checklistShare() }}%</strong>
+      </header>
+      <div class="rp-meter" role="meter" [attr.aria-valuenow]="checklist.done" aria-valuemin="0" [attr.aria-valuemax]="checklist.total" [attr.aria-label]="checklistLabel()">
+        <i class="rp-meter-fill" [style.width.%]="checklistShare()"></i>
+      </div>
+    </section>
+    }
+  </div>
+  }
+</div>

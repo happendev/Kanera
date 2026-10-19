@@ -16,6 +16,7 @@ import type {
   WorkGroupBy,
   WorkSort,
 } from "@kanera/shared/dto";
+import { DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { expandCardSummary, type WireBoardMemberUser, type WireCardDetail, type WireCardSummary, type WireChecklistAssignment, type WireCustomField } from "@kanera/shared/events";
 import type { GradientToken } from "@kanera/shared/colors";
 import type { WorkViewLens } from "@kanera/shared/schema";
@@ -50,6 +51,8 @@ import { FilterBarComponent } from "../board/table-view/filter-bar.component";
 import { ListComponent, type BulkCardMenuPayload, type BulkCardSelectionPayload, type BulkListSelectionPayload, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
 import { workDoneLayoutState } from "../board/work-done-view/work-done-preferences";
+import { dependencyLayoutState } from "../dependencies/dependency-layout";
+import type { WorkDoneReportSource } from "../board/work-done-view/work-done-report";
 import { readBackground, readCompactCards, writeBackground, writeCompactCards } from "../board/table-view/view-preference";
 import type { WorkDoneLayout } from "../board/work-done-view/work-done.types";
 import { BoardTableViewComponent } from "../board/table-view/board-table-view.component";
@@ -276,6 +279,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   setWorkDoneLayout(layout: WorkDoneLayout): void {
     this.workDoneLayoutState.setLayout(layout);
   }
+  /** Map/Timeline/Steps, remembered per lens like the rest of the Dependencies view's choices. */
+  readonly dependencyLayoutState = dependencyLayoutState(() => `globalWork:${this.lens()}`);
   /**
    * Every display that renders `k-board-table-view` full-height, which is what `.is-table-frame`
    * sizes with flexbox. The sheet owns a scrollport and raises its incremental row cap from that
@@ -898,6 +903,32 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly historyLabels = computed(() =>
     this.state.catalog().labels.map((label) => ({ id: label.id, name: label.name, color: label.color }))
   );
+  /**
+   * The Work done report's "right now" half, built from this page's own cross-board cards and catalog
+   * (the view's BoardState here is bare). Lists name their workspace as a group once the page spans
+   * workspaces, since the report charts one bar per shared list and "Backlog" repeats across
+   * workspaces. Thresholds come from each card's workspace; the catalog has no inactivity setting, so
+   * that one stays at the product default.
+   */
+  readonly workDoneReportSource = computed<WorkDoneReportSource>(() => {
+    const catalog = this.state.catalog();
+    const cards = this.state.cards();
+    return {
+      title: this.pageTitle(),
+      cards,
+      lists: catalog.lists.map((list) => ({ id: list.id, name: list.name, icon: list.icon, color: list.color, inProgress: list.inProgress, group: this.multiWorkspace() ? this.workspaceName(list.workspaceId) : null })),
+      boards: catalog.boards.map((board) => ({ id: board.id, name: board.name, icon: board.icon, color: board.iconColor, inProgressEnabled: board.inProgressEnabled })),
+      workspaces: catalog.workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, icon: workspace.icon, color: workspace.accentColor })),
+      viewerUserId: this.lens() === "my" ? this.state.auth.user()?.id ?? null : null,
+      members: catalog.people.map((person) => ({ userId: person.userId, displayName: person.displayName, avatarUrl: person.avatarUrl, role: "member" as const, source: "workspace" as const })),
+      assigneeIdsByCard: new Map(cards.map((card) => [card.id, card.assigneeIds])),
+      labelIdsByCard: new Map(cards.map((card) => [card.id, card.labelIds])),
+      fieldValuesByCard: this.boardCustomFieldValues(),
+      workspaceSettings: new Map(catalog.workspaces.map((workspace) => [workspace.id, { inProgressAlertDays: workspace.inProgressAlertDays, inactiveCardsDays: DEFAULT_INACTIVE_CARDS_DAYS, timeZone: workspace.timeZone }])),
+      partial: this.state.canLoadMore() || this.state.loadingMore(),
+    };
+  });
+
   readonly historyCfConditions = computed(() =>
     this.state.definition().filters.customFieldConditions.map((condition) => ({
       fieldId: condition.fieldId,
@@ -1201,6 +1232,14 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   constructor() {
     document.addEventListener("keydown", this.handleDocumentKeydown);
     document.addEventListener("keydown", this.handleSelectionEscape, true);
+    effect(() => {
+      // The report counts open cards across every board, so a first page of a hundred would
+      // under-report. The history timeline itself needs no cards, so only the Report layout walks
+      // the remaining pages, one at a time: each loadMore flips loadingMore and re-runs this.
+      if (this.workDoneLayout() !== "report" || this.effectiveDisplay() !== "history") return;
+      if (this.state.loading() || this.state.loadingMore() || !this.state.canLoadMore()) return;
+      untracked(() => void this.state.loadMore());
+    });
     effect(() => {
       // Keep the modal derived from the route so browser Back/Forward and pasted global-work links
       // behave like the existing board card detail. The visible query is preferred to avoid a

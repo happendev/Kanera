@@ -1028,6 +1028,8 @@ describe("GlobalWorkPage portfolio summary", () => {
       toggleOrganisationCollapsed: vi.fn(toggle("collapsedOrganisationIds")),
       toggleWorkspaceCollapsed: vi.fn(toggle("collapsedWorkspaceIds")),
       initialize: vi.fn(() => Promise.resolve()),
+      canLoadMore: signal(false),
+      loadingMore: signal(false),
     };
 
     await TestBed.configureTestingModule({
@@ -1225,6 +1227,8 @@ describe("GlobalWorkPage toolbar state", () => {
     const state = {
       auth: { user: () => null },
       focusedTargetUserId: () => null,
+      canLoadMore: signal(false),
+      loadingMore: signal(false),
       cards: signal([card, prioritySecondCard]),
       catalog: signal({
         organisations: [],
@@ -1552,15 +1556,19 @@ describe("GlobalWorkPage toolbar state", () => {
 
   it("restores and persists the Work Done layout", async () => {
     const workDoneKey = workDonePreferencesStorageKey("global");
+    // A "grid" remembered from before that layout was retired falls back to the list.
     localStorage.setItem(workDoneKey, JSON.stringify({ preset: "30d", layout: "grid" }));
 
     const { fixture } = await mount();
     try {
-      expect(fixture.componentInstance.workDoneLayout()).toBe("grid");
+      expect(fixture.componentInstance.workDoneLayout()).toBe("list");
+      // Report is offered across boards too, not only on a board.
+      expect(fixture.componentInstance.workDoneLayoutOptions().map((option) => option.id)).toEqual(["list", "report"]);
+      expect(fixture.componentInstance.workDoneReportSource().title).toBe("My Cards");
 
-      fixture.componentInstance.setWorkDoneLayout("list");
+      fixture.componentInstance.setWorkDoneLayout("report");
       expect(JSON.parse(localStorage.getItem(workDoneKey) ?? "{}"))
-        .toEqual({ preset: "30d", layout: "list" });
+        .toEqual({ preset: "30d", layout: "report" });
     } finally {
       fixture.destroy();
       localStorage.removeItem(workDoneKey);

@@ -1,6 +1,6 @@
 import { GettingStartedService } from "../../../core/getting-started/getting-started.service";
 import { EmptyStateComponent } from "../../../shared/empty-state.component";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from "@angular/core";
 import type {
   WorkDoneDaySummary,
   WorkDoneEvent,
@@ -10,14 +10,17 @@ import type {
   WorkFilters,
   WorkScope,
 } from "@kanera/shared/dto";
-import type { WireCardSummary } from "@kanera/shared/events";
+import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import type { WorkViewLens } from "@kanera/shared/schema";
+import { DEFAULT_IN_PROGRESS_ALERT_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { ApiClient } from "../../../core/api/api.client";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../../shared/activity-strip.component";
 import { ToastService } from "../../../shared/toast.service";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { addDays, localDateKey, startOfLocalDay, viewerTimeZone } from "../../../shared/day-key.util";
 import { mediaQuerySignal } from "../../../shared/media-query.signal";
+import { MinuteClockService } from "../../../shared/minute-clock.service";
+import { startOfWeek, weekdayIndex } from "../../../shared/week-start";
 import { SegmentedComponent, type SegmentedOption } from "../../../shared/segmented.component";
 import { DateRangePickerPopover } from "../../completed-cards/date-range-picker.popover";
 import type { CardLabelPresentation } from "../card-labels.component";
@@ -33,6 +36,8 @@ import {
   groupIntoDays,
 } from "./work-done-grouping";
 import { WorkDoneDayComponent, type WorkDoneBoardSummary } from "./work-done-day.component";
+import { buildReportText, buildWorkDoneReport, type WorkDoneReportField, type WorkDoneReportSource } from "./work-done-report";
+import { WorkDoneReportComponent } from "./work-done-report.component";
 import { readWorkDonePreferences, updateWorkDonePreferences } from "./work-done-preferences";
 import type { CardDayDigest, WorkDoneDay, WorkDoneLayout, WorkDoneRangePreset } from "./work-done.types";
 import { formatDate, formatDateRange } from "../../../shared/date-format";
@@ -67,17 +72,25 @@ const STRIP_WINDOW_DAYS_NARROW = 28;
 /** Where the strip stacks its rows — see the matching breakpoint in activity-strip.component.scss. */
 const NARROW_STRIP_QUERY = "(max-width: 640px)";
 
-/** Days covered by each preset, counting the current day as one. */
-const PRESET_DAYS: Record<Exclude<WorkDoneRangePreset, "custom">, number> = {
+/** Days covered by each fixed-length preset, counting the current day as one. `week` is calendar-based. */
+const PRESET_DAYS: Record<Exclude<WorkDoneRangePreset, "custom" | "week">, number> = {
   today: 1,
   "7d": 7,
   "14d": 14,
   "30d": 30,
 };
 
+/** First day of a preset's range, given today. */
+function presetStart(preset: Exclude<WorkDoneRangePreset, "custom">, today: Date): Date {
+  // The working week as every calendar grid in the app draws it: Monday through today.
+  if (preset === "week") return startOfWeek(today);
+  return addDays(today, -(PRESET_DAYS[preset] - 1));
+}
+
 /** Labelled, not icon-only: "7d" is already as short as an icon and far clearer than one. */
 const PRESET_OPTIONS: SegmentedOption<Exclude<WorkDoneRangePreset, "custom">>[] = [
   { id: "today", label: $localize`:Work done period preset - today:Today`, tooltip: $localize`:Work done period preset tooltip:Today only` },
+  { id: "week", label: $localize`:Work done period preset - the current working week:Week`, tooltip: $localize`:Work done period preset tooltip:This week, Monday to today` },
   { id: "7d", label: $localize`:Work done period preset - abbreviation for 7 days:7d`, tooltip: $localize`:Work done period preset tooltip:Last 7 days` },
   { id: "14d", label: $localize`:Work done period preset - abbreviation for 14 days:14d`, tooltip: $localize`:Work done period preset tooltip:Last 14 days` },
   { id: "30d", label: $localize`:Work done period preset - abbreviation for 30 days:30d`, tooltip: $localize`:Work done period preset tooltip:Last 30 days` },
@@ -122,12 +135,13 @@ function toDateInputValue(date: Date): string {
 @Component({
   selector: "k-work-done-view",
   standalone: true,
-  imports: [EmptyStateComponent, 
+  imports: [EmptyStateComponent,
     ActivityStripComponent,
     DateRangePickerPopover,
     SegmentedComponent,
     TooltipDirective,
     WorkDoneDayComponent,
+    WorkDoneReportComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./work-done-view.component.html",
@@ -140,6 +154,7 @@ export class WorkDoneViewComponent {
   // label/custom-field filters resolve against the same workspace catalogs the live board cards use.
   private readonly state = inject(BoardState, { optional: true });
   private readonly gettingStarted = inject(GettingStartedService);
+  private readonly clock = inject(MinuteClockService);
 
   readonly scope = input.required<"board" | "global">();
   readonly boardId = input<string | null>(null);
@@ -175,6 +190,13 @@ export class WorkDoneViewComponent {
   readonly refreshVersion = input(0);
   /** Optional host-owned day folds; board History keeps its existing transient local state. */
   readonly hostCollapsedDayKeys = input<readonly string[] | null>(null);
+  /**
+   * The report's "right now" inputs from a host that has no hydrated BoardState: Global Work passes
+   * its cross-board cards, lists, boards, people and per-workspace thresholds here. Board scope leaves
+   * it null and reads BoardState. Without either, the Report layout has nothing to draw and falls
+   * back to the list.
+   */
+  readonly reportSource = input<WorkDoneReportSource | null>(null);
 
   readonly cardOpened = output<string>();
   readonly cardSummaryOpened = output<WireCardSummary>();
@@ -185,6 +207,14 @@ export class WorkDoneViewComponent {
   readonly rangePickerOpen = signal(false);
   private readonly events = signal<WorkDoneEvent[]>([]);
   private readonly stripDays = signal<WorkDoneDaySummary[]>([]);
+  /**
+   * Per-day counts for the period of the same length just before the visible one; the report's
+   * deltas. Null until loaded, when the layout is not Report, or when that period reaches back past
+   * the server's window, in which case the report simply shows no comparison.
+   */
+  private readonly previousDays = signal<WorkDoneDaySummary[] | null>(null);
+  /** The first timeline response has landed, so an empty report means "quiet", not "still loading". */
+  private readonly loadedOnce = signal(false);
   private readonly localCollapsedDayKeys = signal<ReadonlySet<string>>(new Set());
   private readonly collapsedDayKeys = computed(() => {
     const hosted = this.hostCollapsedDayKeys();
@@ -193,6 +223,7 @@ export class WorkDoneViewComponent {
   private loadSeq = 0;
   private loadedRequestKey: string | null = null;
   private stripSeq = 0;
+  private previousSeq = 0;
 
   readonly skeletonRows = Array.from({ length: SKELETON_ROW_COUNT }, (_unused, index) => index);
   readonly presetOptions = PRESET_OPTIONS;
@@ -214,10 +245,29 @@ export class WorkDoneViewComponent {
   constructor() {
     // Boards and My Cards both render this view, so it ticks the "View Work done" step for either.
     this.gettingStarted.noteUsed("viewWorkDone");
-    // Restore remembered preferences once the scope input is available.
+    // Restore the remembered period for the active layout. The report defaults to the working week
+    // (what a coordinator reports on), the timeline to the last 7 days; each remembers its own choice.
     effect(() => {
       const prefs = readWorkDonePreferences(this.scope());
-      if (prefs.preset && prefs.preset !== "custom") this.applyPreset(prefs.preset, false);
+      const preset = this.layout() === "report" ? (prefs.reportPreset ?? "week") : (prefs.preset ?? "7d");
+      if (preset !== "custom") untracked(() => this.applyPreset(preset, false));
+    });
+
+    effect(() => {
+      // The comparison period moves with the visible range, but only the report reads it.
+      this.layout();
+      this.from();
+      this.to();
+      this.boardId();
+      this.globalLens();
+      this.globalScope();
+      this.globalFilters();
+      this.searchQuery();
+      this.filterListIds();
+      this.filterLabelIds();
+      this.filterMemberIds();
+      this.refreshVersion();
+      void this.loadPreviousPeriod();
     });
 
     effect(() => {
@@ -417,6 +467,108 @@ export class WorkDoneViewComponent {
     return types.map((type) => ({ ...EVENT_TYPE_SERIES[type], counts: counts(type) }));
   });
 
+  /**
+   * Select fields with their options, for the report's per-option breakdowns. Only wire fields carry
+   * options; a bare schema row (never the board page's case) contributes nothing.
+   */
+  private readonly reportSelectFields = computed<WorkDoneReportField[]>(() =>
+    this.customFields()
+      .filter((field) => field.type === "select" && !field.archivedAt && "options" in field)
+      .map((field) => ({
+        id: field.id,
+        name: field.name,
+        icon: field.icon,
+        options: ("options" in field ? field.options : []).map((option) => ({ id: option.id, name: option.label, color: option.color })),
+      })),
+  );
+
+  /** Whether this host can draw the report at all: the board's own state, or a supplied source. */
+  readonly reportAvailable = computed(() => (this.scope() === "board" ? !!this.state : this.reportSource() !== null));
+
+  /**
+   * The management report over the loaded period plus the live cards, only while the Report layout
+   * is showing, so the timeline never pays for it. Null until the first timeline response, so the
+   * report cannot open on "nothing happened" while the events are still in flight.
+   *
+   * On a board, the page's list, label and member filters narrow the "right now" half too, so a report
+   * filtered to one person shows that person's overdue work, not the whole board's. Search text is the
+   * one filter applied to events alone: it matches server-side and has no client predicate for live
+   * cards. In global scope the host's cards already match its filters server-side, so they pass as is.
+   */
+  readonly report = computed(() => {
+    if (this.layout() !== "report" || !this.loadedOnce()) return null;
+    const source = this.scope() === "global" ? this.reportSource() : null;
+    if (source) {
+      return buildWorkDoneReport({
+        from: this.from(),
+        to: this.to(),
+        today: this.today,
+        now: this.clock.now(),
+        events: this.filteredEvents(),
+        previousDays: this.previousDays(),
+        cards: source.cards,
+        lists: source.lists,
+        boards: source.boards,
+        workspaces: source.workspaces,
+        viewerUserId: source.viewerUserId,
+        members: source.members,
+        assigneeIdsByCard: source.assigneeIdsByCard,
+        labelIdsByCard: source.labelIdsByCard,
+        labelsById: this.labelsById(),
+        selectFields: this.reportSelectFields(),
+        fieldValuesByCard: source.fieldValuesByCard,
+        inProgressEnabled: true,
+        inProgressAlertDays: DEFAULT_IN_PROGRESS_ALERT_DAYS,
+        inactiveCardsDays: DEFAULT_INACTIVE_CARDS_DAYS,
+        timeZone: viewerTimeZone(),
+        workspaceSettings: source.workspaceSettings,
+      });
+    }
+    const state = this.state;
+    if (!state || this.scope() !== "board") return null;
+    const listIds = new Set(this.filterListIds());
+    const labelIds = new Set(this.filterLabelIds());
+    const memberIds = new Set(this.filterMemberIds());
+    const conditions = this.filterCfConditions();
+    const labelIdsByCard = state.labelIdsByCard();
+    const assigneeIdsByCard = state.assigneeIdsByCard();
+    const fieldsById = conditions.length ? new Map(this.customFields().map((field) => [field.id, field])) : null;
+    const valuesByCard = fieldsById ? state.customFieldValuesByCardAndField() : null;
+    const cards = state.cards().filter((card) => {
+      if (listIds.size && !listIds.has(card.listId)) return false;
+      if (labelIds.size && !(labelIdsByCard.get(card.id) ?? []).some((id) => labelIds.has(id))) return false;
+      if (memberIds.size && !(assigneeIdsByCard.get(card.id) ?? []).some((id) => memberIds.has(id))) return false;
+      if (fieldsById && valuesByCard && !matchesCfConditions(card.id, conditions, fieldsById, valuesByCard)) return false;
+      return true;
+    });
+    return buildWorkDoneReport({
+      from: this.from(),
+      to: this.to(),
+      today: this.today,
+      now: this.clock.now(),
+      events: this.filteredEvents(),
+      previousDays: this.previousDays(),
+      cards,
+      lists: state.visibleLists().map((list) => ({ id: list.id, name: list.name, icon: list.icon, color: list.color, inProgress: list.inProgress })),
+      members: state.members(),
+      assigneeIdsByCard,
+      labelIdsByCard,
+      labelsById: this.labelsById(),
+      selectFields: this.reportSelectFields(),
+      fieldValuesByCard: state.customFieldValuesByCardAndField(),
+      inProgressEnabled: this.inProgressEnabled(),
+      inProgressAlertDays: state.inProgressAlertDays(),
+      inactiveCardsDays: state.inactiveCardsDays(),
+      timeZone: state.workspaceTimeZone(),
+    });
+  });
+
+  readonly reportMembersById = computed<ReadonlyMap<string, WireBoardMemberUser>>(() => {
+    const source = this.scope() === "global" ? this.reportSource() : null;
+    if (source) return new Map(source.members.map((member) => [member.userId, member]));
+    return this.state?.membersById() ?? new Map();
+  });
+
   isDayCollapsed(dateKey: string): boolean {
     return this.collapsedDayKeys().has(dateKey);
   }
@@ -436,24 +588,32 @@ export class WorkDoneViewComponent {
     const today = startOfLocalDay(new Date());
     this.preset.set(preset);
     this.to.set(today);
-    this.from.set(addDays(today, -(PRESET_DAYS[preset] - 1)));
+    this.from.set(presetStart(preset, today));
     if (persist) this.persistPrefs();
   }
 
-  /** Shifts the whole period, clamped to the queryable window. */
+  /**
+   * Shifts the whole period, clamped to the queryable window. A week (the Week preset, or any
+   * Monday-to-Sunday range) pages by calendar weeks rather than by its own length, so stepping back
+   * from "this week so far" on a Monday lands on all of last week, not on Sunday alone.
+   */
   shiftRange(direction: -1 | 1) {
-    const length = this.rangeLengthDays();
+    const weekly = this.preset() === "week" || (weekdayIndex(this.from()) === 0 && this.rangeLengthDays() === 7);
+    const length = weekly ? 7 : this.rangeLengthDays();
     let from = addDays(this.from(), direction * length);
-    let to = addDays(this.to(), direction * length);
+    let to = weekly ? addDays(from, 6) : addDays(this.to(), direction * length);
     if (from.getTime() < this.minDay.getTime()) {
       from = this.minDay;
       to = addDays(from, length - 1);
     }
     if (to.getTime() > this.today.getTime()) {
       to = this.today;
-      from = addDays(to, -(length - 1));
+      // A week keeps its Monday: forward onto the current week is "this week so far", not the
+      // trailing seven days.
+      if (!weekly) from = addDays(to, -(length - 1));
     }
-    this.preset.set("custom");
+    const thisWeek = weekly && from.getTime() === startOfWeek(this.today).getTime();
+    this.preset.set(thisWeek ? "week" : "custom");
     this.from.set(from);
     this.to.set(to);
   }
@@ -489,7 +649,7 @@ export class WorkDoneViewComponent {
   }
 
   private persistPrefs(): void {
-    updateWorkDonePreferences(this.scope(), { preset: this.preset() });
+    updateWorkDonePreferences(this.scope(), this.layout() === "report" ? { reportPreset: this.preset() } : { preset: this.preset() });
   }
 
   openDigest(digest: CardDayDigest) {
@@ -502,6 +662,12 @@ export class WorkDoneViewComponent {
   }
 
   async copyRange() {
+    const report = this.report();
+    if (report) {
+      const subject = (this.scope() === "global" ? this.reportSource()?.title : this.state?.board()?.name) ?? "";
+      await this.copyText(buildReportText(report, $localize`:Title line of the copied report text, e.g. "Report for Platform Delivery · 14–18 Oct":Report for ${subject}:board: · ${this.rangeLabel()}:range:`));
+      return;
+    }
     await this.copyText(buildRangeStandupText(this.days(), this.boardNames()));
   }
 
@@ -537,6 +703,7 @@ export class WorkDoneViewComponent {
       if (seq !== this.loadSeq) return;
       this.events.set(response.events ?? []);
       this.loadedRequestKey = requestKey;
+      this.loadedOnce.set(true);
     } catch {
       // A transient reconnect failure must not replace already-loaded history with an error page.
       if (seq === this.loadSeq && !refreshing) this.error.set($localize`:Error when the work done history fails to load:Work history could not be loaded.`);
@@ -566,15 +733,47 @@ export class WorkDoneViewComponent {
   }
 
   /**
+   * The report's comparison: the same-length period ending the day before the visible one. Skipped
+   * (and cleared) outside the Report layout, and when the period would start before the server's
+   * window — a partial comparison would understate the previous period and overstate every delta.
+   */
+  private async loadPreviousPeriod() {
+    if (this.layout() !== "report" || !this.reportAvailable()) {
+      this.previousDays.set(null);
+      return;
+    }
+    const length = this.rangeLengthDays();
+    const to = addDays(this.from(), -1);
+    const from = addDays(to, -(length - 1));
+    const request = from.getTime() >= this.minDay.getTime() ? this.request({ summary: true, range: { from, to } }) : null;
+    const seq = ++this.previousSeq;
+    if (!request) {
+      this.previousDays.set(null);
+      return;
+    }
+    try {
+      const response = request.body
+        ? await this.api.post<WorkDoneSummaryResponse>(request.url, request.body)
+        : await this.api.get<WorkDoneSummaryResponse>(request.url);
+      if (seq !== this.previousSeq) return;
+      this.previousDays.set(response.days ?? []);
+    } catch {
+      // No comparison beats a wrong one: the report drops its deltas until the next refresh.
+      if (seq === this.previousSeq) this.previousDays.set(null);
+    }
+  }
+
+  /**
    * Builds the events or summary request for the current scope.
    *
-   * The summary variant always covers the fixed strip window rather than the visible range, and adds
-   * `/summary` to the REST paths or `/summary/query` for the global POST.
+   * The summary variant covers the fixed strip window rather than the visible range (or an explicit
+   * `range`, for the report's previous-period comparison), and adds `/summary` to the REST paths or
+   * `/summary/query` for the global POST.
    */
-  private request(opts: { summary?: boolean } = {}): { url: string; body?: object } | null {
+  private request(opts: { summary?: boolean; range?: { from: Date; to: Date } } = {}): { url: string; body?: object } | null {
     const today = startOfLocalDay(new Date());
-    const rangeFrom = opts.summary ? addDays(today, -(STRIP_WINDOW_DAYS - 1)) : this.from();
-    const rangeTo = opts.summary ? today : this.to();
+    const rangeFrom = opts.range?.from ?? (opts.summary ? addDays(today, -(STRIP_WINDOW_DAYS - 1)) : this.from());
+    const rangeTo = opts.range?.to ?? (opts.summary ? today : this.to());
     const from = rangeFrom.toISOString();
     // Exclusive upper bound: start of the day after the last day in the range.
     const to = addDays(rangeTo, 1).toISOString();

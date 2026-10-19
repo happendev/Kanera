@@ -204,9 +204,19 @@
     <k-segmented
       [options]="workDoneLayoutOptions()"
       [value]="workDoneLayout()"
+      [autoLabels]="true"
       ariaLabel="Work done layout"
       i18n-ariaLabel
       (valueChange)="setWorkDoneLayout($event)"
+    />
+    } @else if (effectiveView() === 'dependencies') {
+    <k-segmented
+      [options]="dependencyLayoutState.options"
+      [value]="dependencyLayoutState.layout()"
+      [autoLabels]="true"
+      ariaLabel="Dependencies layout"
+      i18n-ariaLabel
+      (valueChange)="dependencyLayoutState.setLayout($event)"
     />
     }
   </div>
@@ -350,7 +360,7 @@
 <!-- The map reads its own graph (chains cross into boards this page never loaded). Search and the
      filter bar still apply: a chain stays while any of this board's cards in it matches. A
      standalone board's workspace is the board itself, so it offers no workspace scope. -->
-<k-dependency-map [boardId]="boardId()" [workspaceId]="state.workspaceKind() === 'board' ? null : (state.board()?.workspaceId ?? null)" [preferenceScope]="'board:' + boardId()"
+<k-dependency-map [boardId]="boardId()" [workspaceId]="state.workspaceKind() === 'board' ? null : (state.board()?.workspaceId ?? null)" [preferenceScope]="'board:' + boardId()" [layoutMode]="dependencyLayoutState.layout()"
   [hostCardIds]="showArchived() ? null : filteredCardIds()" [selectedCardId]="openCardId()" (cardOpened)="openDependencyCard($event)" />
 } @else if (effectiveView() === 'history') {
 <k-work-done-view scope="board" [boardId]="boardId()" [workspaceId]="state.board()?.workspaceId ?? null" [timeZonesByWorkspace]="workDoneTimeZones()" [lists]="state.visibleLists()" [selectedCardId]="openCardId()" [searchQuery]="searchQuery()" [filterLabelIds]="filterLabelIds()" [filterMemberIds]="filterMemberIds()" [filterListIds]="filterListIds()" [filterCfConditions]="filterCfConditions()" [eventTypeFilter]="workDoneEventType()" [layout]="workDoneLayout()" [refreshVersion]="workDoneRefreshVersion()" (cardOpened)="openCardDetail($event)" />

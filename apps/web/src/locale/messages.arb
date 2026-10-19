@@ -2795,6 +2795,7 @@
     "x-files": [
       "src/app/core/notifications/browser-push.service.ts",
       "src/app/features/board/board.page.html",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/dependencies/dependency-map.component.ts",
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -7717,7 +7718,9 @@
   "@2952127331314675199": {
     "description": "Board mirror status badge",
     "x-files": [
-      "src/app/features/board-mirrors/board-mirrors.dialog.ts"
+      "src/app/features/board-mirrors/board-mirrors.dialog.ts",
+      "src/app/features/board/work-done-view/work-done-report.component.html",
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "2904866536433097519": "Choose source lists",
@@ -8380,6 +8383,7 @@
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/table-view/table-columns.util.ts",
       "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/board/work-done-view/work-done-preferences.ts",
       "src/app/features/completed-cards/completed-cards-panel.component.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/share-target/share-target.page.html",
@@ -8678,6 +8682,7 @@
       "src/app/features/board/board.page.html",
       "src/app/features/board/table-view/filter-bar.component.ts",
       "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/global-work/team-overview.component.ts",
       "src/app/features/home/home.page.html",
@@ -8720,6 +8725,7 @@
     "x-files": [
       "src/app/features/board/board.page.html",
       "src/app/features/board/table-view/group-by.util.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/import/trello-import.page.html"
     ]
@@ -8729,7 +8735,8 @@
     "description": "Board overview count: cards with no recent activity",
     "x-files": [
       "src/app/features/board/board.page.html",
-      "src/app/features/board/table-view/filter-bar.component.ts"
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "1209068326542296680": "Show cards in progress",
@@ -8866,6 +8873,13 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
+  "3168241265899648027": "Dependencies layout",
+  "@3168241265899648027": {
+    "x-files": [
+      "src/app/features/board/board.page.html",
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
   "1821222939222457554": "Reset to list columns",
   "@1821222939222457554": {
     "x-files": [
@@ -8902,6 +8916,8 @@
       "src/app/features/board/table-view/filter-bar.component.ts",
       "src/app/features/board/table-view/group-by.util.ts",
       "src/app/features/board/work-done-view/work-done-grouping.ts",
+      "src/app/features/board/work-done-view/work-done-report.component.html",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/home/home.page.html",
@@ -9668,7 +9684,8 @@
   "@5141352019990967744": {
     "description": "Calendar view mode - show one week",
     "x-files": [
-      "src/app/features/board/calendar-view/board-calendar-view.component.ts"
+      "src/app/features/board/calendar-view/board-calendar-view.component.ts",
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
     ]
   },
   "3198158141036823013": "Could not change the due date",
@@ -12922,7 +12939,8 @@
   "@3037427182705835959": {
     "description": "Accessible name of the marker beside an In progress list's name",
     "x-files": [
-      "src/app/features/board/list.component.html"
+      "src/app/features/board/list.component.html",
+      "src/app/features/board/work-done-view/work-done-report.component.html"
     ]
   },
   "5745843220163365478": "List options",
@@ -13816,6 +13834,7 @@
     "description": "Spreadsheet export row label for a group's aggregate values",
     "x-files": [
       "src/app/features/board/table-view/export.util.ts",
+      "src/app/features/board/work-done-view/work-done-report.component.html",
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
@@ -13917,7 +13936,8 @@
   "@7008439939460403347": {
     "description": "Spreadsheet sheet name - per-group report with cards and totals",
     "x-files": [
-      "src/app/features/board/table-view/export.util.ts"
+      "src/app/features/board/table-view/export.util.ts",
+      "src/app/features/board/work-done-view/work-done-preferences.ts"
     ]
   },
   "1955668912634269108": "Overall totals",
@@ -13964,6 +13984,8 @@
       "src/app/features/board/table-view/table-columns.util.ts",
       "src/app/features/board/work-done-view/work-done-day.component.html",
       "src/app/features/board/work-done-view/work-done-grouping.ts",
+      "src/app/features/board/work-done-view/work-done-report.component.html",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/features/completed-cards/completed-cards-panel.component.ts"
     ]
@@ -13973,6 +13995,7 @@
     "description": "Activity type filter option - checklist items that were ticked off",
     "x-files": [
       "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/features/workspace-settings/templates/templates.page.html"
     ]
@@ -14481,7 +14504,8 @@
   "@4434367879176668365": {
     "description": "Tracked time in words",
     "x-files": [
-      "src/app/features/board/time-in-progress.util.ts"
+      "src/app/features/board/time-in-progress.util.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "5064174445353626071": "less than a minute",
@@ -14502,14 +14526,16 @@
   "@7525315557219832608": {
     "description": "Time a card has spent in progress, in words",
     "x-files": [
-      "src/app/features/board/time-in-progress.util.ts"
+      "src/app/features/board/time-in-progress.util.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "6998559563810944833": "{count, plural, one {# week} other {# weeks}}",
   "@6998559563810944833": {
     "description": "Time a card has spent in progress, in words",
     "x-files": [
-      "src/app/features/board/time-in-progress.util.ts"
+      "src/app/features/board/time-in-progress.util.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "2641132196803376197": "{$tracked} tracked in progress",
@@ -14590,6 +14616,7 @@
     "description": "Work done day tooltip - card moves between lists",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-day.component.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -14648,6 +14675,7 @@
     "description": "A person working through an AI agent, e.g. \"Ada via Claude\"",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-grouping.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/notifications/notifications-panel.component.ts"
     ]
   },
@@ -14680,11 +14708,463 @@
       "src/app/features/board/work-done-view/work-done-preferences.ts"
     ]
   },
-  "3152881158193723229": "Grid layout",
-  "@3152881158193723229": {
-    "description": "Work done layout option - several columns",
+  "7365672942978077102": "Report layout",
+  "@7365672942978077102": {
+    "description": "Work done layout option - management summary with charts",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-preferences.ts"
+    ]
+  },
+  "1195046961047110528": "Loading all matching cards… the right-now counts settle when the full set is ready.",
+  "@1195046961047110528": {
+    "description": "Notice on the report while the host is still loading cards",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "287957726382031982": "Daily flow",
+  "@287957726382031982": {
+    "description": "Report chart heading: cards created and completed per day",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "6805139966769561820": "Cards started and finished each day",
+  "@6805139966769561820": {
+    "description": "Report chart subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "7707176955005055131": "Series",
+  "@7707176955005055131": {
+    "description": "Chart legend label",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "7390482586468665361": "Where open work sits",
+  "@7390482586468665361": {
+    "description": "Report chart heading: open cards per list",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "5704858732039936144": "Right now, not just this period",
+  "@5704858732039936144": {
+    "description": "Report section subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "5874794238234631522": "People",
+  "@5874794238234631522": {
+    "description": "Report section heading: activity and workload per person",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "6907249990641330456": "What each person did this period, and what they hold now",
+  "@6907249990641330456": {
+    "description": "Report section subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "2525458355852558722": "Other activity",
+  "@2525458355852558722": {
+    "description": "Chart legend: created, moved and checklist actions",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "6429423247460526133": "Who worked when",
+  "@6429423247460526133": {
+    "description": "Heatmap label - activity per person per day",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "8125664548979187075": "Open cards by workspace",
+  "@8125664548979187075": {
+    "description": "Report chart heading: open cards per workspace",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "1675530369139942300": "With how many in each were completed this period",
+  "@1675530369139942300": {
+    "description": "Report chart subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "7075517951373626841": "Open cards by board",
+  "@7075517951373626841": {
+    "description": "Report chart heading: open cards per board",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "5903225811285030764": "With how many on each were completed this period",
+  "@5903225811285030764": {
+    "description": "Report chart subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "3390413960056163990": "Open cards by label",
+  "@3390413960056163990": {
+    "description": "Report chart heading: open cards per label",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "2708308689454204194": "With how many of each were completed this period",
+  "@2708308689454204194": {
+    "description": "Report chart subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "6980359950108336769": "Checklist progress",
+  "@6980359950108336769": {
+    "description": "Report meter heading: checklist items done on open cards",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "4172838919212348496": "{count, plural, one {# open card} other {# open cards}}",
+  "@4172838919212348496": {
+    "description": "Report panel subtitle - open cards on the board",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "2330494586782561606": "{done} of {total, plural, one {# item} other {# items}} done across {cards, plural, one {# card} other {# cards}}",
+  "@2330494586782561606": {
+    "description": "Report checklist meter text",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "8377841088250237399": "{count, plural, one {and # more} other {and # more}}",
+  "@8377841088250237399": {
+    "description": "Report attention list footer - cards not named individually",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "7740987866892686570": "No activity this period",
+  "@7740987866892686570": {
+    "description": "Report people row - the person did nothing in the period",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "3685822175298390514": "{count, plural, one {# completed} other {# completed}}",
+  "@3685822175298390514": {
+    "description": "Report people row - cards completed",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
+    ]
+  },
+  "3062284830073104677": "{count, plural, one {# other action} other {# other actions}}",
+  "@3062284830073104677": {
+    "description": "Report people row - other actions (created, moved, checklist items)",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "8525594940673654390": "{count, plural, one {# open} other {# open}}",
+  "@8525594940673654390": {
+    "description": "Report people row - open assignments now",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "3338771948482786055": "{count, plural, one {# overdue} other {# overdue}}",
+  "@3338771948482786055": {
+    "description": "Report people row - overdue assignments now",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "5538206717712454870": "{count, plural, one {# card without a value} other {# cards without a value}}",
+  "@5538206717712454870": {
+    "description": "Report field breakdown - open cards with no value",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "8043140703840572371": "{$name} · {$count}",
+  "@8043140703840572371": {
+    "description": "Tooltip on a report bar, e.g. \"Billing · 4 open\"",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "6831157624590216246": "under an hour",
+  "@6831157624590216246": {
+    "description": "Elapsed time in words, under one hour",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "2462312429495029122": "{$person} · {$day} · {$count}",
+  "@2462312429495029122": {
+    "description": "Tooltip on a cell of the who-worked-when heatmap",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "702404658246969299": "{count, plural, one {# action} other {# actions}}",
+  "@702404658246969299": {
+    "description": "Count in a heatmap tooltip",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "6313141179989459041": "Moves",
+  "@6313141179989459041": {
+    "description": "Report metric - card moves between lists in the period",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1388656358616696781": "People active",
+  "@1388656358616696781": {
+    "description": "Report metric - people who did something in the period",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "8911875786812273431": "In progress now",
+  "@8911875786812273431": {
+    "description": "Report metric - cards currently in a running in-progress stint",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "3082756460837727932": "{days, plural, one {vs previous day} other {vs previous # days}}",
+  "@3082756460837727932": {
+    "description": "Suffix after a change figure, e.g. \"+3 vs previous 7 days\"",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "3233132640705819201": "{$day} · {$created} · {$completed} · {$moved}",
+  "@3233132640705819201": {
+    "description": "Tooltip on one day of the report's flow chart",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1600777140568186147": "{count, plural, one {# created} other {# created}}",
+  "@1600777140568186147": {
+    "description": "Count in a chart tooltip",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1849578541140736247": "Due {$date}",
+  "@1849578541140736247": {
+    "description": "Attention row detail - when the card is due",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "5262406189765431162": "{$board} · {$list}",
+  "@5262406189765431162": {
+    "description": "Bar label on a cross-board report - board name then list name",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1558720727333805694": "In progress for {$duration}",
+  "@1558720727333805694": {
+    "description": "Attention row detail - how long the card has been in progress",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "921492057205148786": "In progress too long",
+  "@921492057205148786": {
+    "description": "Report attention group - cards in progress past the workspace alert",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts",
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
+  "1814145032290720554": "Due in the next 7 days",
+  "@1814145032290720554": {
+    "description": "Report attention group - cards due within the next 7 days",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "177538383466759777": "Last updated {$when}",
+  "@177538383466759777": {
+    "description": "Attention row detail - when the card was last touched",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "6953859380164809014": "No cards were worked on in this period.",
+  "@6953859380164809014": {
+    "description": "Report headline when nothing happened in the period",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "4888705427490339712": "You completed {completed, plural, =0 {no cards} one {# card} other {# cards}} and started {created, plural, =0 {no new ones} one {# new one} other {# new ones}}.",
+  "@4888705427490339712": {
+    "description": "Report headline sentence on My Cards, addressed to the viewer",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "6191459728070907008": "Across your cards, {completed, plural, =0 {none were completed} one {# was completed} other {# were completed}} and {created, plural, =0 {none started} one {# started} other {# started}}.",
+  "@6191459728070907008": {
+    "description": "Report headline sentence on My Cards when other people also acted on the viewer's cards",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1822759676941713416": "{solo, select, yes {{name}} other {The team}} completed {completed, plural, =0 {no cards} one {# card} other {# cards}} and started {created, plural, =0 {no new ones} one {# new one} other {# new ones}}.",
+  "@1822759676941713416": {
+    "description": "Report headline sentence. \"solo\" is yes when exactly one person was active, and \"name\" is that person",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "736841598247383673": "{trend, select, up {That is up from} down {That is down from} other {That matches}} {previous, plural, one {# completion} other {# completions}} in the previous {days, plural, one {day} other {# days}}.",
+  "@736841598247383673": {
+    "description": "Report headline sentence comparing completions with the previous period of the same length",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "8881596239953746194": "More cards were started than finished, so open work grew by {count, plural, one {# card} other {# cards}}.",
+  "@8881596239953746194": {
+    "description": "Report headline sentence - more cards were created than completed",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "6983622371346177569": "More cards were finished than started, so open work shrank by {count, plural, one {# card} other {# cards}}.",
+  "@6983622371346177569": {
+    "description": "Report headline sentence - more cards were completed than created",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "2107340882807984575": "Starts and finishes balanced out, so open work stayed level.",
+  "@2107340882807984575": {
+    "description": "Report headline sentence - as many cards were created as completed",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "904009041600509187": "{count, plural, other {# people were active}}.",
+  "@904009041600509187": {
+    "description": "Report headline sentence - how many people did something",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "7149214280694002271": "{name} completed the most ({count, plural, one {# card} other {# cards}}).",
+  "@7149214280694002271": {
+    "description": "Report headline sentence - the person who completed the most cards",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "374524755314758407": "{onTime} of {total, plural, one {the # completed card} other {the # completed cards}} with a due date finished on time.",
+  "@374524755314758407": {
+    "description": "Report headline sentence - delivery against due dates",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "5089357084143465905": "Completed cards took a median of {$duration} from creation to completion.",
+  "@5089357084143465905": {
+    "description": "Report headline sentence - median time from creation to completion",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "2686948427676577354": "They spent a median of {$duration} of working time in progress.",
+  "@2686948427676577354": {
+    "description": "Report headline sentence - median tracked working time in progress",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "2200303992852549837": "{count, plural, one {# card is overdue} other {# cards are overdue}}.",
+  "@2200303992852549837": {
+    "description": "Report headline sentence - cards past their due date right now",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "8547684372907144947": "{count, plural, one {# card is blocked by other work} other {# cards are blocked by other work}}.",
+  "@8547684372907144947": {
+    "description": "Report headline sentence - cards waiting on other open cards right now",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "3099694594822338462": "{count, plural, one {# card has} other {# cards have}} been in progress longer than {days, plural, one {# day} other {# days}}.",
+  "@3099694594822338462": {
+    "description": "Report headline sentence - cards in progress past the workspace alert",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "2667457607347257678": "{count, plural, one {# card has} other {# cards have}} been in progress longer than its workspace allows.",
+  "@2667457607347257678": {
+    "description": "Report headline sentence - cards in progress past their own workspace's alert, thresholds differ",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1923796992661761597": "Nothing is overdue, blocked or stuck right now.",
+  "@1923796992661761597": {
+    "description": "Report headline sentence when no card is overdue, blocked or stuck",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "4441735950553629579": "{count, plural, one {# card is} other {# cards are}} due in the next 7 days.",
+  "@4441735950553629579": {
+    "description": "Report headline sentence - cards due within the next 7 days",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "5127422178672326969": "{count, plural, one {# card is} other {# cards are}} in progress right now.",
+  "@5127422178672326969": {
+    "description": "Report headline sentence - cards in a running in-progress stint right now",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "8693603235657020323": "Other",
+  "@8693603235657020323": {
+    "description": "Chart bar folding the smallest categories together",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts",
+      "src/app/features/import/trello-import.page.html"
+    ]
+  },
+  "1872367702833640463": "- {count, plural, one {and # more} other {and # more}}",
+  "@1872367702833640463": {
+    "description": "Line in the copied report text for cards not named individually",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "1507949699959470925": "Period",
@@ -14724,6 +15204,12 @@
       "src/app/features/board/work-done-view/work-done-view.component.html"
     ]
   },
+  "6288386975306475547": "Loading report",
+  "@6288386975306475547": {
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-view.component.html"
+    ]
+  },
   "7124801473504221747": "Loading work done",
   "@7124801473504221747": {
     "x-files": [
@@ -14732,6 +15218,13 @@
   },
   "7578254038293609096": "Today only",
   "@7578254038293609096": {
+    "description": "Work done period preset tooltip",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
+    ]
+  },
+  "8265481332753807321": "This week, Monday to today",
+  "@8265481332753807321": {
     "description": "Work done period preset tooltip",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-view.component.ts"
@@ -14812,13 +15305,6 @@
   "8212193794507429974": "{count, plural, one {# event} other {# events}}",
   "@8212193794507429974": {
     "description": "Work done summary - number of events",
-    "x-files": [
-      "src/app/features/board/work-done-view/work-done-view.component.ts"
-    ]
-  },
-  "3685822175298390514": "{count, plural, one {# completed} other {# completed}}",
-  "@3685822175298390514": {
-    "description": "Work done summary - number of cards completed",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-view.component.ts"
     ]
@@ -14904,6 +15390,13 @@
   "7706594278087064071": "{$heading} · before field filters",
   "@7706594278087064071": {
     "description": "Activity strip heading - the counts ignore custom-field filters",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
+    ]
+  },
+  "5923548606978399830": "Report for {$board} · {$range}",
+  "@5923548606978399830": {
+    "description": "Title line of the copied report text, e.g. \"Report for Platform Delivery · 14–18 Oct\"",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-view.component.ts"
     ]
@@ -15135,6 +15628,27 @@
       "src/app/features/completed-cards/date-range-picker.popover.ts"
     ]
   },
+  "6869587862671945558": "Map",
+  "@6869587862671945558": {
+    "description": "Dependencies view layout - chains drawn as a map with connectors",
+    "x-files": [
+      "src/app/features/dependencies/dependency-layout.ts"
+    ]
+  },
+  "6814295386768519176": "Timeline",
+  "@6814295386768519176": {
+    "description": "Dependencies view layout - cards placed in columns by the week they are due",
+    "x-files": [
+      "src/app/features/dependencies/dependency-layout.ts"
+    ]
+  },
+  "1534367694207535197": "Steps",
+  "@1534367694207535197": {
+    "description": "Dependencies view layout - chains listed step by step",
+    "x-files": [
+      "src/app/features/dependencies/dependency-layout.ts"
+    ]
+  },
   "5703705840354938825": "Filter dependency chains",
   "@5703705840354938825": {
     "x-files": [
@@ -15175,12 +15689,6 @@
   "583155944513136531": "Critical path",
   "@583155944513136531": {
     "description": "Dependencies view toggle: highlight each chain's critical path",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.html"
-    ]
-  },
-  "3168241265899648027": "Dependencies layout",
-  "@3168241265899648027": {
     "x-files": [
       "src/app/features/dependencies/dependency-map.component.html"
     ]
@@ -15277,27 +15785,6 @@
     "description": "Dependencies view step list: the open cards waiting on this card",
     "x-files": [
       "src/app/features/dependencies/dependency-map.component.html"
-    ]
-  },
-  "6869587862671945558": "Map",
-  "@6869587862671945558": {
-    "description": "Dependencies view layout - chains drawn as a map with connectors",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "6814295386768519176": "Timeline",
-  "@6814295386768519176": {
-    "description": "Dependencies view layout - cards placed in columns by the week they are due",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "1534367694207535197": "Steps",
-  "@1534367694207535197": {
-    "description": "Dependencies view layout - chains listed step by step",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
   "134944425477703133": "{count, plural, one {chain} other {chains}}",
@@ -16079,13 +16566,6 @@
   "5125207159492328627": "Inactive 14 days",
   "@5125207159492328627": {
     "description": "Portfolio stat tile, cards untouched for 14 days",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "921492057205148786": "In progress too long",
-  "@921492057205148786": {
-    "description": "Portfolio stat tile, cards in progress past their workspace's alert",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -18115,13 +18595,6 @@
   "2118163980660550038": "Checklist item",
   "@2118163980660550038": {
     "description": "CSV column target option",
-    "x-files": [
-      "src/app/features/import/trello-import.page.html"
-    ]
-  },
-  "8693603235657020323": "Other",
-  "@8693603235657020323": {
-    "description": "CSV column target group",
     "x-files": [
       "src/app/features/import/trello-import.page.html"
     ]

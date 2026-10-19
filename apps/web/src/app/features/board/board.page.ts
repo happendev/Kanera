@@ -47,6 +47,7 @@ import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.
 import { DependencyMapComponent } from "../dependencies/dependency-map.component";
 import { WorkDoneViewComponent } from "./work-done-view/work-done-view.component";
 import { workDoneLayoutState } from "./work-done-view/work-done-preferences";
+import { dependencyLayoutState } from "../dependencies/dependency-layout";
 import type { WorkDoneLayout } from "./work-done-view/work-done.types";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { CardDetailComponent } from "./card-detail.component";
@@ -284,6 +285,8 @@ export class BoardPage implements OnDestroy {
   setWorkDoneLayout(layout: WorkDoneLayout): void {
     this.workDoneLayoutState.setLayout(layout);
   }
+  /** Map/Timeline/Steps, remembered per board like the rest of the Dependencies view's choices. */
+  readonly dependencyLayoutState = dependencyLayoutState(() => `board:${this.boardId()}`);
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
   readonly showInactiveOnly = signal(false);

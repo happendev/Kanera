@@ -650,6 +650,10 @@ k-page-header.is-tight {
   gap: 8px;
   width: 100%;
   min-width: 0;
+  // The layout switch reveals its labels from this box's width (see `sg-room` in k-segmented).
+  // Safe here despite the toolbar's no-containment rule: nothing in the search slot opens a fixed
+  // picker, and the switch's tooltips render in the CDK overlay.
+  container: sg-room / inline-size;
 
   k-search-field {
     flex: 1 1 auto;
@@ -659,4 +663,11 @@ k-page-header.is-tight {
   k-segmented {
     flex: none;
   }
+}
+
+// A layout switch shares the search slot, so widen the slot by the switch rather than shrinking
+// search to make room for it, and keep room for search beside the icon-only switch.
+k-page-toolbar:has(.work-done-search k-segmented) {
+  --pt-search-max-width: 580px;
+  --pt-search-min-width: 260px;
 }
