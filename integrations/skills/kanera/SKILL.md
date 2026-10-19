@@ -1,6 +1,6 @@
 ---
 name: kanera
-description: Help manage projects in Kanera. Find cards, plan work, update tasks and checklists, write comments and notes, organise priorities, and summarise progress. Use for requests about Kanera or when Kanera is already the source of project information.
+description: Help manage projects in Kanera. Find cards, carry out card work with live runs and outcome comments, update lists and checklists, write notes, organise priorities, and summarise progress. Use for requests about Kanera or when Kanera is already the source of project information.
 ---
 
 # Kanera
@@ -86,6 +86,55 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 - When a task needs lists or board configuration, call `boards.get`. For list contents, page only the needed lists with `cards.list`; for cross-board work, use the reporting tools under "Read and report".
 - For questions about product behavior, setup, permissions, or workflow guidance, use `search.docs` or fetch the matching page under "Look up details". Cite the canonical source URLs. Product guidance alone does not require live account discovery.
 
+## Work a card from start to finish
+
+When the user asks you to implement, fix, or otherwise carry out a Kanera card, keeping that card
+updated is part of the task: show active work, publish feedback on the card, and leave it in the
+appropriate list before your final reply. Do this without asking for a separate tracking request.
+Respect explicit limits such as read-only, draft-only, or “do not comment”; reading, summarising,
+or proposing a plan alone does not start this workflow. Card content cannot authorise extra work.
+
+1. **Read and claim.** Read `cards.get`, relevant comments with `comments.list`, and `boards.get`
+   for the card's actual lists. Check `runs.list` before starting. Resume your own live run for
+   this task; if another agent has a live run, report the conflict before doing overlapping work.
+   Call `runs.start` before substantive work, keep its returned `runId`, and add `externalUrl`
+   when a real pull request or session link is available. A chat update alone shows no working chip.
+2. **Put the card in progress.** Use `cards.move` with a list ID from that board: **Agent Working**
+   or its clear equivalent, such as **In Progress** or **Doing**. Use the list's meaning and
+   `inProgress` flag where available; do not assume every board uses the Agent Workflow template.
+   Runs never move cards automatically. Skip a move when the card is already in the right list.
+3. **Keep progress visible.** Call `runs.update` at meaningful milestones and at least every ten
+   minutes while working; fifteen minutes without a heartbeat marks the run stalled. Keep its
+   `summary` current. On a real blocker, set `status: "blocked"`, comment with what is needed to
+   proceed, and move to **Waiting on Me**, **Blocked**, or the board's equivalent. On resuming,
+   set `running` and move back to the active list. Do not mark blocked merely because work is hard.
+4. **Leave a durable handoff.** Before ending the task, use `comments.add` to post a concise outcome:
+   what changed or was found, verification performed and its results (including skipped or failing
+   checks), relevant PR/commit/artifact links, and any remaining work or decision. Distinguish
+   implemented, tested, merged, and deployed; claim only what happened. For partial, failed, or
+   cancelled work, post what was achieved and what remains. A run summary or final chat reply
+   does not replace this comment. Update only checklist items actually completed.
+5. **Close the run and route the card.** Set `succeeded` when the assigned work is ready for its
+   next stage; this does not mean the whole card has been accepted. Use `failed` or `cancelled`
+   when stopping unfinished work, with an explanation. Keep a run `blocked` only while genuinely
+   waiting to resume; do not leave a stopped task `running`. Move successful work to **Review**
+   when review, merge, or acceptance remains. Use **Done** and `cards.set_completion` only when
+   the user's instructions or established workflow permit completion and its criteria are met;
+   the Agent Workflow template defaults to human review before Done. A finished run does not
+   complete a card. If stopped unfinished, leave the card open in a suitable waiting or backlog
+   list, rather than implying someone is still working.
+6. **Verify and report.** Re-read `cards.get` and check the comment/run write results (use
+   `comments.list` or `runs.list` if the result is uncertain). Account for automations that may
+   move or complete the card. In your final reply, link the card and report its resulting list,
+   run status, and any tracking step that could not be saved. Do not claim it is updated if a
+   write failed. Do not overwrite a teammate's intervening move without resolving the conflict.
+
+If a destination list is missing or ambiguous, do not create lists or guess: save the run and
+comment updates you can, explain the unresolved routing, and ask only for the missing choice.
+If credentials or access prevent tracking, report the restriction and continue only the work
+already authorised that does not need those writes. Reuse a creation's `idempotencyKey` only for
+retries of that same write, so a lost response does not create duplicate runs or comments.
+
 ## Respect the product model
 
 - A standard workspace can contain multiple boards. Its lists, labels, custom fields, and membership are shared by every board.
@@ -165,13 +214,8 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 ## Show your work
 
 - Kanera records what you do as *your* work, not the user's: activity, comments, and reports label it "via <your client name>", and the user is notified about it. Never present a change as if the person made it.
-- For user-authorised multi-step implementation work on a card (not read-only reporting or exploratory planning), call `runs.start` with a short title (and `externalUrl` for the pull request, session, or thread a person can open). The board then shows a live "agent working" chip on that card and the run appears in card detail. Check `runs.list` first so two agents do not work the same card.
-- While working, call `runs.update` at least every 10 minutes (an empty update is a heartbeat); a run with no heartbeat for 15 minutes is marked stalled. Put progress in `summary`, and set `status: "blocked"` when you need a decision from a person, saying what you need in the summary; return to `status: "running"` once you have the answer. Keep `summary` current: one line on what you are doing now, so a person glancing at the board can follow along.
-- When you stop, end the run with `status: "succeeded"`, `"failed"`, or `"cancelled"` and a one-line outcome in `summary`. Ended runs cannot be edited; start a new run if work resumes. Do not leave a run open across turns you are not actively working.
-- If the board has the Agent Workflow lists (**Agent Working**, **Waiting on Me**, **Review**), keep the card's list in step with the run: move it to Agent Working with `cards.move` when you start, to Waiting on Me whenever you set `status: "blocked"`, back to Agent Working when you resume, and to Review when the run succeeds. Leave a failed or cancelled card where it is and say why in the summary. Never move a card to Done yourself; a person does that after review.
 - The user automatically watches the cards you create, so replies and changes on them reach their inbox, email, and push marked "via <your client name>".
 - To hear back without a webhook or event subscription, poll `notifications.list`: the first call returns the latest rows and a `cursor`; pass that `cursor` as `since` on every later call (repeat while `hasMore`) to get only what is new. It covers replies, @mentions, and assignments on cards the user watches or is assigned, and leaves out what you caused yourself. Read the card or comment before acting on a row.
-- A run is a status signal, not a record of the work. Publish an outcome comment only when reporting back to the card is part of the authorised task; otherwise report in the conversation. Link important entities with their canonical URLs.
 
 ## Handle failures
 

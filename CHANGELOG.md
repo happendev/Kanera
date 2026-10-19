@@ -6,7 +6,7 @@ All notable changes to Kanera are documented here.
 
 ### Added
 
-- **Card dependencies:** link cards as **blocked by**, **blocking** or **related**, including across boards in the same workspace. Manage links from card detail or the right-click menu, see blocked status live, and use the **Blocked** filter on boards, My Cards and Team Cards.
+- **Card dependencies:** link cards as **blocked by**, **blocking** or **related**, including across boards in the same workspace. Manage links from card detail or the right-click menu, see blocked status live, use the **Blocked** filter on boards, My Cards and Team Cards, and see blocked counts in the board overview and Portfolio.
   - **Dependencies view:** explore blocking chains across boards with a visual map, Timeline or Steps. Spot bottlenecks, at-risk work and the critical path; add or remove dependencies directly on the map with undo and redo.
   - **Notifications and handoffs:** assignees and watchers hear when work becomes blocked or ready to start, with configurable inbox, email and push notifications.
   - **Automations:** use the new **Card blocked** and **Card unblocked** triggers to act when work gets held up or becomes ready. Completing blocked work shows a warning you can override.
@@ -23,6 +23,8 @@ All notable changes to Kanera are documented here.
 - **Kanera speaks your language:** the whole app, including onboarding, boards, cards, notifications, settings, emails and push notifications, is now available in English (US), English (UK), Spanish, Brazilian Portuguese, French, German, Japanese, Dutch, Norwegian Bokmål, Simplified Chinese and Traditional Chinese. Choose a language under Profile settings → Language (or from the sign-in page). It is saved to your account, so every device and every email follows it.
 
 ### Changed
+
+- **More reliable agent handoffs:** Kanera skills, CLI setup instructions and MCP guidance now make live runs, outcome comments, verification and appropriate list moves part of carrying out a card, including boards with custom workflows.
 
 - Account settings now have a Security page for two-factor authentication and password changes, and a Preferences page for Card Keys and Scratchpad visibility, with links to both guides.
 

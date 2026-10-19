@@ -386,6 +386,137 @@
         "browser",
         "computer-use"
       ]
+    },
+    {
+      "id": "implement-card-with-tracking",
+      "category": "indirect",
+      "prompt": "Implement DEV-938 in this checkout and open a PR. Its board has Backlog, Agent Working, Waiting on Me, Review and Done. Leave acceptance to me.",
+      "expectedTools": [
+        "cards.get",
+        "comments.list",
+        "boards.get",
+        "runs.list",
+        "runs.start",
+        "runs.update",
+        "comments.add",
+        "cards.move"
+      ],
+      "expectedArguments": {
+        "runs.start": "Before substantive implementation, only after checking for another live run; retain runId.",
+        "runs.update": "Milestone progress, heartbeats for long work, then succeeded for implementation ready for review.",
+        "comments.add": "Before final reply, publish actual changes, checks/results, PR link and remaining acceptance; a run summary does not replace it.",
+        "cards.move": "Active list when starting, Review when ready; use resolved list IDs and a valid anchor.",
+        "cards.get": "Re-read after tracking writes; verify the saved outcome comment and run result and report resulting state."
+      },
+      "forbiddenTools": [
+        "cards.set_completion"
+      ],
+      "forbiddenCapabilities": [
+        "browser",
+        "computer-use"
+      ]
+    },
+    {
+      "id": "custom-workflow-card-completion",
+      "category": "indirect",
+      "prompt": "Carry out the documentation correction in DOC-24. This board uses To do, Doing and Complete; our workflow allows agents to complete documentation cards once checks pass.",
+      "expectedTools": [
+        "cards.get",
+        "comments.list",
+        "boards.get",
+        "runs.list",
+        "runs.start",
+        "runs.update",
+        "comments.add",
+        "cards.move"
+      ],
+      "expectedArguments": {
+        "cards.move": "Resolve actual Doing and Complete IDs with boards.get; do not require Agent Workflow list names.",
+        "runs.update": "Start before work, end succeeded only after the correction and verification.",
+        "comments.add": "Record the correction, actual checks and results before final reply.",
+        "cards.get": "Re-read final list and completion after automations; use cards.set_completion only if still needed to record permitted completion."
+      },
+      "forbiddenTools": []
+    },
+    {
+      "id": "blocked-card-handoff",
+      "category": "indirect",
+      "prompt": "Continue implementing DEV-938 using your live run from this session. It is in Agent Working, but the required service credential is missing and only I can supply it.",
+      "expectedTools": [
+        "cards.get",
+        "boards.get",
+        "runs.list",
+        "runs.update",
+        "comments.add",
+        "cards.move"
+      ],
+      "expectedArguments": {
+        "runs.update": "Reuse own run, set blocked with the exact missing access; do not claim success.",
+        "comments.add": "State the blocker, work achieved and what is needed to resume.",
+        "cards.move": "Move to the resolved waiting list, leave the card incomplete."
+      },
+      "forbiddenTools": [
+        "runs.start",
+        "cards.set_completion"
+      ]
+    },
+    {
+      "id": "read-card-without-tracking",
+      "category": "negative",
+      "prompt": "Read DEV-938 and tell me what implementation would involve. Do not start work or update Kanera.",
+      "expectedTools": [
+        "cards.get"
+      ],
+      "expectedArguments": {
+        "cards.get": {
+          "cardId": "DEV-938"
+        }
+      },
+      "forbiddenTools": [
+        "runs.start",
+        "runs.update",
+        "comments.add",
+        "cards.move",
+        "cards.set_completion",
+        "cards.update"
+      ]
+    },
+    {
+      "id": "card-already-being-worked",
+      "category": "negative",
+      "prompt": "Implement DEV-938. The live runs show a different agent is already carrying out the same task.",
+      "expectedTools": [
+        "cards.get",
+        "runs.list"
+      ],
+      "expectedArguments": {
+        "runs.list": "Inspect ownership; report the live-run conflict before overlapping implementation. Do not close or take over the other agent's run."
+      },
+      "forbiddenTools": [
+        "runs.start",
+        "runs.update",
+        "comments.add",
+        "cards.move",
+        "cards.set_completion"
+      ]
+    },
+    {
+      "id": "card-tracking-read-only-credential",
+      "category": "negative",
+      "prompt": "Implement DEV-938 in this checkout. Your Kanera credential is read-only.",
+      "expectedTools": [
+        "cards.get"
+      ],
+      "expectedArguments": {
+        "cards.get": "Read the task; explain that live runs, outcome comments and list changes cannot be saved with this credential. Continue only authorised local work; report tracking as incomplete."
+      },
+      "forbiddenTools": [
+        "runs.start",
+        "runs.update",
+        "comments.add",
+        "cards.move",
+        "cards.set_completion"
+      ]
     }
   ]
 }
