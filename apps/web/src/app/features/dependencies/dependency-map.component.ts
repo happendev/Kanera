@@ -19,7 +19,7 @@ import { CardLabelsComponent, type CardLabelPresentation } from "../board/card-l
 import { isPlainPrimaryClick } from "../board/card-navigation.util";
 import { formatDueDate, isOverdue } from "../board/due-date.util";
 import {
-  CHAIN_HEAD_HEIGHT,
+  chainHeaderHeight,
   chainNeighbourhood,
   layoutDependencyMap,
   MAP_PADDING,
@@ -160,7 +160,7 @@ export class DependencyMapComponent implements OnInit {
 
   readonly instanceId = `dm${nextInstanceId++}`;
   readonly tileWidth = TILE_WIDTH;
-  readonly chainHeadHeight = CHAIN_HEAD_HEIGHT;
+  readonly chainHeadHeight = chainHeaderHeight;
   readonly stepLabelHeight = STEP_LABEL_HEIGHT;
 
   readonly scopeMode = signal<ScopeMode>("board");

@@ -20,6 +20,10 @@
   --dm-wire: color-mix(in srgb, var(--text-muted) 55%, transparent);
   --dm-wire-cleared: color-mix(in srgb, var(--success) 45%, transparent);
   --dm-tile-bg: var(--card-bg, var(--surface));
+
+  // This toolbar needs full touch targets even though its desktop segments use the dense size.
+  --sg-touch-track-height: 50px;
+  --sg-touch-target-size: 44px;
 }
 
 // Inside Global Work the page scrolls; the map must not clip itself or fight it for height.
@@ -243,7 +247,7 @@
   .dm-canvas { border-top: 1px solid var(--border); }
 }
 
-// Its height is computed, so the header stays on one line and a wide chain scrolls inside the box.
+// Its height is computed, including the compact header; wide chains scroll inside their boxes.
 .dm-chains.is-map .dm-chain {
   position: absolute;
   display: flex;
@@ -260,7 +264,7 @@
 }
 
 /* A bar of its own above the steps, with the same inset on every side. The map fixes its height
-   (CHAIN_HEAD_HEIGHT); the step list lets it wrap. */
+   (chainHeaderHeight); the step list lets it wrap. */
 .dm-chain-head {
   display: flex;
   flex-wrap: wrap;
@@ -272,6 +276,38 @@
   border-bottom: 1px solid var(--border);
 
   > i { flex: none; color: var(--text-muted); font-size: 16px; }
+}
+
+.dm-chain-badges {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+
+  &:empty { display: none; }
+}
+
+// The width used here is also used by packChains, including on a wide screen with small chains.
+// Two rows protect the goal from badges without letting a taller header overlap the next chain.
+.dm-chain-head.is-compact {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-content: center;
+  gap: 4px 8px;
+
+  .dm-chain-badges {
+    grid-column: 1 / -1;
+    flex-wrap: nowrap;
+  }
+
+  .dm-pill.is-critical {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .dm-chain-title {
@@ -812,8 +848,8 @@
   > li + li { border-top: 1px solid var(--border); }
 }
 
-/* Narrow: title and status on top, relations and date under the title. Wide: one row of columns
-   that line up down the whole chain, since every track but the title has a fixed width. */
+/* Narrow rows stack metadata below the title. Wide rows use columns that line up down the
+   whole chain, since every track but the title has a fixed width. */
 .dm-row {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;
@@ -856,6 +892,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
   min-width: 0;
   color: var(--text-muted);
   font-size: var(--text-xs);
@@ -934,7 +971,9 @@
 .dm-row-due,
 .dm-row-people { margin-top: 4px; }
 
-@container dm-chain (min-width: 720px) {
+// The auxiliary columns need roughly 680px before the title gets any room. Keep rows stacked
+// until a chain can also give the title a useful width; viewport width alone ignores the sidebar.
+@container dm-chain (min-width: 1024px) {
   .dm-row {
     grid-template-columns: 16px minmax(0, 1fr) minmax(0, 15rem) 7.5rem 52px 6.5rem;
     grid-template-areas: "icon main rels due people status";
@@ -951,6 +990,19 @@
   .dm-row-people:empty { display: block; }
 }
 
+// On the narrowest chains the status gets its own line, so it cannot squeeze out the title.
+@container dm-chain (max-width: 480px) {
+  .dm-row {
+    grid-template-areas:
+      "icon main main"
+      ".    status status"
+      ".    rels rels"
+      ".    due people";
+  }
+
+  .dm-row-status { justify-content: flex-start; margin-top: 4px; }
+}
+
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
   .dm-stat,
   .dm-toggle { height: 44px; }
@@ -958,6 +1010,18 @@
   /* Touch has no hover to reveal the handles, so they stay out, a little larger. */
   .dm-link-handle { width: 22px; height: 22px; margin: -11px 0 0 -11px; opacity: 1; }
 
+  .dm-link-handle::before {
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+  .dm-wire-hit { stroke-width: 44; }
+  .dm-wire-remove,
+  .dm-retry { min-height: 44px; }
+  .dm-retry { min-width: 44px; }
   .dm-row { min-height: 44px; box-sizing: border-box; }
 }
 

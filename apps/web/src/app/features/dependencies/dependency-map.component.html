@@ -99,14 +99,16 @@
   @let place = packed?.placements?.[index];
   <section class="dm-chain" [attr.aria-label]="goalTitle(chain)"
     [style.left.px]="place?.x" [style.top.px]="place?.y" [style.width.px]="place?.width" [style.height.px]="place?.height">
-    <header class="dm-chain-head" [style.height.px]="layoutMode() !== 'list' ? chainHeadHeight : null">
+    <header class="dm-chain-head" [class.is-compact]="layoutMode() !== 'list' && (place?.width ?? viewWidth()) <= 640"
+      [style.height.px]="layoutMode() !== 'list' ? chainHeadHeight(place?.width ?? viewWidth()) : null">
       <i class="ti ti-flag-3" aria-hidden="true"></i>
       <span class="dm-chain-title">
         <span class="dm-chain-goal">{{ goalTitle(chain) }}</span>
         <span class="dm-chain-meta">{{ chainMeta(chain) }}</span>
       </span>
+      <span class="dm-chain-badges">
       @if (critical() && chain.critical.nodeIds.size) {
-      <span class="dm-pill is-critical">{{ criticalLabel(chain) }}</span>
+      <span class="dm-pill is-critical" [kTooltip]="criticalLabel(chain)">{{ criticalLabel(chain) }}</span>
       }
       @if (chain.counts.atRisk) {
       <span class="dm-pill is-risk" i18n="Dependencies view chain badge">{ chain.counts.atRisk, plural, other {{{ chain.counts.atRisk }} at risk} }</span>
@@ -114,6 +116,7 @@
       @if (chain.counts.blocked) {
       <span class="dm-pill is-blocked" i18n="Dependencies view chain badge">{ chain.counts.blocked, plural, other {{{ chain.counts.blocked }} blocked} }</span>
       }
+      </span>
     </header>
 
     @if (layoutMode() !== 'list') {

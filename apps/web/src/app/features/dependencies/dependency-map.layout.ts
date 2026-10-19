@@ -511,8 +511,10 @@ function orderColumns(columns: LayoutItem[][], links: Links): void {
   }
 }
 
-/** A chain box's fixed header, above its canvas. Fixed so a box's height is known before it renders. */
-export const CHAIN_HEAD_HEIGHT = 40;
+/** Narrow chains put badges below the title; packing must reserve the same height as the header. */
+export function chainHeaderHeight(width: number): number {
+  return width <= 640 ? 64 : 40;
+}
 /** The "Step N" row at the top of a chain's canvas. */
 export const STEP_LABEL_HEIGHT = 22;
 const CHAIN_GAP = 12;
@@ -551,7 +553,7 @@ export function packChains(chains: readonly Pick<MapChain, "waves" | "width" | "
     // A single column takes the full width: on a phone there is nothing to share the row with.
     const width = columns === 1 ? Math.max(0, containerWidth) : span * STEP_PITCH - CHAIN_GAP;
     const scrolls = chain.width + CHAIN_BORDER * 2 > width;
-    const height = CHAIN_BORDER * 2 + CHAIN_HEAD_HEIGHT + STEP_LABEL_HEIGHT + chain.height + (scrolls ? SCROLLBAR_ALLOWANCE : 0);
+    const height = CHAIN_BORDER * 2 + chainHeaderHeight(width) + STEP_LABEL_HEIGHT + chain.height + (scrolls ? SCROLLBAR_ALLOWANCE : 0);
     let column = 0;
     let y = Infinity;
     for (let start = 0; start + span <= columns; start += 1) {
