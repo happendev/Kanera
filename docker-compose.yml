@@ -640,7 +640,7 @@ services:
       - "3100"
 
   alloy:
-    image: grafana/alloy:v1.20.1
+    image: grafana/alloy:v1.21.0
     restart: unless-stopped
     profiles: ["monitoring"]
     command:
@@ -761,7 +761,7 @@ services:
       - "9100"
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.91.1
+    image: oliver006/redis_exporter:v1.94.0
     restart: unless-stopped
     profiles: ["monitoring"]
     environment:
