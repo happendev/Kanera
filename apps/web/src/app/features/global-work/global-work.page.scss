@@ -148,6 +148,10 @@
   align-items: center;
   width: 100%;
   min-width: 0;
+  // The layout switch reveals its labels from this box's width (see `sg-room` in k-segmented).
+  // Safe here despite the toolbar's no-containment rule: nothing in the search slot opens a fixed
+  // picker, and the switch's tooltips render in the CDK overlay.
+  container: sg-room / inline-size;
 
   k-search-field {
     flex: 1 1 200px;
@@ -160,6 +164,20 @@
 .work-done-layout-switch {
   flex: none;
   margin-left: 8px;
+}
+
+// A layout switch shares the search slot, so widen the slot by the switch rather than clipping it,
+// and keep room for search beside the icon-only switch.
+k-page-toolbar:has(.work-done-layout-switch) {
+  --pt-search-max-width: 580px;
+  --pt-search-min-width: 260px;
+}
+
+// Beside a switch the field takes whatever the widened slot leaves (the slot's own cap bounds it),
+// so no gap opens between the switch and the next control; it gives way down to the slot's floor.
+.work-search:has(.work-done-layout-switch) k-search-field {
+  min-width: 0;
+  max-width: none;
 }
 
 /* ── Up next dock ──────────────────────────────────────────────────────────────
@@ -706,6 +724,10 @@ tbody tr:last-child td {
         --heat-color: var(--danger);
       }
 
+      &[data-tone="warning"] {
+        --heat-color: var(--color-amber);
+      }
+
       &[data-tone="success"] {
         --heat-color: var(--success);
       }
@@ -1189,6 +1211,12 @@ k-work-done-view {
     // Still no top padding: the pinned chrome is the first thing on the page and a gutter above it
     // read as the page having slipped down.
     padding: 0 var(--work-gutter) 24px;
+  }
+
+  // The Work done layout switch (icons only here) shares the row with search; the field
+  // gives way rather than pushing the switch past the edge.
+  .work-search k-search-field {
+    min-width: 0;
   }
 }
 

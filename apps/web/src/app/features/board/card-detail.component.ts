@@ -2262,6 +2262,23 @@ export class CardDetailComponent {
     });
   }
 
+  /**
+   * Labels are workspace-scoped and the API only lets workspace admins create them, so the label
+   * picker offers "Create label …" to exactly those viewers (and only while the card is editable).
+   */
+  readonly canCreateLabels = computed(() => this.canEdit() && this.state.viewerIsWorkspaceAdmin());
+
+  /** Create a workspace label from the picker's search text, then apply it as if it had been picked. */
+  async createLabel(name: string) {
+    if (!this.canCreateLabels()) return;
+    const label = await this.api.post<WireCardLabel>(`/workspaces/${this.card().workspaceId}/card-labels`, { name });
+    // Add it locally before assigning: the card-labels echo for an id BoardState has not seen yet
+    // forces a full board resync, and the cardLabel:created echo is not guaranteed to land first.
+    // The socket handler replaces by id, so the echo that follows is a no-op.
+    this.state.cardLabels.update((labels) => [...labels.filter((l) => l.id !== label.id), label]);
+    await this.toggleLabel(label.id);
+  }
+
   async toggleLabel(labelId: string) {
     if (!this.canEdit()) return;
     const current = this.cardLabelIds();

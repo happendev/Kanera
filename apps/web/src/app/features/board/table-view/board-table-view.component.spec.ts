@@ -481,8 +481,8 @@ describe("BoardTableViewComponent", () => {
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
     try {
-      view.componentInstance.exportCsv();
-      view.componentInstance.exportJson();
+      await view.componentInstance.exportCsv();
+      await view.componentInstance.exportJson();
       const csv = await blobs[0]!.text();
       const json = JSON.parse(await blobs[1]!.text()) as { groups: Array<{ cards: unknown[] }> };
 
@@ -1485,7 +1485,7 @@ describe("BoardTableViewComponent", () => {
       });
       vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
-      view.componentInstance.exportCsv();
+      await view.componentInstance.exportCsv();
       const csv = await blobs[0]!.text();
       vi.restoreAllMocks();
 

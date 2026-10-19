@@ -1,5 +1,5 @@
 import { Injectable, signal } from "@angular/core";
-import type { HomeTodayResponse, PendingBoardInvitationSummary, PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkViewDefinition } from "@kanera/shared/dto";
+import type { DependencyGraphResponse, HomeTodayResponse, PendingBoardInvitationSummary, PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkViewDefinition } from "@kanera/shared/dto";
 import type { CardAttachmentRow, CardFeedItem, WireBoardMemberUser, WireCard, WireCardDetail, WireCardLabel, WireCardSummary, WireChecklistTemplate, WireList, WireNote, WireSeparator } from "@kanera/shared/events";
 import type {
   Board,
@@ -168,6 +168,13 @@ export type OfflineHomeTodaySnapshot = {
   response: HomeTodayResponse;
 };
 
+export type OfflineDependencyGraphSnapshot = {
+  // Keyed by client, user and request: the graph is filtered to the cards this viewer may open.
+  key: string;
+  cachedAt: string;
+  response: DependencyGraphResponse;
+};
+
 interface StoredNotesSnapshot extends Omit<OfflineNotesSnapshot, "notes"> {
   entries: { id: string; token: string; bytes: number }[];
 }
@@ -176,8 +183,8 @@ interface StoredNoteEntry {
   note: WireNote;
 }
 
-type CacheStore = "shell" | "boards" | "cardDetails" | "notes" | "globalWork" | "homeToday";
-const CACHE_STORES: CacheStore[] = ["shell", "boards", "cardDetails", "notes", "globalWork", "homeToday"];
+type CacheStore = "shell" | "boards" | "cardDetails" | "notes" | "globalWork" | "homeToday" | "dependencyGraphs";
+const CACHE_STORES: CacheStore[] = ["shell", "boards", "cardDetails", "notes", "globalWork", "homeToday", "dependencyGraphs"];
 const CACHE_BUDGET_BYTES = 32 * 1024 * 1024;
 const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -215,6 +222,10 @@ interface KaneraOfflineDb extends DBSchema {
   homeToday: {
     key: string;
     value: OfflineHomeTodaySnapshot;
+  };
+  dependencyGraphs: {
+    key: string;
+    value: OfflineDependencyGraphSnapshot;
   };
 }
 
@@ -295,6 +306,9 @@ export class OfflineCacheService {
     // Same reasoning for the home agenda: it mixes boards with aggregate counts and a completion
     // trend, so subtracting one board risks leaking it indirectly through stale totals.
     await tx.objectStore("homeToday").clear();
+    // A dependency map follows chains across boards, so any snapshot may hold the revoked board's
+    // cards; clear them all rather than prune one board out of each chain.
+    await tx.objectStore("dependencyGraphs").clear();
     // Remove accounting for the same rows atomically, so revoked data does not consume the
     // budget and cause unrelated offline boards to be evicted prematurely.
     const metadata = tx.objectStore("cacheMeta");
@@ -411,6 +425,15 @@ export class OfflineCacheService {
     return (await db.get("homeToday", key)) ?? null;
   }
 
+  async saveDependencyGraph(key: string, response: DependencyGraphResponse): Promise<void> {
+    await this.put("dependencyGraphs", { key, cachedAt: new Date().toISOString(), response }, key);
+  }
+
+  async loadDependencyGraph(key: string): Promise<OfflineDependencyGraphSnapshot | null> {
+    const db = await this.db();
+    return (await db.get("dependencyGraphs", key)) ?? null;
+  }
+
   async clearAll(): Promise<void> {
     this.failedWrites.clear();
     this.persistenceError.set(null);
@@ -498,8 +521,10 @@ export class OfflineCacheService {
     // the retired workspace-scoped work page. Version 9 drops `homePriorities` and deletes the
     // stored queue from Global Work snapshots: priority order is never served from cache, because a
     // stale sequence reads as an instruction the reader cannot date.
-    this.dbPromise ??= openDB<KaneraOfflineDb>("kanera-offline", 11, {
+    this.dbPromise ??= openDB<KaneraOfflineDb>("kanera-offline", 12, {
       upgrade(db, oldVersion, _newVersion, transaction) {
+        // Version 12 adds offline Dependencies view snapshots.
+        if (!db.objectStoreNames.contains("dependencyGraphs")) db.createObjectStore("dependencyGraphs");
         // Version 11 splits note bodies from their complete snapshot manifest. Existing snapshots
         // remain readable and are converted atomically on their next successful live save.
         if (!db.objectStoreNames.contains("noteEntries")) {

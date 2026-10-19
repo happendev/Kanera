@@ -1,19 +1,6 @@
-import type { Page } from "@playwright/test";
-import { SEED_PASSWORD, webOrigin } from "./support/env";
+import { webOrigin } from "./support/env";
 import { expect, test } from "./support/fixtures";
-import { expectBoardLoaded, scrollBoardToEnd } from "./support/ui";
-
-async function signUp(page: Page, name: string) {
-  const email = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@kanera.test`;
-  await page.goto("/signup");
-  await page.locator("#cname").fill(name);
-  await page.locator("#dn").fill(name);
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(SEED_PASSWORD);
-  await page.locator("#confirm-password").fill(SEED_PASSWORD);
-  await page.locator("form").getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/\/onboarding/);
-}
+import { expectBoardLoaded, scrollBoardToEnd, signUp } from "./support/ui";
 
 test("signup creates a workspace whose lists and fields belong to a second board", async ({ page, uniqueName }) => {
   const workspaceName = uniqueName("E2E Workspace");

@@ -94,25 +94,31 @@ describe("BulkCardActionsMenuPopover", () => {
     const toasts = TestBed.inject(ToastService);
     const pending = fixture.componentInstance.archive(new MouseEvent("click"));
     await Promise.resolve();
-    expect(toasts.messages()).toEqual([]);
+    expect(toasts.messages().map((toast) => toast.variant)).toEqual(["loading"]);
+    const loadingId = toasts.messages()[0]!.id;
     finish({ cards: [] });
     await pending;
     expect(toasts.messages().map((toast) => toast.message)).toEqual(["3 cards archived."]);
-    // Archive is undoable: the toast's action re-issues the bulk PATCH with archived: false.
+    expect(toasts.messages()[0]!.id).toBe(loadingId);
+    // Bulk archive cannot restore: Undo uses the supported single-card endpoint for each id.
     expect(toasts.messages()[0]!.action?.label).toBe("Undo");
-    patch.mockResolvedValueOnce({ cards: [] }).mockResolvedValueOnce({ cards: [] });
+    patch.mockResolvedValue(card("restored", "board-1"));
     toasts.messages()[0]!.action!.run();
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(patch.mock.calls.slice(2).map(([, body]) => (body as { archived: boolean }).archived)).toEqual([false, false]);
+    await vi.waitFor(() => expect(patch).toHaveBeenCalledTimes(5));
+    expect(patch.mock.calls.slice(2)).toEqual([
+      ["/cards/card-1/archive", { archived: false }],
+      ["/cards/card-3/archive", { archived: false }],
+      ["/cards/card-2/archive", { archived: false }],
+    ]);
     expect(toasts.messages()).toEqual([]);
   });
 
   it("does not announce success when a later board batch fails", async () => {
     const patch = vi.fn().mockResolvedValueOnce({ cards: [] }).mockRejectedValueOnce(new Error("Failed"));
     const { fixture } = await createComponent({ patch });
-    await expect(fixture.componentInstance.archive(new MouseEvent("click"))).rejects.toThrow("Failed");
-    expect(TestBed.inject(ToastService).messages()).toEqual([]);
+    await fixture.componentInstance.archive(new MouseEvent("click"));
+    expect(TestBed.inject(ToastService).messages().map((toast) => toast.variant)).toEqual(["error"]);
+    expect(TestBed.inject(ToastService).messages()[0]!.action).toBeUndefined();
   });
 
   it("reads selection state and applies results through the host card store", async () => {

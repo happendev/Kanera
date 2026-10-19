@@ -144,6 +144,24 @@ export function weekColumnStart(key: number): string {
   return new Date(key * DAY_MS).toISOString().slice(0, 10);
 }
 
+/** Wire summaries and live board cards both fit; the board omits some fields it never sets. */
+type RiskCard = Partial<Pick<WireCardSummary, "completedAt" | "archivedAt" | "dueDateLocalDate" | "dueDateSlot" | "dueDateTimezone">>;
+
+/**
+ * Jira calls these off-track dependencies: the dependent cannot finish on time if its blocker
+ * finishes on time (due after it), or the blocker has already slipped (overdue). Only open pairs
+ * count; a cleared blocker cannot put anything at risk. The board overview's At risk count and the
+ * portfolio's (`dependencyAtRiskSql` in the API) use this same rule.
+ */
+export function dependencyRisk(blocker: RiskCard | undefined, dependent: RiskCard | undefined, now: number): AtRiskReason | null {
+  if (!blocker || !dependent || blocker.completedAt || blocker.archivedAt || dependent.completedAt || dependent.archivedAt) return null;
+  const blockerDue = dueDateTimestamp(blocker.dueDateLocalDate, blocker.dueDateSlot, blocker.dueDateTimezone);
+  if (blockerDue !== null && blockerDue <= now) return "overdue";
+  const dependentDue = dueDateTimestamp(dependent.dueDateLocalDate, dependent.dueDateSlot, dependent.dueDateTimezone);
+  if (blockerDue !== null && dependentDue !== null && blockerDue > dependentDue) return "dueAfter";
+  return null;
+}
+
 export interface LayoutOptions {
   /** Draw `relates_to` edges and keep cards that only relate to the chain. */
   showRelated: boolean;
@@ -185,23 +203,8 @@ export function layoutDependencyMap(
     const card = byId.get(id);
     return Boolean(card && !card.completedAt && !card.archivedAt);
   };
-  const dueAt = (card: WireCardSummary) => dueDateTimestamp(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
-
-  /**
-   * Jira calls these off-track dependencies: the dependent cannot finish on time if its blocker
-   * finishes on time (due after it), or the blocker has already slipped (overdue). Only open pairs
-   * count; a cleared blocker cannot put anything at risk.
-   */
-  const edgeRisk = (blockerId: string, dependentId: string): AtRiskReason | null => {
-    if (!isOpen(blockerId) || !isOpen(dependentId)) return null;
-    const blocker = byId.get(blockerId)!;
-    const dependent = byId.get(dependentId)!;
-    const blockerDue = dueAt(blocker);
-    if (blockerDue !== null && blockerDue <= now.getTime()) return "overdue";
-    const dependentDue = dueAt(dependent);
-    if (blockerDue !== null && dependentDue !== null && blockerDue > dependentDue) return "dueAfter";
-    return null;
-  };
+  const edgeRisk = (blockerId: string, dependentId: string): AtRiskReason | null =>
+    dependencyRisk(byId.get(blockerId), byId.get(dependentId), now.getTime());
 
   // A card stays on the map only when the map can say something about it: it has a drawn edge, or
   // it is blocked by cards the map cannot show (so "blocked by 1 card you can't access" has a home).

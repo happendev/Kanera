@@ -1,14 +1,18 @@
 import type { WorkDoneEventType } from "@kanera/shared/dto";
 import type { WireCardSummary } from "@kanera/shared/events";
 
-/** Range presets offered by the toolbar. `custom` is whatever the range picker last applied. */
-export type WorkDoneRangePreset = "today" | "7d" | "14d" | "30d" | "custom";
+/**
+ * Range presets offered by the toolbar. `week` is the current working week, Monday to today; `custom`
+ * is whatever the range picker last applied.
+ */
+export type WorkDoneRangePreset = "today" | "week" | "7d" | "14d" | "30d" | "custom";
 
-/** Presentation only: both layouts render the same filtered day components and event data. */
-export type WorkDoneLayout = "list" | "grid";
-
-/** Matches the point where the day grid would collapse to one column and stop adding any value. */
-export const NARROW_WORK_DONE_LAYOUT_QUERY = "(max-width: 720px)";
+/**
+ * `list` renders the filtered day components; `report` renders the management summary
+ * (`work-done-report.ts`) over the same loaded events plus the live cards: the board's own on a board,
+ * the cross-board set Global Work hands in through `reportSource`.
+ */
+export type WorkDoneLayout = "list" | "report";
 
 
 /** A list the card passed through, resolved for display. */

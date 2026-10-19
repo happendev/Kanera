@@ -12,6 +12,8 @@ import { appLocale } from "../../core/i18n/locale";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { ListboxNav } from "../../shared/listbox-nav";
+import { MatchHighlightComponent } from "../../shared/match-highlight.component";
 
 // Stands in for the viewer's own name in member lists, and is searchable as such.
 const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
@@ -19,7 +21,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
 @Component({
   selector: "k-member-picker",
   standalone: true,
-  imports: [AvatarComponent],
+  imports: [AvatarComponent, MatchHighlightComponent],
   hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -32,24 +34,36 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
         type="text"
         placeholder="Search members…"
         i18n-placeholder
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded="true"
+        [attr.aria-controls]="nav.listId"
+        [attr.aria-activedescendant]="nav.activeDescendant()"
         [value]="query()"
-        (input)="query.set($any($event.target).value)"
+        (input)="onQuery($any($event.target).value)"
+        (keydown)="onKeydown($event)"
       />
-      <div class="mp-list">
-        @if (filtered().length === 0) {
-          <p class="mp-empty" i18n>No matching members</p>
-        }
+      @if (filtered().length === 0) {
+        <p class="mp-empty" i18n>No matching members</p>
+      }
+      <div class="mp-list" role="listbox" aria-multiselectable="true" [id]="nav.listId" (keydown)="onKeydown($event)">
         @for (m of filtered(); track m.userId) {
           <button
             type="button"
             class="mp-row"
+            role="option"
+            tabindex="-1"
+            [id]="nav.optionId(m.userId)"
+            [attr.aria-selected]="selectedIds().includes(m.userId)"
+            [class.is-active]="nav.isActive(m.userId)"
             [class.is-selected]="selectedIds().includes(m.userId)"
             (click)="toggle.emit(m.userId)"
+            (pointermove)="nav.hover(m.userId, $event)"
           >
             <span class="mp-avatar">
               <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="24" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" />
             </span>
-            <span class="mp-name">{{ m.userId === currentUserId() ? meLabel : m.displayName }}</span>
+            <span class="mp-name"><k-match-highlight [text]="m.userId === currentUserId() ? meLabel : m.displayName" [query]="query()" /></span>
             @if (selectedIds().includes(m.userId)) {
               <i class="ti ti-check mp-check"></i>
             }
@@ -137,6 +151,12 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
       transition: background-color 0.12s;
       &:hover { background: var(--surface-hover); }
       &.is-selected { background: var(--surface-2); }
+      /* Keyboard row (the pointer moves it too): hover wash plus an inset ring so it stays visible
+         on an already-tinted selected row. A ring, never an edge stripe. */
+      &.is-active {
+        background: var(--surface-hover);
+        box-shadow: inset 0 0 0 1px var(--border-strong);
+      }
     }
 
     .mp-avatar {
@@ -230,6 +250,17 @@ export class MemberPickerPopover {
     if (!q) return sorted;
     return sorted.filter((m) => m.displayName.toLowerCase().includes(q) || (m.userId === meId && ME_LABEL.toLowerCase().includes(q)));
   });
+
+  readonly nav = new ListboxNav(() => this.filtered().map((member) => ({ key: member.userId })));
+
+  onQuery(value: string): void {
+    this.query.set(value);
+    this.nav.resetFor(value);
+  }
+
+  onKeydown(event: KeyboardEvent): void {
+    this.nav.onKeydown(event, (key) => this.toggle.emit(key));
+  }
 
   initialFor(name: string): string {
     return (name || "?").charAt(0).toUpperCase();

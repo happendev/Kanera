@@ -500,6 +500,23 @@
       </div>
       }
       <div class="k-menu-separator user-popover-divider"></div>
+      @if (gettingStarted.menuProgress(); as progress) {
+      <!-- The home checklist while it has steps left, whether it is on home or hidden from it: the
+           ring goes to it on home (bringing it back if hidden), the × removes it for good. Two sibling items rather than a button inside a button, so
+           both stay reachable with the menu's arrow keys. -->
+      <div class="popover-group getting-started-menu" role="group" aria-label="Getting started" i18n-aria-label="Account menu group: the getting started checklist">
+        <button type="button" class="k-menu-item popover-item getting-started-open" (click)="reopenGettingStarted()" role="menuitem" [attr.aria-label]="gettingStartedMenuLabel()">
+          <span class="getting-started-ring" [style.--gs-progress]="progress.percent" aria-hidden="true"></span>
+          <span class="getting-started-name" i18n="Account menu item: open the getting started checklist on home">Getting started</span>
+          <span class="getting-started-count" aria-hidden="true">{{ progress.done }}/{{ progress.total }}</span>
+        </button>
+        <button type="button" class="k-menu-item popover-item getting-started-remove" (click)="removeGettingStarted()" role="menuitem"
+          aria-label="Remove getting started" i18n-aria-label="Account menu button: remove the getting started checklist for good" kTooltip="Remove for good" i18n-kTooltip="Tooltip: remove the getting started checklist for good">
+          <i class="ti ti-x"></i>
+        </button>
+      </div>
+      <div class="k-menu-separator user-popover-divider"></div>
+      }
       @if (organisations().length > 0) {
       <!-- Switching, creating and joining organisations are occasional actions, so they collapse behind
            one row instead of pushing the everyday account items down the menu. The flyout is a DOM

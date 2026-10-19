@@ -16,6 +16,7 @@ import type {
   WorkGroupBy,
   WorkSort,
 } from "@kanera/shared/dto";
+import { DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { expandCardSummary, type WireBoardMemberUser, type WireCardDetail, type WireCardSummary, type WireChecklistAssignment, type WireCustomField } from "@kanera/shared/events";
 import type { GradientToken } from "@kanera/shared/colors";
 import type { WorkViewLens } from "@kanera/shared/schema";
@@ -50,6 +51,8 @@ import { FilterBarComponent } from "../board/table-view/filter-bar.component";
 import { ListComponent, type BulkCardMenuPayload, type BulkCardSelectionPayload, type BulkListSelectionPayload, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
 import { workDoneLayoutState } from "../board/work-done-view/work-done-preferences";
+import { dependencyLayoutState } from "../dependencies/dependency-layout";
+import type { WorkDoneReportSource } from "../board/work-done-view/work-done-report";
 import { readBackground, readCompactCards, writeBackground, writeCompactCards } from "../board/table-view/view-preference";
 import type { WorkDoneLayout } from "../board/work-done-view/work-done.types";
 import { BoardTableViewComponent } from "../board/table-view/board-table-view.component";
@@ -96,7 +99,7 @@ type ChecklistGroup = {
 };
 /** Which toolbar/header popover is open. Only one at a time, so opening one dismisses the rest. */
 type WorkMenu = "save" | "display" | "source" | "team" | "view" | "group" | "sort" | "period";
-type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong" | "completed" | "overdueChecklistItems";
+type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong" | "blocked" | "atRisk" | "completed" | "overdueChecklistItems";
 type PortfolioRow = {
   id: string;
   level: "organisation" | "workspace" | "board";
@@ -118,13 +121,17 @@ type PortfolioRow = {
   inactive: number;
   inProgress: number;
   inProgressTooLong: number;
+  blocked: number;
+  atRisk: number;
   completed: number;
   overdueChecklistItems: number;
 };
 /** Number columns of the portfolio table, in render order, with the tone their heat tint uses. */
-const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" | "success" | "neutral" }[] = [
+const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" | "warning" | "success" | "neutral" }[] = [
   { key: "active", label: $localize`:Portfolio table column, cards not completed:Active`, tone: "neutral" },
   { key: "overdue", label: $localize`:Portfolio table column, overdue cards:Overdue`, tone: "danger" },
+  { key: "blocked", label: $localize`:Portfolio table column, open cards waiting on another open card:Blocked`, tone: "danger" },
+  { key: "atRisk", label: $localize`:Portfolio table column, cards whose blocker is overdue or due after them:At risk`, tone: "warning" },
   { key: "dueSoon", label: $localize`:Portfolio table column, cards due in the next 7 days:Next 7 days`, tone: "neutral" },
   { key: "unassigned", label: $localize`:Portfolio table column, cards with no assignee:Unassigned`, tone: "neutral" },
   { key: "inactive", label: $localize`:Portfolio table column, cards untouched for 14 days (keep it short):Inactive 14d`, tone: "neutral" },
@@ -272,6 +279,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   setWorkDoneLayout(layout: WorkDoneLayout): void {
     this.workDoneLayoutState.setLayout(layout);
   }
+  /** Map/Timeline/Steps, remembered per lens like the rest of the Dependencies view's choices. */
+  readonly dependencyLayoutState = dependencyLayoutState(() => `globalWork:${this.lens()}`);
   /**
    * Every display that renders `k-board-table-view` full-height, which is what `.is-table-frame`
    * sizes with flexbox. The sheet owns a scrollport and raises its incremental row cap from that
@@ -894,6 +903,32 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly historyLabels = computed(() =>
     this.state.catalog().labels.map((label) => ({ id: label.id, name: label.name, color: label.color }))
   );
+  /**
+   * The Work done report's "right now" half, built from this page's own cross-board cards and catalog
+   * (the view's BoardState here is bare). Lists name their workspace as a group once the page spans
+   * workspaces, since the report charts one bar per shared list and "Backlog" repeats across
+   * workspaces. Thresholds come from each card's workspace; the catalog has no inactivity setting, so
+   * that one stays at the product default.
+   */
+  readonly workDoneReportSource = computed<WorkDoneReportSource>(() => {
+    const catalog = this.state.catalog();
+    const cards = this.state.cards();
+    return {
+      title: this.pageTitle(),
+      cards,
+      lists: catalog.lists.map((list) => ({ id: list.id, name: list.name, icon: list.icon, color: list.color, inProgress: list.inProgress, group: this.multiWorkspace() ? this.workspaceName(list.workspaceId) : null })),
+      boards: catalog.boards.map((board) => ({ id: board.id, name: board.name, icon: board.icon, color: board.iconColor, inProgressEnabled: board.inProgressEnabled })),
+      workspaces: catalog.workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, icon: workspace.icon, color: workspace.accentColor })),
+      viewerUserId: this.lens() === "my" ? this.state.auth.user()?.id ?? null : null,
+      members: catalog.people.map((person) => ({ userId: person.userId, displayName: person.displayName, avatarUrl: person.avatarUrl, role: "member" as const, source: "workspace" as const })),
+      assigneeIdsByCard: new Map(cards.map((card) => [card.id, card.assigneeIds])),
+      labelIdsByCard: new Map(cards.map((card) => [card.id, card.labelIds])),
+      fieldValuesByCard: this.boardCustomFieldValues(),
+      workspaceSettings: new Map(catalog.workspaces.map((workspace) => [workspace.id, { inProgressAlertDays: workspace.inProgressAlertDays, inactiveCardsDays: DEFAULT_INACTIVE_CARDS_DAYS, timeZone: workspace.timeZone }])),
+      partial: this.state.canLoadMore() || this.state.loadingMore(),
+    };
+  });
+
   readonly historyCfConditions = computed(() =>
     this.state.definition().filters.customFieldConditions.map((condition) => ({
       fieldId: condition.fieldId,
@@ -1017,14 +1052,17 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     key: PortfolioMetric;
     label: string;
     icon: string;
-    tone: "danger" | "success" | null;
+    tone: "danger" | "warning" | "success" | null;
     value: number;
   }[]>(() => {
     const totals = this.state.portfolio()?.totals;
     if (!totals) return [];
-    const metrics: { key: PortfolioMetric; label: string; icon: string; tone: "danger" | "success" | null; value: number }[] = [
+    const metrics: { key: PortfolioMetric; label: string; icon: string; tone: "danger" | "warning" | "success" | null; value: number }[] = [
       { key: "active", label: $localize`:Portfolio stat tile, cards not completed:Active`, icon: "player-play", tone: null, value: totals.cards - totals.completed },
       { key: "overdue", label: $localize`:Portfolio stat tile, overdue cards:Overdue`, icon: "alert-triangle", tone: "danger", value: totals.overdue },
+      // Older offline snapshots predate the blocked count; show none until the next refresh.
+      { key: "blocked", label: $localize`:Portfolio stat tile, open cards waiting on another open card:Blocked`, icon: "lock", tone: "danger", value: totals.blocked ?? 0 },
+      { key: "atRisk", label: $localize`:Portfolio stat tile, cards whose blocker is overdue or due after them:At risk`, icon: "alert-octagon", tone: "warning", value: totals.atRisk ?? 0 },
       { key: "dueSoon", label: $localize`:Portfolio stat tile:Due next 7 days`, icon: "calendar-due", tone: null, value: totals.dueSoon },
       { key: "unassigned", label: $localize`:Portfolio stat tile, cards with no assignee:Unassigned`, icon: "user-question", tone: null, value: totals.unassigned },
       { key: "inactive", label: $localize`:Portfolio stat tile, cards untouched for 14 days:Inactive 14 days`, icon: "clock-pause", tone: null, value: totals.inactive },
@@ -1109,6 +1147,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
             inactive: bucket.inactive ?? 0,
             inProgress: bucket.inProgress ?? 0,
             inProgressTooLong: bucket.inProgressTooLong ?? 0,
+            blocked: bucket.blocked ?? 0,
+            atRisk: bucket.atRisk ?? 0,
             completed: bucket.completed,
             overdueChecklistItems: bucket.overdueChecklistItems,
           });
@@ -1192,6 +1232,14 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   constructor() {
     document.addEventListener("keydown", this.handleDocumentKeydown);
     document.addEventListener("keydown", this.handleSelectionEscape, true);
+    effect(() => {
+      // The report counts open cards across every board, so a first page of a hundred would
+      // under-report. The history timeline itself needs no cards, so only the Report layout walks
+      // the remaining pages, one at a time: each loadMore flips loadingMore and re-runs this.
+      if (this.workDoneLayout() !== "report" || this.effectiveDisplay() !== "history") return;
+      if (this.state.loading() || this.state.loadingMore() || !this.state.canLoadMore()) return;
+      untracked(() => void this.state.loadMore());
+    });
     effect(() => {
       // Keep the modal derived from the route so browser Back/Forward and pasted global-work links
       // behave like the existing board card detail. The visible query is preferred to avoid a
@@ -1308,6 +1356,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       || filters.inProgressOnly
       || filters.inProgressTooLongOnly
       || filters.blockedOnly
+      || filters.atRiskOnly
       || filters.overdueOnly
       || filters.overdueChecklistOnly
       || filters.unreadOnly
@@ -1625,6 +1674,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inProgressOnly: false,
       inProgressTooLongOnly: false,
       blockedOnly: false,
+      atRiskOnly: false,
       unreadOnly: false,
       prioritySetOnly: false,
       archived: false,
@@ -2413,6 +2463,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactiveOnly: metric === "inactive",
       inProgressOnly: metric === "inProgress",
       inProgressTooLongOnly: metric === "inProgressTooLong",
+      blockedOnly: metric === "blocked",
+      atRiskOnly: metric === "atRisk",
       overdueChecklistOnly: metric === "overdueChecklistItems",
       dueFrom: metric === "dueSoon" ? today : null,
       dueTo: metric === "dueSoon" ? localDateKey(nextSeven) : null,
@@ -2435,6 +2487,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactiveOnly: false,
       inProgressOnly: false,
       inProgressTooLongOnly: false,
+      blockedOnly: false,
+      atRiskOnly: false,
       overdueChecklistOnly: false,
       dueFrom: null,
       dueTo: null,
@@ -2454,6 +2508,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactive: $localize`:Portfolio drill-down, cards untouched for 14 days:Inactive 14 days`,
       inProgress: $localize`:Portfolio drill-down, open cards whose time-in-progress clock is running:In progress`,
       inProgressTooLong: $localize`:Portfolio drill-down, cards in progress past their workspace's alert:In progress too long`,
+      blocked: $localize`:Portfolio drill-down, open cards waiting on another open card:Blocked`,
+      atRisk: $localize`:Portfolio drill-down, cards whose blocker is overdue or due after them:At risk`,
       completed: $localize`:Portfolio drill-down, cards completed in the last N days (d = days, keep it short):Completed (${this.state.definition().portfolioDays}:days:d)`,
       overdueChecklistItems: $localize`:Portfolio drill-down:Overdue checklist items`,
     } as Record<string, string>)[metric] ?? metric;
@@ -2589,6 +2645,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactive: row.inactive + (bucket.inactive ?? 0),
       inProgress: row.inProgress + (bucket.inProgress ?? 0),
       inProgressTooLong: row.inProgressTooLong + (bucket.inProgressTooLong ?? 0),
+      blocked: row.blocked + (bucket.blocked ?? 0),
+      atRisk: row.atRisk + (bucket.atRisk ?? 0),
       completed: row.completed + bucket.completed,
       overdueChecklistItems: row.overdueChecklistItems + bucket.overdueChecklistItems,
     }), {
@@ -2609,6 +2667,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactive: 0,
       inProgress: 0,
       inProgressTooLong: 0,
+      blocked: 0,
+      atRisk: 0,
       completed: 0,
       overdueChecklistItems: 0,
     });

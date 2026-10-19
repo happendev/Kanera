@@ -4,12 +4,13 @@ import { cardPath } from "@kanera/shared/card-links";
 import type { CardRelationSummary, DependencyGraphBody, DependencyGraphResponse } from "@kanera/shared/dto";
 import { expandCardSummary, SERVER_EVENTS, type WireCardSummary, type WireCustomField } from "@kanera/shared/events";
 import { ApiClient, ApiError } from "../../core/api/api.client";
-import { viewPreferenceKey } from "../../core/browser/browser-contracts";
+import { AuthService } from "../../core/auth/auth.service";
+import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { icu } from "../../core/i18n/icu";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { localDateKey } from "../../shared/day-key.util";
-import { formatDate } from "../../shared/date-format";
+import { formatDate, formatRelativeTime } from "../../shared/date-format";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { ToastService } from "../../shared/toast.service";
@@ -36,14 +37,13 @@ import {
   type MapEdge,
   type MapNode,
 } from "./dependency-map.layout";
+import { readDependencyPreference, updateDependencyPreference, type DependencyLayout } from "./dependency-layout";
 import { tileContent, tileFields, tileHeight, type TileContent, type TileDensity } from "./dependency-map.tile";
 
 type ScopeMode = "board" | "workspace";
-type LayoutMode = "map" | "timeline" | "list";
 
 interface StoredPreference {
   scope?: ScopeMode;
-  layout?: LayoutMode;
   showRelated?: boolean;
   slim?: boolean;
   critical?: boolean;
@@ -69,7 +69,6 @@ interface EdgeSelection {
   y: number;
 }
 
-const LAYOUT_MODES: readonly LayoutMode[] = ["map", "timeline", "list"];
 /**
  * One dependency the viewer changed on this map, with what it takes to reverse it: `added` says
  * whether the change created the relation or removed it. `source`/`target` are the blocker and the
@@ -99,8 +98,6 @@ const REFRESH_DEBOUNCE_MS = 400;
  * would otherwise undim the whole chain for a frame and dim it again: a flicker on every move.
  */
 const FOCUS_RELEASE_MS = 120;
-/** The narrowest viewport that opens on the map by default; below it the step list reads better. */
-const MAP_MIN_VIEWPORT = 720;
 
 const EMPTY_TILE: TileContent = { labels: [], fields: [] };
 
@@ -132,6 +129,8 @@ let nextInstanceId = 0;
 export class DependencyMapComponent implements OnInit {
   private readonly api = inject(ApiClient);
   private readonly sockets = inject(SocketService);
+  private readonly auth = inject(AuthService);
+  private readonly offlineCache = inject(OfflineCacheService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly toasts = inject(ToastService);
@@ -142,8 +141,10 @@ export class DependencyMapComponent implements OnInit {
   readonly workspaceId = input<string | null>(null);
   /** Card scope, for Global Work: the lens's loaded cards. Takes precedence over `boardId`. */
   readonly cardIds = input<readonly string[] | null>(null);
-  /** Key for the remembered scope, layout and related toggle. */
+  /** Key for the remembered scope and toggles. */
   readonly preferenceScope = input.required<string>();
+  /** Map, Timeline or Steps. The host owns the switch, in its toolbar (see `dependencyLayoutState`). */
+  readonly layoutMode = input.required<DependencyLayout>();
   /**
    * The host's search and filter result over its own cards, or null when nothing narrows it.
    * A chain stays on the map while any of its in-scope cards matches; cards from elsewhere in the
@@ -164,9 +165,6 @@ export class DependencyMapComponent implements OnInit {
   readonly stepLabelHeight = STEP_LABEL_HEIGHT;
 
   readonly scopeMode = signal<ScopeMode>("board");
-  readonly layoutMode = signal<LayoutMode>("map");
-  /** Only a layout the viewer picked is remembered; otherwise each device keeps its own default. */
-  private layoutChosen = false;
   readonly showRelated = signal(false);
   /** Detailed tiles carry labels and card-face fields like a board card; slim ones only key and title. */
   readonly density = signal<TileDensity>("detailed");
@@ -189,6 +187,12 @@ export class DependencyMapComponent implements OnInit {
   private readonly hostWidth = signal(0);
 
   readonly response = signal<DependencyGraphResponse | null>(null);
+  /** Set while the map is an offline snapshot; cleared by the next successful read. */
+  readonly cachedAt = signal<string | null>(null);
+  readonly offlineCopyLabel = computed(() => {
+    const cachedAt = this.cachedAt();
+    return cachedAt ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(cachedAt)}:time:` : "";
+  });
   readonly loading = signal(false);
   readonly loadFailed = signal(false);
   private loadSeq = 0;
@@ -218,11 +222,6 @@ export class DependencyMapComponent implements OnInit {
   readonly scopeOptions: SegmentedOption<ScopeMode>[] = [
     { id: "board", icon: "layout-kanban", label: $localize`:Dependencies view scope switch - only chains that touch this board:This board` },
     { id: "workspace", icon: "building", label: $localize`:Dependencies view scope switch - every chain in the board's workspace:Workspace` },
-  ];
-  readonly layoutOptions: SegmentedOption<LayoutMode>[] = [
-    { id: "map", icon: "git-merge", label: $localize`:dependency map layout|Dependencies view layout - chains drawn as a map with connectors:Map` },
-    { id: "timeline", icon: "calendar-week", label: $localize`:Dependencies view layout - cards placed in columns by the week they are due:Timeline` },
-    { id: "list", icon: "list-numbers", label: $localize`:Dependencies view layout - chains listed step by step:Steps` },
   ];
 
   readonly boardsById = computed(() => new Map((this.response()?.boards ?? []).map((board) => [board.id, board])));
@@ -393,12 +392,22 @@ export class DependencyMapComponent implements OnInit {
       const scope = this.preferenceScope();
       const stored = readPreference(scope);
       untracked(() => {
-        this.scopeMode.set(stored?.scope === "workspace" ? "workspace" : "board");
-        this.showRelated.set(stored?.showRelated === true);
-        this.density.set(stored?.slim ? "slim" : "detailed");
-        this.critical.set(stored?.critical === true);
-        this.layoutChosen = Boolean(stored?.layout);
-        this.layoutMode.set(stored?.layout ?? (viewportWidth() < MAP_MIN_VIEWPORT ? "list" : "map"));
+        this.scopeMode.set(stored.scope === "workspace" ? "workspace" : "board");
+        this.showRelated.set(stored.showRelated === true);
+        this.density.set(stored.slim ? "slim" : "detailed");
+        this.critical.set(stored.critical === true);
+      });
+    });
+    // A focus or a half-drawn link belongs to the layout it started in; switching drops both.
+    let shownLayout: DependencyLayout | null = null;
+    effect(() => {
+      const layout = this.layoutMode();
+      untracked(() => {
+        if (shownLayout !== null && shownLayout !== layout) {
+          this.focusedId.set(null);
+          this.cancelEditing();
+        }
+        shownLayout = layout;
       });
     });
     effect(() => {
@@ -443,6 +452,12 @@ export class DependencyMapComponent implements OnInit {
     socket.on(SERVER_EVENTS.CARD_LABELS_SET, cardChanged);
     socket.on(SERVER_EVENTS.CARD_ASSIGNEES_SET, cardChanged);
     socket.on(SERVER_EVENTS.CARD_LINKS_CHANGED, linksChanged);
+    // Tiles show custom fields, and a card shared with or withdrawn from this viewer joins or
+    // leaves the map (or turns into an off-map blocker), so both need a fresh read.
+    socket.on(SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, cardChanged);
+    socket.on(SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, cardChanged);
+    socket.on(SERVER_EVENTS.CARD_VISIBILITY_GRANTED, linksChanged);
+    socket.on(SERVER_EVENTS.CARD_VISIBILITY_REVOKED, linksChanged);
     socket.on("connect", reconnected);
     this.destroyRef.onDestroy(() => {
       socket.off(SERVER_EVENTS.CARD_UPDATED, updated);
@@ -451,6 +466,10 @@ export class DependencyMapComponent implements OnInit {
       socket.off(SERVER_EVENTS.CARD_LABELS_SET, cardChanged);
       socket.off(SERVER_EVENTS.CARD_ASSIGNEES_SET, cardChanged);
       socket.off(SERVER_EVENTS.CARD_LINKS_CHANGED, linksChanged);
+      socket.off(SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, cardChanged);
+      socket.off(SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, cardChanged);
+      socket.off(SERVER_EVENTS.CARD_VISIBILITY_GRANTED, linksChanged);
+      socket.off(SERVER_EVENTS.CARD_VISIBILITY_REVOKED, linksChanged);
       socket.off("connect", reconnected);
       if (this.refreshTimer) clearTimeout(this.refreshTimer);
       if (this.focusReleaseTimer) clearTimeout(this.focusReleaseTimer);
@@ -465,17 +484,44 @@ export class DependencyMapComponent implements OnInit {
     const seq = ++this.loadSeq;
     this.loading.set(true);
     this.loadFailed.set(false);
+    const cacheKey = this.cacheKey();
     try {
       const response = await this.api.post<DependencyGraphResponse>("/cards/dependency-graph", request);
       if (seq !== this.loadSeq) return;
       this.response.set(response);
+      this.cachedAt.set(null);
       this.syncRooms(response.boards.map((board) => board.id));
+      void cacheKey.then((key) => key ? this.offlineCache.saveDependencyGraph(key, response) : undefined).catch(() => undefined);
     } catch {
-      // A re-read keeps the map it has; only a first load with nothing to show reports the failure.
-      if (seq === this.loadSeq && !this.response()) this.loadFailed.set(true);
+      // Offline (or the read failed): fall back to this exact map's last snapshot. Its board rooms
+      // are joined so the reconnect refresh replaces it as soon as the socket is back.
+      const key = await cacheKey.catch(() => null);
+      const cached = key ? await this.offlineCache.loadDependencyGraph(key).catch(() => null) : null;
+      if (seq !== this.loadSeq) return;
+      if (cached) {
+        this.response.set(cached.response);
+        this.cachedAt.set(cached.cachedAt);
+        this.syncRooms(cached.response.boards.map((board) => board.id));
+      } else if (!this.response()) {
+        // A re-read keeps the map it has; only a first load with nothing to show reports the failure.
+        this.loadFailed.set(true);
+      }
     } finally {
       if (seq === this.loadSeq) this.loading.set(false);
     }
+  }
+
+  /**
+   * Per user (the graph is filtered to what they may open) and per request. A card-set request can
+   * name 2000 cards, so the request part is hashed rather than stored as the key itself.
+   */
+  private async cacheKey(): Promise<string | null> {
+    const user = this.auth.user();
+    const requestKey = this.requestKey();
+    if (!user || !requestKey || typeof crypto === "undefined" || !crypto.subtle) return null;
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(requestKey));
+    const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${user.clientId}:${user.id}:${hash}`;
   }
 
   private scheduleRefresh(): void {
@@ -505,14 +551,6 @@ export class DependencyMapComponent implements OnInit {
     this.persist();
   }
 
-  setLayout(layout: LayoutMode): void {
-    this.layoutMode.set(layout);
-    this.layoutChosen = true;
-    this.focusedId.set(null);
-    this.cancelEditing();
-    this.persist();
-  }
-
   toggleCritical(): void {
     this.critical.update((value) => !value);
     this.persist();
@@ -537,7 +575,6 @@ export class DependencyMapComponent implements OnInit {
   private persist(): void {
     writePreference(this.preferenceScope(), {
       scope: this.scopeMode(),
-      ...(this.layoutChosen ? { layout: this.layoutMode() } : {}),
       showRelated: this.showRelated(),
       ...(this.density() === "slim" ? { slim: true } : {}),
       ...(this.critical() ? { critical: true } : {}),
@@ -1061,33 +1098,19 @@ function contentWidth(element: HTMLElement): number {
   return Math.max(0, element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
 }
 
-function viewportWidth(): number {
-  return typeof window === "undefined" ? 1280 : window.visualViewport?.width ?? window.innerWidth;
-}
-
-function readPreference(scope: string): StoredPreference | null {
-  try {
-    const raw = localStorage.getItem(viewPreferenceKey("dependencyMap", scope));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      ...(parsed["scope"] === "workspace" || parsed["scope"] === "board" ? { scope: parsed["scope"] } : {}),
-      ...(LAYOUT_MODES.includes(parsed["layout"] as LayoutMode) ? { layout: parsed["layout"] as LayoutMode } : {}),
-      showRelated: parsed["showRelated"] === true,
-      slim: parsed["slim"] === true,
-      critical: parsed["critical"] === true,
-    };
-  } catch {
-    return null;
-  }
+function readPreference(scope: string): StoredPreference {
+  const parsed = readDependencyPreference(scope);
+  return {
+    ...(parsed["scope"] === "workspace" || parsed["scope"] === "board" ? { scope: parsed["scope"] } : {}),
+    showRelated: parsed["showRelated"] === true,
+    slim: parsed["slim"] === true,
+    critical: parsed["critical"] === true,
+  };
 }
 
 function writePreference(scope: string, value: StoredPreference): void {
-  try {
-    localStorage.setItem(viewPreferenceKey("dependencyMap", scope), JSON.stringify(value));
-  } catch {
-    // Storage can be unavailable in privacy mode or over quota; the in-memory choice still applies.
-  }
+  // Explicit falses clear a toggle the merge would otherwise keep.
+  updateDependencyPreference(scope, { slim: false, critical: false, ...value });
 }
 
 /** The API's own message (already in the viewer's language, e.g. the loop rejection), else a fallback. */

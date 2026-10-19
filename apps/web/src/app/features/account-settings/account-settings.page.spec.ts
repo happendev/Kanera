@@ -2,7 +2,7 @@ import { computed, provideZonelessChangeDetection, signal, type WritableSignal }
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { ActivatedRoute, Router } from "@angular/router";
-import type { Entitlements, NotificationSettingsResponse, NotificationWorkspaceRule, StorageFilesResponse, StorageOverviewResponse } from "@kanera/shared/dto";
+import type { Entitlements, NotificationSettingsResponse, NotificationWorkspaceRule, PlanUsageResponse, StorageFilesResponse, StorageOverviewResponse } from "@kanera/shared/dto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import type { AuthUser } from "../../core/auth/auth.service";
@@ -74,6 +74,7 @@ describe("AccountSettingsPage", () => {
   let orgGuestSeatsResponse: unknown[];
   let archivedWorkspacesResponse: unknown[];
   let storageOverviewResponse: StorageOverviewResponse;
+  let planUsageResponse: PlanUsageResponse;
   let storageFilesResponse: StorageFilesResponse;
   let emailVerificationEnabled: boolean;
   let githubConfigResponse: unknown;
@@ -168,6 +169,8 @@ describe("AccountSettingsPage", () => {
       ],
       workspaces: [{ workspaceId: "workspace-1", name: "Workspace", kind: "standard", bytes: 209 * 1024 * 1024, count: 14 }],
     };
+    // Tests that exercise the meters set their own payload; the rest render no usage block.
+    planUsageResponse = { tier: null, meters: [] };
     storageFilesResponse = {
       total: 1,
       totalBytes: 40 * 1024 * 1024,
@@ -252,6 +255,7 @@ describe("AccountSettingsPage", () => {
         if (path === "/workspaces") return [{ id: "workspace-1", name: "Workspace" }];
         if (path === "/clients/me/archived-workspaces") return archivedWorkspacesResponse;
         if (path === "/clients/me/storage") return storageOverviewResponse;
+        if (path === "/clients/me/plan-usage") return planUsageResponse;
         if (path.startsWith("/clients/me/storage/files")) return storageFilesResponse;
         if (path === "/clients/me/github-app/config") return githubConfigResponse;
         if (path === "/clients/me/github-app/installation") return githubInstallationResponse;
@@ -598,14 +602,56 @@ describe("AccountSettingsPage", () => {
     expect(component.workspaceRuleAutosave.state()).toBe("error");
   });
 
-  it("renders org storage usage on the account plan tab", async () => {
+  it("links to the storage tab from the account plan tab instead of repeating storage usage", async () => {
     activeSettingsRoute = "account-plan";
     await createPage();
 
-    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
-    expect(text).toContain("Storage");
-    expect(text).toContain("512.0 MB of 1.0 GB used");
-    expect(text).toContain("512.0 MB remaining");
+    const el = fixture.nativeElement as HTMLElement;
+    const link = Array.from(el.querySelectorAll("a")).find((a) => a.textContent?.trim() === "Manage storage");
+    expect(link).toBeDefined();
+    expect(el.textContent).not.toContain("512.0 MB remaining");
+  });
+
+  it("renders plan usage meters with near-limit and at-limit states, and no bar for unlimited meters", async () => {
+    activeSettingsRoute = "account-plan";
+    planUsageResponse = {
+      tier: "free",
+      meters: [
+        { key: "boards", used: 3, limit: 3, resetsAt: null },
+        { key: "members", used: 4, limit: 5, resetsAt: null },
+        { key: "activeAutomations", used: 1, limit: 3, resetsAt: null },
+        { key: "automationExecutions", used: 12, limit: 100, resetsAt: "2026-11-01T00:00:00.000Z" },
+      ],
+    };
+    await createPage();
+
+    const root = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => expect(root.querySelectorAll(".plan-usage-meter").length).toBe(4));
+    const rows = Array.from(root.querySelectorAll<HTMLElement>(".plan-usage-meter"));
+    const row = (label: string) => rows.find((candidate) => candidate.textContent?.includes(label))!;
+    expect(row("Boards").classList).toContain("plan-usage-meter--limit");
+    expect(row("Boards").textContent).toContain("3 of 3");
+    expect(row("Boards").textContent).toContain("Limit reached");
+    expect(row("Members").classList).toContain("plan-usage-meter--warning");
+    expect(row("Members").textContent).toContain("Near limit");
+    expect(row("Active automations").className).not.toMatch(/--warning|--limit/);
+    expect(row("Automation executions this month").textContent).toContain("Resets");
+    expect(root.textContent).toContain("reached a Free plan limit");
+
+    planUsageResponse = {
+      tier: "trial",
+      meters: [
+        { key: "boards", used: 9, limit: null, resetsAt: null },
+        { key: "automationExecutions", used: null, limit: null, resetsAt: null },
+      ],
+    };
+    fixture.destroy();
+    await createPage();
+    const trialRoot = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => expect(trialRoot.querySelectorAll(".plan-usage-meter").length).toBe(2));
+    expect(trialRoot.querySelectorAll(".plan-usage-bar").length).toBe(0);
+    expect(trialRoot.textContent).toContain("9 · Unlimited");
+    expect(trialRoot.querySelector(".plan-usage-note")).toBeNull();
   });
 
   it("shows the scratchpad by default and persists the personal visibility choice", async () => {

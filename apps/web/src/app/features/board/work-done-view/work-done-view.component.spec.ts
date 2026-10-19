@@ -249,19 +249,6 @@ describe("WorkDoneViewComponent", () => {
     expect(native.querySelectorAll(".wd-row")).toHaveLength(2);
   });
 
-  it("places the same day components in the responsive grid layout", async () => {
-    const native = await render({
-      events: [
-        completedEvent,
-        { ...movedEvent, id: "act-moved-yesterday", at: yesterdayAt(14) },
-      ],
-    }, { layout: "grid" });
-
-    expect(native.querySelector(".wd-stream")?.classList.contains("wd-stream-grid")).toBe(true);
-    expect(native.querySelectorAll("k-work-done-day")).toHaveLength(2);
-    expect(native.querySelectorAll(".wd-row")).toHaveLength(2);
-  });
-
   it("summarises each day with per-type counts and its contributors", async () => {
     const native = await render({ events: [checklistEvent, completedEvent, movedEvent, createdEvent] });
 
@@ -508,6 +495,39 @@ describe("WorkDoneViewComponent", () => {
     expect(summaryCall).toBeDefined();
   });
 
+  it("renders the report in global scope from the host's source and compares via the global summary", async () => {
+    const overdue = cardSummary({ id: "card-9", title: "Late", boardId: "board-2", dueDateLocalDate: "2000-01-01", dueDateTimezone: "UTC" });
+    const native = await render({ events: [completedEvent] }, {
+      scope: "global",
+      boardId: null,
+      globalLens: "my",
+      layout: "report",
+      reportSource: {
+        title: "My Cards",
+        cards: [overdue, cardSummary({ id: "card-8", title: "Fine", boardId: "board-1" })],
+        lists: [{ id: "list-1", name: "To Do", icon: null, color: null, inProgress: false }],
+        boards: [
+          { id: "board-1", name: "Platform", icon: null, color: null, inProgressEnabled: true },
+          { id: "board-2", name: "Website", icon: null, color: null, inProgressEnabled: true },
+        ],
+        members: [],
+        assigneeIdsByCard: new Map(),
+        labelIdsByCard: new Map(),
+        fieldValuesByCard: new Map(),
+        workspaceSettings: new Map(),
+        partial: false,
+      },
+    });
+
+    expect(fixture.componentInstance.report()?.openCount).toBe(2);
+    expect(fixture.componentInstance.report()?.boards.map((bar) => bar.name)).toEqual(["Platform", "Website"]);
+    expect(native.querySelector("k-work-done-report")).not.toBeNull();
+    expect(native.querySelector(".rp-boards")).not.toBeNull();
+    // The previous period comes from the same POST aggregate the strip uses, with a shifted range.
+    const summaryCalls = api.post.mock.calls.filter(([url]) => url === "/work/work-done/summary/query");
+    expect(summaryCalls.length).toBe(2);
+  });
+
   it("member filter keeps card events by actor and checklist events by completedBy", async () => {
     // movedEvent's actor is user-2; created/completed/checklist are user-1.
     const native = await render(
@@ -525,7 +545,7 @@ describe("WorkDoneViewComponent", () => {
   it("shows a filter-aware empty state when nothing matches", async () => {
     const native = await render({ events: [completedEvent] }, { filterMemberIds: ["nobody"] });
 
-    expect(native.querySelector(".wd-empty-panel .es-title")?.textContent?.trim()).toBe("No matching work done");
+    expect(native.querySelector(".wd-empty k-empty-state .es-title")?.textContent?.trim()).toBe("No matching work done");
     expect(native.querySelectorAll(".wd-row")).toHaveLength(0);
   });
 

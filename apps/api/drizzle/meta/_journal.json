@@ -638,6 +638,13 @@
       "when": 1792156158599,
       "tag": "0090_wide_psynapse",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1792421004437,
+      "tag": "0091_light_leper_queen",
+      "breakpoints": true
     }
   ]
 }

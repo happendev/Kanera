@@ -75,7 +75,14 @@
     border-color: var(--border-strong);
   }
 
-  &:disabled { cursor: default; opacity: 0.55; }
+  // Dim the content, not the button: opacity would let a board's background gradient show through
+  // the fill and wash the whole chip out.
+  &:disabled {
+    cursor: default;
+    opacity: 1;
+    color: color-mix(in srgb, var(--text-muted) 70%, var(--surface));
+    strong { color: inherit; }
+  }
 
   &.is-blocked.has-count i { color: var(--dm-blocked); }
   &.is-atRisk.has-count i { color: var(--dm-risk); }
@@ -120,19 +127,30 @@
   }
 }
 
+// Filled like .dm-linking rather than bare text: on a board with a background gradient, muted copy
+// straight on the canvas loses its contrast.
 .dm-callout,
 .dm-note {
   display: flex;
   flex: none;
   align-items: flex-start;
+  align-self: flex-start;
   gap: 8px;
+  max-width: 100%;
   margin: 0 0 var(--space-3);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, var(--radius));
+  background: var(--surface);
   color: var(--text-muted);
   font-size: var(--text-sm);
   line-height: 1.4;
 
   > i { flex: none; margin-top: 2px; font-size: 15px; }
 }
+
+// Raised states centre themselves; this only spaces them off the toolbar.
+.dm-empty { margin-top: var(--space-6); }
 
 .dm-callout > i { color: var(--dm-risk); }
 
@@ -163,14 +181,6 @@
   text-decoration: none;
 
   &:hover { text-decoration: underline; }
-}
-
-.dm-state {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--danger);
-  font-size: var(--text-sm);
 }
 
 .dm-retry {

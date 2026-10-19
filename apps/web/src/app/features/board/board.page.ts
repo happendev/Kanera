@@ -8,7 +8,7 @@ import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireAgentRun, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, inProgressClockOf, SERVER_EVENTS } from "@kanera/shared/events";
 import type { ReportedInProgressClock } from "./time-in-progress.util";
-import type { BoardExportArchive, WorkDoneEventType, WorkPrioritiesResponse } from "@kanera/shared/dto";
+import type { BoardExportArchive, DependencyGraphCard, DependencyGraphEdge, DependencyGraphResponse, WorkDoneEventType, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import type { Board, BoardRole, BoardSeparator, Card, CardCustomFieldValue, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
@@ -47,11 +47,13 @@ import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.
 import { DependencyMapComponent } from "../dependencies/dependency-map.component";
 import { WorkDoneViewComponent } from "./work-done-view/work-done-view.component";
 import { workDoneLayoutState } from "./work-done-view/work-done-preferences";
+import { dependencyLayoutState } from "../dependencies/dependency-layout";
 import type { WorkDoneLayout } from "./work-done-view/work-done.types";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { CardDetailComponent } from "./card-detail.component";
 import { isOverdue } from "./due-date.util";
 import { blockedByCountOf } from "./card-relations.util";
+import { dependencyRisk } from "../dependencies/dependency-map.layout";
 import { BoardGroupColumnComponent, type GroupCardDropPayload } from "./board-group-column.component";
 import { CardComposerDialogComponent, type CardComposerSeed } from "./card-composer.dialog";
 import { BoardTableViewComponent } from "./table-view/board-table-view.component";
@@ -83,7 +85,7 @@ import { isInProgressRunning, isInProgressTooLong } from "./time-in-progress.uti
 
 type AnyCard = Card | WireCard | WireCardSummary;
 
-type BoardCardFilter = "overdue" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong";
+type BoardCardFilter = "overdue" | "blocked" | "atRisk" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong";
 const OFFLINE_COPY_PROMPT_DELAY_MS = 3000; // 3 seconds
 const SEARCH_DEBOUNCE_MS = 200;
 
@@ -283,6 +285,8 @@ export class BoardPage implements OnDestroy {
   setWorkDoneLayout(layout: WorkDoneLayout): void {
     this.workDoneLayoutState.setLayout(layout);
   }
+  /** Map/Timeline/Steps, remembered per board like the rest of the Dependencies view's choices. */
+  readonly dependencyLayoutState = dependencyLayoutState(() => `board:${this.boardId()}`);
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
   readonly showInactiveOnly = signal(false);
@@ -488,6 +492,8 @@ export class BoardPage implements OnDestroy {
         if (!showArchived && cardFilter) {
           if (card.completedAt) return false;
           if (cardFilter === "overdue" && !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone)) return false;
+          if (cardFilter === "blocked" && !blockedByCountOf(card)) return false;
+          if (cardFilter === "atRisk" && !this.atRiskCardIds()?.has(card.id)) return false;
           if (cardFilter === "unassigned" && (this.state.assigneesByCard().get(card.id)?.length ?? 0) > 0) return false;
           if (cardFilter === "inactive" && !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays())) return false;
           if (cardFilter === "inProgress" && !isInProgressRunning(card)) return false;
@@ -530,6 +536,54 @@ export class BoardPage implements OnDestroy {
   // The height cap only guards very tall boards: the placement helper clamps to the viewport, so the
   // panel scrolls only when it really does not fit.
   readonly overviewPlacement: AnchoredPanelPlacement = { align: "end", gap: 6, width: 400, maxHeight: 900 };
+  /**
+   * The links behind the overview's At risk count, read from the dependency graph each time the
+   * overview opens: a blocker may sit on another board, so the board's own cards cannot answer it.
+   * Only blockers the viewer can see are in the graph, which is also all the Dependencies view judges.
+   */
+  private readonly dependencyRiskGraph = signal<{ boardId: string; edges: DependencyGraphEdge[]; cards: Map<string, DependencyGraphCard> } | null>(null);
+  private dependencyRiskSeq = 0;
+
+  /** This board's open cards at risk by the Dependencies view's rule; null until the graph loads. */
+  readonly atRiskCardIds = computed<Set<string> | null>(() => {
+    const graph = this.dependencyRiskGraph();
+    if (!graph || graph.boardId !== this.boardId()) return null;
+    const now = this.cardTimingClock();
+    // Live board cards win over the graph's snapshot, so a due date or completion changed while the
+    // overview is open moves the count without another read.
+    const live = this.state.cardsById();
+    const ids = new Set<string>();
+    for (const edge of graph.edges) {
+      if (edge.kind !== "blocks") continue;
+      const dependent = live.get(edge.targetCardId);
+      if (!dependent || ids.has(dependent.id)) continue;
+      const blocker = live.get(edge.sourceCardId) ?? graph.cards.get(edge.sourceCardId);
+      if (dependencyRisk(blocker, dependent, now)) ids.add(dependent.id);
+    }
+    return ids;
+  });
+
+  /**
+   * Which cards are blocked, and by how many: a primitive that changes when a relation on this
+   * board is added, removed or cleared (the realtime echo carries `blockedByCount`).
+   */
+  private readonly blockerSignature = computed(() => this.state.cards()
+    .filter((card) => !card.archivedAt && blockedByCountOf(card) > 0)
+    .map((card) => `${card.id}:${blockedByCountOf(card)}`)
+    .join("|"));
+
+  private async loadDependencyRisk(): Promise<void> {
+    const boardId = this.boardId();
+    const seq = ++this.dependencyRiskSeq;
+    try {
+      const graph = await this.api.post<DependencyGraphResponse>("/cards/dependency-graph", { boardId });
+      if (seq !== this.dependencyRiskSeq) return;
+      this.dependencyRiskGraph.set({ boardId, edges: graph.edges, cards: new Map(graph.cards.map((card) => [card.id, card])) });
+    } catch {
+      // The tile keeps its last answer (or stays unknown); the rest of the overview is local.
+    }
+  }
+
   readonly boardOverview = computed(() => {
     const now = this.cardTimingClock();
     const cards = this.state.cards().filter((card) => !card.archivedAt);
@@ -540,6 +594,8 @@ export class BoardPage implements OnDestroy {
       const due = card.dueDateLocalDate;
       return !!due && due >= localDateKey(new Date()) && due <= nextWeek;
     }).length;
+    // Open blockers only (blockedByCountOf), and a done card is not waiting on anything.
+    const blocked = incomplete.filter((card) => blockedByCountOf(card) > 0).length;
     const unassigned = incomplete.filter((card) => (this.state.assigneesByCard().get(card.id)?.length ?? 0) === 0).length;
     const inactive = incomplete.filter((card) => isCardInactive(card.updatedAt, now, this.state.inactiveCardsDays())).length;
     // Open work with a running clock, and the part of it whose current stint is past the alert (the
@@ -558,6 +614,8 @@ export class BoardPage implements OnDestroy {
       active: incomplete.length,
       overdue,
       dueSoon,
+      blocked,
+      atRisk: this.atRiskCardIds()?.size ?? null,
       unassigned,
       inactive,
       inProgress: inProgressCards.length,
@@ -990,6 +1048,14 @@ export class BoardPage implements OnDestroy {
   }
 
   constructor() {
+    // The overview's At risk count reads the dependency graph on open, and again whenever a
+    // relation on this board changes while it stays open. Keyed on primitives only.
+    effect(() => {
+      if (!this.overviewOpen()) return;
+      this.boardId();
+      this.blockerSignature();
+      untracked(() => void this.loadDependencyRisk());
+    });
     effect(() => {
       if (this.state.inProgressEnabled()) return;
       this.showInProgressOnly.set(false);
@@ -1945,9 +2011,11 @@ export class BoardPage implements OnDestroy {
     if (!this.state.canEditRole() || this.exportLoading()) return;
     this.exportLoading.set("json");
     try {
-      const archive = await this.loadBoardExportArchive();
-      downloadTextFile(JSON.stringify(archive, null, 2), "application/json", boardArchiveFileName(archive, "json"));
-      this.boardMenuOpen.set(false);
+      await this.runExport(async () => {
+        const archive = await this.loadBoardExportArchive();
+        downloadTextFile(JSON.stringify(archive, null, 2), "application/json", boardArchiveFileName(archive, "json"));
+        this.boardMenuOpen.set(false);
+      });
     } finally {
       this.exportLoading.set(null);
     }
@@ -1957,17 +2025,32 @@ export class BoardPage implements OnDestroy {
     if (!this.state.canEditRole() || this.exportLoading()) return;
     this.exportLoading.set("xlsx");
     try {
-      const archive = await this.loadBoardExportArchive();
-      const rows = boardArchiveToReportRows(archive);
-      const { default: writeXlsxFile } = await import("write-excel-file/browser");
-      await writeXlsxFile(styledBoardReportRows(rows), {
-        sheet: $localize`:Board export spreadsheet sheet name:Cards`,
-        columns: boardReportColumnWidths(rows),
-        stickyRowsCount: 4,
-      }).toFile(boardArchiveFileName(archive, "xlsx"));
-      this.boardMenuOpen.set(false);
+      await this.runExport(async () => {
+        const archive = await this.loadBoardExportArchive();
+        const rows = boardArchiveToReportRows(archive);
+        const { default: writeXlsxFile } = await import("write-excel-file/browser");
+        await writeXlsxFile(styledBoardReportRows(rows), {
+          sheet: $localize`:Board export spreadsheet sheet name:Cards`,
+          columns: boardReportColumnWidths(rows),
+          stickyRowsCount: 4,
+        }).toFile(boardArchiveFileName(archive, "xlsx"));
+        this.boardMenuOpen.set(false);
+      });
     } finally {
       this.exportLoading.set(null);
+    }
+  }
+
+  private async runExport(operation: () => void | Promise<void>) {
+    try {
+      await this.toasts.promise(operation, {
+        loading: $localize`Preparing export…`,
+        success: $localize`Export downloaded.`,
+        error: $localize`Couldn't export. Try again.`,
+        icon: "download",
+      });
+    } catch {
+      // The toast owns export failure feedback; do not leak a rejected UI event handler.
     }
   }
 

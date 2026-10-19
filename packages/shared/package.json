@@ -14,6 +14,7 @@
     "./dto/name-limits": "./src/dto/name-limits.ts",
     "./dto/reminder-limits": "./src/dto/reminder-limits.ts",
     "./dto/storage-limits": "./src/dto/storage-limits.ts",
+    "./dto/plan-usage-limits": "./src/dto/plan-usage-limits.ts",
     "./dto/csv-import-targets": "./src/dto/csv-import-targets.ts",
     "./appearance": "./src/appearance.ts",
     "./locales": "./src/locales.ts",

@@ -6,19 +6,26 @@ All notable changes to Kanera are documented here.
 
 ### Added
 
-- **Card dependencies:** link cards as **blocked by**, **blocking** or **related**, including across boards in the same workspace. Manage links from card detail or the right-click menu, see blocked status live, and use the **Blocked** filter on boards, My Cards and Team Cards.
-  - **Dependencies view:** explore blocking chains across boards with a visual map, Timeline or Steps. Spot bottlenecks, at-risk work and the critical path; add or remove dependencies directly on the map with undo and redo.
+- **Card dependencies:** link cards as **blocked by**, **blocking** or **related**, including across boards in the same workspace. Manage links from card detail or the right-click menu, see blocked status live, use the **Blocked** filter on boards, My Cards and Team Cards, and see Blocked and At risk counts in the board overview and Portfolio.
+  - **Dependencies view:** explore blocking chains across boards with a visual map, Timeline or Steps. Spot bottlenecks, at-risk work and the critical path; add or remove dependencies directly on the map with undo and redo. Works offline from your last saved copy.
   - **Notifications and handoffs:** assignees and watchers hear when work becomes blocked or ready to start, with configurable inbox, email and push notifications.
   - **Automations:** use the new **Card blocked** and **Card unblocked** triggers to act when work gets held up or becomes ready. Completing blocked work shows a warning you can override.
   - **AI agents and integrations:** manage dependencies, query blocking chains and filter blocked work through MCP, the CLI, SDK and public API.
+- **Getting started checklist:** a guided checklist on Home that teaches cards, filters, notes, team setup and agents, ticking each step off as you do it. Hide it to your account menu or remove it for good; it retires itself after 35 days. Replaces the old "First steps" card.
 - **Notification sounds:** choose the original chime, three new gentle Kanera sounds (Ripple, Bloom and Pebble), or None in Profile settings → Notifications.
 - **Time in progress:** mark lists as **In progress** and each card in them tracks working time (09:00–17:00 weekdays), shown on the card, in card detail, the table and Work done. Cards in progress too long turn amber, notify their watchers and can trigger automations; admins can correct a card's time.
 - **Team overview:** a new Team Cards display with one panel per teammate showing what they have in progress (longest-running first), what they recently worked on, the head of their Up next, their other open cards by due date, and what they finished in the last 7 days. Open, In progress, Overdue and Done 7d counts expand into the full list, in-progress work with no assignee gets its own panel, and quiet teammates fold into one row.
 - **React to and comment on uploads:** when someone attaches a file, such as a screenshot of what they've built, the activity row now has a thumbs-up and a Comment button right under it. Comment starts a reply that links the file and mentions whoever uploaded it.
 - **Thumbs-up notifications:** when someone gives your comment or uploaded file a thumbs-up, you now get an inbox notification and a push notification. Email is off by default; turn it on under Profile settings → Notifications ("Thumbs-up on your comment or file"). Removing the thumbs-up takes the notification back. Duplicated cards keep the thumbs-ups on their copied files.
+- **Work done report:** Work done has a new **Report** layout on boards, My Cards and Team Cards: a plain-language summary of the period, the key counts with changes against the previous period, a daily flow chart, where open work sits, what needs attention right now with the cards named, activity and workload per person, and breakdowns by workspace, board, label, select field and checklist. Sections appear only when there is something to show.
+- **Date range presets:** the completed-cards, table and Work done date pickers now offer This week, Last week, This month, Last month and Last quarter alongside the Last N days shortcuts.
+- **Faster pickers:** label, member and select pickers support arrow keys, Home/End and Enter, highlight the text you searched for, and workspace admins can create a missing label straight from the card's label picker.
+- **Plan usage meters (hosted):** Account Plan settings show live usage of boards, members or seats, active automations and this month's automation executions against your plan, with a warning as you near a limit.
 - **Kanera speaks your language:** the whole app, including onboarding, boards, cards, notifications, settings, emails and push notifications, is now available in English (US), English (UK), Spanish, Brazilian Portuguese, French, German, Japanese, Dutch, Norwegian Bokmål, Simplified Chinese and Traditional Chinese. Choose a language under Profile settings → Language (or from the sign-in page). It is saved to your account, so every device and every email follows it.
 
 ### Changed
+
+- **More reliable agent handoffs:** Kanera skills, CLI setup instructions and MCP guidance now make live runs, outcome comments, verification and appropriate list moves part of carrying out a card, including boards with custom workflows.
 
 - Account settings now have a Security page for two-factor authentication and password changes, and a Preferences page for Card Keys and Scratchpad visibility, with links to both guides.
 

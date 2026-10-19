@@ -1,5 +1,22 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { webOrigin } from "./env";
+import { SEED_PASSWORD, webOrigin } from "./env";
+
+/**
+ * Creates a brand-new account and organisation through the signup form and stops at onboarding.
+ * Returns the email, for API calls made as that account.
+ */
+export async function signUp(page: Page, name: string): Promise<string> {
+  const email = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@kanera.test`;
+  await page.goto("/signup");
+  await page.locator("#cname").fill(name);
+  await page.locator("#dn").fill(name);
+  await page.locator("#email").fill(email);
+  await page.locator("#password").fill(SEED_PASSWORD);
+  await page.locator("#confirm-password").fill(SEED_PASSWORD);
+  await page.locator("form").getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL(/\/onboarding/);
+  return email;
+}
 
 /** The sidebar href (`/b/:id`) of a board the signed-in user can see. */
 export async function boardHref(page: Page, boardName: string): Promise<string> {

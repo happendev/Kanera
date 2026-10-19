@@ -144,9 +144,20 @@
               class="work-done-layout-switch"
               [options]="workDoneLayoutOptions()"
               [value]="workDoneLayout()"
+              [autoLabels]="true"
               ariaLabel="Work done layout"
               i18n-ariaLabel
               (valueChange)="setWorkDoneLayout($event)"
+            />
+          } @else if (effectiveDisplay() === "dependencies") {
+            <k-segmented
+              class="work-done-layout-switch"
+              [options]="dependencyLayoutState.options"
+              [value]="dependencyLayoutState.layout()"
+              [autoLabels]="true"
+              ariaLabel="Dependencies layout"
+              i18n-ariaLabel
+              (valueChange)="dependencyLayoutState.setLayout($event)"
             />
           }
         </div>
@@ -655,6 +666,7 @@
           [filterCfConditions]="historyCfConditions()"
           [eventTypeFilter]="workDoneEventType()"
           [layout]="workDoneLayout()"
+          [reportSource]="workDoneReportSource()"
           [refreshVersion]="workDoneRefreshVersion() + state.reconciliationVersion()"
           [hostCollapsedDayKeys]="state.collapsedHistoryDayKeys()"
           (hostCollapsedDayKeysChange)="state.setCollapsedHistoryDayKeys($event)"
@@ -713,6 +725,7 @@
           [stacked]="true"
           [cardIds]="dependencySeedIds()"
           [preferenceScope]="'globalWork:' + lens()"
+          [layoutMode]="dependencyLayoutState.layout()"
           [selectedCardId]="selectedCard()?.id ?? null"
           [refreshVersion]="state.reconciliationVersion()"
           (cardOpened)="openDependencyCard($event)"

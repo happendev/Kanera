@@ -29,6 +29,7 @@ import { MyPrioritiesService } from "../../core/priorities/my-priorities.service
 import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import { PwaInstallService } from "../../core/install/pwa-install.service";
 import { ToastService } from "../../shared/toast.service";
+import { GettingStartedService } from "../../core/getting-started/getting-started.service";
 import { ScratchpadPanelComponent } from "../scratchpad/scratchpad-panel.component";
 import { ScratchpadService } from "../scratchpad/scratchpad.service";
 import { ToastComponent } from "../../shared/toast.component";
@@ -156,6 +157,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly upgradePrompt = inject(UpgradePromptService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly search = inject(GlobalSearchService);
+  readonly gettingStarted = inject(GettingStartedService);
   // Escape stays here rather than in the shortcuts registry: it must close shell chrome even while
   // focus is in an input, which the registry's bare-key guard would prevent.
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => {
@@ -632,6 +634,25 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.organisationMenuOpen.set(false);
   }
 
+  readonly gettingStartedMenuLabel = computed(() => {
+    const progress = this.gettingStarted.menuProgress();
+    return progress
+      ? icu($localize`:Account menu item for the getting started checklist, read by screen readers:Getting started, {done} of {total} steps done. Open it on home.`, { done: progress.done, total: progress.total })
+      : "";
+  });
+
+  /** Goes to the checklist on home, first putting it back there if it was hidden. */
+  reopenGettingStarted(): void {
+    this.closeUserMenu();
+    if (this.gettingStarted.state()?.hidden) this.gettingStarted.show();
+    void this.router.navigateByUrl("/");
+  }
+
+  removeGettingStarted(): void {
+    this.closeUserMenu();
+    this.gettingStarted.dismiss();
+  }
+
   toggleOrganisationMenu() {
     this.organisationMenuOpen.update((v) => !v);
   }
@@ -891,6 +912,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
     // Initialise before any panel opens; both services are idempotent when a drawer later mounts.
     this.notifications.initialise();
     this.myPriorities.initialise();
+    // The account menu shows a hidden checklist's progress on every page, not only after home loads.
+    void this.gettingStarted.load();
     this.shortcuts.attach();
     this.registerGlobalShortcuts();
     this.registerPaletteActions();

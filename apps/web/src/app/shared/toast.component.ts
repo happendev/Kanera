@@ -18,8 +18,8 @@ import type { ToastVariant } from "./toast.service";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <ng-template #prompt>
-      <div class="toast" [attr.data-variant]="variant()" [attr.role]="variant() === 'error' ? 'alert' : 'status'" [attr.aria-live]="variant() === 'error' ? 'assertive' : 'polite'">
-        <i [class]="'ti ti-' + icon()"></i>
+      <div class="toast" [attr.data-variant]="variant()" [attr.aria-busy]="variant() === 'loading'" [attr.role]="variant() === 'error' ? 'alert' : 'status'" [attr.aria-live]="variant() === 'error' ? 'assertive' : 'polite'">
+        <i [class]="'ti ti-' + icon()" aria-hidden="true"></i>
         <span class="message">{{ message() }}</span>
         <ng-content />
       </div>
@@ -61,6 +61,9 @@ import type { ToastVariant } from "./toast.service";
 
     .toast[data-variant="success"] > i { color: var(--success); }
     .toast[data-variant="error"] > i { color: var(--danger); }
+    .toast[data-variant="loading"] > i { animation: toast-spin 1s linear infinite; }
+
+    @keyframes toast-spin { to { transform: rotate(360deg); } }
 
     .message {
       overflow-wrap: anywhere;
@@ -82,6 +85,7 @@ import type { ToastVariant } from "./toast.service";
 
     @media (prefers-reduced-motion: reduce) {
       .toast, .toast.leaving { animation-duration: 1ms; }
+      .toast[data-variant="loading"] > i { animation: none; }
     }
   `,
 })
@@ -97,6 +101,7 @@ export class ToastComponent implements AfterViewInit, OnDestroy {
   private readonly portalEffect: EffectRef;
   private delayTimer: number | null = null;
   private exitTimer: number | null = null;
+  private resizeObserver: ResizeObserver | null = null;
 
   readonly variant = input<ToastVariant>("info");
   readonly show = input(false);
@@ -164,6 +169,7 @@ export class ToastComponent implements AfterViewInit, OnDestroy {
     this.clearDelayTimer();
     this.clearExitTimer();
     this.stack.unregister(this.toastId);
+    this.resizeObserver?.disconnect();
     this.overlayRef.dispose();
   }
 
@@ -179,6 +185,7 @@ export class ToastComponent implements AfterViewInit, OnDestroy {
     const reducedMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.exitTimer = window.setTimeout(() => {
       this.exitTimer = null;
+      this.resizeObserver?.disconnect();
       this.overlayRef.detach();
     }, reducedMotion ? 0 : TOAST_EXIT_MS);
   }
@@ -214,6 +221,12 @@ export class ToastComponent implements AfterViewInit, OnDestroy {
 
     this.measureToast(toast);
     queueMicrotask(() => this.measureToast(toast));
+    // Promise settlement can change wrapping or add Undo without replacing the overlay.
+    this.resizeObserver?.disconnect();
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(() => this.measureToast(toast));
+      this.resizeObserver.observe(toast);
+    }
   }
 
   private measureToast(toast: HTMLElement) {
