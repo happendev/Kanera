@@ -17069,6 +17069,20 @@
       "src/app/features/home/getting-started.component.ts"
     ]
   },
+  "2525005000498701820": "Give your agent a task",
+  "@2525005000498701820": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "2472896447806178761": "Ask your agent to add a card, move one along or comment on it. Its changes show on the card, marked as agent work.",
+  "@2472896447806178761": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
   "7125948080719352676": "Turn on push notifications",
   "@7125948080719352676": {
     "description": "Getting started step title",

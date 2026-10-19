@@ -65,7 +65,7 @@ const SECTIONS: readonly { key: string; label: string; steps: readonly GettingSt
   {
     key: "setup",
     label: $localize`:Getting started checklist section heading for push notifications and AI agents:Your setup`,
-    steps: ["enablePush", "connectAgent"],
+    steps: ["enablePush", "connectAgent", "useAgent"],
   },
 ];
 
@@ -354,6 +354,13 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
           text: $localize`:Getting started step text:Let Claude or another agent read and update your boards through MCP or the Kanera CLI.`,
           actionLabel: $localize`:Getting started step button:Connect`,
           action: { kind: "link", commands: ["/settings", "api-keys"] },
+        };
+      case "useAgent":
+        return {
+          title: $localize`:Getting started step title:Give your agent a task`,
+          text: $localize`:Getting started step text:Ask your agent to add a card, move one along or comment on it. Its changes show on the card, marked as agent work.`,
+          actionLabel: openBoard,
+          action: boardLink,
         };
       case "enablePush":
         return {

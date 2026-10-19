@@ -22,7 +22,7 @@ import {
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, asc, eq, gt, isNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
 import { isClientAdminRole } from "../../lib/client-membership.js";
@@ -43,7 +43,7 @@ const ADMIN_STEPS: ReadonlySet<GettingStartedStep> = new Set(["inviteTeam", "sec
  * Work done, quick edit) are stamped by the web on first use, in `user.getting_started_used`. Team steps (invite, second board, automation) are
  * organisation-wide on purpose: an admin who joins an organisation that already has a team, boards
  * and automations has nothing to do there, and the automation table records no creator to narrow it
- * by. Agent and push are per user, because each person connects their own agent and devices.
+ * by. Agent and push steps are per user, because each person connects their own agent and devices.
  */
 export async function loadGettingStarted(auth: AuthClaims): Promise<HomeGettingStartedResponse> {
   const [user] = await db
@@ -67,7 +67,7 @@ export async function loadGettingStarted(auth: AuthClaims): Promise<HomeGettingS
   const none = Promise.resolve(false);
   const [
     createCard, assignCard, comment, mention, addDependency, completeCard, scratchpad, savedNote,
-    inviteTeam, secondBoard, createAutomation, connectAgent, push, teamTarget, notesWorkspaceId,
+    inviteTeam, secondBoard, createAutomation, connectAgent, useAgent, push, teamTarget, notesWorkspaceId,
   ] = await Promise.all([
     hasActivity(auth, "card", eq(activityEvents.action, "created")),
     hasAssignedCard(auth),
@@ -81,6 +81,7 @@ export async function loadGettingStarted(auth: AuthClaims): Promise<HomeGettingS
     admin ? hasSecondBoard(auth.cid) : none,
     admin ? hasAutomation(auth.cid) : none,
     hasConnectedAgent(auth),
+    hasAgentWork(auth),
     loadPushStep(auth),
     admin ? loadTeamTarget(auth.cid) : Promise.resolve(null),
     loadNotesWorkspace(auth),
@@ -104,7 +105,9 @@ export async function loadGettingStarted(auth: AuthClaims): Promise<HomeGettingS
     secondBoard,
     createAutomation,
     enablePush: push.done,
-    connectAgent,
+    // An agent that has made changes was connected, even if its grant or key is gone since.
+    connectAgent: connectAgent || useAgent,
+    useAgent,
   };
   // A step the viewer cannot take is left out rather than shown undone: admin steps for members,
   // push where it cannot be delivered, the scratchpad when it is switched off in Preferences, and
@@ -365,6 +368,24 @@ async function hasConnectedAgent(auth: AuthClaims): Promise<boolean> {
       .limit(1)),
   ]);
   return grant || key;
+}
+
+/**
+ * A change an agent made for this person: through an interactive grant (actorKind "agent") or one of
+ * their API keys ("apiKey"); both keep actorId as the person. Any write counts, whatever the entity:
+ * the step teaches handing work over, not one tool. Reads leave no row, so asking an agent to only
+ * read a board leaves the step open; the step's copy asks for a change for that reason.
+ */
+function hasAgentWork(auth: AuthClaims): Promise<boolean> {
+  return exists(db.select({ id: activityEvents.id })
+    .from(activityEvents)
+    .innerJoin(workspaces, eq(workspaces.id, activityEvents.workspaceId))
+    .where(and(
+      eq(workspaces.clientId, auth.cid),
+      eq(activityEvents.actorId, auth.sub),
+      inArray(activityEvents.actorKind, ["agent", "apiKey"]),
+    ))
+    .limit(1));
 }
 
 /**

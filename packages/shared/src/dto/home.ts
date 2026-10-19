@@ -150,6 +150,7 @@ export const GETTING_STARTED_STEPS = [
   // Making Kanera reach you.
   "enablePush",
   "connectAgent",
+  "useAgent",
 ] as const;
 export type GettingStartedStep = (typeof GETTING_STARTED_STEPS)[number];
 

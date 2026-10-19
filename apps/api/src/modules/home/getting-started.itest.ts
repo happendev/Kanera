@@ -62,7 +62,7 @@ test("members get only the personal steps; admins get the team steps and the wor
     const member = await load(f, f.memberToken);
     assert.deepEqual(Object.keys(stepState(member)), [
       "createCard", "assignCard", "comment", "mention", "addDependency", "completeCard",
-      "quickEdit", "useFilter", "commandPalette", "viewWorkDone", "scratchpad", "saveNote", "connectAgent",
+      "quickEdit", "useFilter", "commandPalette", "viewWorkDone", "scratchpad", "saveNote", "connectAgent", "useAgent",
     ]);
     assert.equal(member.notesWorkspaceId, f.workspace.id);
     assert.equal(member.teamTarget, null);
@@ -86,6 +86,7 @@ test("members get only the personal steps; admins get the team steps and the wor
       secondBoard: false,
       createAutomation: false,
       connectAgent: false,
+      useAgent: false,
     });
     assert.deepEqual(admin.teamTarget, { workspaceId: f.workspace.id });
   } finally {
@@ -123,9 +124,22 @@ test("steps tick themselves off from the rows each step creates", async () => {
       secondBoard: true,
       createAutomation: true,
       connectAgent: true,
+      useAgent: false,
     });
     // The agent connection is personal: the member has not connected one.
     assert.equal(stepState(await load(f, f.memberToken)).connectAgent, false);
+
+    // Connecting is not using: the next step waits for a change the agent made for this person.
+    const [grant] = await db.select({ id: oauthGrants.id }).from(oauthGrants).where(eq(oauthGrants.userId, f.admin.id));
+    await db.insert(activityEvents).values({
+      workspaceId: f.workspace.id, boardId: f.board.id, actorId: f.admin.id, actorKind: "agent", agentGrantId: grant!.id, agentName: "Claude",
+      entityType: "card", entityId: f.board.id, action: "moved",
+    });
+    assert.equal(stepState(await load(f, f.adminToken)).useAgent, true);
+    assert.equal(stepState(await load(f, f.memberToken)).useAgent, false);
+    // Agent work implies a connection, even once the grant behind it is revoked.
+    await db.update(oauthGrants).set({ revokedAt: new Date() }).where(eq(oauthGrants.id, grant!.id));
+    assert.equal(stepState(await load(f, f.adminToken)).connectAgent, true);
   } finally {
     await f.app.close();
   }
