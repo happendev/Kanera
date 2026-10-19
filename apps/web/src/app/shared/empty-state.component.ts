@@ -6,13 +6,14 @@ import { booleanAttribute, ChangeDetectionStrategy, Component, input } from "@an
  * a quiet glyph, a short sentence, and at most one action projected into the slot.
  *
  * `size="sm"` is for inline gaps inside a settings section or a drawer; the default is for a page
- * or panel whose whole content area is empty.
+ * or panel whose whole content area is empty. `raised` is for a state that sits straight on a board
+ * view's canvas instead of inside a panel.
  */
 @Component({
   selector: "k-empty-state",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { "[class.is-sm]": "size() === 'sm'", "[class.is-plain]": "plain()", "[class.is-success]": "tone() === 'success'", role: "status" },
+  host: { "[class.is-sm]": "size() === 'sm'", "[class.is-plain]": "plain()", "[class.is-raised]": "raised()", "[class.is-success]": "tone() === 'success'", role: "status" },
   template: `
     <i class="es-icon ti" [class]="'es-icon ti ti-' + icon()" aria-hidden="true"></i>
     <p class="es-title">{{ title() }}</p>
@@ -44,6 +45,17 @@ import { booleanAttribute, ChangeDetectionStrategy, Component, input } from "@an
     :host.is-plain {
       border: 0;
       padding-block: var(--space-8);
+    }
+
+    /* On a board view's canvas, which may be a chosen background gradient, a transparent dashed
+       outline floats over the colour and its muted copy loses contrast. Raised, it is its own card
+       at a reading width, filled and bordered like a list, so it reads the same on any background. */
+    :host.is-raised {
+      width: min(440px, 100%);
+      margin-inline: auto;
+      background: var(--surface);
+      border-style: solid;
+      box-shadow: var(--shadow-sm);
     }
 
     .es-icon {
@@ -99,5 +111,6 @@ export class EmptyStateComponent {
   readonly text = input<string | null>(null);
   readonly size = input<"sm" | "md">("md");
   readonly plain = input(false, { transform: booleanAttribute });
+  readonly raised = input(false, { transform: booleanAttribute });
   readonly tone = input<"neutral" | "success">("neutral");
 }

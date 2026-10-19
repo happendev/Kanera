@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { ACCENTS, THEMES } from "../appearance.js";
 import { LOCALES } from "../locales.js";
 import { citext } from "./_citext.js";
@@ -45,6 +45,16 @@ export const users = pgTable(
     // browser was showing; null is a legacy account that never chose, which the web app resolves from
     // the browser and mail renders in SOURCE_LOCALE.
     locale: text("locale", { enum: LOCALES }),
+    // The home "Getting started" checklist. Account-scoped like the preferences above, so closing
+    // it on one device closes it everywhere. Hidden moves it off home (the account menu still has
+    // it) and can be undone; dismissed removes it for good.
+    gettingStartedHiddenAt: timestamp("getting_started_hidden_at", { withTimezone: true }),
+    gettingStartedDismissedAt: timestamp("getting_started_dismissed_at", { withTimezone: true }),
+    // First use of the steps that leave no durable trace of their own (opening the palette, a
+    // filter, Work done, quick edit), as step key -> ISO timestamp. Every other step is derived from
+    // the rows the step itself creates. A map rather than a column each: these come and go with the
+    // checklist's copy, and none is ever queried across users.
+    gettingStartedUsed: jsonb("getting_started_used").$type<Partial<Record<string, string>>>().notNull().default({}),
     lastOnlineAt: timestamp("last_online_at", { withTimezone: true }),
     // Set by a platform admin to soft-delete the user. Hides them from tenant listings and blocks auth;
     // the row is retained so historical author/audit references stay valid. Recoverable until purged.

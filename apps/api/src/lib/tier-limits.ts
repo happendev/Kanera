@@ -1,4 +1,4 @@
-import type { Entitlements } from "@kanera/shared/dto";
+import type { Entitlements, PlanUsageMeter, PlanUsageResponse } from "@kanera/shared/dto";
 import { automationMonthlyUsage, automations, boards, clientGuestSeats, clientMembers, clients, users, workspaces, type ClientBillingStatus, type ClientPlan } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { db, type Tx } from "../db.js";
@@ -77,29 +77,76 @@ export async function lockTenant(clientId: string, tx: Tx): Promise<void> {
   await tx.execute(sql`select 1 from ${clients} where ${clients.id} = ${clientId} for update`);
 }
 
-export async function assertBoardLimit(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
-  if (await isUnlimited(clientId, tx, config)) return;
-  await lockTenant(clientId, tx);
-  // Workspaces are unlimited on Free, so the board cap must be org-wide rather than workspace-local.
+// The counters below are the single definition of what each cap counts. Enforcement and the plan
+// usage meters (getPlanUsage) both read them, so a meter at its limit means the next create fails.
+
+// Workspaces are unlimited on Free, so the board cap is org-wide rather than workspace-local.
+// Archived boards free their slot; standalone boards (hidden board workspaces) count like any other.
+async function countLiveBoards(clientId: string, tx: Tx): Promise<number> {
   const [row] = await tx
     .select({ count: sql<number>`count(*)::int` })
     .from(boards)
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .where(and(eq(workspaces.clientId, clientId), isNull(boards.archivedAt)));
-  const current = row?.count ?? 0;
+  return row?.count ?? 0;
+}
+
+// Accepted, active members only; pending invites, suspended members (disabled by a prior downgrade),
+// and removed member tombstones do not occupy a slot (mirrors paid-guest-seats).
+async function countActiveOrgMembers(clientId: string, tx: Tx): Promise<number> {
+  const [row] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(clientMembers)
+    .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)));
+  return row?.count ?? 0;
+}
+
+// Guests holding a paid seat draw from the same pool as members on a Pro subscription.
+async function countPaidGuestSeats(clientId: string, tx: Tx): Promise<number> {
+  const [row] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(clientGuestSeats)
+    .innerJoin(users, eq(users.id, clientGuestSeats.userId))
+    .where(and(eq(clientGuestSeats.clientId, clientId), isNull(users.deletedAt)));
+  return row?.count ?? 0;
+}
+
+async function countEnabledAutomations(clientId: string, tx: Tx, excludeId?: string): Promise<number> {
+  const conditions = [eq(workspaces.clientId, clientId), eq(automations.enabled, true)];
+  if (excludeId) conditions.push(ne(automations.id, excludeId));
+  const [row] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(automations)
+    .innerJoin(workspaces, eq(workspaces.id, automations.workspaceId))
+    .where(and(...conditions));
+  return row?.count ?? 0;
+}
+
+// The execution allowance is a UTC calendar month, keyed by its first day.
+function automationPeriodStart(now: Date): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
+async function countAutomationExecutions(clientId: string, tx: Tx, now: Date): Promise<number> {
+  const [usage] = await tx
+    .select({ executionCount: automationMonthlyUsage.executionCount })
+    .from(automationMonthlyUsage)
+    .where(and(eq(automationMonthlyUsage.clientId, clientId), eq(automationMonthlyUsage.periodStart, automationPeriodStart(now))))
+    .limit(1);
+  return usage?.executionCount ?? 0;
+}
+
+export async function assertBoardLimit(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
+  if (await isUnlimited(clientId, tx, config)) return;
+  await lockTenant(clientId, tx);
+  const current = await countLiveBoards(clientId, tx);
   if (current >= config.HOSTED_FREE_MAX_BOARDS) throw planLimitError("boards", current, config.HOSTED_FREE_MAX_BOARDS);
 }
 
 export async function assertOrgMemberLimit(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
   if (await isUnlimited(clientId, tx, config)) return;
   await lockTenant(clientId, tx);
-  // Accepted, active members only; pending invites, suspended members (disabled by a prior downgrade),
-  // and removed member tombstones do not occupy a slot (mirrors paid-guest-seats).
-  const [row] = await tx
-    .select({ count: sql<number>`count(*)::int` })
-    .from(clientMembers)
-    .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)));
-  const current = row?.count ?? 0;
+  const current = await countActiveOrgMembers(clientId, tx);
   if (current >= config.HOSTED_FREE_MAX_ORG_MEMBERS) throw planLimitError("members", current, config.HOSTED_FREE_MAX_ORG_MEMBERS);
 }
 
@@ -127,16 +174,7 @@ export async function assertSeatPoolAvailable(clientId: string, tx: Tx = db, con
   await lockTenant(clientId, tx);
   const [seatRow] = await tx.select({ seatLimit: clients.seatLimit }).from(clients).where(eq(clients.id, clientId)).limit(1);
   const seatLimit = seatRow?.seatLimit ?? 1;
-  const [memberRow] = await tx
-    .select({ count: sql<number>`count(*)::int` })
-    .from(clientMembers)
-    .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)));
-  const [guestSeatRow] = await tx
-    .select({ count: sql<number>`count(*)::int` })
-    .from(clientGuestSeats)
-    .innerJoin(users, eq(users.id, clientGuestSeats.userId))
-    .where(and(eq(clientGuestSeats.clientId, clientId), isNull(users.deletedAt)));
-  const used = (memberRow?.count ?? 0) + (guestSeatRow?.count ?? 0);
+  const used = (await countActiveOrgMembers(clientId, tx)) + (await countPaidGuestSeats(clientId, tx));
   if (used >= seatLimit) throw seatLimitError(used, seatLimit);
 }
 
@@ -148,16 +186,9 @@ export async function assertEnabledAutomationLimit(
 ): Promise<void> {
   if (await isUnlimited(clientId, tx, config)) return;
   await lockTenant(clientId, tx);
-  const conditions = [eq(workspaces.clientId, clientId), eq(automations.enabled, true)];
   // When toggling an existing automation on, exclude it from the count so re-enabling the only
   // allowed automation does not trip the limit against itself.
-  if (options.excludeId) conditions.push(ne(automations.id, options.excludeId));
-  const [row] = await tx
-    .select({ count: sql<number>`count(*)::int` })
-    .from(automations)
-    .innerJoin(workspaces, eq(workspaces.id, automations.workspaceId))
-    .where(and(...conditions));
-  const current = row?.count ?? 0;
+  const current = await countEnabledAutomations(clientId, tx, options.excludeId);
   if (current >= config.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS) {
     throw planLimitError("enabled automations", current, config.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS);
   }
@@ -170,7 +201,7 @@ export async function claimAutomationExecution(
   config: TierLimitEnv = env,
 ): Promise<boolean> {
   if (await isUnlimited(clientId, tx, config)) return true;
-  const periodStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const periodStart = automationPeriodStart(now);
   const max = config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY;
   // The conditional upsert is the quota reservation: concurrent triggers can never increment the
   // same organisation/month past the cap. Keeping it in the action transaction means an execution
@@ -197,13 +228,7 @@ export async function getAutomationExecutionsRemaining(
   config: TierLimitEnv = env,
 ): Promise<number | null> {
   if (await isUnlimited(clientId, tx, config)) return null;
-  const periodStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-  const [usage] = await tx
-    .select({ executionCount: automationMonthlyUsage.executionCount })
-    .from(automationMonthlyUsage)
-    .where(and(eq(automationMonthlyUsage.clientId, clientId), eq(automationMonthlyUsage.periodStart, periodStart)))
-    .limit(1);
-  return Math.max(0, config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY - (usage?.executionCount ?? 0));
+  return Math.max(0, config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY - (await countAutomationExecutions(clientId, tx, now)));
 }
 
 export async function shouldEnableSeededAutomations(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<boolean> {
@@ -327,4 +352,73 @@ export function getEntitlements(
     webhooksAllowed: false,
     boardSyncAllowed: false,
   };
+}
+
+type PlanUsageCounts = {
+  boards: number;
+  members: number;
+  paidGuestSeats: number;
+  enabledAutomations: number;
+  automationExecutions: number;
+};
+
+/**
+ * Pure projection of an organisation's counts onto its plan's caps for the usage meters. Limits come
+ * from getEntitlements (the same Free definition enforcement uses); the seat pool mirrors
+ * assertSeatPoolAvailable, which only caps active and past-due subscriptions, never trials.
+ */
+export function projectPlanUsage(
+  entitlements: Pick<Entitlements, "tier" | "maxBoards" | "maxOrgMembers" | "maxEnabledAutomations" | "maxAutomationExecutionsPerMonth">,
+  billing: { billingStatus: ClientBillingStatus | null | undefined; seatLimit: number },
+  counts: PlanUsageCounts,
+  now: Date,
+): PlanUsageResponse {
+  const nextPeriod = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const executionLimit = entitlements.maxAutomationExecutionsPerMonth;
+  // Free counts members only (guests are not available there). Trial and Pro bill per seat, which
+  // includes guests holding a paid seat.
+  const people: PlanUsageMeter = entitlements.tier === "free"
+    ? { key: "members", used: counts.members, limit: entitlements.maxOrgMembers, resetsAt: null }
+    : {
+      key: "seats",
+      used: counts.members + counts.paidGuestSeats,
+      limit: entitlements.tier === "paid" && (billing.billingStatus === "active" || billing.billingStatus === "past_due") ? billing.seatLimit : null,
+      resetsAt: null,
+    };
+  return {
+    tier: entitlements.tier,
+    meters: [
+      { key: "boards", used: counts.boards, limit: entitlements.maxBoards, resetsAt: null },
+      people,
+      { key: "activeAutomations", used: counts.enabledAutomations, limit: entitlements.maxEnabledAutomations, resetsAt: null },
+      // claimAutomationExecution only counts while the plan caps executions, so an uncapped plan
+      // has no trustworthy number to show.
+      executionLimit === null
+        ? { key: "automationExecutions", used: null, limit: null, resetsAt: null }
+        : { key: "automationExecutions", used: counts.automationExecutions, limit: executionLimit, resetsAt: nextPeriod.toISOString() },
+    ],
+  };
+}
+
+/** Plan usage meters for an organisation. Self-hosted has no plans, so it reports no meters. */
+export async function getPlanUsage(clientId: string, tx: Tx = db, now = new Date(), config: TierLimitEnv = env): Promise<PlanUsageResponse> {
+  if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return { tier: null, meters: [] };
+  const [state] = await tx
+    .select({ plan: clients.plan, billingStatus: clients.billingStatus, currentPeriodEnd: clients.currentPeriodEnd, seatLimit: clients.seatLimit })
+    .from(clients)
+    .where(eq(clients.id, clientId))
+    .limit(1);
+  const [boardCount, members, paidGuestSeats, enabledAutomations, automationExecutions] = await Promise.all([
+    countLiveBoards(clientId, tx),
+    countActiveOrgMembers(clientId, tx),
+    countPaidGuestSeats(clientId, tx),
+    countEnabledAutomations(clientId, tx),
+    countAutomationExecutions(clientId, tx, now),
+  ]);
+  return projectPlanUsage(
+    getEntitlements(state?.plan, state?.billingStatus, state?.currentPeriodEnd, config),
+    { billingStatus: state?.billingStatus, seatLimit: state?.seatLimit ?? 1 },
+    { boards: boardCount, members, paidGuestSeats, enabledAutomations, automationExecutions },
+    now,
+  );
 }

@@ -222,6 +222,7 @@ const cachedDefinition: WorkViewDefinition = {
     inProgressOnly: false,
     inProgressTooLongOnly: false,
     blockedOnly: false,
+    atRiskOnly: false,
     dueFrom: null,
     dueTo: null,
     overdueOnly: false,
@@ -1005,7 +1006,7 @@ describe("GlobalWorkState", () => {
   it("keeps an empty cached Portfolio summary visible offline", async () => {
     const portfolio: PortfolioSummary = {
       days: 30,
-      totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0, inProgress: 0, inProgressTooLong: 0 },
+      totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0, inProgress: 0, inProgressTooLong: 0, blocked: 0, atRisk: 0 },
       buckets: [],
       activityDays: 60,
       activity: [],
@@ -1177,6 +1178,7 @@ describe("GlobalWorkState", () => {
         inProgressOnly: false,
         inProgressTooLongOnly: false,
         blockedOnly: false,
+        atRiskOnly: false,
         dueFrom: null,
         dueTo: null,
         overdueOnly: false,

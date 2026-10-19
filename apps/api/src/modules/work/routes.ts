@@ -66,6 +66,7 @@ import {
   cardAccessCondition as accessCondition,
   cardDueColumns,
   cardSummaryDueColumns as cardColumns,
+  dependencyAtRiskSql,
   dueSoonSql,
   overdueChecklistItemSql,
   overdueChecklistSql,
@@ -214,7 +215,8 @@ function baseCardConditions(
   authUserId: string,
   scopeBoards: AccessibleBoard[],
   rawFilters: unknown,
-  options: { teamUserIds?: string[]; forceUserId?: string; portfolio?: boolean } = {},
+  // `blockerBoards`: every board the viewer can read, for judging at-risk blockers outside the scope.
+  options: { teamUserIds?: string[]; forceUserId?: string; portfolio?: boolean; blockerBoards?: AccessibleBoard[] } = {},
   columns = cardColumns,
 ): SQL[] {
   const filters = dto.workFiltersSchema.parse(rawFilters ?? {});
@@ -248,16 +250,8 @@ function baseCardConditions(
   // the card sits in one; a completed card there is finished work, not work in progress.
   if (filters.inProgressOnly) conditions.push(isNotNull(columns.inProgressSince), isNull(columns.completedAt));
   if (filters.inProgressTooLongOnly) conditions.push(isNull(columns.completedAt), inProgressTooLongSql(columns.inProgressSince));
-  // Same definition as card_summary_view.blocked_by_count and lib/card-relations.ts: open blockers
-  // only, including ones on boards the viewer cannot open. A done card is not waiting on anything.
-  if (filters.blockedOnly) conditions.push(isNull(columns.completedAt), sql`exists (
-    select 1 from card_relation work_blocker_link
-    inner join card work_blocker on work_blocker.id = work_blocker_link.source_card_id
-    where work_blocker_link.target_card_id = ${columns.id}
-      and work_blocker_link.kind = 'blocks'
-      and work_blocker.completed_at is null
-      and work_blocker.archived_at is null
-  )`);
+  if (filters.blockedOnly) conditions.push(isNull(columns.completedAt), hasOpenBlockerSql(columns.id));
+  if (filters.atRiskOnly) conditions.push(isNull(columns.completedAt), dependencyAtRiskSql(authUserId, options.blockerBoards ?? scopeBoards, columns));
   if (filters.completedFrom) conditions.push(gte(columns.completedAt, new Date(filters.completedFrom)));
   if (filters.completedTo) conditions.push(lte(columns.completedAt, new Date(filters.completedTo)));
   if (filters.dueFrom) conditions.push(gte(columns.dueDateLocalDate, filters.dueFrom));
@@ -707,6 +701,7 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
     forceUserId: query.lens === "my" ? authUserId : undefined,
     teamUserIds: query.lens === "team" ? requestedTeamIds : undefined,
     portfolio: query.lens === "portfolio",
+    blockerBoards: allBoards,
   }, cardDueColumns);
   const cursor = decodeCursor(query.cursor);
   const asOf = cursor ? new Date(cursor.asOf) : new Date();
@@ -841,6 +836,22 @@ function inProgressTooLongSql(inProgressSince: SQLWrapper) {
   return sql`(${workspaces.inProgressAlertDays} > 0 and ${inProgressSince} <= now() - make_interval(days => ${workspaces.inProgressAlertDays}))`;
 }
 
+/**
+ * Same definition as card_summary_view.blocked_by_count and lib/card-relations.ts: open blockers
+ * only, including ones on boards the viewer cannot open. Callers add the "not completed" condition:
+ * a done card is not waiting on anything.
+ */
+function hasOpenBlockerSql(cardId: SQLWrapper) {
+  return sql`exists (
+    select 1 from card_relation work_blocker_link
+    inner join card work_blocker on work_blocker.id = work_blocker_link.source_card_id
+    where work_blocker_link.target_card_id = ${cardId}
+      and work_blocker_link.kind = 'blocks'
+      and work_blocker.completed_at is null
+      and work_blocker.archived_at is null
+  )`;
+}
+
 async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input: unknown): Promise<PortfolioSummary> {
   const query = dto.workPortfolioQueryBody.parse(input);
   const scopeBoards = applyWorkScope(allBoards, query.scope);
@@ -848,7 +859,7 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
   // Portfolio health uses each joined workspace's active-card inactivity boundary, matching the
   // board UI even when an organisation's workspaces intentionally have different thresholds.
   const filters = dto.workFiltersSchema.parse({ ...(query.filters ?? {}), completion: "all" });
-  const conditions = baseCardConditions(authUserId, scopeBoards, filters, { portfolio: true }, cardDueColumns);
+  const conditions = baseCardConditions(authUserId, scopeBoards, filters, { portfolio: true, blockerBoards: allBoards }, cardDueColumns);
 
   const rows = await db
     .select({
@@ -864,6 +875,8 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
       inactive: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.updatedAt} <= now() - make_interval(days => ${workspaces.inactiveCardsDays}))::integer`,
       inProgress: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.inProgressSince} is not null)::integer`,
       inProgressTooLong: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${inProgressTooLongSql(cards.inProgressSince)})::integer`,
+      blocked: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${hasOpenBlockerSql(cards.id)})::integer`,
+      atRisk: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${dependencyAtRiskSql(authUserId, allBoards, cardDueColumns)})::integer`,
       completed: sql<number>`count(*) filter (where ${cards.completedAt} >= ${from})::integer`,
     })
     .from(cards)
@@ -919,6 +932,8 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
       inactive: row.inactive,
       inProgress: row.inProgress,
       inProgressTooLong: row.inProgressTooLong,
+      blocked: row.blocked,
+      atRisk: row.atRisk,
       completed: row.completed,
       overdueChecklistItems: overdueChecklistByBoard.get(row.boardId) ?? 0,
     }];
@@ -942,7 +957,9 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
     inactive: sum.inactive + bucket.inactive,
     inProgress: sum.inProgress + bucket.inProgress,
     inProgressTooLong: sum.inProgressTooLong + bucket.inProgressTooLong,
-  }), { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0, inProgress: 0, inProgressTooLong: 0 });
+    blocked: sum.blocked + bucket.blocked,
+    atRisk: sum.atRisk + bucket.atRisk,
+  }), { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0, inProgress: 0, inProgressTooLong: 0, blocked: 0, atRisk: 0 });
 
   return { days: query.days, totals, buckets, activityDays: PORTFOLIO_ACTIVITY_DAYS, activity };
 }

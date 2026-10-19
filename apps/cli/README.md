@@ -187,6 +187,15 @@ kanera skill            # print the portable Agent Skill document for another ha
 kanera mcp              # serve the same tools over stdio MCP, using the stored credential
 ```
 
+Both setup targets teach the complete card workflow: start a run before substantive work, keep
+progress visible, post an outcome comment with verification and links, and move to the board's
+appropriate list before the final reply. Review is the default when acceptance remains; completion
+follows the user's instructions or established workflow. Read-only and exploratory requests cause
+no tracking writes, and explicit user restrictions take precedence.
+
+After upgrading, replace an existing Claude skill with `kanera setup claude --force`. Existing
+`AGENTS.md` sections are preserved; refresh yours from `kanera skill` if it lacks the work loop.
+
 `kanera mcp` means a user who has already run `kanera auth login` does not configure a second
 credential in a second place to use Kanera from an MCP client.
 

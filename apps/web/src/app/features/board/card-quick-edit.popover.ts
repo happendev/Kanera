@@ -1,3 +1,4 @@
+import { GettingStartedService } from "../../core/getting-started/getting-started.service";
 import type {
   AfterViewInit,
   ElementRef,
@@ -262,6 +263,7 @@ export class CardQuickEditPopover implements OnInit, AfterViewInit {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly state = inject(BoardState, { optional: true });
+  private readonly gettingStarted = inject(GettingStartedService);
 
   readonly cardId = input.required<string>();
   readonly title = input.required<string>();
@@ -290,6 +292,8 @@ export class CardQuickEditPopover implements OnInit, AfterViewInit {
   private readonly titleInput?: ElementRef<HTMLTextAreaElement>;
 
   constructor() {
+    // Opened from the card menu, by right-click or the card's actions button: the "Quick edit" step.
+    this.gettingStarted.noteUsed("quickEdit");
     this.panel.configure({
       // Beside the card rather than below it: the card row is the anchor, and the panel is taller than
       // most rows have room under them.

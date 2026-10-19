@@ -67,7 +67,16 @@ void test("the submission plugin declares the hosted Kanera MCP server", async (
       oauth_resource: "https://mcp.kanera.app/mcp",
       extensions: {
         "com.openai": {
-          auth: { type: "oauth", client: { mode: "dcr" } },
+          auth: {
+            type: "oauth",
+            client: { mode: "dcr" },
+            authorizationServerBase: "https://api.kanera.app",
+            authorizationUrl: "https://api.kanera.app/oauth/authorize",
+            tokenUrl: "https://api.kanera.app/oauth/token",
+            registrationUrl: "https://api.kanera.app/oauth/register",
+            resource: "https://mcp.kanera.app/mcp",
+            baseScopes: ["kanera:read", "kanera:write"],
+          },
         },
       },
     },

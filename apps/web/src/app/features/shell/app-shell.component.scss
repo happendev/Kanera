@@ -1277,6 +1277,63 @@ k-support-session-banner {
   margin-left: auto;
 }
 
+// The hidden "Getting started" checklist: a progress ring, its count, and a remove button on one row.
+.user-popover .getting-started-menu {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+}
+
+.user-popover .getting-started-open {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.getting-started-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// The menu's item styles let every label span grow; the count must not, or it takes half the row
+// and its digits sit mid-row instead of beside the remove button.
+.user-popover .getting-started-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+// A data mark, not an icon: a conic fill masked to a ring. It draws at the size of a Tabler glyph's ink inside it (20 of 24 grid units, so ~13px),
+// or it reads larger than its neighbours and the label beside it looks pushed out of line.
+.getting-started-ring {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  // Centred in the 22px slot of the organisation avatar on the row below, so both labels start
+  // on the same line.
+  margin: 1.5px 4.5px;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) calc(var(--gs-progress, 0) * 1%), var(--border-strong) 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+}
+
+.user-popover .getting-started-remove {
+  flex: none;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+
+  > .ti {
+    width: auto;
+  }
+}
+
+
 .nav-context-menu {
   display: flex;
   flex-direction: column;
@@ -1484,6 +1541,10 @@ k-support-session-banner {
 
   .organisation-action {
     min-height: 38px;
+  }
+
+  .user-popover .getting-started-remove {
+    width: 44px;
   }
 }
 

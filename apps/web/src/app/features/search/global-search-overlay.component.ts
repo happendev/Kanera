@@ -1,6 +1,6 @@
 import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
@@ -12,6 +12,7 @@ import type {
 import { actionMatchesQuery, CommandPaletteService, resolveDetail, type PaletteAction } from "../../core/search/command-palette.service";
 import { formatShortcut } from "../../core/keyboard/keyboard-shortcuts.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
+import { GettingStartedService } from "../../core/getting-started/getting-started.service";
 import { AuthService } from "../../core/auth/auth.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
@@ -439,6 +440,7 @@ export class GlobalSearchOverlayComponent {
   private readonly theme = inject(ThemeService);
   private readonly auth = inject(AuthService);
   private readonly palette = inject(CommandPaletteService);
+  private readonly gettingStarted = inject(GettingStartedService);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   private readonly inputEl = viewChild<ElementRef<HTMLInputElement>>("searchInput");
@@ -508,6 +510,11 @@ export class GlobalSearchOverlayComponent {
     effect(() => {
       const el = this.inputEl()?.nativeElement;
       if (this.search.isOpen() && el) el.focus();
+    });
+    // Ticks the home checklist's palette step. Keyed on isOpen alone; the service's own state reads
+    // stay untracked so its optimistic tick cannot re-run this effect.
+    effect(() => {
+      if (this.search.isOpen()) untracked(() => this.gettingStarted.noteUsed("commandPalette"));
     });
     // Reset the highlight to the first result whenever the result set changes.
     effect(() => {

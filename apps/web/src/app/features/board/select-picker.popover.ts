@@ -10,6 +10,8 @@ import {
 import type { WireCustomFieldOption } from "@kanera/shared/events";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { ListboxNav } from "../../shared/listbox-nav";
+import { MatchHighlightComponent } from "../../shared/match-highlight.component";
 import { byPosition } from "../../shared/position-sort";
 
 // Option picker for `select` custom fields. Single vs multi selection is decided
@@ -17,7 +19,7 @@ import { byPosition } from "../../shared/position-sort";
 @Component({
   selector: "k-select-picker",
   standalone: true,
-  imports: [],
+  imports: [MatchHighlightComponent],
   hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -33,26 +35,38 @@ import { byPosition } from "../../shared/position-sort";
         type="text"
         placeholder="Search options…"
         i18n-placeholder
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded="true"
+        [attr.aria-controls]="nav.listId"
+        [attr.aria-activedescendant]="nav.activeDescendant()"
         [value]="query()"
-        (input)="query.set($any($event.target).value)"
+        (input)="onQuery($any($event.target).value)"
+        (keydown)="onKeydown($event)"
         autofocus
       />
-      <div class="lp-list">
-        @if (filtered().length === 0) {
-          <p class="lp-empty" i18n>No matching options</p>
-        }
+      @if (filtered().length === 0) {
+        <p class="lp-empty" i18n>No matching options</p>
+      }
+      <div class="lp-list" role="listbox" [attr.aria-multiselectable]="allowMultiple()" [id]="nav.listId" (keydown)="onKeydown($event)">
         @for (option of filtered(); track option.id) {
           <button
             type="button"
             class="lp-row"
+            role="option"
+            tabindex="-1"
+            [id]="nav.optionId(option.id)"
+            [attr.aria-selected]="selectedIds().includes(option.id)"
+            [class.is-active]="nav.isActive(option.id)"
             [class.is-selected]="selectedIds().includes(option.id)"
             (click)="toggle.emit(option.id)"
+            (pointermove)="nav.hover(option.id, $event)"
           >
             <span
               class="lp-dot"
               [style.background]="option.color ? 'var(--color-' + option.color + ')' : 'var(--border-strong)'"
             ></span>
-            <span class="lp-name">{{ option.label }}</span>
+            <span class="lp-name"><k-match-highlight [text]="option.label" [query]="query()" /></span>
             @if (selectedIds().includes(option.id)) {
               <i class="ti ti-check lp-check"></i>
             }
@@ -142,6 +156,12 @@ import { byPosition } from "../../shared/position-sort";
       transition: background-color 0.12s;
       &:hover { background: var(--surface-hover); }
       &.is-selected { background: var(--surface-2); }
+      /* Keyboard row (the pointer moves it too): hover wash plus an inset ring so it stays visible
+         on an already-tinted selected row. A ring, never an edge stripe. */
+      &.is-active {
+        background: var(--surface-hover);
+        box-shadow: inset 0 0 0 1px var(--border-strong);
+      }
     }
 
     .lp-dot {
@@ -203,4 +223,15 @@ export class SelectPickerPopover {
     if (!q) return sorted;
     return sorted.filter((o) => o.label.toLowerCase().includes(q));
   });
+
+  readonly nav = new ListboxNav(() => this.filtered().map((option) => ({ key: option.id })));
+
+  onQuery(value: string): void {
+    this.query.set(value);
+    this.nav.resetFor(value);
+  }
+
+  onKeydown(event: KeyboardEvent): void {
+    this.nav.onKeydown(event, (key) => this.toggle.emit(key));
+  }
 }

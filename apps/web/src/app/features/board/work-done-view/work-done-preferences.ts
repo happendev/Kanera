@@ -1,14 +1,20 @@
 import { computed, signal, type Signal } from "@angular/core";
 import type { SegmentedOption } from "../../../shared/segmented.component";
-import { mediaQuerySignal } from "../../../shared/media-query.signal";
-import { NARROW_WORK_DONE_LAYOUT_QUERY, type WorkDoneLayout, type WorkDoneRangePreset } from "./work-done.types";
+import type { WorkDoneLayout, WorkDoneRangePreset } from "./work-done.types";
 
 export type WorkDonePreferenceScope = "board" | "global";
 
 const STORAGE_KEY = "kanera.workDone.prefs";
 
 export interface WorkDonePreferences {
+  /** Period preset for the list layout. */
   preset?: WorkDoneRangePreset;
+  /**
+   * Period preset for the report layout, kept apart from `preset`: a timeline is usually read over
+   * the last few days while a report is read over the working week, so switching layouts switches
+   * periods rather than making the reader re-pick one each time.
+   */
+  reportPreset?: WorkDoneRangePreset;
   layout?: WorkDoneLayout;
 }
 
@@ -44,7 +50,9 @@ export function updateWorkDonePreferences(
 }
 
 function readWorkDoneLayout(scope: WorkDonePreferenceScope): WorkDoneLayout {
-  return readWorkDonePreferences(scope).layout === "grid" ? "grid" : "list";
+  const layout = readWorkDonePreferences(scope).layout;
+  // A "grid" remembered from before that layout was retired falls back to the list.
+  return layout === "report" ? "report" : "list";
 }
 
 function writeWorkDoneLayout(scope: WorkDonePreferenceScope, layout: WorkDoneLayout): void {
@@ -52,28 +60,24 @@ function writeWorkDoneLayout(scope: WorkDonePreferenceScope, layout: WorkDoneLay
 }
 
 export interface WorkDoneLayoutState {
-  /** The layout to render: the stored preference, or List while the grid cannot form columns. */
+  /** The layout to render: the stored preference. */
   layout: Signal<WorkDoneLayout>;
   options: Signal<readonly SegmentedOption<WorkDoneLayout>[]>;
   setLayout(layout: WorkDoneLayout): void;
 }
 
-/**
- * The list/grid choice for a Work Done surface. Grid is a wide-screen preference, so below the
- * narrow breakpoint the stored choice is kept but List is rendered and the Grid option is disabled.
- * Must be created in an injection context (it watches a media query).
- */
+/** The list/report choice for a Work Done surface; both layouts reflow for phones. */
 export function workDoneLayoutState(scope: WorkDonePreferenceScope): WorkDoneLayoutState {
   const preferred = signal<WorkDoneLayout>(readWorkDoneLayout(scope));
-  const narrow = mediaQuerySignal(NARROW_WORK_DONE_LAYOUT_QUERY);
   return {
-    layout: computed(() => (narrow() ? "list" : preferred())),
+    layout: preferred,
     options: computed(() => [
-      { id: "list", icon: "list-details", label: $localize`:Work done layout option - one column:List layout` },
-      { id: "grid", icon: "layout-grid", label: $localize`:Work done layout option - several columns:Grid layout`, disabled: narrow() },
+      // Labelled (hosts render with showLabels): icons alone read as decoration, and Report in
+      // particular was invisible to the people it is for. The long form is the accessible tooltip.
+      { id: "list", icon: "list-details", label: $localize`:Short work done layout label:List`, tooltip: $localize`:Work done layout option - one column:List layout` },
+      { id: "report", icon: "report-analytics", label: $localize`:Short work done layout label:Report`, tooltip: $localize`:Work done layout option - management summary with charts:Report layout` },
     ]),
     setLayout(layout) {
-      if (layout === "grid" && narrow()) return;
       preferred.set(layout);
       writeWorkDoneLayout(scope, layout);
     },

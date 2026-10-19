@@ -91,6 +91,7 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
       inProgressOnly: false,
       inProgressTooLongOnly: false,
       blockedOnly: false,
+      atRiskOnly: false,
       dueFrom: null,
       dueTo: null,
       overdueOnly: false,

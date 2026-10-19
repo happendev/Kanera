@@ -160,6 +160,21 @@ export type SegmentedOption<T extends string = string> = {
         padding-inline: 10px;
       }
 
+      /* The same reveal for a switch sharing a page toolbar's search slot: the slot is the
+         \`sg-room\` container, and labels show once it has room for them beside a usable search field.
+         CSS rather than a viewport query, because what fits depends on the sidebar and on how many
+         other controls share the row. */
+      @container sg-room (min-width: 440px) {
+        .sg-auto-label {
+          max-width: none;
+          margin-left: 6px;
+        }
+
+        .sg-btn:has(.sg-auto-label) {
+          padding-inline: 10px;
+        }
+      }
+
       /* Hover lifts the label and nothing else. The background has to be restated here, because the
          base button rule in styles.scss paints background: var(--accent-hover) on hover and
          button:hover:not(:disabled) — (0,2,1) — outranks the plain .sg-btn fill, which is only

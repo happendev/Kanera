@@ -954,55 +954,16 @@ describe("BoardPage", () => {
 
   it("restores and persists the board Work Done layout without resetting its date range", () => {
     const key = workDonePreferencesStorageKey("board");
-    localStorage.setItem(key, JSON.stringify({ preset: "14d", layout: "grid" }));
+    localStorage.setItem(key, JSON.stringify({ preset: "14d", layout: "report" }));
 
     const fixture = TestBed.createComponent(BoardPage);
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.workDoneLayout()).toBe("grid");
+    expect(fixture.componentInstance.workDoneLayout()).toBe("report");
     fixture.componentInstance.setWorkDoneLayout("list");
     expect(JSON.parse(localStorage.getItem(key) ?? "{}"))
       .toEqual({ preset: "14d", layout: "list" });
-  });
-
-  it("temporarily falls back to List on a narrow screen and restores the saved Grid layout", () => {
-    const originalMatchMedia = window.matchMedia;
-    const listeners = new Set<(event: MediaQueryListEvent) => void>();
-    const media = {
-      matches: true,
-      addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
-      removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
-    };
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: () => media as unknown as MediaQueryList,
-    });
-
-    const key = workDonePreferencesStorageKey("board");
-    localStorage.setItem(key, JSON.stringify({ layout: "grid" }));
-    try {
-      const fixture = TestBed.createComponent(BoardPage);
-      try {
-        fixture.componentRef.setInput("boardId", "board-1");
-        fixture.detectChanges();
-
-        expect(fixture.componentInstance.workDoneLayout()).toBe("list");
-        expect(fixture.componentInstance.workDoneLayoutOptions().find((option) => option.id === "grid")?.disabled)
-          .toBe(true);
-        const stored = JSON.parse(localStorage.getItem(key) ?? "{}") as { layout?: string };
-        expect(stored.layout).toBe("grid");
-
-        media.matches = false;
-        for (const listener of listeners) listener({ matches: false } as MediaQueryListEvent);
-        TestBed.tick();
-        expect(fixture.componentInstance.workDoneLayout()).toBe("grid");
-      } finally {
-        fixture.destroy();
-      }
-    } finally {
-      Object.defineProperty(window, "matchMedia", { configurable: true, value: originalMatchMedia });
-    }
   });
 
   it("loads hidden custom-field values when Table view is active", async () => {

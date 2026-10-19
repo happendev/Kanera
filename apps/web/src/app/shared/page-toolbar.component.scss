@@ -57,7 +57,9 @@
   // Dense overview pages can opt into a wider search slot when it also carries lightweight inline
   // controls that must remain outside the phone filter drawer.
   max-width: var(--pt-search-max-width, 340px);
-  min-width: 0;
+  // A page whose search slot also carries a switch sets a floor, so the controls beside it wrap
+  // onto a second line before search is squeezed under the switch.
+  min-width: var(--pt-search-min-width, 0);
   --search-field-width: 100%;
 
   // A page can omit search entirely (the portfolio summary lists counts, not cards); without this
@@ -133,6 +135,7 @@
   .pt-search {
     flex: 1 1 160px;
     max-width: none;
+    min-width: 0;
   }
 
   // Collapsed, the search field is the only thing left in .pt-main. A page without one (the portfolio

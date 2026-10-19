@@ -213,52 +213,9 @@
          The three due tiles filter the agenda below; a tile with nothing to filter to, and the
          Done tile (whose detail is the progress panel), render as static readouts so nothing
          looks clickable unless clicking it visibly does something. -->
-    @if (showFirstRun()) {
-    <!-- Three steps, each a link into the place the step happens. Deliberately not a checklist that
-         tracks completion: the gate is "small organisation", and the card leaves when it is closed
-         or when the organisation outgrows it. -->
-    <section class="first-run" aria-labelledby="first-run-heading">
-      <div class="first-run-head">
-        <h2 id="first-run-heading" class="section-title" i18n="Section heading">First steps</h2>
-        <button type="button" class="ghost icon sm" aria-label="Dismiss first steps" i18n-aria-label kTooltip="Dismiss" i18n-kTooltip="Tooltip: dismiss the first steps card" (click)="dismissFirstRun()">
-          <i class="ti ti-x"></i>
-        </button>
-      </div>
-      <div class="first-run-steps">
-        @if (firstRunListsLink(); as link) {
-        <a class="first-run-step" [routerLink]="link">
-          <span class="first-run-num">1</span>
-          <span class="first-run-body">
-            <span class="first-run-title" i18n="First steps: step title">Shape your workflow</span>
-            <span class="first-run-text" i18n="First steps: step text">Name the lists cards move through and add the fields your team tracks.</span>
-          </span>
-          <i class="ti ti-chevron-right"></i>
-        </a>
-        }
-        @if (firstRunBoardId(); as boardId) {
-        <button type="button" class="first-run-step" (click)="openBoard(boardId)">
-          <span class="first-run-num">2</span>
-          <span class="first-run-body">
-            <span class="first-run-title" i18n="First steps: step title">Add your first cards</span>
-            <span class="first-run-text" i18n="First steps: step text; C is the keyboard shortcut">Open a board and press C to create a card. Drag it between lists as it moves.</span>
-          </span>
-          <i class="ti ti-chevron-right"></i>
-        </button>
-        }
-        <a class="first-run-step" routerLink="/settings/users">
-          <span class="first-run-num">3</span>
-          <span class="first-run-body">
-            <span class="first-run-title" i18n="First steps: step title">Bring your team</span>
-            <span class="first-run-text" i18n="First steps: step text">Invite people to the organisation, then add them to workspaces or single boards.</span>
-          </span>
-          <i class="ti ti-chevron-right"></i>
-        </a>
-      </div>
-      @if (!touchOnly()) {
-        <p class="first-run-foot" i18n="Hint; ? is the key that opens the shortcuts list">Press <kbd class="k-kbd">?</kbd> anywhere for keyboard shortcuts.</p>
-      }
-    </section>
-    }
+    <!-- Above the tiles while it has something to teach; it removes itself once closed, and never
+         appears for a checklist that was already complete. -->
+    <k-getting-started [boardId]="lastBoardId()" (newStandaloneBoard)="newStandaloneBoard()" />
     <section class="focus-grid" aria-label="Focus" i18n-aria-label="Label for the home page summary tiles">
       <k-stat-tile label="Overdue" i18n-label="Stat tile: overdue cards" icon="alert-triangle" [value]="state.overdueTotal()" [tone]="state.overdueTotal() > 0 ? 'danger' : 'neutral'" [interactive]="state.overdueTotal() > 0" [pressable]="true"
         [active]="focusFilter() === 'overdue'" (activated)="toggleFocus('overdue')" />

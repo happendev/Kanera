@@ -1,3 +1,4 @@
+import { ToastService } from "../../shared/toast.service";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
@@ -44,6 +45,7 @@ type CompletedCardGroup = {
   styleUrl: "./completed-cards-panel.component.scss",
 })
 export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
+  private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly sockets = inject(SocketService);
 
@@ -282,9 +284,11 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
     this.exporting.set(true);
     this.error.set(null);
     try {
-      const payload = await this.buildCompletedExportPayload();
-      this.downloadBlob(JSON.stringify(payload, null, 2), "application/json", this.exportFileName(payload, "json"));
-      this.exportMenuOpen.set(false);
+      await this.runExport(async () => {
+        const payload = await this.buildCompletedExportPayload();
+        this.downloadBlob(JSON.stringify(payload, null, 2), "application/json", this.exportFileName(payload, "json"));
+        this.exportMenuOpen.set(false);
+      });
     } catch {
       this.error.set($localize`Completed cards could not be exported.`);
     } finally {
@@ -297,20 +301,31 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
     this.exporting.set(true);
     this.error.set(null);
     try {
-      const payload = await this.buildCompletedExportPayload();
-      const { default: writeXlsxFile } = await import("write-excel-file/browser");
-      const sheet = buildWorkbookExport(payload).sheets[0]!;
-      await writeXlsxFile(styledSheetData(sheet), {
-        sheet: sheet.name,
-        columns: sheet.columnWidths.map((width) => ({ width })),
-        stickyRowsCount: 4,
-      }).toFile(this.exportFileName(payload, "xlsx"));
-      this.exportMenuOpen.set(false);
+      await this.runExport(async () => {
+        const payload = await this.buildCompletedExportPayload();
+        const { default: writeXlsxFile } = await import("write-excel-file/browser");
+        const sheet = buildWorkbookExport(payload).sheets[0]!;
+        await writeXlsxFile(styledSheetData(sheet), {
+          sheet: sheet.name,
+          columns: sheet.columnWidths.map((width) => ({ width })),
+          stickyRowsCount: 4,
+        }).toFile(this.exportFileName(payload, "xlsx"));
+        this.exportMenuOpen.set(false);
+      });
     } catch {
       this.error.set($localize`Completed cards could not be exported.`);
     } finally {
       this.exporting.set(false);
     }
+  }
+
+  private runExport(operation: () => void | Promise<void>) {
+    return this.toasts.promise(operation, {
+      loading: $localize`Preparing export…`,
+      success: $localize`Export downloaded.`,
+      error: $localize`Couldn't export. Try again.`,
+      icon: "download",
+    });
   }
 
   private inputValue(target: EventTarget | null): string {

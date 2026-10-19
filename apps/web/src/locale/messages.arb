@@ -175,6 +175,7 @@
       "src/app/features/account-settings/storage/storage.page.ts",
       "src/app/features/board/board.page.ts",
       "src/app/features/board/card-detail.component.ts",
+      "src/app/features/home/getting-started.component.ts",
       "src/app/features/notes/workspace-notes.page.ts",
       "src/app/features/search/global-search-overlay.component.ts",
       "src/app/features/shell/app-shell.component.html",
@@ -2793,7 +2794,10 @@
     "description": "Browser notification permission state",
     "x-files": [
       "src/app/core/notifications/browser-push.service.ts",
-      "src/app/features/dependencies/dependency-map.component.ts"
+      "src/app/features/board/board.page.html",
+      "src/app/features/board/work-done-view/work-done-report.ts",
+      "src/app/features/dependencies/dependency-map.component.ts",
+      "src/app/features/global-work/global-work.page.ts"
     ]
   },
   "2921347786783741410": "Not asked yet",
@@ -3416,7 +3420,8 @@
   "@5376258449190300543": {
     "description": "Label: number of seats",
     "x-files": [
-      "src/app/features/account-settings/account-plan/account-plan.page.html"
+      "src/app/features/account-settings/account-plan/account-plan.page.html",
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
     ]
   },
   "403234217926479582": "{$USED} of {$TOTAL} used",
@@ -3501,18 +3506,56 @@
       "src/app/features/account-settings/account-plan/account-plan.page.html"
     ]
   },
+  "5209478800408085052": "Plan usage",
+  "@5209478800408085052": {
+    "description": "Heading above the plan usage meters",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "3377422512078297814": "Near limit",
+  "@3377422512078297814": {
+    "description": "Badge on a plan usage meter at 80% or more of its limit",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "3879752497004604417": "Limit reached",
+  "@3879752497004604417": {
+    "description": "Badge on a plan usage meter that has reached its limit",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "5024699618577775846": "All purchased seats are in use. Add seats above before you invite more people.",
+  "@5024699618577775846": {
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "4170699369782056926": "Your organisation has reached a Free plan limit. Upgrade to Pro to lift it.",
+  "@4170699369782056926": {
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "6825120156443511737": "Your organisation is close to a Free plan limit. Upgrade to Pro for unlimited boards, members, and automations.",
+  "@6825120156443511737": {
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
+  "5175538612783076412": "Your organisation is close to its seat limit. Add seats above before you run out.",
+  "@5175538612783076412": {
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.html"
+    ]
+  },
   "8011944903389422386": "Storage usage",
   "@8011944903389422386": {
     "x-files": [
       "src/app/features/account-settings/account-plan/account-plan.page.html",
       "src/app/features/account-settings/storage/storage.page.html"
-    ]
-  },
-  "1285187689894749614": "{$REMAINING} — shared across your whole organisation. Files you upload to another organisation's board count against their storage, not yours.",
-  "@1285187689894749614": {
-    "description": "Starts with the remaining storage, e.g. '3.8 GB remaining'",
-    "x-files": [
-      "src/app/features/account-settings/account-plan/account-plan.page.html"
     ]
   },
   "8917102681674700841": "Manage storage",
@@ -3522,10 +3565,73 @@
       "src/app/features/account-settings/account-plan/account-plan.page.html"
     ]
   },
-  "4417750524340323633": "Your organisation has reached its storage limit. Contact {$START_LINK}support@kanera.app{$CLOSE_LINK} for more storage.",
-  "@4417750524340323633": {
+  "7107218117130409950": "Boards",
+  "@7107218117130409950": {
+    "description": "Plan usage meter label",
     "x-files": [
-      "src/app/features/account-settings/account-plan/account-plan.page.html"
+      "src/app/features/account-settings/account-plan/account-plan.page.ts",
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/global-work/global-work.page.html",
+      "src/app/features/shell/app-shell.component.html",
+      "src/app/features/workspace-settings/boards/boards.page.html",
+      "src/app/features/workspace-settings/guests/guests.page.html",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4691887509600985309": "Members",
+  "@4691887509600985309": {
+    "description": "Plan usage meter label",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts",
+      "src/app/features/board/bulk-card-actions-menu.popover.ts",
+      "src/app/features/board/card-quick-edit.popover.ts",
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/features/workspace-settings/automations/automation-action-fields.component.ts",
+      "src/app/features/workspace-settings/automations/automations.page.html",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1947060598987185107": "Active automations",
+  "@1947060598987185107": {
+    "description": "Plan usage meter label",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
+    ]
+  },
+  "8887037630189986582": "Automation executions this month",
+  "@8887037630189986582": {
+    "description": "Plan usage meter label",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
+    ]
+  },
+  "7450604306401445632": "{$used} of {$limit}",
+  "@7450604306401445632": {
+    "description": "Plan usage value, e.g. 2 of 3",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
+    ]
+  },
+  "5689164877630739284": "{$used} · Unlimited",
+  "@5689164877630739284": {
+    "description": "Plan usage value with no limit, e.g. 12 · Unlimited",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
+    ]
+  },
+  "240806681889331244": "Unlimited",
+  "@240806681889331244": {
+    "description": "Plan usage value when the plan has no limit",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
+    ]
+  },
+  "2352286574480757975": "Resets {$date}",
+  "@2352286574480757975": {
+    "description": "When the monthly allowance starts again",
+    "x-files": [
+      "src/app/features/account-settings/account-plan/account-plan.page.ts"
     ]
   },
   "3892825090402620438": "Two-factor authentication",
@@ -4023,71 +4129,6 @@
   "2378920110493464361": "Account defaults",
   "@2378920110493464361": {
     "description": "Workspace notification rule status — follows the account-wide settings",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts"
-    ]
-  },
-  "2344516588780022507": "{$size} B",
-  "@2344516588780022507": {
-    "description": "File size in bytes",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts",
-      "src/app/features/account-settings/storage/storage.page.ts",
-      "src/app/features/board/card-composer.dialog.ts",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
-  "6932227221782669858": "{$size} KB",
-  "@6932227221782669858": {
-    "description": "File size in kilobytes",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts",
-      "src/app/features/account-settings/storage/storage.page.ts",
-      "src/app/features/board/card-composer.dialog.ts",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
-  "8382345887776292209": "{$size} MB",
-  "@8382345887776292209": {
-    "description": "File size in megabytes",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts",
-      "src/app/features/account-settings/storage/storage.page.ts",
-      "src/app/features/board/card-composer.dialog.ts",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
-  "1800904542469245972": "{$size} GB",
-  "@1800904542469245972": {
-    "description": "File size in gigabytes",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts",
-      "src/app/features/account-settings/storage/storage.page.ts"
-    ]
-  },
-  "6823275219150478275": "{$used} of {$quota} used",
-  "@6823275219150478275": {
-    "description": "Storage usage, e.g. \"1.2 GB of 5.0 GB used\"",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts"
-    ]
-  },
-  "7721558890815728627": "{$used} used",
-  "@7721558890815728627": {
-    "description": "Storage usage, e.g. \"1.2 GB used\"",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts"
-    ]
-  },
-  "993979649125711182": "Storage is unlimited on this deployment.",
-  "@993979649125711182": {
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts"
-    ]
-  },
-  "7166187228810433597": "{$size} remaining",
-  "@7166187228810433597": {
-    "description": "Storage left, e.g. \"3.8 GB remaining\"",
     "x-files": [
       "src/app/features/account-settings/account-settings.page.ts"
     ]
@@ -6583,6 +6624,40 @@
       "src/app/features/account-settings/storage/storage.page.ts"
     ]
   },
+  "2344516588780022507": "{$size} B",
+  "@2344516588780022507": {
+    "description": "File size in bytes",
+    "x-files": [
+      "src/app/features/account-settings/storage/storage.page.ts",
+      "src/app/features/board/card-composer.dialog.ts",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "6932227221782669858": "{$size} KB",
+  "@6932227221782669858": {
+    "description": "File size in kilobytes",
+    "x-files": [
+      "src/app/features/account-settings/storage/storage.page.ts",
+      "src/app/features/board/card-composer.dialog.ts",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "8382345887776292209": "{$size} MB",
+  "@8382345887776292209": {
+    "description": "File size in megabytes",
+    "x-files": [
+      "src/app/features/account-settings/storage/storage.page.ts",
+      "src/app/features/board/card-composer.dialog.ts",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "1800904542469245972": "{$size} GB",
+  "@1800904542469245972": {
+    "description": "File size in gigabytes",
+    "x-files": [
+      "src/app/features/account-settings/storage/storage.page.ts"
+    ]
+  },
   "1616102757855967475": "All",
   "@1616102757855967475": {
     "description": "File type filter option — all files",
@@ -6852,7 +6927,8 @@
   "@3463797202358605584": {
     "description": "Column heading",
     "x-files": [
-      "src/app/features/account-settings/users/users.page.html"
+      "src/app/features/account-settings/users/users.page.html",
+      "src/app/features/home/getting-started.component.ts"
     ]
   },
   "1196063204965083742": "Workspaces",
@@ -7642,7 +7718,9 @@
   "@2952127331314675199": {
     "description": "Board mirror status badge",
     "x-files": [
-      "src/app/features/board-mirrors/board-mirrors.dialog.ts"
+      "src/app/features/board-mirrors/board-mirrors.dialog.ts",
+      "src/app/features/board/work-done-view/work-done-report.component.html",
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "2904866536433097519": "Choose source lists",
@@ -7769,6 +7847,7 @@
       "src/app/features/global-work/save-view.popover.ts",
       "src/app/features/global-work/team-overview.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
+      "src/app/features/home/getting-started.component.html",
       "src/app/features/notes/notes-view.component.ts",
       "src/app/features/scratchpad/scratchpad-panel.component.html",
       "src/app/features/shell/organisation-action.dialog.ts",
@@ -8304,6 +8383,7 @@
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/table-view/table-columns.util.ts",
       "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/board/work-done-view/work-done-preferences.ts",
       "src/app/features/completed-cards/completed-cards-panel.component.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/share-target/share-target.page.html",
@@ -8602,11 +8682,35 @@
       "src/app/features/board/board.page.html",
       "src/app/features/board/table-view/filter-bar.component.ts",
       "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/global-work/team-overview.component.ts",
       "src/app/features/home/home.page.html",
       "src/app/features/home/home.state.ts",
       "src/app/shared/user-profile/user-profile-popover.component.html"
+    ]
+  },
+  "3554284544203774311": "Show cards waiting on another open card",
+  "@3554284544203774311": {
+    "description": "Tooltip on the Blocked count in the board overview",
+    "x-files": [
+      "src/app/features/board/board.page.html"
+    ]
+  },
+  "8408051157355593241": "Show cards whose blocker is overdue or due after them",
+  "@8408051157355593241": {
+    "description": "Tooltip on the At risk count in the board overview",
+    "x-files": [
+      "src/app/features/board/board.page.html"
+    ]
+  },
+  "239883740512866888": "At risk",
+  "@239883740512866888": {
+    "description": "Board overview count: cards whose blocker is overdue or due after them (keep it short)",
+    "x-files": [
+      "src/app/features/board/board.page.html",
+      "src/app/features/dependencies/dependency-map.component.ts",
+      "src/app/features/global-work/global-work.page.ts"
     ]
   },
   "62814732093089536": "Show unassigned cards",
@@ -8621,6 +8725,7 @@
     "x-files": [
       "src/app/features/board/board.page.html",
       "src/app/features/board/table-view/group-by.util.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/import/trello-import.page.html"
     ]
@@ -8630,7 +8735,8 @@
     "description": "Board overview count: cards with no recent activity",
     "x-files": [
       "src/app/features/board/board.page.html",
-      "src/app/features/board/table-view/filter-bar.component.ts"
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "1209068326542296680": "Show cards in progress",
@@ -8767,6 +8873,13 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
+  "3168241265899648027": "Dependencies layout",
+  "@3168241265899648027": {
+    "x-files": [
+      "src/app/features/board/board.page.html",
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
   "1821222939222457554": "Reset to list columns",
   "@1821222939222457554": {
     "x-files": [
@@ -8803,6 +8916,8 @@
       "src/app/features/board/table-view/filter-bar.component.ts",
       "src/app/features/board/table-view/group-by.util.ts",
       "src/app/features/board/work-done-view/work-done-grouping.ts",
+      "src/app/features/board/work-done-view/work-done-report.component.html",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/home/home.page.html",
@@ -9007,7 +9122,8 @@
   "@7380438472091699995": {
     "description": "Toast; a relative time such as \"5 minutes ago\" follows",
     "x-files": [
-      "src/app/features/board/board.page.ts"
+      "src/app/features/board/board.page.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
   "3756150389690952207": "{count, plural, one {# board member} other {# board members}}",
@@ -9086,6 +9202,30 @@
       "src/app/features/board/board.page.ts"
     ]
   },
+  "2174284193609483488": "Preparing export…",
+  "@2174284193609483488": {
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/board/table-view/board-table-view.component.ts",
+      "src/app/features/completed-cards/completed-cards-panel.component.ts"
+    ]
+  },
+  "7945700064012172493": "Export downloaded.",
+  "@7945700064012172493": {
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/board/table-view/board-table-view.component.ts",
+      "src/app/features/completed-cards/completed-cards-panel.component.ts"
+    ]
+  },
+  "5753202624498398139": "Couldn't export. Try again.",
+  "@5753202624498398139": {
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/board/table-view/board-table-view.component.ts",
+      "src/app/features/completed-cards/completed-cards-panel.component.ts"
+    ]
+  },
   "1365372602653623849": "{count, plural, other {# cards moved.}}",
   "@1365372602653623849": {
     "description": "Toast after dragging several cards",
@@ -9136,19 +9276,6 @@
       "src/app/features/board/bulk-card-actions-menu.popover.ts",
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-quick-edit.popover.ts"
-    ]
-  },
-  "4691887509600985309": "Members",
-  "@4691887509600985309": {
-    "description": "Card members section label",
-    "x-files": [
-      "src/app/features/board/bulk-card-actions-menu.popover.ts",
-      "src/app/features/board/card-quick-edit.popover.ts",
-      "src/app/features/board/table-view/filter-bar.component.ts",
-      "src/app/features/shared/board-members-menu.popover.ts",
-      "src/app/features/workspace-settings/automations/automation-action-fields.component.ts",
-      "src/app/features/workspace-settings/automations/automations.page.html",
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
   "3348547714642337740": "No members",
@@ -9313,6 +9440,18 @@
   "8814541128616247689": "{count, plural, one {# card archived.} other {# cards archived.}}",
   "@8814541128616247689": {
     "description": "Toast after a bulk action",
+    "x-files": [
+      "src/app/features/board/bulk-card-actions-menu.popover.ts"
+    ]
+  },
+  "4742038089517866413": "Updating cards…",
+  "@4742038089517866413": {
+    "x-files": [
+      "src/app/features/board/bulk-card-actions-menu.popover.ts"
+    ]
+  },
+  "1607837845924070671": "Couldn't update all selected cards. Refresh to see the current state.",
+  "@1607837845924070671": {
     "x-files": [
       "src/app/features/board/bulk-card-actions-menu.popover.ts"
     ]
@@ -9545,7 +9684,8 @@
   "@5141352019990967744": {
     "description": "Calendar view mode - show one week",
     "x-files": [
-      "src/app/features/board/calendar-view/board-calendar-view.component.ts"
+      "src/app/features/board/calendar-view/board-calendar-view.component.ts",
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
     ]
   },
   "3198158141036823013": "Could not change the due date",
@@ -11903,8 +12043,7 @@
   "@3825851172372934119": {
     "description": "Error shown when the dependencies popover could not load a card's relations",
     "x-files": [
-      "src/app/features/board/card-relations-popover.component.ts",
-      "src/app/features/dependencies/dependency-map.component.html"
+      "src/app/features/board/card-relations-popover.component.ts"
     ]
   },
   "6650633628037596693": "Try again",
@@ -12780,6 +12919,13 @@
       "src/app/features/board/label-picker.popover.ts"
     ]
   },
+  "8734217413240624023": "Create label “{$NAME}”",
+  "@8734217413240624023": {
+    "description": "Label picker row that creates a new workspace label from the search text and adds it to the card",
+    "x-files": [
+      "src/app/features/board/label-picker.popover.ts"
+    ]
+  },
   "7611855326498002481": "In progress list: each card shows its time in progress",
   "@7611855326498002481": {
     "description": "Tooltip on the marker beside an In progress list's name",
@@ -12793,7 +12939,8 @@
   "@3037427182705835959": {
     "description": "Accessible name of the marker beside an In progress list's name",
     "x-files": [
-      "src/app/features/board/list.component.html"
+      "src/app/features/board/list.component.html",
+      "src/app/features/board/work-done-view/work-done-report.component.html"
     ]
   },
   "5745843220163365478": "List options",
@@ -13687,6 +13834,7 @@
     "description": "Spreadsheet export row label for a group's aggregate values",
     "x-files": [
       "src/app/features/board/table-view/export.util.ts",
+      "src/app/features/board/work-done-view/work-done-report.component.html",
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
@@ -13788,7 +13936,8 @@
   "@7008439939460403347": {
     "description": "Spreadsheet sheet name - per-group report with cards and totals",
     "x-files": [
-      "src/app/features/board/table-view/export.util.ts"
+      "src/app/features/board/table-view/export.util.ts",
+      "src/app/features/board/work-done-view/work-done-preferences.ts"
     ]
   },
   "1955668912634269108": "Overall totals",
@@ -13835,6 +13984,8 @@
       "src/app/features/board/table-view/table-columns.util.ts",
       "src/app/features/board/work-done-view/work-done-day.component.html",
       "src/app/features/board/work-done-view/work-done-grouping.ts",
+      "src/app/features/board/work-done-view/work-done-report.component.html",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/features/completed-cards/completed-cards-panel.component.ts"
     ]
@@ -13844,6 +13995,7 @@
     "description": "Activity type filter option - checklist items that were ticked off",
     "x-files": [
       "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/features/workspace-settings/templates/templates.page.html"
     ]
@@ -13922,18 +14074,6 @@
     "x-files": [
       "src/app/features/board/table-view/filter-bar.component.ts",
       "src/app/features/workspace-settings/automations/automations.page.ts"
-    ]
-  },
-  "7107218117130409950": "Boards",
-  "@7107218117130409950": {
-    "description": "Filter dimension",
-    "x-files": [
-      "src/app/features/board/table-view/filter-bar.component.ts",
-      "src/app/features/global-work/global-work.page.html",
-      "src/app/features/shell/app-shell.component.html",
-      "src/app/features/workspace-settings/boards/boards.page.html",
-      "src/app/features/workspace-settings/guests/guests.page.html",
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
   "2913525949208463386": "Activity type",
@@ -14306,6 +14446,7 @@
     "description": "Due-date group heading - cards due later this week",
     "x-files": [
       "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/completed-cards/date-range-picker.popover.ts",
       "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
@@ -14363,7 +14504,8 @@
   "@4434367879176668365": {
     "description": "Tracked time in words",
     "x-files": [
-      "src/app/features/board/time-in-progress.util.ts"
+      "src/app/features/board/time-in-progress.util.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "5064174445353626071": "less than a minute",
@@ -14384,14 +14526,16 @@
   "@7525315557219832608": {
     "description": "Time a card has spent in progress, in words",
     "x-files": [
-      "src/app/features/board/time-in-progress.util.ts"
+      "src/app/features/board/time-in-progress.util.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "6998559563810944833": "{count, plural, one {# week} other {# weeks}}",
   "@6998559563810944833": {
     "description": "Time a card has spent in progress, in words",
     "x-files": [
-      "src/app/features/board/time-in-progress.util.ts"
+      "src/app/features/board/time-in-progress.util.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "2641132196803376197": "{$tracked} tracked in progress",
@@ -14472,6 +14616,7 @@
     "description": "Work done day tooltip - card moves between lists",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-day.component.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -14530,6 +14675,7 @@
     "description": "A person working through an AI agent, e.g. \"Ada via Claude\"",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-grouping.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/notifications/notifications-panel.component.ts"
     ]
   },
@@ -14562,11 +14708,463 @@
       "src/app/features/board/work-done-view/work-done-preferences.ts"
     ]
   },
-  "3152881158193723229": "Grid layout",
-  "@3152881158193723229": {
-    "description": "Work done layout option - several columns",
+  "7365672942978077102": "Report layout",
+  "@7365672942978077102": {
+    "description": "Work done layout option - management summary with charts",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-preferences.ts"
+    ]
+  },
+  "1195046961047110528": "Loading all matching cards… the right-now counts settle when the full set is ready.",
+  "@1195046961047110528": {
+    "description": "Notice on the report while the host is still loading cards",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "287957726382031982": "Daily flow",
+  "@287957726382031982": {
+    "description": "Report chart heading: cards created and completed per day",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "6805139966769561820": "Cards started and finished each day",
+  "@6805139966769561820": {
+    "description": "Report chart subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "7707176955005055131": "Series",
+  "@7707176955005055131": {
+    "description": "Chart legend label",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "7390482586468665361": "Where open work sits",
+  "@7390482586468665361": {
+    "description": "Report chart heading: open cards per list",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "5704858732039936144": "Right now, not just this period",
+  "@5704858732039936144": {
+    "description": "Report section subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "5874794238234631522": "People",
+  "@5874794238234631522": {
+    "description": "Report section heading: activity and workload per person",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "6907249990641330456": "What each person did this period, and what they hold now",
+  "@6907249990641330456": {
+    "description": "Report section subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "2525458355852558722": "Other activity",
+  "@2525458355852558722": {
+    "description": "Chart legend: created, moved and checklist actions",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "6429423247460526133": "Who worked when",
+  "@6429423247460526133": {
+    "description": "Heatmap label - activity per person per day",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "8125664548979187075": "Open cards by workspace",
+  "@8125664548979187075": {
+    "description": "Report chart heading: open cards per workspace",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "1675530369139942300": "With how many in each were completed this period",
+  "@1675530369139942300": {
+    "description": "Report chart subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "7075517951373626841": "Open cards by board",
+  "@7075517951373626841": {
+    "description": "Report chart heading: open cards per board",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "5903225811285030764": "With how many on each were completed this period",
+  "@5903225811285030764": {
+    "description": "Report chart subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "3390413960056163990": "Open cards by label",
+  "@3390413960056163990": {
+    "description": "Report chart heading: open cards per label",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "2708308689454204194": "With how many of each were completed this period",
+  "@2708308689454204194": {
+    "description": "Report chart subtitle",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "6980359950108336769": "Checklist progress",
+  "@6980359950108336769": {
+    "description": "Report meter heading: checklist items done on open cards",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.html"
+    ]
+  },
+  "4172838919212348496": "{count, plural, one {# open card} other {# open cards}}",
+  "@4172838919212348496": {
+    "description": "Report panel subtitle - open cards on the board",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "2330494586782561606": "{done} of {total, plural, one {# item} other {# items}} done across {cards, plural, one {# card} other {# cards}}",
+  "@2330494586782561606": {
+    "description": "Report checklist meter text",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "8377841088250237399": "{count, plural, one {and # more} other {and # more}}",
+  "@8377841088250237399": {
+    "description": "Report attention list footer - cards not named individually",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "7740987866892686570": "No activity this period",
+  "@7740987866892686570": {
+    "description": "Report people row - the person did nothing in the period",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "3685822175298390514": "{count, plural, one {# completed} other {# completed}}",
+  "@3685822175298390514": {
+    "description": "Report people row - cards completed",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts",
+      "src/app/features/board/work-done-view/work-done-report.ts",
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
+    ]
+  },
+  "3062284830073104677": "{count, plural, one {# other action} other {# other actions}}",
+  "@3062284830073104677": {
+    "description": "Report people row - other actions (created, moved, checklist items)",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "8525594940673654390": "{count, plural, one {# open} other {# open}}",
+  "@8525594940673654390": {
+    "description": "Report people row - open assignments now",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "3338771948482786055": "{count, plural, one {# overdue} other {# overdue}}",
+  "@3338771948482786055": {
+    "description": "Report people row - overdue assignments now",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "5538206717712454870": "{count, plural, one {# card without a value} other {# cards without a value}}",
+  "@5538206717712454870": {
+    "description": "Report field breakdown - open cards with no value",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "8043140703840572371": "{$name} · {$count}",
+  "@8043140703840572371": {
+    "description": "Tooltip on a report bar, e.g. \"Billing · 4 open\"",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.component.ts"
+    ]
+  },
+  "6831157624590216246": "under an hour",
+  "@6831157624590216246": {
+    "description": "Elapsed time in words, under one hour",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "2462312429495029122": "{$person} · {$day} · {$count}",
+  "@2462312429495029122": {
+    "description": "Tooltip on a cell of the who-worked-when heatmap",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "702404658246969299": "{count, plural, one {# action} other {# actions}}",
+  "@702404658246969299": {
+    "description": "Count in a heatmap tooltip",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "6313141179989459041": "Moves",
+  "@6313141179989459041": {
+    "description": "Report metric - card moves between lists in the period",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1388656358616696781": "People active",
+  "@1388656358616696781": {
+    "description": "Report metric - people who did something in the period",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "8911875786812273431": "In progress now",
+  "@8911875786812273431": {
+    "description": "Report metric - cards currently in a running in-progress stint",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "3082756460837727932": "{days, plural, one {vs previous day} other {vs previous # days}}",
+  "@3082756460837727932": {
+    "description": "Suffix after a change figure, e.g. \"+3 vs previous 7 days\"",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "3233132640705819201": "{$day} · {$created} · {$completed} · {$moved}",
+  "@3233132640705819201": {
+    "description": "Tooltip on one day of the report's flow chart",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1600777140568186147": "{count, plural, one {# created} other {# created}}",
+  "@1600777140568186147": {
+    "description": "Count in a chart tooltip",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1849578541140736247": "Due {$date}",
+  "@1849578541140736247": {
+    "description": "Attention row detail - when the card is due",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "5262406189765431162": "{$board} · {$list}",
+  "@5262406189765431162": {
+    "description": "Bar label on a cross-board report - board name then list name",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1558720727333805694": "In progress for {$duration}",
+  "@1558720727333805694": {
+    "description": "Attention row detail - how long the card has been in progress",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "921492057205148786": "In progress too long",
+  "@921492057205148786": {
+    "description": "Report attention group - cards in progress past the workspace alert",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts",
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
+  "1814145032290720554": "Due in the next 7 days",
+  "@1814145032290720554": {
+    "description": "Report attention group - cards due within the next 7 days",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "177538383466759777": "Last updated {$when}",
+  "@177538383466759777": {
+    "description": "Attention row detail - when the card was last touched",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "6953859380164809014": "No cards were worked on in this period.",
+  "@6953859380164809014": {
+    "description": "Report headline when nothing happened in the period",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "4888705427490339712": "You completed {completed, plural, =0 {no cards} one {# card} other {# cards}} and started {created, plural, =0 {no new ones} one {# new one} other {# new ones}}.",
+  "@4888705427490339712": {
+    "description": "Report headline sentence on My Cards, addressed to the viewer",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "6191459728070907008": "Across your cards, {completed, plural, =0 {none were completed} one {# was completed} other {# were completed}} and {created, plural, =0 {none started} one {# started} other {# started}}.",
+  "@6191459728070907008": {
+    "description": "Report headline sentence on My Cards when other people also acted on the viewer's cards",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1822759676941713416": "{solo, select, yes {{name}} other {The team}} completed {completed, plural, =0 {no cards} one {# card} other {# cards}} and started {created, plural, =0 {no new ones} one {# new one} other {# new ones}}.",
+  "@1822759676941713416": {
+    "description": "Report headline sentence. \"solo\" is yes when exactly one person was active, and \"name\" is that person",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "736841598247383673": "{trend, select, up {That is up from} down {That is down from} other {That matches}} {previous, plural, one {# completion} other {# completions}} in the previous {days, plural, one {day} other {# days}}.",
+  "@736841598247383673": {
+    "description": "Report headline sentence comparing completions with the previous period of the same length",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "8881596239953746194": "More cards were started than finished, so open work grew by {count, plural, one {# card} other {# cards}}.",
+  "@8881596239953746194": {
+    "description": "Report headline sentence - more cards were created than completed",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "6983622371346177569": "More cards were finished than started, so open work shrank by {count, plural, one {# card} other {# cards}}.",
+  "@6983622371346177569": {
+    "description": "Report headline sentence - more cards were completed than created",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "2107340882807984575": "Starts and finishes balanced out, so open work stayed level.",
+  "@2107340882807984575": {
+    "description": "Report headline sentence - as many cards were created as completed",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "904009041600509187": "{count, plural, other {# people were active}}.",
+  "@904009041600509187": {
+    "description": "Report headline sentence - how many people did something",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "7149214280694002271": "{name} completed the most ({count, plural, one {# card} other {# cards}}).",
+  "@7149214280694002271": {
+    "description": "Report headline sentence - the person who completed the most cards",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "374524755314758407": "{onTime} of {total, plural, one {the # completed card} other {the # completed cards}} with a due date finished on time.",
+  "@374524755314758407": {
+    "description": "Report headline sentence - delivery against due dates",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "5089357084143465905": "Completed cards took a median of {$duration} from creation to completion.",
+  "@5089357084143465905": {
+    "description": "Report headline sentence - median time from creation to completion",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "2686948427676577354": "They spent a median of {$duration} of working time in progress.",
+  "@2686948427676577354": {
+    "description": "Report headline sentence - median tracked working time in progress",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "2200303992852549837": "{count, plural, one {# card is overdue} other {# cards are overdue}}.",
+  "@2200303992852549837": {
+    "description": "Report headline sentence - cards past their due date right now",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "8547684372907144947": "{count, plural, one {# card is blocked by other work} other {# cards are blocked by other work}}.",
+  "@8547684372907144947": {
+    "description": "Report headline sentence - cards waiting on other open cards right now",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "3099694594822338462": "{count, plural, one {# card has} other {# cards have}} been in progress longer than {days, plural, one {# day} other {# days}}.",
+  "@3099694594822338462": {
+    "description": "Report headline sentence - cards in progress past the workspace alert",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "2667457607347257678": "{count, plural, one {# card has} other {# cards have}} been in progress longer than its workspace allows.",
+  "@2667457607347257678": {
+    "description": "Report headline sentence - cards in progress past their own workspace's alert, thresholds differ",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "1923796992661761597": "Nothing is overdue, blocked or stuck right now.",
+  "@1923796992661761597": {
+    "description": "Report headline sentence when no card is overdue, blocked or stuck",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "4441735950553629579": "{count, plural, one {# card is} other {# cards are}} due in the next 7 days.",
+  "@4441735950553629579": {
+    "description": "Report headline sentence - cards due within the next 7 days",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "5127422178672326969": "{count, plural, one {# card is} other {# cards are}} in progress right now.",
+  "@5127422178672326969": {
+    "description": "Report headline sentence - cards in a running in-progress stint right now",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
+    ]
+  },
+  "8693603235657020323": "Other",
+  "@8693603235657020323": {
+    "description": "Chart bar folding the smallest categories together",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts",
+      "src/app/features/import/trello-import.page.html"
+    ]
+  },
+  "1872367702833640463": "- {count, plural, one {and # more} other {and # more}}",
+  "@1872367702833640463": {
+    "description": "Line in the copied report text for cards not named individually",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "1507949699959470925": "Period",
@@ -14606,6 +15204,12 @@
       "src/app/features/board/work-done-view/work-done-view.component.html"
     ]
   },
+  "6288386975306475547": "Loading report",
+  "@6288386975306475547": {
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-view.component.html"
+    ]
+  },
   "7124801473504221747": "Loading work done",
   "@7124801473504221747": {
     "x-files": [
@@ -14614,6 +15218,13 @@
   },
   "7578254038293609096": "Today only",
   "@7578254038293609096": {
+    "description": "Work done period preset tooltip",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
+    ]
+  },
+  "8265481332753807321": "This week, Monday to today",
+  "@8265481332753807321": {
     "description": "Work done period preset tooltip",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-view.component.ts"
@@ -14694,13 +15305,6 @@
   "8212193794507429974": "{count, plural, one {# event} other {# events}}",
   "@8212193794507429974": {
     "description": "Work done summary - number of events",
-    "x-files": [
-      "src/app/features/board/work-done-view/work-done-view.component.ts"
-    ]
-  },
-  "3685822175298390514": "{count, plural, one {# completed} other {# completed}}",
-  "@3685822175298390514": {
-    "description": "Work done summary - number of cards completed",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-view.component.ts"
     ]
@@ -14786,6 +15390,13 @@
   "7706594278087064071": "{$heading} · before field filters",
   "@7706594278087064071": {
     "description": "Activity strip heading - the counts ignore custom-field filters",
+    "x-files": [
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
+    ]
+  },
+  "5923548606978399830": "Report for {$board} · {$range}",
+  "@5923548606978399830": {
+    "description": "Title line of the copied report text, e.g. \"Report for Platform Delivery · 14–18 Oct\"",
     "x-files": [
       "src/app/features/board/work-done-view/work-done-view.component.ts"
     ]
@@ -14982,11 +15593,60 @@
       "src/app/features/completed-cards/date-range-picker.popover.ts"
     ]
   },
+  "7591870443991978948": "Last week",
+  "@7591870443991978948": {
+    "description": "Date range preset button selecting the whole previous week",
+    "x-files": [
+      "src/app/features/completed-cards/date-range-picker.popover.ts"
+    ]
+  },
+  "842657237693374355": "This month",
+  "@842657237693374355": {
+    "description": "Date range preset button selecting the current month up to today",
+    "x-files": [
+      "src/app/features/completed-cards/date-range-picker.popover.ts"
+    ]
+  },
+  "4463380307954693363": "Last month",
+  "@4463380307954693363": {
+    "description": "Date range preset button selecting the whole previous calendar month",
+    "x-files": [
+      "src/app/features/completed-cards/date-range-picker.popover.ts"
+    ]
+  },
+  "5483339165629526387": "Last quarter",
+  "@5483339165629526387": {
+    "description": "Date range preset button selecting the whole previous calendar quarter",
+    "x-files": [
+      "src/app/features/completed-cards/date-range-picker.popover.ts"
+    ]
+  },
   "5848916523710148463": "Select a start date, then an end date",
   "@5848916523710148463": {
     "description": "Date range picker hint",
     "x-files": [
       "src/app/features/completed-cards/date-range-picker.popover.ts"
+    ]
+  },
+  "6869587862671945558": "Map",
+  "@6869587862671945558": {
+    "description": "Dependencies view layout - chains drawn as a map with connectors",
+    "x-files": [
+      "src/app/features/dependencies/dependency-layout.ts"
+    ]
+  },
+  "6814295386768519176": "Timeline",
+  "@6814295386768519176": {
+    "description": "Dependencies view layout - cards placed in columns by the week they are due",
+    "x-files": [
+      "src/app/features/dependencies/dependency-layout.ts"
+    ]
+  },
+  "1534367694207535197": "Steps",
+  "@1534367694207535197": {
+    "description": "Dependencies view layout - chains listed step by step",
+    "x-files": [
+      "src/app/features/dependencies/dependency-layout.ts"
     ]
   },
   "5703705840354938825": "Filter dependency chains",
@@ -15033,12 +15693,6 @@
       "src/app/features/dependencies/dependency-map.component.html"
     ]
   },
-  "3168241265899648027": "Dependencies layout",
-  "@3168241265899648027": {
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.html"
-    ]
-  },
   "2251886683352741815": "Biggest bottleneck:",
   "@2251886683352741815": {
     "description": "Dependencies view callout: the card holding up the most open work",
@@ -15049,6 +15703,20 @@
   "8231763422742114033": "This map stopped at 400 cards, so some chains are cut short. Narrow the scope to see them whole.",
   "@8231763422742114033": {
     "description": "Dependencies view note when the map hit its card limit",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "84253380482925429": "Couldn’t load dependencies",
+  "@84253380482925429": {
+    "description": "Error state title on the Dependencies view",
+    "x-files": [
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "3660632916771561809": "Check your connection and try again.",
+  "@3660632916771561809": {
+    "description": "Error state text on the Dependencies view",
     "x-files": [
       "src/app/features/dependencies/dependency-map.component.html"
     ]
@@ -15119,27 +15787,6 @@
       "src/app/features/dependencies/dependency-map.component.html"
     ]
   },
-  "6869587862671945558": "Map",
-  "@6869587862671945558": {
-    "description": "Dependencies view layout - chains drawn as a map with connectors",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "6814295386768519176": "Timeline",
-  "@6814295386768519176": {
-    "description": "Dependencies view layout - cards placed in columns by the week they are due",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "1534367694207535197": "Steps",
-  "@1534367694207535197": {
-    "description": "Dependencies view layout - chains listed step by step",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
   "134944425477703133": "{count, plural, one {chain} other {chains}}",
   "@134944425477703133": {
     "description": "Dependencies view summary - number of dependency chains shown",
@@ -15150,13 +15797,6 @@
   "5133669317878143440": "Cards waiting on a blocker that is still open",
   "@5133669317878143440": {
     "description": "Tooltip on the Dependencies view Blocked count",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "239883740512866888": "At risk",
-  "@239883740512866888": {
-    "description": "Dependencies view summary - cards whose blocker is overdue or due after them",
     "x-files": [
       "src/app/features/dependencies/dependency-map.component.ts"
     ]
@@ -15930,13 +16570,6 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
-  "921492057205148786": "In progress too long",
-  "@921492057205148786": {
-    "description": "Portfolio stat tile, cards in progress past their workspace's alert",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "2485229318223716979": "Overdue checklist",
   "@2485229318223716979": {
     "description": "Portfolio stat tile, overdue checklist items",
@@ -16680,6 +17313,455 @@
       "src/app/features/home/agenda-group.component.ts"
     ]
   },
+  "2032543851461335019": "You're all set",
+  "@2032543851461335019": {
+    "description": "Getting started checklist heading once every step is done",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html"
+    ]
+  },
+  "5508024422979239599": "Getting started",
+  "@5508024422979239599": {
+    "description": "Getting started checklist heading",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html",
+      "src/app/features/shell/app-shell.component.html"
+    ]
+  },
+  "3372702640019176509": "Close getting started",
+  "@3372702640019176509": {
+    "description": "Button: close the getting started checklist for good",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html"
+    ]
+  },
+  "4142057738286268789": "Hide getting started",
+  "@4142057738286268789": {
+    "description": "Button: move the getting started checklist off home into the account menu",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html"
+    ]
+  },
+  "7644333902303166694": "Hide · reopen it from your account menu",
+  "@7644333902303166694": {
+    "description": "Tooltip: hide the getting started checklist, which stays available in the account menu",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html"
+    ]
+  },
+  "1386464914080783041": ", done",
+  "@1386464914080783041": {
+    "description": "Screen reader suffix on a completed getting started step",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html"
+    ]
+  },
+  "9068741667079861391": "The basics",
+  "@9068741667079861391": {
+    "description": "Getting started checklist section heading for the core card workflow",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "268127485535275184": "Work faster",
+  "@268127485535275184": {
+    "description": "Getting started checklist section heading for shortcuts, filters and views",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "9178759481896989482": "Your team",
+  "@9178759481896989482": {
+    "description": "Getting started checklist section heading for the organisation admin steps",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "6767937122776569230": "Your setup",
+  "@6767937122776569230": {
+    "description": "Getting started checklist section heading for push notifications and AI agents",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "6987011136556418173": "{done} of {total} steps done",
+  "@6987011136556418173": {
+    "description": "Getting started checklist progress for screen readers",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "53335246447361679": "Getting started is in your account menu whenever you want it.",
+  "@53335246447361679": {
+    "description": "Toast after hiding the getting started checklist from home",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "2868855223010339249": "Push notifications could not be turned on. Try again from notification settings.",
+  "@2868855223010339249": {
+    "description": "Getting started checklist error",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "596613040379865150": "Open a board",
+  "@596613040379865150": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5560994377600054525": "Create your first card",
+  "@5560994377600054525": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "964348372527382661": "Open a board and choose New card, or Add card at the foot of a list. Cards move through the lists as the work moves.",
+  "@964348372527382661": {
+    "description": "Getting started step text; New card and Add card are button labels on the board",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "1167905852064569963": "Open a board and press C, or choose New card. Cards move through the lists as the work moves.",
+  "@1167905852064569963": {
+    "description": "Getting started step text; C is the keyboard shortcut, New card is a button label on the board",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4199868641826340070": "Assign a card",
+  "@4199868641826340070": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4599579378765218277": "Open a card and choose Assignees, so everyone can see who owns it. Assigned cards gather in My Cards.",
+  "@4599579378765218277": {
+    "description": "Getting started step text; Assignees is a field label on the card and My Cards a page name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8342983898585679210": "Comment on a card",
+  "@8342983898585679210": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8147192106116617508": "Open a card and write a comment, so the conversation stays with the work instead of in chat.",
+  "@8147192106116617508": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "892482638615701510": "Mention someone",
+  "@892482638615701510": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3848623021770183127": "In a comment, type @ and pick a person. They are notified and can reply right on the card.",
+  "@3848623021770183127": {
+    "description": "Getting started step text; @ is the character typed to mention someone",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7068410431012753254": "Complete a card",
+  "@7068410431012753254": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5892731453440747912": "Open a card and choose Mark complete when the work is done. Completed cards show up in Work done.",
+  "@5892731453440747912": {
+    "description": "Getting started step text; Mark complete is a button label",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "6649175963172868414": "Quick edit a card",
+  "@6649175963172868414": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7877496257778676586": "Tap a card's actions button and choose Quick edit to change its title, people, labels or due date without opening it.",
+  "@7877496257778676586": {
+    "description": "Getting started step text; Quick edit is a menu item",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4739725498696129224": "Right-click a card and choose Quick edit to change its title, people, labels or due date without opening it.",
+  "@4739725498696129224": {
+    "description": "Getting started step text; Quick edit is a menu item",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5716020447373201058": "Use a filter",
+  "@5716020447373201058": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5686224175126400231": "Choose Filter on a board or in My Cards to narrow cards by person, label, due date and more.",
+  "@5686224175126400231": {
+    "description": "Getting started step text; Filter is a button label and My Cards a page name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7202378212385687634": "Open My Cards",
+  "@7202378212385687634": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts",
+      "src/app/features/priorities/my-priorities-panel.component.html"
+    ]
+  },
+  "2655051192620066373": "View Work done",
+  "@2655051192620066373": {
+    "description": "Getting started step title; Work done is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8508621174197406668": "See what has been finished, day by day, on any board or across your cards.",
+  "@8508621174197406668": {
+    "description": "Getting started step text; Work done is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "1578045483282131441": "Open Work done",
+  "@1578045483282131441": {
+    "description": "Getting started step button; Work done is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "1985748036701170667": "Write in your scratchpad",
+  "@1985748036701170667": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8993885334469838249": "Jot down quick thoughts in a private scratchpad that is one click away on every page.",
+  "@8993885334469838249": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "1134940187745242606": "Open scratchpad",
+  "@1134940187745242606": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts",
+      "src/app/features/shell/app-shell.component.ts"
+    ]
+  },
+  "4366001528336874776": "Save a note",
+  "@4366001528336874776": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "451869330344256004": "Keep specs, meeting notes and how-tos next to the boards they are about, where the whole team can find them.",
+  "@451869330344256004": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5664052109779517498": "Open notes",
+  "@5664052109779517498": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "2596353668630909784": "Link a dependency",
+  "@2596353668630909784": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3322252543020614776": "In a card's Dependencies, mark what it is blocked by. Its assignee hears when it is ready to start.",
+  "@3322252543020614776": {
+    "description": "Getting started step text; Dependencies is a section in card detail",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "2283912767959567698": "Invite your team",
+  "@2283912767959567698": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7141491141998033725": "Add people to the organisation, then give them the workspaces and boards they work on.",
+  "@7141491141998033725": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4341948927143064102": "Create a second board",
+  "@4341948927143064102": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "724300503195435556": "Boards in a workspace share its lists and fields, so a new one is ready to use straight away.",
+  "@724300503195435556": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5254919684312260732": "Give another project or team its own board.",
+  "@5254919684312260732": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4551184567681208389": "New board",
+  "@4551184567681208389": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts",
+      "src/app/features/home/home.page.html",
+      "src/app/features/onboarding/onboarding.page.html"
+    ]
+  },
+  "6792733980959743509": "Create an automation",
+  "@6792733980959743509": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "1897135382321605870": "Assign, label or move cards on their own when something happens on a board.",
+  "@1897135382321605870": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5674286808255988565": "Create",
+  "@5674286808255988565": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts",
+      "src/app/features/import/trello-import.page.html",
+      "src/app/features/workspace-settings/api/api.page.html"
+    ]
+  },
+  "4185773362590968492": "Connect an AI agent",
+  "@4185773362590968492": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts",
+      "src/app/shared/agent-connect-card/agent-connect-card.component.html"
+    ]
+  },
+  "465607310718150951": "Let Claude or another agent read and update your boards through MCP or the Kanera CLI.",
+  "@465607310718150951": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "813263746069473514": "Connect",
+  "@813263746069473514": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "2525005000498701820": "Give your agent a task",
+  "@2525005000498701820": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "2472896447806178761": "Ask your agent to add a card, move one along or comment on it. Its changes show on the card, marked as agent work.",
+  "@2472896447806178761": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7125948080719352676": "Turn on push notifications",
+  "@7125948080719352676": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5345125979777642189": "Hear about assignments and mentions on this device, even with Kanera closed.",
+  "@5345125979777642189": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "663430187703981871": "Turn on",
+  "@663430187703981871": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4324385332051445418": "Try the command palette",
+  "@4324385332051445418": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4766776841547864429": "Search cards, notes and comments, and run commands, from one box.",
+  "@4766776841547864429": {
+    "description": "Getting started step text",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8015588859464612084": "Press {$keys} to search cards, notes and comments, and run commands, from one box.",
+  "@8015588859464612084": {
+    "description": "Getting started step text; keys is a keyboard shortcut such as ⌘K or Ctrl+K",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "7330497278645626593": "Try it",
+  "@7330497278645626593": {
+    "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
   "3212270930387653490": "Your trial ends on {$DATE}.",
   "@3212270930387653490": {
     "description": "Trial banner",
@@ -16813,14 +17895,6 @@
       "src/app/features/home/home.page.html"
     ]
   },
-  "4551184567681208389": "New board",
-  "@4551184567681208389": {
-    "description": "Getting-started option heading",
-    "x-files": [
-      "src/app/features/home/home.page.html",
-      "src/app/features/onboarding/onboarding.page.html"
-    ]
-  },
   "3439421419867133635": "A board in this workspace, or a standalone one with its own lists and fields.",
   "@3439421419867133635": {
     "description": "Getting-started option: new board",
@@ -16886,77 +17960,6 @@
   "1988850832846843897": "Connection lost. Showing the last loaded day. Changes will refresh after reconnecting.",
   "@1988850832846843897": {
     "description": "Offline banner on the home page",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "8522270084976549870": "First steps",
-  "@8522270084976549870": {
-    "description": "Section heading",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "4198525626687726739": "Dismiss first steps",
-  "@4198525626687726739": {
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "1536087519743707362": "Dismiss",
-  "@1536087519743707362": {
-    "description": "Tooltip: dismiss the first steps card",
-    "x-files": [
-      "src/app/features/home/home.page.html",
-      "src/app/features/notes/note-editor.component.ts",
-      "src/app/shared/attachments/attachment-upload-list.component.ts"
-    ]
-  },
-  "3310319784022714322": "Shape your workflow",
-  "@3310319784022714322": {
-    "description": "First steps: step title",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "4761208646284537776": "Name the lists cards move through and add the fields your team tracks.",
-  "@4761208646284537776": {
-    "description": "First steps: step text",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "3357223898348691475": "Add your first cards",
-  "@3357223898348691475": {
-    "description": "First steps: step title",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "906612517964712074": "Open a board and press C to create a card. Drag it between lists as it moves.",
-  "@906612517964712074": {
-    "description": "First steps: step text; C is the keyboard shortcut",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "6328774783908839805": "Bring your team",
-  "@6328774783908839805": {
-    "description": "First steps: step title",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "8604925863893752265": "Invite people to the organisation, then add them to workspaces or single boards.",
-  "@8604925863893752265": {
-    "description": "First steps: step text",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "2457158531604491157": "Press {$START_TAG_KBD}?{$CLOSE_TAG_KBD} anywhere for keyboard shortcuts.",
-  "@2457158531604491157": {
-    "description": "Hint; ? is the key that opens the shortcuts list",
     "x-files": [
       "src/app/features/home/home.page.html"
     ]
@@ -17596,13 +18599,6 @@
       "src/app/features/import/trello-import.page.html"
     ]
   },
-  "8693603235657020323": "Other",
-  "@8693603235657020323": {
-    "description": "CSV column target group",
-    "x-files": [
-      "src/app/features/import/trello-import.page.html"
-    ]
-  },
   "1240739868347418586": "Ignore",
   "@1240739868347418586": {
     "description": "CSV column target option: do not import this column",
@@ -17687,14 +18683,6 @@
     "description": "Suffix after a list's card count",
     "x-files": [
       "src/app/features/import/trello-import.page.html"
-    ]
-  },
-  "5674286808255988565": "Create",
-  "@5674286808255988565": {
-    "description": "Import mapping choice: create a new item",
-    "x-files": [
-      "src/app/features/import/trello-import.page.html",
-      "src/app/features/workspace-settings/api/api.page.html"
     ]
   },
   "5813867925497374051": "Map",
@@ -18327,6 +19315,18 @@
       "src/app/features/import/trello-import.page.ts"
     ]
   },
+  "1998169978791208851": "Importing board…",
+  "@1998169978791208851": {
+    "x-files": [
+      "src/app/features/import/trello-import.page.ts"
+    ]
+  },
+  "7558260041253338095": "Board imported.",
+  "@7558260041253338095": {
+    "x-files": [
+      "src/app/features/import/trello-import.page.ts"
+    ]
+  },
   "2139744842574860415": "Trello attachment copying is not configured for this Kanera deployment.",
   "@2139744842574860415": {
     "x-files": [
@@ -18505,6 +19505,14 @@
     "description": "Button: edit a note whose lock has expired",
     "x-files": [
       "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "1536087519743707362": "Dismiss",
+  "@1536087519743707362": {
+    "description": "Button label: dismiss an error banner",
+    "x-files": [
+      "src/app/features/notes/note-editor.component.ts",
+      "src/app/shared/attachments/attachment-upload-list.component.ts"
     ]
   },
   "6956486606046872920": "Copy note link",
@@ -20101,12 +21109,6 @@
       "src/app/features/priorities/my-priorities-panel.component.html"
     ]
   },
-  "7202378212385687634": "Open My Cards",
-  "@7202378212385687634": {
-    "x-files": [
-      "src/app/features/priorities/my-priorities-panel.component.html"
-    ]
-  },
   "9177411226369031967": "Up next ({count, plural, one {# card} other {# cards}})",
   "@9177411226369031967": {
     "description": "Up next trigger button label with its queued card count",
@@ -20780,6 +21782,20 @@
       "src/app/features/shell/app-shell.component.html"
     ]
   },
+  "3111091949322721840": "Remove getting started",
+  "@3111091949322721840": {
+    "description": "Account menu button: remove the getting started checklist for good",
+    "x-files": [
+      "src/app/features/shell/app-shell.component.html"
+    ]
+  },
+  "4820484162830557801": "Remove for good",
+  "@4820484162830557801": {
+    "description": "Tooltip: remove the getting started checklist for good",
+    "x-files": [
+      "src/app/features/shell/app-shell.component.html"
+    ]
+  },
   "6548636604923614716": "Organisations",
   "@6548636604923614716": {
     "description": "Menu name",
@@ -21006,6 +22022,13 @@
       "src/app/features/shell/app-shell.component.ts"
     ]
   },
+  "1685194753370781881": "Getting started, {done} of {total} steps done. Open it on home.",
+  "@1685194753370781881": {
+    "description": "Account menu item for the getting started checklist, read by screen readers",
+    "x-files": [
+      "src/app/features/shell/app-shell.component.ts"
+    ]
+  },
   "4944057561753398636": "Everywhere",
   "@4944057561753398636": {
     "description": "Keyboard shortcuts sheet section — shortcuts that work on every page",
@@ -21108,13 +22131,6 @@
   "3592230966174769162": "add task",
   "@3592230966174769162": {
     "description": "Extra search words for the \"Create a new card\" command palette action, space-separated",
-    "x-files": [
-      "src/app/features/shell/app-shell.component.ts"
-    ]
-  },
-  "1134940187745242606": "Open scratchpad",
-  "@1134940187745242606": {
-    "description": "Command palette action",
     "x-files": [
       "src/app/features/shell/app-shell.component.ts"
     ]
@@ -25756,13 +26772,6 @@
     "x-files": [
       "src/app/shared/activity-strip.component.ts",
       "src/app/shared/user-profile/user-profile-popover.component.html"
-    ]
-  },
-  "4185773362590968492": "Connect an AI agent",
-  "@4185773362590968492": {
-    "description": "Card heading",
-    "x-files": [
-      "src/app/shared/agent-connect-card/agent-connect-card.component.html"
     ]
   },
   "9023590373061364853": "Let Claude, Copilot, Codex, ChatGPT, or any other agent set up boards and manage work for you. Your AI Agent can do all the heavy lifting and get you productive faster.",

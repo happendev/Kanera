@@ -191,28 +191,60 @@
   </div>
   }
 
+  @if (meters().length > 0) {
+  <!-- Live plan usage sits with storage: both are organisation-wide pools governed by the plan.
+       Unlimited meters show their count without a bar, so trial and Pro read as headroom, not 0%. -->
+  <div class="storage-usage-block plan-usage-block">
+    <span class="account-plan-label" i18n="Heading above the plan usage meters">Plan usage</span>
+    <ul class="plan-usage-list">
+      @for (meter of meters(); track meter.key) {
+      <li class="plan-usage-meter" [class.plan-usage-meter--warning]="meter.level === 'warning'" [class.plan-usage-meter--limit]="meter.level === 'limit'">
+        <div class="plan-usage-head">
+          <i [class]="'ti ti-' + meter.icon" aria-hidden="true"></i>
+          <span class="plan-usage-name">{{ meter.label }}</span>
+          @if (meter.level === 'warning') {
+          <span class="plan-usage-status" i18n="Badge on a plan usage meter at 80% or more of its limit">Near limit</span>
+          } @else if (meter.level === 'limit') {
+          <span class="plan-usage-status" i18n="Badge on a plan usage meter that has reached its limit">Limit reached</span>
+          }
+          <span class="plan-usage-value">{{ meter.valueLabel }}</span>
+        </div>
+        @if (meter.percent !== null) {
+        <div class="storage-usage-meter plan-usage-bar" role="meter" [attr.aria-label]="meter.label" aria-valuemin="0" [attr.aria-valuemax]="meter.limit" [attr.aria-valuenow]="meter.used ?? 0" [attr.aria-valuetext]="meter.valueLabel">
+          <span [style.width.%]="meter.percent"></span>
+        </div>
+        }
+        @if (meter.resetsLabel) {
+        <span class="plan-usage-reset">{{ meter.resetsLabel }}</span>
+        }
+      </li>
+      }
+    </ul>
+    @if (anyAtLimit() || anyNearLimit()) {
+    <p class="account-plan-note plan-usage-note" [class.account-plan-note--warning]="anyAtLimit()">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      @if (seatsFull()) {
+      <span i18n>All purchased seats are in use. Add seats above before you invite more people.</span>
+      } @else if (usageTier() === 'free' && anyAtLimit()) {
+      <span i18n>Your organisation has reached a Free plan limit. Upgrade to Pro to lift it.</span>
+      } @else if (usageTier() === 'free') {
+      <span i18n>Your organisation is close to a Free plan limit. Upgrade to Pro for unlimited boards, members, and automations.</span>
+      } @else {
+      <span i18n>Your organisation is close to its seat limit. Add seats above before you run out.</span>
+      }
+    </p>
+    }
+  </div>
+  }
+
   @if (settings.user()?.storageUsage?.limited) {
-  <!-- Storage is an org-wide pool charged to whoever owns each board (host-pays), so it lives
-       with the plan rather than the personal profile. Shown to org admins on the plan settings tab. -->
+  <!-- Storage detail (usage, remaining, full warning) lives on the Storage tab; the plan page only
+       points there so the two views can't drift. -->
   <div class="storage-usage-block">
     <div class="account-plan-row">
       <span class="account-plan-label" i18n>Storage usage</span>
-      <span class="account-plan-storage-usage">{{ settings.storageUsageLabel() }}</span>
-    </div>
-    <div class="storage-usage-meter" role="meter" aria-label="Storage usage" i18n-aria-label [attr.aria-valuenow]="settings.storageUsagePercent()" aria-valuemin="0" aria-valuemax="100">
-      <span [style.width.%]="settings.storageUsagePercent()"></span>
-    </div>
-    <p class="account-plan-note account-plan-note--muted">
-      <ng-container i18n="Starts with the remaining storage, e.g. '3.8 GB remaining'">{{ settings.storageRemainingLabel() // i18n(ph="remaining") }} — shared across your whole organisation. Files you upload to another organisation's board count against their storage, not yours.</ng-container>
       <a routerLink="/settings/storage" i18n="Link">Manage storage</a>
-    </p>
-    @if (settings.storageFull() && settings.planTier() === 'paid') {
-    <p class="account-plan-note account-plan-note--warning">
-      <i class="ti ti-alert-triangle"></i>
-      <ng-container i18n>Your organisation has reached its storage limit. Contact
-      <a href="mailto:support@kanera.app">support&#64;kanera.app</a> for more storage.</ng-container>
-    </p>
-    }
+    </div>
   </div>
   }
 

@@ -140,6 +140,17 @@
     }
   }
 
+  // Needs attention but has not slipped yet (at risk, aging): the amber the board uses for it.
+  &.warning {
+    .stat-tile-label i {
+      color: var(--color-amber);
+    }
+
+    strong {
+      color: var(--color-amber);
+    }
+  }
+
   &.success {
     .stat-tile-label i {
       color: var(--success);

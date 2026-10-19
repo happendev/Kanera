@@ -282,7 +282,7 @@
               <i class="ti ti-plus"></i>
             </button>
             @if (labelPickerOpen()) {
-            <k-label-picker [labels]="cardLabels()" [selectedIds]="cardLabelIds()" (toggle)="toggleLabel($event)" (close)="labelPickerOpen.set(false)" />
+            <k-label-picker [labels]="cardLabels()" [selectedIds]="cardLabelIds()" [canCreate]="canCreateLabels()" (toggle)="toggleLabel($event)" (create)="createLabel($event)" (close)="labelPickerOpen.set(false)" />
             }
           </div>
           } @else if (!assignedLabels().length) {

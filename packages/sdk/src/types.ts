@@ -707,6 +707,8 @@ export interface WorkFilters {
   inProgressTooLongOnly?: boolean;
   /** Only open cards with at least one open blocker (`blockedByCount` > 0). */
   blockedOnly?: boolean;
+  /** Only open cards with a visible open blocker that is overdue or due after them. */
+  atRiskOnly?: boolean;
   dueFrom?: LocalDate | null;
   dueTo?: LocalDate | null;
   overdueOnly?: boolean;

@@ -88,6 +88,9 @@ export const workFiltersSchema = z.object({
   // Open cards with at least one open blocker, hidden blockers included (the count never reveals
   // titles). Completed cards are done whatever blocked them, like the board's Blocked quick filter.
   blockedOnly: z.boolean().default(false),
+  // Open cards with a visible open blocker that is overdue or due after them: the Dependencies
+  // view's "at risk". Hidden blockers do not count, since judging them would reveal their dates.
+  atRiskOnly: z.boolean().default(false),
   dueFrom: z.iso.date().nullable().default(null),
   dueTo: z.iso.date().nullable().default(null),
   overdueOnly: z.boolean().default(false),
@@ -118,6 +121,7 @@ export const workViewDefinitionSchema = z.object({
     inProgressOnly: false,
     inProgressTooLongOnly: false,
     blockedOnly: false,
+    atRiskOnly: false,
     dueFrom: null,
     dueTo: null,
     overdueOnly: false,
@@ -338,6 +342,10 @@ export type PortfolioBucket = {
   inProgress: number;
   /** Of those, the cards whose current stint has passed the workspace's in-progress alert. */
   inProgressTooLong: number;
+  /** Open cards waiting on at least one open blocker. */
+  blocked: number;
+  /** Of those, the cards with a visible blocker that is overdue or due after them. */
+  atRisk: number;
   completed: number;
   overdueChecklistItems: number;
 };
@@ -355,7 +363,7 @@ export type PortfolioActivityDay = {
 
 export type PortfolioSummary = {
   days: number;
-  totals: Omit<WorkTotals, "checklistItems"> & { unassigned: number; inactive: number; inProgress: number; inProgressTooLong: number };
+  totals: Omit<WorkTotals, "checklistItems"> & { unassigned: number; inactive: number; inProgress: number; inProgressTooLong: number; blocked: number; atRisk: number };
   buckets: PortfolioBucket[];
   /** Length of the heatmap window in days. Fixed, and independent of the `days` reporting period. */
   activityDays: number;

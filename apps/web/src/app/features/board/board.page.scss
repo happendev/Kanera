@@ -45,14 +45,13 @@
   border-radius: var(--radius-sm);
 }
 
-// The no-lists state sits where the first list would, top-left of the canvas, at a reading width
-// rather than stretching across the whole horizontal scroller.
-.board-empty {
+// The no-lists state sits where the first list would, top-left of the canvas, rather than centred
+// in the whole horizontal scroller. Element-qualified so it outranks the raised state's auto margins.
+k-empty-state.board-empty {
   align-self: flex-start;
   flex: none;
   width: min(440px, calc(100vw - 48px));
   margin: var(--space-6) var(--space-5);
-  background: var(--surface);
 }
 
 .skeleton-list {
@@ -140,9 +139,12 @@
 
 .board-overview-metrics {
   display: grid;
-  // Six counts in two rows of three, so every label reads in full.
+  // Six counts in two rows of three, or eight in two rows of four with in-progress tracking, so
+  // every row is full and every label still reads in full.
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
+
+  &.has-progress { grid-template-columns: repeat(4, 1fr); }
 
   // The global button reset pins every <button> to 36px with nowrap, which crushed the count and
   // label against the tile's top and bottom borders. These tiles are containers, so they size to
@@ -648,6 +650,10 @@ k-page-header.is-tight {
   gap: 8px;
   width: 100%;
   min-width: 0;
+  // The layout switch reveals its labels from this box's width (see `sg-room` in k-segmented).
+  // Safe here despite the toolbar's no-containment rule: nothing in the search slot opens a fixed
+  // picker, and the switch's tooltips render in the CDK overlay.
+  container: sg-room / inline-size;
 
   k-search-field {
     flex: 1 1 auto;
@@ -657,4 +663,11 @@ k-page-header.is-tight {
   k-segmented {
     flex: none;
   }
+}
+
+// A layout switch shares the search slot, so widen the slot by the switch rather than shrinking
+// search to make room for it, and keep room for search beside the icon-only switch.
+k-page-toolbar:has(.work-done-search k-segmented) {
+  --pt-search-max-width: 580px;
+  --pt-search-min-width: 260px;
 }

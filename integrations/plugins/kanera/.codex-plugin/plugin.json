@@ -1,6 +1,6 @@
 {
   "name": "kanera",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "Plan work, update cards, and keep track of project progress in Kanera.",
   "author": {
     "name": "Happen Software Limited",
@@ -104,7 +104,7 @@
         "commerce_description": "The plugin reads and updates project work in an existing Kanera account. It does not sell products, take payments, or manage subscriptions through its tools."
       },
       "publication": {
-        "release_notes": "Updated directory submission aligned with Kanera MCP 4.1.0, with explicit dynamic OAuth client registration, five positive and three negative review cases, and an MCP-only skill for managing project work."
+        "release_notes": "Explicit OAuth authorization, token and dynamic client registration endpoints, resource and scopes for Platform MCP setup. Retains five positive and three negative review cases and the MCP-only Kanera skill."
       }
     }
   }

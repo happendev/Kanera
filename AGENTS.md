@@ -118,6 +118,22 @@ Screenshot at desktop and phone width; small screens and the PWA are first-class
 - Don't modify `.env` files with real secrets, commit credentials, or force-push shared branches.
 - Ask before adding a dependency, a new top-level package, or a new realtime event family.
 
+## Work assigned through Kanera cards
+
+When the user asks you to carry out a specific Kanera card, keep the card updated as part of the
+assignment. Use the connected Kanera skill/instructions: read the card and relevant comments,
+check for another live agent run, start your run before substantive work, and move to the board's
+actual active list. Update progress at milestones and at least every ten minutes. On a blocker,
+record what is needed in both the run and a card comment, and use the appropriate waiting list.
+
+Before your final reply, post an outcome comment with changes, verification results, relevant
+PR/commit/artifact links, and remaining work; end the run appropriately and move the card to
+Review when acceptance remains, or Done only when the agreed workflow permits completion.
+Verify the saved comment, run status, and resulting card list; report any write that failed.
+Reading or exploratory planning alone causes no tracking writes; explicit user restrictions win.
+This applies to real-data work the user assigns, and does not authorise using production Kanera
+for local verification or updating an unrelated card.
+
 ## Making changes
 
 - Prefer the smallest change that preserves the existing architecture.
@@ -127,7 +143,7 @@ Screenshot at desktop and phone width; small screens and the PWA are first-class
 - Comment the "why" where it isn't obvious from the code: product rules, tenancy and access decisions,
   realtime fanout, notification suppression, automation side effects, coalescing, ordering. Explain
   intent and constraints, not mechanics or history.
-- Add user-visible changes to `CHANGELOG.md`.
+- Add user-visible changes to `CHANGELOG.md`. Keep succinct.
 
 ## Done means
 

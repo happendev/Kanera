@@ -170,6 +170,7 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
     inProgressOnly: filters["inProgressOnly"] === true,
     inProgressTooLongOnly: filters["inProgressTooLongOnly"] === true,
     blockedOnly: filters["blockedOnly"] === true,
+    atRiskOnly: filters["atRiskOnly"] === true,
     dueFrom: nullableDate(filters["dueFrom"]),
     dueTo: nullableDate(filters["dueTo"]),
     overdueOnly: filters["overdueOnly"] === true,

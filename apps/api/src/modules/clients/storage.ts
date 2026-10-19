@@ -1,5 +1,5 @@
 import { dto } from "@kanera/shared";
-import type { StorageFileRow, StorageOverviewResponse } from "@kanera/shared/dto";
+import type { PlanUsageResponse, StorageFileRow, StorageOverviewResponse } from "@kanera/shared/dto";
 import {
   boards,
   cardAttachments,
@@ -15,6 +15,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertCardAccess, assertOrgRole } from "../../lib/access.js";
 import { getUploadEntitlements } from "../../lib/entitlements.js";
+import { getPlanUsage } from "../../lib/tier-limits.js";
 import { emitClientEntitlementsChanged } from "../../realtime/emit.js";
 import { removeCardAttachment } from "../cards/attachments.routes.js";
 import { removeNoteAttachment } from "../notes/routes.js";
@@ -90,6 +91,13 @@ type StorageFileDbRow = {
 
 export async function clientStorageRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
+
+  // Hosted plan meters (boards, members/seats, automations) beside the storage pool. Same admin gate
+  // as the storage overview: usage is organisation-wide and sits next to billing.
+  app.get("/clients/me/plan-usage", async (req): Promise<PlanUsageResponse> => {
+    assertOrgRole(req.auth, "admin");
+    return getPlanUsage(req.auth.cid);
+  });
 
   app.get("/clients/me/storage", async (req): Promise<StorageOverviewResponse> => {
     assertOrgRole(req.auth, "admin");
