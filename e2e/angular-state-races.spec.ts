@@ -205,9 +205,9 @@ test("table multi-select clicks preserve both choices before the first request s
   });
   const cell = page.locator(`.tv-row[data-card-id="${card.id}"] [data-col="cf:${field.id}"]`);
   await cell.locator(".tv-cell-trigger").click();
-  await page.locator("k-select-picker").getByRole("button", { name: "Alpha", exact: true }).click();
+  await page.locator("k-select-picker").getByRole("option", { name: "Alpha", exact: true }).click();
   await captured.promise;
-  await page.locator("k-select-picker").getByRole("button", { name: "Beta", exact: true }).click();
+  await page.locator("k-select-picker").getByRole("option", { name: "Beta", exact: true }).click();
   release.release();
   await expect.poll(async () => {
     const detail = await json<{ customFieldValues: { fieldId: string; valueOptionIds: string[] | null }[] }>(await api.get(`/api/cards/${card.id}/detail`));
@@ -258,7 +258,7 @@ for (const surface of ["detail", "table"] as const) {
       });
       try {
         await trigger.click();
-        await page.locator("k-select-picker").getByRole("button", { name: "Alpha", exact: true }).click();
+        await page.locator("k-select-picker").getByRole("option", { name: "Alpha", exact: true }).click();
         await committed.promise;
         await json(await api.put(`/api/cards/${card.id}/custom-fields/${field.id}`, { data: { valueOptionIds: [beta] } }));
         await expect.poll(() => frames.some((frame) => frame.includes("card:customFieldValue:set") && frame.includes(card.id) && frame.includes(beta))).toBe(true);
