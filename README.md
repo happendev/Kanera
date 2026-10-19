@@ -192,7 +192,7 @@ Build automations from a **When** trigger and ordered **Do** actions. Triggers c
 
 Review a daily history of cards created, moved, and completed, plus finished checklist items. Use it on a board, My Cards, or Team Cards for standups, async updates, progress reviews, and client check-ins.
 
-![Kanera Work Done view showing a daily history of card and checklist progress](docs/readme-assets/work-done.jpg)
+![Kanera Work Done view showing a daily history of card and checklist progress](docs/readme-assets/work-done.jpg?v=20261020report)
 
 ### Portfolio rolls work up without losing its source
 
