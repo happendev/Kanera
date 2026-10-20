@@ -13,6 +13,7 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assignedCardVisibility, assertOrgRole, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
+import { loadBoardTileSummaries } from "../../lib/board-tile-summaries.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { cleanupUserBoardParticipation } from "../../lib/board-participation-cleanup.js";
@@ -408,6 +409,13 @@ export async function boardRoutes(app: FastifyInstance) {
       ctx.assignedItemsOnly ? req.auth.sub : undefined,
       { includeCards, listId: query.listId, limit: cardLimit, offset: cardOffset },
     );
+  });
+
+  // Static segment, so find-my-way resolves it ahead of `/boards/:id/...`. A query POST rather
+  // than ids in the query string: a settings page can ask for a hundred boards at once.
+  app.post("/boards/tile-summaries/query", async (req) => {
+    const { boardIds } = dto.boardTileSummariesQueryBody.parse(req.body ?? {});
+    return loadBoardTileSummaries(req.auth, boardIds);
   });
 
   app.get("/boards/:id/transfer-targets", async (req) => {

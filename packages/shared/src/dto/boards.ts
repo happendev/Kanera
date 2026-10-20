@@ -89,3 +89,50 @@ export const updateBoardMemberBody = z.object({
   assignedItemsOnly: z.boolean().optional(),
 });
 export type UpdateBoardMemberBody = z.infer<typeof updateBoardMemberBody>;
+
+/** At most this many boards per tile-summary request: a settings page, never a catalog. */
+export const BOARD_TILE_SUMMARY_MAX_BOARDS = 100;
+
+export const boardTileSummariesQueryBody = z.object({
+  boardIds: z.array(z.uuid()).min(1).max(BOARD_TILE_SUMMARY_MAX_BOARDS),
+});
+export type BoardTileSummariesQueryBody = z.infer<typeof boardTileSummariesQueryBody>;
+
+/** How many member avatars a tile shows before it folds the rest into a "+N" count. */
+export const BOARD_TILE_MEMBER_LIMIT = 4;
+
+export type BoardTileMember = {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+};
+
+/**
+ * The counts row under a board's name on a board tile (the workspace settings board list). One
+ * row per requested board the viewer can open; boards the viewer cannot open are silently absent
+ * rather than an error, so a stale id on the client is harmless.
+ *
+ * Card counts are over unarchived cards and honour the viewer's assigned-items restriction, the
+ * same predicates the Portfolio buckets use, so a tile and the Portfolio row for the same board
+ * never disagree. `completed` is all-time (not a reporting window): the progress bar reads
+ * "done share of everything still on the board".
+ */
+export type BoardTileSummary = {
+  boardId: string;
+  /** Unarchived cards without a completion. */
+  open: number;
+  /** Unarchived cards with a completion, all time. */
+  completed: number;
+  /** Open cards whose due date and slot cut-off have passed in the card's own time zone. */
+  overdue: number;
+  /** Checklist items on open cards, done and total. */
+  checklistDone: number;
+  checklistTotal: number;
+  /** Earliest due date (YYYY-MM-DD) among open cards that are not yet overdue, or null. */
+  nextDueDate: string | null;
+  /** The newest `updatedAt` among the counted cards, the canonical card-activity clock, or null. */
+  lastActivityAt: string | null;
+  /** The first `BOARD_TILE_MEMBER_LIMIT` members in join order. */
+  members: BoardTileMember[];
+  memberCount: number;
+};

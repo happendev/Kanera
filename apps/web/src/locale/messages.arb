@@ -11339,7 +11339,8 @@
   "@899983344489847167": {
     "description": "Sub-checklist progress, e.g. 2/5 items done",
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail.component.html",
+      "src/app/shared/board-tile-summary.component.ts"
     ]
   },
   "8309285169711415702": "Checklist item actions",
@@ -14892,7 +14893,8 @@
   "@3338771948482786055": {
     "description": "Report people row - overdue assignments now",
     "x-files": [
-      "src/app/features/board/work-done-view/work-done-report.component.ts"
+      "src/app/features/board/work-done-view/work-done-report.component.ts",
+      "src/app/shared/board-tile-summary.component.ts"
     ]
   },
   "5538206717712454870": "{count, plural, one {# card without a value} other {# cards without a value}}",
@@ -26921,6 +26923,48 @@
     "description": "Relative time for under a minute, read after \"Last online\"",
     "x-files": [
       "src/app/shared/avatar.component.ts"
+    ]
+  },
+  "6674850178976368452": "Checklist items done on open cards",
+  "@6674850178976368452": {
+    "description": "Board tile tooltip on the checklist count",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "8288945552627986494": "Next due date",
+  "@8288945552627986494": {
+    "description": "Board tile tooltip on the next due date",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "1936573498549727489": "{done, plural, one {# of {total} cards done} other {# of {total} cards done}}",
+  "@1936573498549727489": {
+    "description": "Board tile progress bar label - completed cards out of every card on the board",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "8886723139090848520": "{count, plural, =0 {No open cards} one {# open} other {# open}}",
+  "@8886723139090848520": {
+    "description": "Board tile count of open cards",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "6084766080270264075": "Updated {$time}",
+  "@6084766080270264075": {
+    "description": "Board tile - when the board's cards last changed, e.g. \"Updated 2h ago\"",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "6737089387506614204": "{count, plural, one {# more member} other {# more members}}",
+  "@6737089387506614204": {
+    "description": "Board tile tooltip on the \"+N\" member overflow",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
     ]
   },
   "5786363460327756403": "Rose",
