@@ -208,14 +208,14 @@ const BULK_MENU_WIDTH = 232;
 
     .bcam-head {
       padding: 6px 10px;
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 700;
       color: var(--text-muted);
 
       small {
         display: block;
         margin-top: 2px;
-        font-size: 11px;
+        font-size: var(--text-xs);
         font-weight: 600;
         letter-spacing: 0;
         text-transform: none;
@@ -235,7 +235,7 @@ const BULK_MENU_WIDTH = 232;
       min-height: 32px;
       padding: 7px 10px;
       border-radius: var(--radius-sm);
-      font-size: 13px;
+      font-size: var(--text-base);
       color: var(--text);
       background: transparent;
       border: none;
@@ -269,7 +269,7 @@ const BULK_MENU_WIDTH = 232;
 
     .bcam-chev {
       margin-left: auto;
-      font-size: 12px;
+      font-size: var(--text-sm);
     }
 
     .bcam-panel,
@@ -292,7 +292,7 @@ const BULK_MENU_WIDTH = 232;
     }
 
     .cqe-label {
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       color: var(--text-muted);
     }
@@ -326,12 +326,12 @@ const BULK_MENU_WIDTH = 232;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 13px;
+        font-size: var(--text-base);
       }
 
       > i {
         color: var(--accent, var(--text));
-        font-size: 14px;
+        font-size: var(--text-md);
       }
 
       &:hover,
@@ -356,7 +356,7 @@ const BULK_MENU_WIDTH = 232;
       margin: 0;
       padding: 6px 8px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
     }
 
     .bcam-dot {
@@ -370,7 +370,7 @@ const BULK_MENU_WIDTH = 232;
       margin: 0;
       padding: 8px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       text-align: center;
     }
 
@@ -398,7 +398,7 @@ const BULK_MENU_WIDTH = 232;
       align-items: center;
       gap: 6px;
       padding: 6px;
-      font-size: 12px;
+      font-size: var(--text-sm);
       color: var(--text-muted);
 
       span {
@@ -412,7 +412,7 @@ const BULK_MENU_WIDTH = 232;
       border-radius: var(--radius-sm);
       padding: 4px 7px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: var(--text-sm);
     }
 
     .bcam-confirm-yes {

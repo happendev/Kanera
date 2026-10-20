@@ -111,7 +111,7 @@ const COLOR_LABELS: Record<ColorToken, string> = {
       display: flex;
       align-items: center;
       justify-content: center;
-      i { font-size: 16px; color: var(--text-muted); }
+      i { font-size: var(--text-lg); color: var(--text-muted); }
     }
 
     .cp-dropdown {

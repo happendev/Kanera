@@ -36,6 +36,14 @@
   --text: #e8f0f8;
   --text-muted: #a3b5cc;
   --muted: #a3b5cc;
+  // Four text tiers, not two. --text-3 sits between --text and --text-muted for secondary content that
+  // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
+  // is placeholders only, the one tier allowed to fall below body contrast.
+  --text-3: #c5d1df;
+  --text-4: #7d8ea4;
+  // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
+  // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
+  --divider: #1e2a3c;
 
   // Emphasis tone for sidebar nav rows (top-level items, workspace headers, boards
   // with unread attention). On dark it is just the normal foreground; on light the

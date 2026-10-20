@@ -247,7 +247,7 @@ type FlatResult =
       align-items: center;
       gap: 10px;
       padding: 14px 16px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--divider);
     }
 
     .search-row > .ti {
@@ -264,10 +264,10 @@ type FlatResult =
       color: var(--text);
     }
 
-    .search-input::placeholder { color: var(--text-muted); }
+    .search-input::placeholder { color: var(--text-4); }
 
     .esc {
-      font-size: 11px;
+      font-size: var(--text-xs);
       color: var(--text-muted);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
@@ -285,7 +285,7 @@ type FlatResult =
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 600;
       color: var(--text-muted);
       padding: 10px 12px 4px;
@@ -332,7 +332,7 @@ type FlatResult =
       margin-top: 1px;
     }
 
-    .row-icon .ti { font-size: 16px; line-height: 1; }
+    .row-icon .ti { font-size: var(--text-lg); line-height: 1; }
 
     .row-main {
       display: flex;
@@ -345,20 +345,20 @@ type FlatResult =
 
     .row-title {
       display: block;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 500;
       line-height: 1.35;
       color: var(--text);
       white-space: normal;
       overflow-wrap: anywhere;
     }
-    .card-key { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+    .card-key { color: var(--text-muted); font-size: var(--text-xs); font-weight: 400; }
 
     /* The snippet is injected via [innerHTML], so pierce emulated encapsulation
        to style the <mark> tags ts_headline produces. */
     .snippet {
       display: block;
-      font-size: 12px;
+      font-size: var(--text-sm);
       line-height: 1.5;
       color: var(--text-muted);
       white-space: normal;
@@ -375,7 +375,7 @@ type FlatResult =
 
     .meta {
       display: block;
-      font-size: 11px;
+      font-size: var(--text-xs);
       line-height: 1.4;
       color: var(--text-muted);
       opacity: 0.6;
@@ -390,7 +390,7 @@ type FlatResult =
       gap: 8px;
       padding: 32px 16px;
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: var(--text-base);
     }
 
     .empty .ti { font-size: 24px; }
@@ -406,7 +406,7 @@ type FlatResult =
       .backdrop { padding: 8px; align-items: stretch; }
       .panel { max-width: none; max-height: calc(100dvh - 16px); }
       .search-row { padding: 12px 14px; }
-      .search-input { font-size: 16px; } /* iOS zooms into inputs below 16px */
+      .search-input { font-size: var(--text-lg); } /* iOS zooms into inputs below 16px */
       .esc { display: none; }
       .row { gap: 10px; padding: 10px; }
       .command-arrow { display: none; }

@@ -8,14 +8,14 @@
   @if (navigation() === "paged") {
   <div class="calendar-toolbar" (click)="$event.stopPropagation()">
     <div class="calendar-toolbar-left">
-      <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="previous()" aria-label="Previous" i18n-aria-label="Button - go to the previous month or week" kTooltip="Previous" i18n-kTooltip="Button - go to the previous month or week">
+      <button type="button" class="k-toolbar-icon-btn" (click)="previous()" aria-label="Previous" i18n-aria-label="Button - go to the previous month or week" kTooltip="Previous" i18n-kTooltip="Button - go to the previous month or week">
         <i class="ti ti-chevron-left"></i>
       </button>
-      <button type="button" class="cal-toolbar-btn" (click)="today()">
+      <button type="button" class="k-toolbar-btn" (click)="today()">
         <i class="ti ti-calendar-event"></i>
         <span i18n="Button - jump the calendar to today">Today</span>
       </button>
-      <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="next()" aria-label="Next" i18n-aria-label="Button - go to the next month or week" kTooltip="Next" i18n-kTooltip="Button - go to the next month or week">
+      <button type="button" class="k-toolbar-icon-btn" (click)="next()" aria-label="Next" i18n-aria-label="Button - go to the next month or week" kTooltip="Next" i18n-kTooltip="Button - go to the next month or week">
         <i class="ti ti-chevron-right"></i>
       </button>
       <span class="cal-toolbar-title">{{ title() }}</span>

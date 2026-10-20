@@ -60,7 +60,7 @@
            chose over the default for this sheet's shape. -->
       <button
         type="button"
-        class="tv-toolbar-btn"
+        class="k-toolbar-btn k-toolbar-collapsible-label"
         [class.is-open]="columnsOpen()"
         [class.is-set]="columnsIsSet()"
         [class.has-clear]="columnsIsSet()"
@@ -70,10 +70,10 @@
         i18n-aria-label
         (click)="toggleColumnsMenu($event)"
       >
-        <i class="ti ti-columns-3"></i><span class="tv-toolbar-label" i18n="Toolbar button that opens the column picker">Columns</span>
+        <i class="ti ti-columns-3"></i><span i18n="Toolbar button that opens the column picker">Columns</span>
       </button>
       @if (columnsIsSet()) {
-        <button type="button" class="tv-toolbar-clear" kTooltip="Restore default columns" i18n-kTooltip aria-label="Restore default columns" i18n-aria-label (click)="clearColumns()">
+        <button type="button" class="k-toolbar-clear" kTooltip="Restore default columns" i18n-kTooltip aria-label="Restore default columns" i18n-aria-label (click)="clearColumns()">
           <i class="ti ti-x"></i>
         </button>
       }
@@ -114,7 +114,7 @@
       -->
       <button
         type="button"
-        class="tv-toolbar-btn"
+        class="k-toolbar-btn k-toolbar-collapsible-label"
         [class.is-open]="groupOpen()"
         [class.is-set]="groupIsSet()"
         [class.has-clear]="groupIsSet()"
@@ -123,11 +123,11 @@
         (click)="toggleMenu('group')"
       >
         <i class="ti" [class.ti-chart-donut]="hostGroupBy()" [class.ti-layout-rows]="!hostGroupBy()"></i>
-        <span class="tv-toolbar-label">{{ groupTriggerLabel() }}</span>
+        <span>{{ groupTriggerLabel() }}</span>
       </button>
       @if (groupIsSet()) {
         @let clearGroupLabel = hostGroupBy() ? text.clearBreakdown : text.resetGrouping;
-        <button type="button" class="tv-toolbar-clear" [kTooltip]="clearGroupLabel" [attr.aria-label]="clearGroupLabel" (click)="clearGroup()">
+        <button type="button" class="k-toolbar-clear" [kTooltip]="clearGroupLabel" [attr.aria-label]="clearGroupLabel" (click)="clearGroup()">
           <i class="ti ti-x"></i>
         </button>
       }
@@ -166,7 +166,7 @@
       <span class="tv-menu-wrap">
         <button
           type="button"
-          class="tv-toolbar-btn"
+          class="k-toolbar-btn k-toolbar-collapsible-label"
           [class.is-open]="sortOpen()"
           [class.is-set]="sortIsSet()"
           [class.has-clear]="sortIsSet()"
@@ -174,10 +174,10 @@
           [attr.aria-label]="sortTriggerLabel()"
           (click)="toggleMenu('sort')"
         >
-          <i class="ti ti-arrows-sort"></i><span class="tv-toolbar-label">{{ sortTriggerLabel() }}</span>
+          <i class="ti ti-arrows-sort"></i><span>{{ sortTriggerLabel() }}</span>
         </button>
         @if (sortIsSet()) {
-          <button type="button" class="tv-toolbar-clear" kTooltip="Reset sort" i18n-kTooltip aria-label="Reset sort" i18n-aria-label (click)="clearSort()">
+          <button type="button" class="k-toolbar-clear" kTooltip="Reset sort" i18n-kTooltip aria-label="Reset sort" i18n-aria-label (click)="clearSort()">
             <i class="ti ti-x"></i>
           </button>
         }
@@ -197,7 +197,7 @@
     @if (canCollapseGroups()) {
       <button
         type="button"
-        class="tv-toolbar-btn tv-icon-btn"
+        class="k-toolbar-icon-btn"
         [attr.aria-label]="allGroupsCollapsed() ? text.expandAllGroups : text.collapseAllGroups"
         [kTooltip]="allGroupsCollapsed() ? text.expandAll : text.collapseAll"
         (click)="toggleAllGroups()"
@@ -211,7 +211,7 @@
     <span class="tv-menu-wrap">
       <button
         type="button"
-        class="tv-toolbar-btn tv-icon-btn"
+        class="k-toolbar-icon-btn"
         [class.is-open]="moreOpen()"
         kTooltip="More table actions"
         i18n-kTooltip

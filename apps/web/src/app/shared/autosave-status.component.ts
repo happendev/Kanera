@@ -23,11 +23,11 @@ import type { AutosaveState } from "./autosave-tracker";
     :host { display: flex; align-items: center; justify-content: flex-end; min-height: 24px; }
     .chip {
       display: inline-flex; align-items: center; gap: 5px; margin-left: auto; min-height: 22px; padding: 0 8px;
-      border-radius: 999px; color: var(--text-muted); font-size: 12px; font-weight: 500; white-space: nowrap;
+      border-radius: 999px; color: var(--text-muted); font-size: var(--text-sm); font-weight: 500; white-space: nowrap;
       transition: opacity var(--motion-fast);
     }
     .chip:empty { opacity: 0; }
-    .chip i { font-size: 14px; }
+    .chip i { font-size: var(--text-md); }
     .chip[data-state="saved"] { color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
     .chip[data-state="error"] { color: var(--danger); background: var(--danger-bg); }
     .chip[data-state="saving"] { background: var(--surface-2); }

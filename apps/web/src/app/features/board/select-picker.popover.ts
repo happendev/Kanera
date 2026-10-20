@@ -102,13 +102,13 @@ import { byPosition } from "../../shared/position-sort";
     }
 
     .lp-title {
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       color: var(--text);
     }
 
     .lp-hint {
-      font-size: 11px;
+      font-size: var(--text-xs);
       color: var(--text-muted);
     }
 
@@ -118,7 +118,7 @@ import { byPosition } from "../../shared/position-sort";
       border-radius: var(--radius-sm);
       color: var(--text);
       padding: 6px 8px;
-      font-size: 13px;
+      font-size: var(--text-base);
       outline: none;
       &:focus { border-color: var(--accent, var(--text)); }
     }
@@ -135,7 +135,7 @@ import { byPosition } from "../../shared/position-sort";
 
     .lp-empty {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       margin: 0;
       padding: 8px 4px;
       text-align: center;
@@ -173,7 +173,7 @@ import { byPosition } from "../../shared/position-sort";
 
     .lp-name {
       flex: 1;
-      font-size: 13px;
+      font-size: var(--text-base);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -181,7 +181,7 @@ import { byPosition } from "../../shared/position-sort";
 
     .lp-check {
       color: var(--accent, var(--text));
-      font-size: 14px;
+      font-size: var(--text-md);
     }
 
     .lp-clear {
@@ -190,7 +190,7 @@ import { byPosition } from "../../shared/position-sort";
       border-radius: var(--radius-sm);
       color: var(--text-muted);
       padding: 5px 8px;
-      font-size: 12px;
+      font-size: var(--text-sm);
       cursor: pointer;
       &:hover { background: var(--surface-hover); color: var(--text); }
     }

@@ -53,18 +53,18 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 30px;
+  height: var(--h-md);
   padding: 0 10px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
   transition: background-color var(--motion-fast), color var(--motion-fast);
 
-  i { font-size: 14px; }
+  i { font-size: var(--text-md); }
 
   &:hover {
     background: var(--surface-2);
@@ -83,7 +83,7 @@
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 
@@ -104,12 +104,12 @@
     border: 1px solid var(--accent);
     border-radius: var(--radius);
     color: var(--accent-fg);
-    font-size: 13px;
+    font-size: var(--text-base);
     font-weight: 500;
     cursor: pointer;
     transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
 
-    i { font-size: 14px; }
+    i { font-size: var(--text-md); }
 
     &:hover:not(:disabled) {
       background: var(--accent-hover);
@@ -137,13 +137,13 @@
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
 
   i {
     flex-shrink: 0;
     margin-top: 1px;
-    font-size: 14px;
+    font-size: var(--text-md);
   }
 }
 
@@ -151,7 +151,7 @@
   padding: 24px 16px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -175,7 +175,7 @@
   display: none;
   align-items: center;
   justify-content: center;
-  height: 30px;
+  height: var(--h-md);
   padding: 0 10px;
   gap: 6px;
   flex-shrink: 0;
@@ -186,10 +186,10 @@
   cursor: pointer;
   transition: background-color var(--motion-fast), color var(--motion-fast);
 
-  i { font-size: 16px; }
+  i { font-size: var(--text-lg); }
 
   span {
-    font-size: 13px;
+    font-size: var(--text-base);
     font-weight: 500;
     white-space: nowrap;
   }

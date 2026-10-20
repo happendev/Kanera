@@ -128,7 +128,7 @@ import { byPosition } from "../../shared/position-sort";
       align-items: center;
       gap: 8px;
       padding: 0 2px 2px;
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 700;
       color: var(--text);
     }
@@ -141,7 +141,7 @@ import { byPosition } from "../../shared/position-sort";
     }
 
     .cqe-label {
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       color: var(--text-muted);
     }
@@ -153,7 +153,7 @@ import { byPosition } from "../../shared/position-sort";
       background: var(--surface-2);
       color: var(--text);
       padding: 7px 8px;
-      font-size: 13px;
+      font-size: var(--text-base);
       line-height: 1.35;
       outline: none;
       resize: none;
@@ -197,12 +197,12 @@ import { byPosition } from "../../shared/position-sort";
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 13px;
+        font-size: var(--text-base);
       }
 
       > i {
         color: var(--accent, var(--text));
-        font-size: 14px;
+        font-size: var(--text-md);
       }
 
       &:hover,
@@ -222,7 +222,7 @@ import { byPosition } from "../../shared/position-sort";
       margin: 0;
       padding: 6px 8px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
     }
 
     .cqe-due-wrap {
@@ -237,7 +237,7 @@ import { byPosition } from "../../shared/position-sort";
 
       > i {
         color: var(--text-muted);
-        font-size: 14px;
+        font-size: var(--text-md);
       }
 
       > span {
@@ -246,7 +246,7 @@ import { byPosition } from "../../shared/position-sort";
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 13px;
+        font-size: var(--text-base);
       }
 
       &:hover,

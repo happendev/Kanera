@@ -87,7 +87,7 @@
 
 .wd-day-label {
   flex: none;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -98,7 +98,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
 }
 
@@ -113,7 +113,7 @@
   grid-template-columns: 4.5rem repeat(4, minmax(2.75rem, max-content));
   gap: 6px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -135,7 +135,7 @@
   }
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1;
   }
 
@@ -260,7 +260,7 @@
 .wd-time {
   padding-top: 6px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   white-space: nowrap;
@@ -277,7 +277,7 @@
   color: var(--text-muted);
 
   i {
-    font-size: 16px;
+    font-size: var(--text-lg);
     line-height: 1;
   }
 
@@ -322,7 +322,7 @@
 .wd-verb {
   flex: none;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
 
   &.wd-verb--created {
@@ -346,7 +346,7 @@
   overflow: hidden;
   min-width: 0;
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -357,7 +357,7 @@
 .wd-card-key {
   flex: none;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
@@ -368,11 +368,11 @@
   flex: none;
   max-width: 40%;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 
   i {
     flex: none;
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1;
   }
 
@@ -410,12 +410,12 @@
   gap: 4px;
   padding: 1px 6px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   line-height: 18px;
 
   i {
-    font-size: 12px;
+    font-size: var(--text-sm);
     line-height: 1;
   }
 
@@ -481,7 +481,7 @@
 
   i {
     flex: none;
-    font-size: 12px;
+    font-size: var(--text-sm);
     line-height: 1;
   }
 }
@@ -510,7 +510,7 @@
 // Robot mark for agent-done work. Same size as the row text so it reads as part of the name, in
 // the accent so it matches the "via <agent>" badge used on activity and comments.
 .wd-actor-agent {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--accent);
   flex: 0 0 auto;
 }
@@ -519,7 +519,7 @@
   overflow: hidden;
   max-width: 7rem;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;

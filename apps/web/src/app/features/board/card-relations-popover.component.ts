@@ -57,7 +57,7 @@ import { CardRelationsComponent } from "./card-relations.component";
     }
     /* No left indent inside the narrow popover; the section heading is the popover's title. */
     k-card-relations { --cr-indent: 0; }
-    .crp-loading { margin: 6px 0; color: var(--muted); font-size: 13px; }
+    .crp-loading { margin: 6px 0; color: var(--muted); font-size: var(--text-base); }
     .crp-error { color: var(--danger); }
     .crp-retry {
       height: auto;
@@ -65,7 +65,7 @@ import { CardRelationsComponent } from "./card-relations.component";
       border: 0;
       background: transparent;
       color: var(--text);
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 500;
       text-decoration: underline;
     }

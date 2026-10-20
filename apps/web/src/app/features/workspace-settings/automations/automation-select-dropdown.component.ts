@@ -76,7 +76,7 @@ import type { PickerGroup, PickerOption } from "../../../shared/picker-list.comp
       border-radius: var(--radius);
       background: var(--field-bg, var(--surface-2));
       color: var(--text);
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 500;
       text-align: left;
       cursor: pointer;
@@ -143,7 +143,7 @@ import type { PickerGroup, PickerOption } from "../../../shared/picker-list.comp
     .asd-chevron {
       flex: 0 0 auto;
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: var(--text-md);
       transition: transform 0.15s;
     }
 

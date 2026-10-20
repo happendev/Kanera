@@ -81,7 +81,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
       .ae-group-name {
         margin: 0 0 2px;
         color: var(--text-muted);
-        font-size: 11px;
+        font-size: var(--text-xs);
         font-weight: 700;
       }
 
@@ -130,13 +130,13 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
       }
 
       .ae-recipe strong {
-        font-size: 13px;
+        font-size: var(--text-base);
         font-weight: 600;
       }
 
       .ae-recipe small {
         color: var(--text-muted);
-        font-size: 12px;
+        font-size: var(--text-sm);
         line-height: 1.4;
       }
 
@@ -145,16 +145,16 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
         align-items: center;
         gap: 4px;
         color: var(--warning);
-        font-size: 11px;
+        font-size: var(--text-xs);
         font-style: normal;
 
-        i { font-size: 12px; }
+        i { font-size: var(--text-sm); }
       }
 
       .ae-recipe-go {
         margin-top: 2px;
         color: var(--text-muted);
-        font-size: 14px;
+        font-size: var(--text-md);
       }
 
       .ae-foot {
@@ -162,7 +162,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
         padding-top: 8px;
         border-top: 1px solid var(--border);
         color: var(--text-muted);
-        font-size: 11px;
+        font-size: var(--text-xs);
         line-height: 1.45;
       }
     `,

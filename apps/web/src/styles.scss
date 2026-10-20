@@ -70,7 +70,7 @@
   background: var(--surface-overlay);
   color: var(--text);
   box-shadow: var(--shadow-lg, 0 10px 30px -8px rgba(0, 0, 0, 0.24));
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -243,10 +243,10 @@ k-list.is-drop-target {
 //      the overlay container and body-appended dialogs both attach after the app root.
 // ─── Scale tokens ────────────────────────────────────────────────────────────
 //
-// Spacing is a 4px scale with seven steps; type is four sizes plus one micro-label size; motion is two
-// durations and one curve. New styles should reach for these rather than inventing a value, and a
-// value outside the scale needs a comment saying why. Hierarchy comes from weight, colour and space,
-// not from a tenth font size — the shell alone used to carry ten.
+// Spacing is a 4px scale with seven steps; type is four sizes plus one micro-label size; controls
+// come in four heights; motion is two durations and one curve. New styles should reach for these
+// rather than inventing a value, and a value outside the scale needs a comment saying why. Hierarchy
+// comes from weight, colour and space, not from a tenth font size — the shell alone used to carry ten.
 :root {
   --space-1: 4px;
   --space-2: 8px;
@@ -261,6 +261,14 @@ k-list.is-drop-target {
   --text-base: 13px; // controls, table cells, dense UI
   --text-md: 14px; // body copy, navigation
   --text-lg: 16px; // section headings
+
+  // Control heights. The global button / input reset pins --h-lg; denser chrome (toolbars inside a
+  // table, card meta, filter chips, checklist rows) picks a named step instead of restating a pixel
+  // value per component, so a density change is a one-line edit.
+  --h-xs: 22px; // inline chips, reaction pills, tiny clears
+  --h-sm: 26px; // checklist rows, in-cell editors, small icon buttons
+  --h-md: 30px; // dense toolbars, sidebar toggles, compact selects
+  --h-lg: 36px; // default controls (the global reset)
 
   // Colour, opacity and border changes on hover; --motion-base for panels sliding or fading in.
   // Layout properties are never transitioned.
@@ -314,6 +322,14 @@ k-list.is-drop-target {
   --text: #e8f0f8;
   --text-muted: #a3b5cc;
   --muted: #a3b5cc;
+  // Four text tiers, not two. --text-3 sits between --text and --text-muted for secondary content that
+  // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
+  // is placeholders only, the one tier allowed to fall below body contrast.
+  --text-3: #c5d1df;
+  --text-4: #7d8ea4;
+  // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
+  // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
+  --divider: #1e2a3c;
 
   // Emphasis tone for sidebar nav rows (top-level items, workspace headers, boards
   // with unread attention). On dark it is just the normal foreground; on light the
@@ -653,6 +669,14 @@ k-list.is-drop-target {
   --text: #0f172a;
   --text-muted: #52647a;
   --muted: #52647a;
+  // Four text tiers, not two. --text-3 sits between --text and --text-muted for secondary content that
+  // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
+  // is placeholders only, the one tier allowed to fall below body contrast.
+  --text-3: #334155;
+  --text-4: #8494a8;
+  // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
+  // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
+  --divider: #e8ecf1;
 
   --nav-text-strong: #334155;
   --nav-active-bg: #dfe6ef;
@@ -797,12 +821,15 @@ k-list.is-drop-target {
 
   --border: #e2ddd4;
   --border-strong: #cec7ba;
+  --divider: #ebe7e0;
 
   // Warm near-black rather than the light base's slate, so body text does not read blue-tinted
   // against the ivory surfaces.
   --text: #26221d;
   --text-muted: #6b6459;
   --muted: #6b6459;
+  --text-3: #48423a;
+  --text-4: #9a9287;
 
   --nav-text-strong: #3d382f;
   --nav-active-bg: #e4dfd6;
@@ -878,6 +905,14 @@ k-list.is-drop-target {
   --text: #f0f6fc;
   --text-muted: #9198a1;
   --muted: #9198a1;
+  // Four text tiers, not two. --text-3 sits between --text and --text-muted for secondary content that
+  // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
+  // is placeholders only, the one tier allowed to fall below body contrast.
+  --text-3: #c9d1d9;
+  --text-4: #6e7681;
+  // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
+  // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
+  --divider: #262d37;
 
   // A deliberately desaturated blue. In Kanera the accent is link text and active-state chrome as
   // often as it is a fill, and a single token has to serve both: a fully saturated blue (~73%
@@ -1056,10 +1091,10 @@ a.sm {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 36px;
+  height: var(--h-lg);
   padding: 0 14px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
   // Not 1: Inter's glyph box is ~1.21em tall, so at line-height 1 any truncating label inside a
   // button (overflow: hidden + ellipsis) clips its descenders and accents. Fixed-height buttons
@@ -1149,9 +1184,9 @@ button.destructive {
 
 button.sm,
 a.sm {
-  height: 30px;
+  height: var(--h-md);
   padding: 0 10px;
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 button.icon {
@@ -1196,7 +1231,7 @@ input,
 textarea,
 select {
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text);
   // Checkboxes and radios inherit this rule too, so the neutral base stays transparent
   // here and the themed field fill is applied to text-like inputs below.
@@ -1207,8 +1242,7 @@ select {
   width: 100%;
 
   &::placeholder {
-    color: var(--text-muted);
-    opacity: 0.6;
+    color: var(--text-4);
   }
 
   &:focus {
@@ -1219,13 +1253,13 @@ select {
 }
 
 input:not([type="checkbox"]):not([type="radio"]) {
-  height: 36px;
+  height: var(--h-lg);
   padding: 0 10px;
   background: var(--input-bg);
 }
 
 select {
-  height: 36px;
+  height: var(--h-lg);
   padding: 0 10px;
   background: var(--select-bg);
 }
@@ -1246,7 +1280,7 @@ k-card.cdk-drag-preview {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   padding: 8px 10px;
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text);
   box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.25));
   cursor: grabbing;
@@ -1350,7 +1384,7 @@ k-app-shell {
   gap: 6px;
   margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.4;
 
   i {
@@ -1437,7 +1471,7 @@ k-app-shell {
     flex: none;
     width: 16px;
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: var(--text-lg);
     text-align: center;
   }
 
@@ -1555,8 +1589,8 @@ button.icon.sm {
 }
 
 button.icon.lg {
-  width: 36px;
-  height: 36px;
+  width: var(--h-lg);
+  height: var(--h-lg);
 }
 
 // ─── Layout utilities ─────────────────────────────────────────────────────────
@@ -1641,7 +1675,7 @@ button.icon.lg {
     padding: var(--space-3);
 
     > .ti {
-      font-size: 16px;
+      font-size: var(--text-lg);
     }
   }
 }

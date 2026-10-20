@@ -50,13 +50,13 @@ export interface UpgradePromptContent {
     .backdrop { position:fixed; inset:0; z-index:var(--z-modal, 1000); display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.5); }
     .dialog { position:relative; width:100%; max-width:520px; padding:28px; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--surface); box-shadow:0 20px 55px rgba(0,0,0,.35); }
     .close { position:absolute; top:14px; right:14px; display:grid; place-items:center; width:32px; height:32px; padding:0; color:var(--text-muted); background:transparent; border-color:transparent; }
-    .context-label { display:inline-flex; margin:0 40px 10px 0; padding:4px 8px; border-radius:999px; color:var(--accent); background:var(--accent-soft); font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+    .context-label { display:inline-flex; margin:0 40px 10px 0; padding:4px 8px; border-radius:999px; color:var(--accent); background:var(--accent-soft); font-size: var(--text-xs); font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
     h2 { margin:0 36px 22px 0; color:var(--text); font-size:21px; line-height:1.3; }
     .detail { display:grid; grid-template-columns:32px 1fr; gap:10px; padding:13px 0; border-top:1px solid var(--border); }
     .detail > i { display:grid; place-items:center; width:30px; height:30px; border-radius:var(--radius); color:var(--text-muted); background:var(--surface-2); }
     .detail div { display:grid; gap:3px; }
-    .detail span { color:var(--text-muted); font-size:11px; font-weight:650; letter-spacing:.03em; text-transform:uppercase; }
-    .detail strong { color:var(--text); font-size:13px; font-weight:550; line-height:1.45; }
+    .detail span { color:var(--text-muted); font-size: var(--text-xs); font-weight:650; letter-spacing:.03em; text-transform:uppercase; }
+    .detail strong { color:var(--text); font-size: var(--text-base); font-weight:550; line-height:1.45; }
     .value-detail > i { color:var(--success); }
     .free-detail > i { color:var(--warning); }
     .actions { display:flex; justify-content:flex-end; gap:8px; margin-top:22px; }

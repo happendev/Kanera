@@ -45,9 +45,9 @@
   gap: 5px;
   margin: 3px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 
-  i { font-size: 14px; }
+  i { font-size: var(--text-md); }
 }
 
 // Opts out of the global 36px button reset: this is a 26px close affordance in a dialog header,
@@ -55,13 +55,13 @@
 .cmp-icon-btn {
   flex: none;
   width: 26px;
-  height: 26px;
+  height: var(--h-sm);
   padding: 0;
   color: var(--text-muted);
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: var(--text-lg);
   cursor: pointer;
 
   &:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
@@ -88,7 +88,7 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md, 8px);
   font-family: inherit;
-  font-size: 16px;
+  font-size: var(--text-lg);
   font-weight: 600;
   line-height: 1.4;
   // Height follows the text. The global reset gives every textarea `min-height: 64px`, which
@@ -99,7 +99,7 @@
   resize: none;
   field-sizing: content;
 
-  &::placeholder { color: var(--text-muted); }
+  &::placeholder { color: var(--text-4); }
 
   &:focus-visible {
     border-color: var(--accent);
@@ -128,7 +128,7 @@
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   border: 2px dashed var(--accent);
   border-radius: var(--radius-lg);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   pointer-events: none;
 
@@ -152,12 +152,12 @@
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: 12.5px;
+  font-size: var(--text-base);
 
   > i {
     flex: none;
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 }
 
@@ -173,14 +173,14 @@
 .cmp-file-size {
   flex: none;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
 .cmp-file-remove {
   width: 22px;
-  height: 22px;
-  font-size: 14px;
+  height: var(--h-xs);
+  font-size: var(--text-md);
 }
 
 .cmp-props {
@@ -202,13 +202,13 @@
   gap: 6px;
   max-width: 260px;
   height: auto;
-  min-height: 30px;
+  min-height: var(--h-md);
   padding: 4px 9px;
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
-  font-size: 12.5px;
+  font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
 
@@ -265,12 +265,12 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 30px;
+  min-height: var(--h-md);
   padding: 2px 4px 2px 9px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
-  font-size: 12.5px;
+  font-size: var(--text-base);
 
   > i { flex: none; font-size: 15px; color: var(--text-muted); }
 
@@ -281,7 +281,7 @@
     color: var(--text);
     background: transparent;
     border: none;
-    font-size: 12.5px;
+    font-size: var(--text-base);
 
     &:focus-visible { outline: none; }
   }
@@ -307,14 +307,14 @@
   gap: 8px;
   padding: 2px 4px 6px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
 .cmp-error {
   margin: 0;
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .cmp-actions {
@@ -332,7 +332,7 @@
   align-items: center;
   gap: 6px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
 
   // The global input reset stretches inputs to full width; a checkbox must stay square.
@@ -349,7 +349,7 @@
   height: 32px;
   padding: 0 14px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
 }

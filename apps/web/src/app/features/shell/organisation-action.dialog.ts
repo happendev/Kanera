@@ -13,8 +13,8 @@ const DIALOG_STYLES = `
   .organisation-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
   header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
   h2 { margin: 0 0 4px; color: var(--text); font-size: 18px; }
-  p { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
-  label { display: grid; gap: 7px; color: var(--text); font-size: 13px; font-weight: 600; }
+  p { margin: 0; color: var(--text-muted); font-size: var(--text-base); line-height: 1.45; }
+  label { display: grid; gap: 7px; color: var(--text); font-size: var(--text-base); font-weight: 600; }
   input { width: 100%; }
   .error { margin-top: 12px; color: var(--danger); }
   footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }

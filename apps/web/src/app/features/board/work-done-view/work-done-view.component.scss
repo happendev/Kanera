@@ -55,7 +55,7 @@
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--text-md);
   cursor: pointer;
   transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
 
@@ -118,7 +118,7 @@
 
 .wd-summary {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -155,7 +155,7 @@
   min-height: 0;
   padding: clamp(32px, 10vh, 88px) var(--wd-gutter) 24px;
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--text-md);
   text-align: center;
 }
 

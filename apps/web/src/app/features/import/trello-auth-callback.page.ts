@@ -36,13 +36,13 @@ import type { OnInit } from "@angular/core";
     }
 
     .trello-auth-callback h1 {
-      font-size: 16px;
+      font-size: var(--text-lg);
       font-weight: 600;
     }
 
     .trello-auth-callback p {
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: var(--text-base);
     }
   `],
 })

@@ -67,7 +67,7 @@ import { PickerListComponent, type PickerGroup } from "./picker-list.component";
       color: var(--text);
       cursor: pointer;
       text-align: left;
-      font-size: 13px;
+      font-size: var(--text-base);
 
       &.is-open {
         border-color: var(--border-strong);
@@ -102,7 +102,7 @@ import { PickerListComponent, type PickerGroup } from "./picker-list.component";
 
     .msd-chevron {
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: var(--text-md);
       flex: 0 0 auto;
     }
 

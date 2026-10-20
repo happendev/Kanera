@@ -193,14 +193,14 @@ import { GlobalWorkState } from "./global-work.state";
 
       .sv-label {
         color: var(--text-muted);
-        font-size: 11px;
+        font-size: var(--text-xs);
         font-weight: 700;
       }
 
       .sv-help {
         margin: 0;
         color: var(--text-muted);
-        font-size: 11px;
+        font-size: var(--text-xs);
         line-height: 1.45;
       }
 
@@ -222,7 +222,7 @@ import { GlobalWorkState } from "./global-work.state";
           background: transparent;
           border: 0;
           border-radius: calc(var(--radius) - 3px);
-          font-size: 12px;
+          font-size: var(--text-sm);
           font-weight: 600;
           cursor: pointer;
 
@@ -236,7 +236,7 @@ import { GlobalWorkState } from "./global-work.state";
 
           &:disabled { cursor: not-allowed; opacity: 0.6; }
 
-          i { font-size: 14px; }
+          i { font-size: var(--text-md); }
         }
       }
 
@@ -247,19 +247,19 @@ import { GlobalWorkState } from "./global-work.state";
         align-items: center;
         gap: 5px;
         height: auto;
-        min-height: 26px;
+        min-height: var(--h-sm);
         padding: 3px 7px;
         color: var(--text);
         background: var(--surface-2);
         border: 1px solid var(--border);
         border-radius: 999px;
-        font-size: 11px;
+        font-size: var(--text-xs);
         cursor: pointer;
 
         &:hover:not(:disabled) { border-color: var(--border-strong); }
         &:disabled { cursor: not-allowed; opacity: 0.6; }
 
-        i { color: var(--text-muted); font-size: 13px; }
+        i { color: var(--text-muted); font-size: var(--text-base); }
       }
 
       .sv-add {
@@ -270,7 +270,7 @@ import { GlobalWorkState } from "./global-work.state";
         background: transparent;
         border: 1px dashed var(--border-strong);
         border-radius: var(--radius-sm);
-        font-size: 12px;
+        font-size: var(--text-sm);
         font-weight: 600;
         cursor: pointer;
 
@@ -299,7 +299,7 @@ import { GlobalWorkState } from "./global-work.state";
         height: 32px;
         padding: 0 12px;
         border-radius: var(--radius-sm);
-        font-size: 13px;
+        font-size: var(--text-base);
         font-weight: 600;
         cursor: pointer;
       }

@@ -267,7 +267,7 @@ function githubStateLabel(state: string): string {
     }
 
     .dv-copy-btn i {
-      font-size: 14px;
+      font-size: var(--text-md);
     }
 
     .dv-empty {
@@ -275,14 +275,14 @@ function githubStateLabel(state: string): string {
       align-items: center;
       gap: 7px;
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: var(--text-base);
       padding: 4px 0;
-      i { font-size: 14px; opacity: 0.7; }
+      i { font-size: var(--text-md); opacity: 0.7; }
     }
 
     .dv-body {
       color: var(--text);
-      font-size: 14px;
+      font-size: var(--text-md);
       line-height: 1.6;
       word-break: break-word;
     }
@@ -300,7 +300,7 @@ function githubStateLabel(state: string): string {
     .dv-body h1 { font-size: 20px; }
     .dv-body h2 { font-size: 17px; }
     .dv-body h3 { font-size: 15px; }
-    .dv-body h4 { font-size: 14px; }
+    .dv-body h4 { font-size: var(--text-md); }
 
     .dv-body ul, .dv-body ol { margin: 0 0 10px; padding-left: 22px; }
     .dv-body li { margin: 2px 0; }
@@ -452,14 +452,14 @@ function githubStateLabel(state: string): string {
       min-width: 0;
       max-width: 100%;
       font-weight: 700;
-      font-size: 13px;
+      font-size: var(--text-base);
       line-height: 1.35;
     }
 
     .dv-body .github-link-brand-icon {
       flex: 0 0 auto;
       color: var(--text);
-      font-size: 14px;
+      font-size: var(--text-md);
     }
 
     .dv-body .github-link-card-title-text {
@@ -476,7 +476,7 @@ function githubStateLabel(state: string): string {
       min-width: 0;
       margin-top: 2px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       line-height: 1.35;
       white-space: nowrap;
       overflow: hidden;
@@ -485,7 +485,7 @@ function githubStateLabel(state: string): string {
 
     .dv-body .github-link-card-meta i {
       flex: 0 0 auto;
-      font-size: 13px;
+      font-size: var(--text-base);
     }
 
     .dv-body .github-link-card-actions {
@@ -498,12 +498,12 @@ function githubStateLabel(state: string): string {
       display: inline-grid;
       place-items: center;
       width: 26px;
-      height: 26px;
+      height: var(--h-sm);
       border: 1px solid var(--border);
       border-radius: 7px;
       color: var(--text-muted);
       background: color-mix(in srgb, var(--surface-2) 70%, transparent);
-      font-size: 14px;
+      font-size: var(--text-md);
     }
 
     .dv-body .github-link-card-stats {
@@ -513,7 +513,7 @@ function githubStateLabel(state: string): string {
       border: 1px solid var(--border);
       border-radius: 7px;
       overflow: hidden;
-      font-size: 12px;
+      font-size: var(--text-sm);
       line-height: 1.35;
     }
 
@@ -561,7 +561,7 @@ function githubStateLabel(state: string): string {
       border: 1px solid var(--border-strong);
       border-radius: 4px;
       padding: 1px 5px;
-      font-size: 12.5px;
+      font-size: var(--text-base);
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       color: var(--text);
     }
@@ -580,7 +580,7 @@ function githubStateLabel(state: string): string {
       background: transparent;
       border: none;
       padding: 0;
-      font-size: 12.5px;
+      font-size: var(--text-base);
       color: inherit;
     }
 
@@ -597,7 +597,7 @@ function githubStateLabel(state: string): string {
       overflow-x: auto;
       border-collapse: collapse;
       margin: 0 0 12px;
-      font-size: 13px;
+      font-size: var(--text-base);
       line-height: 1.45;
     }
 

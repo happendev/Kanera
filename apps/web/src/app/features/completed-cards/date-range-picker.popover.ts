@@ -144,7 +144,7 @@ function compareDateValue(a: string, b: string): number {
 
     .drp-title {
       text-align: center;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 700;
       color: var(--text);
     }
@@ -170,7 +170,7 @@ function compareDateValue(a: string, b: string): number {
       }
 
       i {
-        font-size: 16px;
+        font-size: var(--text-lg);
       }
     }
 
@@ -184,7 +184,7 @@ function compareDateValue(a: string, b: string): number {
       border-radius: var(--radius-sm);
       background: var(--surface-2);
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 700;
       text-align: center;
     }
@@ -218,7 +218,7 @@ function compareDateValue(a: string, b: string): number {
         background: var(--surface-2);
         color: var(--text);
         cursor: pointer;
-        font-size: 12px;
+        font-size: var(--text-sm);
         font-weight: 600;
         transition: background-color 0.12s, border-color 0.12s;
 
@@ -251,7 +251,7 @@ function compareDateValue(a: string, b: string): number {
       align-items: center;
       justify-content: center;
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 700;
     }
 
@@ -263,7 +263,7 @@ function compareDateValue(a: string, b: string): number {
       background: transparent;
       color: var(--text);
       cursor: pointer;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 600;
       padding: 0;
       transition: background-color 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
@@ -311,7 +311,7 @@ function compareDateValue(a: string, b: string): number {
       padding: 0 8px;
       border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 600;
     }
 

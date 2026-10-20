@@ -168,11 +168,11 @@ const SEARCH_DEBOUNCE_MS = 200;
       align-items: center;
       gap: 7px;
       min-height: 28px;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 600;
       color: var(--text-muted);
     }
-    .section-label i { font-size: 14px; }
+    .section-label i { font-size: var(--text-md); }
     .count, .cr-group-count {
       display: inline-flex;
       align-items: center;
@@ -183,18 +183,18 @@ const SEARCH_DEBOUNCE_MS = 200;
       border-radius: 999px;
       background: var(--surface-2);
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 600;
     }
     .cr-add-btn {
       margin-left: auto;
-      height: 26px;
+      height: var(--h-sm);
       padding: 0 8px;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       background: var(--surface);
       color: var(--text);
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 500;
       gap: 4px;
     }
@@ -213,7 +213,7 @@ const SEARCH_DEBOUNCE_MS = 200;
       background: var(--surface);
     }
     .cr-search:focus-within { border-color: var(--accent); }
-    .cr-search > i { color: var(--muted); font-size: 14px; }
+    .cr-search > i { color: var(--muted); font-size: var(--text-md); }
     .cr-search input.cr-search-input {
       flex: 1;
       min-width: 0;
@@ -248,7 +248,7 @@ const SEARCH_DEBOUNCE_MS = 200;
     }
     button.cr-result + button.cr-result { border-top: 1px solid var(--border); }
     button.cr-result:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
-    .cr-result-add { margin-left: auto; color: var(--muted); font-size: 14px; }
+    .cr-result-add { margin-left: auto; color: var(--muted); font-size: var(--text-md); }
 
     /* Status line: answers "can I start this?" before any list. Plain text with a coloured icon. */
     .cr-status {
@@ -257,13 +257,13 @@ const SEARCH_DEBOUNCE_MS = 200;
       gap: 7px;
       margin: 0;
       color: var(--text);
-      font-size: 13px;
+      font-size: var(--text-base);
     }
     .cr-status > i { font-size: 15px; margin-top: 1px; color: var(--success, var(--color-green)); }
     .cr-status.is-blocked > i { color: var(--danger); }
     .cr-status-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
     .cr-status-title { font-weight: 500; }
-    .cr-status-note { color: var(--text-muted); font-size: 12px; }
+    .cr-status-note { color: var(--text-muted); font-size: var(--text-sm); }
 
     /* Groups: one bordered list per direction, rows divided rather than boxed. */
     .cr-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -272,10 +272,10 @@ const SEARCH_DEBOUNCE_MS = 200;
       align-items: center;
       gap: 6px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
     }
-    .cr-group-label i { font-size: 13px; }
+    .cr-group-label i { font-size: var(--text-base); }
     /* Same hues as card detail's dependency chips; only the icon is tinted so the headings stay calm. */
     .cr-group-label i.is-danger { color: var(--danger); }
     .cr-group-label i.is-warning { color: var(--color-amber); }
@@ -301,14 +301,14 @@ const SEARCH_DEBOUNCE_MS = 200;
       color: var(--text);
       text-decoration: none;
     }
-    .cr-state { flex: none; font-size: 16px; color: var(--muted); }
+    .cr-state { flex: none; font-size: var(--text-lg); color: var(--muted); }
     .cr-row.is-closed .cr-state.ti-circle-check { color: var(--success, var(--accent)); }
     .cr-row-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
-    .cr-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+    .cr-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-md); }
     .cr-row.is-closed .cr-title { color: var(--text-muted); text-decoration: line-through; }
-    .cr-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+    .cr-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--text-sm); }
     .cr-key { font-variant-numeric: tabular-nums; }
-    .cr-labels { margin-top: 3px; --label-bar-gap: 0; --label-chip-height: 18px; --label-chip-font-size: 10.5px; --label-chip-max-width: 140px; }
+    .cr-labels { margin-top: 3px; --label-bar-gap: 0; --label-chip-height: 18px; --label-chip-font-size: var(--text-xs); --label-chip-max-width: 140px; }
     .cr-assignees { display: flex; flex: none; align-items: center; }
     .cr-avatar {
       width: 22px;
@@ -335,13 +335,13 @@ const SEARCH_DEBOUNCE_MS = 200;
       border-radius: 999px;
       background: var(--surface-2);
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 600;
     }
     .cr-icon-btn {
       flex: none;
       width: 30px;
-      height: 30px;
+      height: var(--h-md);
       margin-right: 4px;
       padding: 0;
       border: 0;
@@ -353,7 +353,7 @@ const SEARCH_DEBOUNCE_MS = 200;
     /* Remove appears on row hover or focus on desktop; always visible for touch (no hover). */
     .cr-remove { opacity: 0; }
     .cr-row:hover .cr-remove, .cr-remove:focus-visible { opacity: 1; }
-    .cr-empty { margin: 0; color: var(--muted); font-size: 13px; }
+    .cr-empty { margin: 0; color: var(--muted); font-size: var(--text-base); }
     .cr-error { color: var(--danger); }
     .is-popover .cr-add { order: 0; }
     @media (max-width: 767.98px) {

@@ -72,12 +72,21 @@ Phones, tablets and the installed PWA are first-class, so design for them up fro
   them to the viewport. Use `dvh`, not `vh`, and `env(safe-area-inset-*)` for safe areas.
 - Breakpoints in use: 480, 640, 720, 768, 1024. Reuse them.
 
+## Scale tokens
+
+`styles.scss` defines the scale; new styles use it rather than a literal, and a value off the scale
+needs a comment. Type: `--text-xs/sm/base/md/lg`. Control heights: `--h-xs/sm/md/lg` (22/26/30/36).
+Text tiers: `--text` → `--text-3` (card meta, secondary cells) → `--text-muted` (hints, labels) →
+`--text-4` (placeholders only). Rows inside a list or sheet divide with `--divider`, not `--border`.
+Toolbar controls come from `shared/toolbar-styles.scss` (`.k-toolbar-btn`, `.k-toolbar-icon-btn`,
+`.k-toolbar-trigger`, `.k-toolbar-clear`); don't invent a per-view button.
+
 ## CSS traps
 
 These look like rendering bugs but are specificity or sizing problems.
 
-- **Global resets in `styles.scss`.** `button` is pinned to `height: 36px` with an accent background,
-  hover and focus ring. `input` is pinned to `width: 100%; height: 36px`, and `textarea` has
+- **Global resets in `styles.scss`.** `button` is pinned to `height: var(--h-lg)` (36px) with an accent
+  background, hover and focus ring. `input` is pinned to `width: 100%; height: var(--h-lg)`, and `textarea` has
   `min-height: 64px`. Angular's scoping attribute leaves a plain `.my-btn` rule at lower specificity
   than `button:hover:not(:disabled)`, so custom buttons flood with accent on hover. Fixes:
   - Restate the background inside your own `:hover:not(:disabled)`.

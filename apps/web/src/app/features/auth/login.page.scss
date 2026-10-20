@@ -17,13 +17,13 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
+  min-height: var(--h-md);
   padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--warning) 36%, var(--border));
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--warning) 10%, var(--surface));
   color: color-mix(in srgb, var(--warning) 78%, var(--text));
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
 
   i {
@@ -58,7 +58,7 @@
   }
 
   p {
-    font-size: 14px;
+    font-size: var(--text-md);
     color: var(--text-muted);
   }
 }
@@ -78,7 +78,7 @@ form {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 14px;
+    font-size: var(--text-md);
     font-weight: 500;
     color: var(--text);
 
@@ -95,7 +95,7 @@ form {
   border: 1px solid var(--danger-border);
   border-radius: var(--radius);
   color: var(--danger);
-  font-size: 14px;
+  font-size: var(--text-md);
 
   i { font-size: 15px; flex-shrink: 0; }
 }
@@ -109,7 +109,7 @@ form {
   border: 1px solid rgba(34, 197, 94, 0.24);
   border-radius: var(--radius);
   color: var(--success);
-  font-size: 14px;
+  font-size: var(--text-md);
 
   i { font-size: 15px; flex-shrink: 0; }
 }
@@ -140,7 +140,7 @@ form {
   width: 100%;
   height: 38px;
   margin-top: 4px;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
 }
 
@@ -153,6 +153,6 @@ form {
 .auth-footer {
   margin-top: 20px;
   text-align: center;
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
 }

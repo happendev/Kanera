@@ -203,7 +203,7 @@ export interface PickerGroup {
 
       &:first-child { margin-top: 0; }
 
-      i { font-size: 13px; }
+      i { font-size: var(--text-base); }
 
       span {
         overflow: hidden;
@@ -224,7 +224,7 @@ export interface PickerGroup {
       padding-left: 20px;
       color: var(--text-muted);
       background: var(--picker-nested-group-background, none);
-      font-size: 10.5px;
+      font-size: var(--text-xs);
       font-weight: 600;
       letter-spacing: 0.02em;
       text-transform: none;
@@ -251,13 +251,13 @@ export interface PickerGroup {
       color: var(--text);
       background: var(--picker-parent-background, var(--surface-overlay));
       border-bottom: 1px solid var(--picker-parent-border, var(--overlay-separator));
-      font-size: 11.5px;
+      font-size: var(--text-xs);
       font-weight: 700;
       letter-spacing: 0.02em;
 
       &:first-child { margin-top: 0; }
 
-      i { font-size: 14px; }
+      i { font-size: var(--text-md); }
 
       span {
         overflow: hidden;
@@ -279,7 +279,7 @@ export interface PickerGroup {
          to be highlighting the row above. The list scrolls; the rows do not give. The board's own
          k-priority-queue .panel-row carries this rule for the same reason. */
       flex: none;
-      min-height: 30px;
+      min-height: var(--h-md);
       padding: 5px 8px;
       /* Rows are separated by 1px, so a two-line row has to buy its own breathing room or the line
          above and the line below crowd equally and the pairing goes ambiguous. */
@@ -294,7 +294,7 @@ export interface PickerGroup {
       background: var(--picker-row-background, transparent);
       border: 0;
       border-radius: var(--radius-sm);
-      font-size: 13px;
+      font-size: var(--text-base);
       cursor: pointer;
       transition: background-color 0.12s;
 
@@ -382,7 +382,7 @@ export interface PickerGroup {
       -webkit-line-clamp: 2;
       overflow: hidden;
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 400;
       line-height: 1.35;
     }
@@ -407,7 +407,7 @@ export interface PickerGroup {
     .pl-trailing {
       flex: none;
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
 
@@ -442,14 +442,14 @@ export interface PickerGroup {
     .pl-check {
       flex: none;
       color: var(--text);
-      font-size: 14px;
+      font-size: var(--text-md);
     }
 
     .pl-empty {
       margin: 0;
       padding: 10px 4px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       text-align: center;
     }
   `,

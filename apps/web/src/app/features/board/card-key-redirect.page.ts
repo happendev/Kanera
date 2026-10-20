@@ -31,7 +31,7 @@ interface ResolvedCardKey {
     .key-resolver { min-height: 50vh; display: grid; place-content: center; justify-items: center; gap: 8px; color: var(--text-muted); text-align: center; }
     .key-resolver i { font-size: 28px; }
     .key-resolver h1 { margin: 4px 0 0; color: var(--text); font-size: 20px; }
-    .key-resolver p { margin: 0; font-size: 13px; }
+    .key-resolver p { margin: 0; font-size: var(--text-base); }
     .spin { animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
   `],

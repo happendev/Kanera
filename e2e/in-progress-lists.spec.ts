@@ -128,7 +128,7 @@ test("marking a list in progress shows time in progress live on tiles, table and
   await expect(listHeader(page, "Doing").locator(".list-in-progress")).toHaveCount(0);
 });
 
-test("in-progress cards carry a title icon, and a workspace admin corrects their time with an activity entry", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
+test("in-progress cards show a running clock, and a workspace admin corrects their time with an activity entry", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   const api = await apiAs("amelia");
   const boardName = uniqueName("E2E Correct Board");
   const ws = await createWorkspace(api, uniqueName("E2E Correct Workspace"), boardName);
@@ -146,9 +146,9 @@ test("in-progress cards carry a title icon, and a workspace admin corrects their
   await watcher.goto(`/b/${ws.boardId}`);
   await expectBoardLoaded(watcher, boardName);
 
-  // Running work carries the in-progress mark beside its title; work not started does not.
-  await expect(tile(page, working).locator(".card-in-progress")).toHaveCount(1);
-  await expect(tile(page, waiting).locator(".card-in-progress")).toHaveCount(0);
+  // Running work carries a running time-in-progress chip; work not started has none.
+  await expect(tile(page, working).locator(".card-time-in-progress:not(.is-done)")).toHaveCount(1);
+  await expect(tile(page, waiting).locator(".card-time-in-progress")).toHaveCount(0);
 
   // The column marker sits beside the list name, clear of the list menu button that hover reveals.
   const doing = listHeader(page, "Doing");

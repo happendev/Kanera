@@ -101,11 +101,11 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--text-sm);
 
   i {
     flex: 0 0 auto;
-    font-size: 12px;
+    font-size: var(--text-sm);
     line-height: 1;
   }
 }
@@ -117,7 +117,7 @@
   margin: 0;
 
   i {
-    font-size: 12px;
+    font-size: var(--text-sm);
     opacity: 1;
   }
 }
@@ -153,7 +153,7 @@ k-card-labels.card-drag-preview-labels {
   align-items: baseline;
   // Match CardComponent's title row exactly so the title does not shift when the preview replaces it.
   gap: 5px;
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.5;
   word-break: break-word;
 }
@@ -167,7 +167,7 @@ k-card-labels.card-drag-preview-labels {
 
 .card-drag-preview-title {
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 400;
   line-height: 1.5;
   word-break: break-word;
@@ -199,7 +199,7 @@ k-card-labels.card-drag-preview-labels {
     flex: none;
     margin-top: 1px;
     color: var(--accent);
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   strong {
@@ -220,7 +220,7 @@ button.list-in-progress-hint-dismiss {
   height: 20px;
   margin: -2px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .list-header {
@@ -237,7 +237,7 @@ h3 {
   min-width: 0;
   min-height: var(--list-title-height, auto);
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text);
   padding: 4px 6px;
@@ -247,7 +247,7 @@ h3 {
   gap: 6px;
 
   i {
-    font-size: 16px;
+    font-size: var(--text-lg);
     line-height: 1;
     align-self: center;
     flex-shrink: 0;
@@ -269,7 +269,7 @@ h3 {
 
     // Beats `h3.has-color i`, which would otherwise tint it with the list colour.
     i.ti {
-      font-size: 13px;
+      font-size: var(--text-base);
       color: inherit;
     }
   }
@@ -376,7 +376,7 @@ h3 {
   justify-content: flex-start;
   height: 32px;
   padding: 0 8px;
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text);
   border-radius: var(--radius-sm);
   gap: 8px;
@@ -410,7 +410,7 @@ h3 {
 
 .menu-chev {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -452,14 +452,14 @@ h3 {
 }
 
 .menu-confirm-label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   flex: 1;
   white-space: nowrap;
 }
 
 .menu-confirm-yes {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   padding: 3px 8px;
   border-radius: var(--radius-sm);
@@ -486,7 +486,7 @@ h3 {
 }
 
 .menu-confirm-cancel {
-  font-size: 12px;
+  font-size: var(--text-sm);
   padding: 3px 6px;
   border-radius: var(--radius-sm);
   border: none;
@@ -653,7 +653,7 @@ h3 {
   padding: 0 9px;
   border: 0;
   border-radius: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   line-height: 1;
   background: transparent;
@@ -706,7 +706,7 @@ h3 {
   min-width: 0;
   height: 32px;
   padding: 0 8px;
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
   flex-shrink: 0;
   border-radius: var(--radius-sm);

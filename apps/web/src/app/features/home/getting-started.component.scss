@@ -175,7 +175,7 @@
   border: 1.5px solid var(--border-strong);
   border-radius: 50%;
   color: var(--accent-fg);
-  font-size: 12px;
+  font-size: var(--text-sm);
 
   .is-open & {
     border-color: var(--accent);
@@ -194,7 +194,7 @@
 .gs-chevron {
   flex: none;
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--text-md);
   opacity: 0;
   transition: opacity var(--motion-fast), transform var(--motion-fast);
 

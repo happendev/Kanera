@@ -194,12 +194,6 @@ export class CardComponent {
    * lists. It stays on the tile after the card leaves progress or is completed (muted, stopped), and
    * ticks with the shared minute clock rather than a per-tile timer while it runs.
    */
-  /** Title icon for open work with a running clock, beside the agent and inactivity marks. */
-  readonly inProgressMark = computed(() => {
-    const timer = this.timeInProgress();
-    return timer?.running ? { label: timer.label, alert: timer.alert } : null;
-  });
-
   readonly timeInProgress = computed<TimeInProgressChip | null>(() => {
     const card = this.card();
     const now = this.clock.now();

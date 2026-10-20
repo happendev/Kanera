@@ -498,13 +498,13 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       align-items: center;
       justify-content: center;
       gap: 6px;
-      height: 36px;
+      height: var(--h-lg);
       padding: 0 11px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       background: var(--surface);
       color: var(--text);
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 500;
       cursor: pointer;
       transition: background-color 0.12s, color 0.12s, border-color 0.12s;
@@ -551,7 +551,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       border-radius: 0 var(--radius) var(--radius) 0;
       cursor: pointer;
       transition: background-color 0.12s, color 0.12s;
-      i { font-size: 13px; }
+      i { font-size: var(--text-base); }
       /* :not(:disabled) to outrank the reset's own button:hover:not(:disabled). */
       &:hover:not(:disabled) { color: var(--danger); background: color-mix(in srgb, var(--accent) 14%, transparent); }
       &:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--border-strong); outline-offset: 1px; }
@@ -621,7 +621,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
 
     .fb-head-title {
       flex: 1;
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 700;
       color: var(--text);
     }
@@ -631,7 +631,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       align-items: center;
       justify-content: center;
       width: 26px;
-      height: 26px;
+      height: var(--h-sm);
       border: 1px solid transparent;
       border-radius: var(--radius-sm);
       background: transparent;
@@ -645,7 +645,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       border: none;
       background: transparent;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       cursor: pointer;
       padding: 4px 6px;
@@ -655,7 +655,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
     .fb-clear:hover { color: var(--danger); }
 
     .fb-section-label {
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 700;
       color: var(--text-muted);
       padding: 6px 4px 2px;
@@ -688,7 +688,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
 
       small {
         color: var(--text-muted);
-        font-size: 11px;
+        font-size: var(--text-xs);
         /* Explicit line-height: with overflow:hidden a tight line box clips the descenders of a
            workspace name ("Delivery"), which reads as a rendering fault rather than a hint. */
         line-height: 1.35;
@@ -704,7 +704,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       border-radius: var(--radius-sm);
       color: var(--text);
       padding: 6px 8px;
-      font-size: 13px;
+      font-size: var(--text-base);
       outline: none;
       width: 100%;
       &:focus { border-color: var(--accent, var(--text)); }
@@ -725,7 +725,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       color: var(--text);
       text-align: left;
       width: 100%;
-      font-size: 13px;
+      font-size: var(--text-base);
       transition: background-color 0.12s;
       &:hover { background: var(--surface-2); }
       &.active { background: var(--surface-2); }
@@ -764,7 +764,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       border: none;
       color: var(--text);
       text-align: left;
-      font-size: 13px;
+      font-size: var(--text-base);
       cursor: pointer;
       transition: background-color 0.12s;
       &:hover { background: var(--surface-hover); }
@@ -785,9 +785,9 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
 
     .fb-row-icon { font-size: 15px; color: var(--text-muted); width: 16px; text-align: center; flex: 0 0 16px; }
     .fb-row-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .fb-row-summary { color: var(--text-muted); font-size: 12px; max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .fb-row-check { color: var(--accent, var(--text)); font-size: 14px; }
-    .fb-row-caret { color: var(--text-muted); font-size: 14px; }
+    .fb-row-summary { color: var(--text-muted); font-size: var(--text-sm); max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fb-row-check { color: var(--accent, var(--text)); font-size: var(--text-md); }
+    .fb-row-caret { color: var(--text-muted); font-size: var(--text-md); }
 
     .fb-count {
       min-width: 18px;
@@ -799,7 +799,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       border-radius: 999px;
       background: var(--accent, var(--border-strong));
       color: var(--accent-fg, var(--text));
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 700;
     }
 
@@ -826,7 +826,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
 
     .fb-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 12px; }
     .fb-avatar { flex: 0 0 auto; }
-    .fb-empty { color: var(--text-muted); font-size: 12px; margin: 0; padding: 8px 4px; text-align: center; }
+    .fb-empty { color: var(--text-muted); font-size: var(--text-sm); margin: 0; padding: 8px 4px; text-align: center; }
 
     /* Inside k-page-toolbar's collapsed panel the trigger stretches to a full row so it stacks with
        the other stacked controls; the panel still floats at viewport level so it does not get

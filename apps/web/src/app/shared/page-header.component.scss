@@ -80,7 +80,7 @@
 
 .ph-eyebrow {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -184,7 +184,7 @@
   }
 
   .ph-icon {
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   .ph-title-row {
@@ -201,7 +201,7 @@
   // breakpoint rather than wrapping — the title and the view switch are what the row is for.
   .ph-subtitle {
     overflow: hidden;
-    font-size: 12px;
+    font-size: var(--text-sm);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -247,7 +247,7 @@
   // A reading column has the room to wrap, so the subtitle keeps its full text at every width.
   .ph-subtitle {
     max-width: 640px;
-    font-size: 14px;
+    font-size: var(--text-md);
     line-height: 1.45;
   }
 }

@@ -180,7 +180,7 @@
   align-items: center;
   gap: 4px;
   max-width: 100%;
-  height: 30px;
+  height: var(--h-md);
   min-width: 0;
   margin: 0 0 0 -6px;
   padding: 0 4px 0 6px;
@@ -194,7 +194,7 @@
   > i {
     flex: none;
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: var(--text-md);
     transition: transform var(--motion-fast) var(--ease-out);
   }
 
@@ -226,7 +226,7 @@
 
 .page-rename {
   width: min(100%, 260px);
-  height: 30px;
+  height: var(--h-md);
   margin-left: -6px;
   padding: 0 6px;
   border: 1px solid var(--accent);
@@ -268,7 +268,7 @@
   align-items: center;
   justify-content: center;
   width: 30px;
-  height: 30px;
+  height: var(--h-md);
   min-width: 0;
   padding: 0;
   border: 0;
@@ -279,7 +279,7 @@
   transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
 
   i {
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   &:hover:not(:disabled) {
@@ -330,7 +330,7 @@
 
   i {
     flex: none;
-    font-size: 14px;
+    font-size: var(--text-md);
   }
 }
 
@@ -370,7 +370,7 @@
     justify-content: center;
     width: 16px;
     color: var(--accent);
-    font-size: 14px;
+    font-size: var(--text-md);
     visibility: hidden;
   }
 
@@ -513,7 +513,7 @@
   // button's own flexbox either way, so nothing moves inside it.
   .de-tool {
     width: 26px;
-    height: 26px;
+    height: var(--h-sm);
     padding: 0;
   }
 
@@ -582,10 +582,10 @@
 // Matches the retry button in the Up next and notifications drawers, so a failed load reads the
 // same in every side panel.
 .state-retry-btn {
-  height: 30px;
+  height: var(--h-md);
   padding: 0 12px;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   border: 1px solid var(--border);
   border-radius: var(--radius);

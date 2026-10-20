@@ -23,7 +23,7 @@
   border-radius: 10px;
   background: var(--surface-2);
   color: var(--muted-foreground);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.45;
 }
 
@@ -47,22 +47,22 @@ label {
   display: grid;
   gap: 8px;
   color: var(--foreground);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
 .field-heading {
   display: flex;
-  min-height: 30px;
+  min-height: var(--h-md);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
 .paste-button {
-  min-height: 30px;
+  min-height: var(--h-md);
   padding: 0 9px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 input,
@@ -100,7 +100,7 @@ textarea {
   gap: 8px;
   margin: 0;
   color: var(--danger);
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .capture-notice {
@@ -109,7 +109,7 @@ textarea {
   gap: 8px;
   margin: -6px 0 0;
   color: var(--muted-foreground);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 
