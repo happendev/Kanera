@@ -460,7 +460,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       color: var(--text-muted);
 
       &:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--danger) 10%, transparent);
+        background: var(--danger-soft);
         color: var(--danger);
       }
     }

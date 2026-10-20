@@ -485,7 +485,7 @@ class PreviewTooLargeError extends Error {}
 
     .lb-text-body {
       margin: 0;
-      font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+      font-family: var(--mono);
       font-size: var(--text-base);
       line-height: 1.55;
       white-space: pre-wrap;

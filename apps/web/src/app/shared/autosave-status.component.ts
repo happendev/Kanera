@@ -28,7 +28,7 @@ import type { AutosaveState } from "./autosave-tracker";
     }
     .chip:empty { opacity: 0; }
     .chip i { font-size: var(--text-md); }
-    .chip[data-state="saved"] { color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
+    .chip[data-state="saved"] { color: var(--success); background: var(--success-soft); }
     .chip[data-state="error"] { color: var(--danger); background: var(--danger-bg); }
     .chip[data-state="saving"] { background: var(--surface-2); }
     .spin { animation: kanera-spinner 0.8s linear infinite; }

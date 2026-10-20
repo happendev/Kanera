@@ -659,7 +659,7 @@
   box-shadow: 0 -8px 28px rgb(0 0 0 / 22%);
   // Keep the last line of text clear of the home indicator on iOS.
   padding-bottom: env(safe-area-inset-bottom);
-  animation: scratch-sheet-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: scratch-sheet-in 0.2s var(--ease-drawer);
 }
 
 @keyframes scratch-sheet-in {

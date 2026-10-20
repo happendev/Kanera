@@ -1,3 +1,5 @@
+@use "../../../shared/card-key" as key;
+
 // Every responsive decision below is made against the width of this one panel, not the viewport. A
 // day is full-bleed in the list layout but a third of the stream in the grid layout, so the same
 // viewport produces panels that need completely different headers and rows; only a container query
@@ -355,10 +357,7 @@
 // nowrap because the key is one token: once the title line flows as inline text, the hyphen in
 // "DEVELOPMEN-5" is a legal break point and the trailing digits drop to a line of their own.
 .wd-card-key {
-  flex: none;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
+  @include key.card-key;
 }
 
 .wd-board {

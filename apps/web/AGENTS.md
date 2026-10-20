@@ -80,6 +80,13 @@ Text tiers: `--text` → `--text-3` (card meta, secondary cells) → `--text-mut
 `--text-4` (placeholders only). Rows inside a list or sheet divide with `--divider`, not `--border`.
 Toolbar controls come from `shared/toolbar-styles.scss` (`.k-toolbar-btn`, `.k-toolbar-icon-btn`,
 `.k-toolbar-trigger`, `.k-toolbar-clear`); don't invent a per-view button.
+Elevation by role: `--shadow-card` / `--shadow-card-hover` (tiles, with the element's own 1px border as
+the ring), `--shadow-pop` (menus, popovers, pickers), `--shadow-drag` (CDK previews); `--shadow-sm` and
+`--shadow` remain for chrome. Status washes: `--accent-soft`, `--success-soft`, `--danger-soft`,
+`--warning-soft`, never an inline `color-mix(... 10%, transparent)`. Motion: `--motion-fast` for colour,
+`--dur` for transforms, `--motion-base` + `--ease-drawer` for panels and drawers, `--spring` for small
+pops only. Card keys use the `card-key` mixin in `shared/_card-key.scss` (`--text-xs`,
+`--text-3`); add layout on top, never retype it.
 
 ## CSS traps
 

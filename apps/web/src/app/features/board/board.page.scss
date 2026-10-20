@@ -214,13 +214,7 @@ k-empty-state.board-empty {
 }
 
 .board-overview-lists {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-
-  > div { display: flex; align-items: center; justify-content: space-between; min-height: 28px; font-size: var(--text-xs); }
-  span { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-muted); }
-  i { font-size: var(--text-md); }
+  margin-top: 2px;
 }
 
 .board-overview-actions {

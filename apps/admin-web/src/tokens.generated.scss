@@ -127,7 +127,7 @@
   --accent-graphite-hover: #b4c1d2;
 
   --danger: #f87171;
-  --danger-bg: rgba(248, 113, 113, 0.1);
+  --danger-bg: var(--danger-soft);
   --danger-border: rgba(248, 113, 113, 0.2);
 
   // Completed work. Components have long referenced --success (with a #16a34a fallback) without it
@@ -139,6 +139,14 @@
   // run failed, a chat destination with a stale mapping. Same hazard as --success above — callers
   // already write var(--warning, #a16207), so declare it in all three theme blocks.
   --warning: #fbbf24;
+
+  // Soft washes for the status colours, the counterparts of --accent-soft: "this row/chip is in
+  // that state" fills (overdue chips, completed cards, needs-attention banners). Derived from the
+  // solids in the same block so every wash tracks its theme's tone; a literal rgba() here drifted
+  // from --success/--danger every time one of them was retuned.
+  --success-soft: color-mix(in srgb, var(--success) 12%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 10%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 12%, transparent);
 
   // Derived, never a literal: --accent is repointed on this same element by the [data-accent]
   // blocks, and a var(--accent) inside a custom property resolves against the element's winning
@@ -182,6 +190,17 @@
   // The 1px ring is the part that does the work on dark: a soft shadow alone vanishes against
   // same-hue navy, and the ring gives the menu a hard edge the eye can find.
   --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 16px 40px -10px rgba(0, 0, 0, 0.7);
+
+  // Elevation tiers by role. Card tiles sit on a whisper shadow and rely on their own 1px border
+  // for the ring (a ring in box-shadow would paint outside the box and shift every card by a pixel
+  // inside its lane); hover deepens the shadow and swaps the border to --border-strong instead of
+  // translating, because a transform on the tile would turn it into the containing block for its
+  // fixed-position action menu. Popovers and menus take --shadow-pop; CDK drag previews take
+  // --shadow-drag, the one tier allowed to be heavy because the element is literally in the air.
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-pop: var(--shadow-lg);
+  --shadow-drag: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.45);
 
   // ─── Kanban surfaces (semantic) ──────────────────────────────────────────────
   // Dark mode keeps the existing visual: lists lighter than bg, cards lighter still.

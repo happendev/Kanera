@@ -1649,4 +1649,4 @@ k-support-session-banner {
 .nav-board-drop-list .cdk-drag-placeholder { opacity: .25; }
 .nav-board-drop-list.cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder):not(.cdk-drag-preview),
 .cdk-drag-animating { transition: transform 140ms cubic-bezier(.2, 0, 0, 1); }
-.cdk-drag-preview { box-sizing: border-box; background: var(--surface); border-radius: 6px; box-shadow: 0 4px 12px rgb(0 0 0 / 15%); }
+.cdk-drag-preview { box-sizing: border-box; background: var(--surface); border-radius: 6px; box-shadow: var(--shadow-drag); }

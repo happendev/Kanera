@@ -668,6 +668,19 @@ export class BoardTableViewComponent implements OnDestroy {
    * every consumer of this list — the count, the aggregates, shift-range selection, select-all —
    * means "the distinct cards in this view", not "the rows drawn".
    */
+  /**
+   * The widest key among the visible cards, rendered invisibly inside every key cell so all keys
+   * occupy the same slot and the titles after them line up. Keys are proportional text, so the
+   * slot is measured by the browser in the real font rather than estimated from a character count.
+   */
+  readonly keySlotSizer = computed(() => {
+    let widest = "";
+    for (const card of this.visibleCards()) {
+      if (card.key.length > widest.length) widest = card.key;
+    }
+    return widest;
+  });
+
   readonly rows = computed<AnyCard[]>(() => {
     const seen = new Set<string>();
     const rows: AnyCard[] = [];

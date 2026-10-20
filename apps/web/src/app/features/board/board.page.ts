@@ -32,6 +32,7 @@ import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
+import { StatusBarComponent, type StatusBarSegment } from "../../shared/status-bar.component";
 import { ToastComponent } from "../../shared/toast.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardBackgroundPopover } from "./board-background.popover";
@@ -124,7 +125,7 @@ function sameIdSet(a: string[], b: string[]): boolean {
 @Component({
   selector: "k-board-page",
   standalone: true,
-  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, DependencyMapComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, ToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
+  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, DependencyMapComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusBarComponent, ToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -603,10 +604,11 @@ export class BoardPage implements OnDestroy {
     const inProgressCards = incomplete.filter((card) => isInProgressRunning(card));
     const inProgressTooLong = inProgressCards.filter((card) => isInProgressTooLong(card, now, this.state.inProgressAlertDays())).length;
     // Counts support triage without inferring delivery status from card bookkeeping.
-    const listCounts = this.state.visibleLists().map((list) => ({
+    const listCounts: StatusBarSegment[] = this.state.visibleLists().map((list) => ({
       id: list.id,
       name: list.name,
       icon: list.icon || "list",
+      color: list.color,
       count: cards.filter((card) => card.listId === list.id).length,
     })).filter((entry) => entry.count > 0);
     return {

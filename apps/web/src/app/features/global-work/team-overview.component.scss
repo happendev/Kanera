@@ -628,7 +628,7 @@
 // Same treatment as the board tile's Blocked chip, so the state reads the same in both places.
 .row-blocked {
   color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  background: var(--danger-soft);
   border-color: color-mix(in srgb, var(--danger) 25%, transparent);
 }
 

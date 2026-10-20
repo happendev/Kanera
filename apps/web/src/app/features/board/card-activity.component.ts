@@ -36,7 +36,7 @@ import { DescriptionViewerComponent } from "./description-viewer.component";
 import { formatDueDate, type DueDateSlotSelection } from "./due-date.util";
 import { ImageLightboxService } from "./image-lightbox.service";
 import { ReactionPopoverComponent } from "./reaction-popover.component";
-import { formatFeedTime } from "../../shared/date-format";
+import { feedDayGroup, feedDayGroupLabel, formatFeedTime, type FeedDayGroup } from "../../shared/date-format";
 import { icu } from "../../core/i18n/icu";
 import { appLocale } from "../../core/i18n/locale";
 import { formatTrackedDuration } from "./time-in-progress.util";
@@ -70,6 +70,7 @@ function cardFeedSortPriority(item: CardFeedItem): number {
 // every change detection pass (keystrokes, hovers, popover toggles).
 type CardFeedView =
   | { kind: "comment"; key: string; data: CommentRow; timeText: string; isMirror: boolean }
+  | { kind: "day"; key: string; label: string }
   | {
       kind: "activity";
       key: string;
@@ -180,8 +181,25 @@ export class CardActivityComponent {
   // feed change instead of per change detection. Recomputes when the feed, filter, or (for the
   // "moved" activity case) state.lists() change. timeText intentionally does not refresh on a
   // timer — it re-derives whenever the feed signal changes, which is acceptable for relative ages.
-  readonly feedViewItems = computed<CardFeedView[]>(() =>
-    this.filteredFeedItems().map((item) => {
+  // Rows are banded by local day (Today / Yesterday / This week / Earlier): a heading row is
+  // emitted where the band changes, so a feed that is all from today carries one heading and a
+  // long history reads as four. The feed is newest-first, so bands run in that order too.
+  readonly feedViewItems = computed<CardFeedView[]>(() => {
+    const now = new Date();
+    const rows: CardFeedView[] = [];
+    let group: FeedDayGroup | null = null;
+    for (const item of this.filteredFeedItems()) {
+      const itemGroup = feedDayGroup(item.data.createdAt, now);
+      if (itemGroup !== group) {
+        group = itemGroup;
+        rows.push({ kind: "day", key: `day:${itemGroup}`, label: feedDayGroupLabel(itemGroup) });
+      }
+      rows.push(this.feedRowFor(item));
+    }
+    return rows;
+  });
+
+  private feedRowFor(item: CardFeedItem): CardFeedView {
       const timeText = this.formatFeedTime(item.data.createdAt);
       if (item.type === "comment") {
         return { kind: "comment", key: item.data.id, data: item.data, timeText, isMirror: typeof item.data.mirrorId === "string" };
@@ -198,8 +216,7 @@ export class CardActivityComponent {
         hasDescriptionChanges: this.hasDescriptionChangesForActivity(item.data),
         attachmentPreview: this.attachmentPreviewForActivity(item.data),
       };
-    }),
-  );
+  }
 
   showAuthorPresence(authorKind: string, authorId: string | null): boolean {
     return authorKind === "user" && Boolean(authorId && this.memberIds().has(authorId));

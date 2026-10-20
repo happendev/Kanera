@@ -321,7 +321,7 @@ function compareDateValue(a: string, b: string): number {
       color: var(--text-muted);
 
       &:hover {
-        background: color-mix(in srgb, var(--danger) 10%, transparent);
+        background: var(--danger-soft);
         color: var(--danger);
       }
     }

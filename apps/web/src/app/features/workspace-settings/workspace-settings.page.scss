@@ -329,7 +329,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--mono);
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
@@ -687,7 +687,7 @@ button.list-rename-trigger {
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--text-xs);
-    font-family: monospace;
+    font-family: var(--mono);
   }
 }
 
@@ -726,7 +726,7 @@ button.list-rename-trigger {
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--text-xs);
-    font-family: monospace;
+    font-family: var(--mono);
   }
 
   .row-actions {
@@ -823,7 +823,7 @@ button.list-rename-trigger {
   code {
     color: var(--text-muted);
     font-size: var(--text-xs);
-    font-family: monospace;
+    font-family: var(--mono);
   }
 
   small {
@@ -867,7 +867,7 @@ button.list-rename-trigger {
   code {
     color: var(--text-muted);
     font-size: var(--text-xs);
-    font-family: monospace;
+    font-family: var(--mono);
   }
 }
 
@@ -885,7 +885,7 @@ button.list-rename-trigger {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--success);
-  background: color-mix(in srgb, var(--success) 9%, transparent);
+  background: var(--success-soft);
   border: 1px solid color-mix(in srgb, var(--success) 28%, transparent);
   border-radius: 999px;
   padding: 2px 7px;
@@ -1018,7 +1018,7 @@ button.list-rename-trigger {
       word-break: break-all;
       white-space: normal;
       font-size: var(--text-xs);
-      font-family: monospace;
+      font-family: var(--mono);
     }
 
     button {
@@ -1160,7 +1160,7 @@ button.list-rename-trigger {
   }
 
   &.cdk-drag-preview {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-drag);
   }
 }
 
@@ -1299,7 +1299,7 @@ button.list-rename-trigger {
   gap: 8px;
 
   &.cdk-drag-preview {
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-drag);
     background: var(--surface);
     border-radius: 6px;
     padding-right: 6px;
@@ -1463,7 +1463,7 @@ button.list-rename-trigger {
   flex-direction: column;
 
   &.cdk-drag-preview {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-drag);
   }
 }
 

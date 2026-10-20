@@ -336,7 +336,7 @@
   height: 32px;
   border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  background: var(--danger-soft);
   color: var(--danger);
   font-size: 17px;
 }
@@ -367,7 +367,7 @@
   &:hover {
     color: var(--danger);
     border-color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    background: var(--danger-soft);
   }
 }
 
@@ -658,7 +658,7 @@
 // ─── CDK drag-drop visuals ───────────────────────────────────────────────────
 
 .cdk-drag-preview {
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-drag);
 }
 
 .cdk-drag-placeholder {

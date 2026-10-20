@@ -524,6 +524,35 @@ input {
   gap: 10px;
 }
 
+// Open work by list: one bar per workspace, styled as a quiet panel in step with the activity strip.
+.portfolio-lists {
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+
+  h3 {
+    margin: 0;
+    font-size: var(--text-base);
+    font-weight: 600;
+  }
+}
+
+.portfolio-lists-workspace {
+  display: grid;
+  gap: 6px;
+}
+
+.portfolio-lists-workspace-name {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 // Page-local: the portfolio shows six metrics where home shows four, so the column count belongs
 // with each page rather than in the shared k-stat-tile.
 //
@@ -1061,7 +1090,7 @@ k-work-done-view {
 .checklist-overdue-pill {
   padding: 3px 8px;
   color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  background: var(--danger-soft);
   border-radius: 999px;
   font-size: var(--text-xs);
   font-weight: 600;

@@ -7,6 +7,7 @@ import type {
   AgentWorkSources,
   PortfolioActivityDay,
   PortfolioBucket,
+  PortfolioListCount,
   PortfolioSummary,
   SavedWorkView,
   WorkCatalog,
@@ -864,7 +865,7 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
 
   const restrictedBoardIds = scopeBoards.filter((board) => board.assignedItemsOnly).map((board) => board.id);
   // Each projection uses the same resolved scope; none consumes another projection.
-  const [rows, checklistCountRows, activity] = await Promise.all([
+  const [rows, checklistCountRows, listRows, activity] = await Promise.all([
     db
       .select({
         organisationId: workspaces.clientId,
@@ -915,6 +916,27 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
           : undefined,
       ))
       .groupBy(cards.boardId),
+
+    // Open work per workflow list, for the segmented status bar. Same conditions as the buckets so
+    // the bar reports on exactly the cards the tiles count; archived lists are dropped as the board
+    // overview drops them, so a card parked in a retired list is in the Active tile but no segment.
+    db
+      .select({
+        workspaceId: workspaces.id,
+        listId: lists.id,
+        name: lists.name,
+        icon: lists.icon,
+        color: lists.color,
+        inProgress: lists.inProgress,
+        position: lists.position,
+        open: sql<number>`count(*)::integer`,
+      })
+      .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(lists, eq(lists.id, cards.listId))
+      .where(and(...conditions, isNull(cards.completedAt), isNull(lists.archivedAt)))
+      .groupBy(workspaces.id, lists.id),
     portfolioActivity(scopeBoards, conditions, query.timeZone),
   ]);
   const boardById = new Map(scopeBoards.map((board) => [board.id, board]));
@@ -964,7 +986,38 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
     atRisk: sum.atRisk + bucket.atRisk,
   }), { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0, inProgress: 0, inProgressTooLong: 0, blocked: 0, atRisk: 0 });
 
-  return { days: query.days, totals, buckets, activityDays: PORTFOLIO_ACTIVITY_DAYS, activity };
+  // Workspace order is the first board's navigation order, the same rank the buckets sort by, so
+  // the bars stack in the order the table lists the workspaces.
+  const workspaceRank = new Map<string, { order: number; name: string }>();
+  for (const board of scopeBoards) {
+    const current = workspaceRank.get(board.workspaceId);
+    const order = board.navigationOrder ?? Number.MAX_SAFE_INTEGER;
+    if (!current || order < current.order) workspaceRank.set(board.workspaceId, { order, name: board.workspaceName });
+  }
+  const listCounts: PortfolioListCount[] = listRows
+    .flatMap((row) => {
+      const workspace = workspaceRank.get(row.workspaceId);
+      if (!workspace) return [];
+      return [{ row, workspace }];
+    })
+    .sort((a, b) =>
+      a.workspace.order - b.workspace.order
+      || a.row.workspaceId.localeCompare(b.row.workspaceId)
+      || Number(a.row.position) - Number(b.row.position)
+      || a.row.listId.localeCompare(b.row.listId),
+    )
+    .map(({ row, workspace }) => ({
+      workspaceId: row.workspaceId,
+      workspaceName: workspace.name,
+      listId: row.listId,
+      name: row.name,
+      icon: row.icon,
+      color: row.color,
+      inProgress: row.inProgress,
+      open: row.open,
+    }));
+
+  return { days: query.days, totals, buckets, lists: listCounts, activityDays: PORTFOLIO_ACTIVITY_DAYS, activity };
 }
 
 /** Heatmap window. Matches WORK_DONE_MAX_DAYS so both history surfaces look back equally far. */

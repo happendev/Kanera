@@ -309,7 +309,7 @@ import { GlobalWorkState } from "./global-work.state";
         background: transparent;
         border: 1px solid transparent;
 
-        &:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+        &:hover:not(:disabled) { background: var(--danger-soft); }
         &:disabled { cursor: not-allowed; opacity: 0.5; }
       }
 

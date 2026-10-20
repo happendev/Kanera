@@ -1,4 +1,5 @@
 @use "../../../shared/toolbar-styles" as toolbar;
+@use "../../../shared/card-key" as key;
 
 :host {
   display: block;
@@ -405,7 +406,7 @@
 
     .cal-time {
       color: var(--success);
-      background: color-mix(in srgb, var(--success) 12%, transparent);
+      background: var(--success-soft);
     }
 
     .cal-indicator,
@@ -434,7 +435,7 @@
 
     .cal-time {
       color: var(--danger);
-      background: color-mix(in srgb, var(--danger) 12%, transparent);
+      background: var(--danger-soft);
     }
 
     .cal-progress-fill {
@@ -495,7 +496,7 @@ k-card-labels.cal-label-row {
 }
 
 // flex: none so the key survives a narrow day column; the board name beside it ellipsises instead.
-.cal-card-key { flex: none; color: var(--text-muted); font-size: 10px; font-weight: 500; letter-spacing: 0.03em; font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0.8; }
+.cal-card-key { @include key.card-key; }
 
 .week-mode .cal-card-title {
   line-clamp: 3;
@@ -526,7 +527,7 @@ k-card-labels.cal-label-row {
 
   &.is-overdue {
     color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    background: var(--danger-soft);
   }
 }
 
@@ -740,7 +741,7 @@ k-card-labels.cal-label-row {
 // CDK moves the preview under <body>; emulated encapsulation still reaches it through the clone's
 // content attribute, so the tile keeps its own look and just lifts.
 .cal-card.cdk-drag-preview {
-  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.25));
+  box-shadow: var(--shadow-drag);
   border-color: var(--border-strong);
   cursor: grabbing;
   transform: rotate(1.5deg);

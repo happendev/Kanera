@@ -361,10 +361,29 @@ export type PortfolioActivityDay = {
   completed: number;
 };
 
+/**
+ * Open cards per workflow list. Lists are workspace-scoped, so a portfolio spanning workspaces
+ * carries one row per (workspace, list); the client draws one bar per workspace. Rows follow the
+ * workspace's navigation order, then list position, and only unarchived lists with at least one
+ * open card are sent.
+ */
+export type PortfolioListCount = {
+  workspaceId: string;
+  workspaceName: string;
+  listId: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  inProgress: boolean;
+  open: number;
+};
+
 export type PortfolioSummary = {
   days: number;
   totals: Omit<WorkTotals, "checklistItems"> & { unassigned: number; inactive: number; inProgress: number; inProgressTooLong: number; blocked: number; atRisk: number };
   buckets: PortfolioBucket[];
+  /** Optional for older offline snapshots, which predate it. */
+  lists?: PortfolioListCount[];
   /** Length of the heatmap window in days. Fixed, and independent of the `days` reporting period. */
   activityDays: number;
   /** Only days with activity are sent; the client fills the rest of the window with zeroes. */

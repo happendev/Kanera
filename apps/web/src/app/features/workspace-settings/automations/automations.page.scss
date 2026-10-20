@@ -218,7 +218,7 @@
   }
 
   &.cdk-drag-preview {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-drag);
   }
 
   &.cdk-drag-placeholder {
@@ -760,7 +760,7 @@
   }
 
   &.cdk-drag-preview {
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-drag);
   }
 
   &.cdk-drag-placeholder {

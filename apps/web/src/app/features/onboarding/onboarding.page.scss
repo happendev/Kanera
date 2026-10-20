@@ -642,7 +642,7 @@
 
   &.is-active {
     border-color: color-mix(in srgb, var(--success) 32%, transparent);
-    background: color-mix(in srgb, var(--success) 12%, transparent);
+    background: var(--success-soft);
     color: var(--success);
 
     &:hover:not(:disabled) {
@@ -985,7 +985,7 @@
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-drag);
   display: flex;
   align-items: center;
   gap: 10px;

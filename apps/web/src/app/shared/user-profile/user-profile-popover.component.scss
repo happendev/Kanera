@@ -177,7 +177,7 @@ h3 {
 
   &[data-role="guest"] {
     color: var(--warning);
-    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    background: var(--warning-soft);
     border-color: color-mix(in srgb, var(--warning) 30%, transparent);
   }
 }
@@ -640,7 +640,7 @@ button.up-action {
   }
 
   &.is-danger:hover:not(:disabled) {
-    background: var(--danger-bg, color-mix(in srgb, var(--danger) 10%, transparent));
+    background: var(--danger-bg, var(--danger-soft));
     border-color: var(--danger-border, var(--danger));
   }
 }

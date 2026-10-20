@@ -1,4 +1,5 @@
 @use "../../shared/rank-pill" as rank;
+@use "../../shared/card-key" as key;
 
 :host {
   display: block;
@@ -48,17 +49,14 @@
 }
 
 // Opens the tile on its own top-left line. Quiet at rest so the labels and title lead; lifted to
-// full muted tone on hover, for when you actually want to read or quote the reference.
+// full tone on hover, for when you actually want to read or quote the reference. 10px rather than
+// the mixin's --text-xs: on a tile the key is a whisper above the title, not a cell of its own.
 .card-key {
+  @include key.card-key;
   display: block;
   margin-bottom: 3px;
-  // Card meta sits on --text-3, the tier above hints: it is read, not skimmed past.
-  color: var(--text-3);
   font-size: 10px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
   line-height: 1.3;
-  white-space: nowrap;
   opacity: 0.7;
   transition: opacity var(--motion-fast);
 }
@@ -357,24 +355,17 @@
   background: color-mix(in srgb, var(--accent) 10%, var(--card-bg-hover));
 }
 
-// Both dark-family themes get the same lifted card shadow; light recesses instead (below).
-:host-context([data-theme="dark"]),
-:host-context([data-theme="carbon"]) {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-
-  &:hover {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  }
+// Elevation: the tile's own 1px border is the ring, --shadow-card the whisper beneath it (each
+// theme tunes both in styles.scss). Hover only deepens the shadow. It never touches the border:
+// the accent rings above (unread, selected, Up next) must survive a hover, and a plain :host:hover
+// stays below them in specificity. No translate either: a transform would make :host the
+// containing block for the fixed-position action menu nested inside it.
+:host {
+  box-shadow: var(--shadow-card);
 }
 
-:host-context([data-theme="light"]),
-:host-context([data-theme="paper"]) {
-  box-shadow: var(--shadow-sm);
-  border-color: var(--border);
-
-  &:hover {
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
-  }
+:host:hover {
+  box-shadow: var(--shadow-card-hover);
 }
 
 .card-cover {
@@ -623,7 +614,7 @@
   font-weight: 600;
   line-height: 1.5;
   color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  background: var(--danger-soft);
 
   i {
     font-size: var(--text-base);
@@ -660,7 +651,7 @@
 
   &.overdue {
     color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    background: var(--danger-soft);
     border-color: color-mix(in srgb, var(--danger) 25%, transparent);
   }
 

@@ -274,7 +274,19 @@ k-list.is-drop-target {
   // Layout properties are never transitioned.
   --motion-fast: 120ms;
   --motion-base: 180ms;
+  // Movement (transforms): a card lifting, a drag settling, a chip popping. Shorter than
+  // --motion-base because a moving element that lingers reads as lag, not polish.
+  --dur: 140ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  // Drawers and the card detail panel: fast start, long settle, so a 480px panel arrives without
+  // the "ease" plateau that made it look slow to open.
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  // Small pops only (a chip appearing, a toggle thumb). Overshoots, so never on layout or panels.
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  // Identifiers (card keys, API keys, short codes). One stack so DEV-123 scans the same in a card
+  // tile, a table cell and the detail header.
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   --z-sticky: 20;
   --z-panel: 300;
@@ -413,7 +425,7 @@ k-list.is-drop-target {
   --accent-graphite-hover: #b4c1d2;
 
   --danger: #f87171;
-  --danger-bg: rgba(248, 113, 113, 0.1);
+  --danger-bg: var(--danger-soft);
   --danger-border: rgba(248, 113, 113, 0.2);
 
   // Completed work. Components have long referenced --success (with a #16a34a fallback) without it
@@ -425,6 +437,14 @@ k-list.is-drop-target {
   // run failed, a chat destination with a stale mapping. Same hazard as --success above — callers
   // already write var(--warning, #a16207), so declare it in all three theme blocks.
   --warning: #fbbf24;
+
+  // Soft washes for the status colours, the counterparts of --accent-soft: "this row/chip is in
+  // that state" fills (overdue chips, completed cards, needs-attention banners). Derived from the
+  // solids in the same block so every wash tracks its theme's tone; a literal rgba() here drifted
+  // from --success/--danger every time one of them was retuned.
+  --success-soft: color-mix(in srgb, var(--success) 12%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 10%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 12%, transparent);
 
   // Derived, never a literal: --accent is repointed on this same element by the [data-accent]
   // blocks, and a var(--accent) inside a custom property resolves against the element's winning
@@ -468,6 +488,17 @@ k-list.is-drop-target {
   // The 1px ring is the part that does the work on dark: a soft shadow alone vanishes against
   // same-hue navy, and the ring gives the menu a hard edge the eye can find.
   --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 16px 40px -10px rgba(0, 0, 0, 0.7);
+
+  // Elevation tiers by role. Card tiles sit on a whisper shadow and rely on their own 1px border
+  // for the ring (a ring in box-shadow would paint outside the box and shift every card by a pixel
+  // inside its lane); hover deepens the shadow and swaps the border to --border-strong instead of
+  // translating, because a transform on the tile would turn it into the containing block for its
+  // fixed-position action menu. Popovers and menus take --shadow-pop; CDK drag previews take
+  // --shadow-drag, the one tier allowed to be heavy because the element is literally in the air.
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-pop: var(--shadow-lg);
+  --shadow-drag: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.45);
 
   // ─── Kanban surfaces (semantic) ──────────────────────────────────────────────
   // Dark mode keeps the existing visual: lists lighter than bg, cards lighter still.
@@ -719,11 +750,15 @@ k-list.is-drop-target {
   --accent-graphite-hover: #334155;
 
   --danger: #dc2626;
-  --danger-bg: rgba(220, 38, 38, 0.07);
+  --danger-bg: var(--danger-soft);
   --danger-border: rgba(220, 38, 38, 0.2);
 
   --success: #16a34a;
   --warning: #a16207;
+  // See the dark block. Lighter alphas: the same 12% that reads as a tint on navy is a slab on white.
+  --success-soft: color-mix(in srgb, var(--success) 10%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 8%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 10%, transparent);
 
   --ring-strength: 30%;
   --ring: color-mix(in srgb, var(--accent) var(--ring-strength), transparent);
@@ -731,6 +766,12 @@ k-list.is-drop-target {
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
   --shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
   --shadow-lg: 0 10px 30px -8px rgba(15, 23, 42, 0.18);
+  // See the dark block. Light recesses, so the card tier is the ~4% whisper the ring does the work
+  // for; paper restates these in its warm cast below.
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-card-hover: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-pop: var(--shadow-lg);
+  --shadow-drag: 0 12px 28px -6px rgba(15, 23, 42, 0.22), 0 2px 6px rgba(15, 23, 42, 0.08);
 
   // Flip the kanban hierarchy: gray "tray" lists, near-white "elevated" cards.
   // --list-bg is pinned rather than tracking --surface-2: that token is also the inset/chrome
@@ -860,6 +901,9 @@ k-list.is-drop-target {
   --shadow-sm: 0 1px 2px rgba(60, 50, 38, 0.08), 0 1px 1px rgba(60, 50, 38, 0.04);
   --shadow: 0 2px 8px rgba(60, 50, 38, 0.10), 0 1px 3px rgba(60, 50, 38, 0.06);
   --shadow-lg: 0 10px 30px -8px rgba(60, 50, 38, 0.20);
+  --shadow-card: 0 1px 2px rgba(60, 50, 38, 0.06);
+  --shadow-card-hover: 0 2px 8px rgba(60, 50, 38, 0.10), 0 1px 3px rgba(60, 50, 38, 0.06);
+  --shadow-drag: 0 12px 28px -6px rgba(60, 50, 38, 0.24), 0 2px 6px rgba(60, 50, 38, 0.08);
 
   // Label chip ink follows the page's warm near-black, as the light base's follows its slate.
   --label-chip-ink-base: #26221d;
@@ -931,10 +975,14 @@ k-list.is-drop-target {
   --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
 
   --danger: #f85149;
-  --danger-bg: rgba(248, 81, 73, 0.1);
+  --danger-bg: var(--danger-soft);
   --danger-border: rgba(248, 81, 73, 0.22);
   --success: #3fb950;
   --warning: #d29922;
+  // Restated because color-mix() resolves where it is declared, and carbon's solids differ.
+  --success-soft: color-mix(in srgb, var(--success) 12%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 10%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 12%, transparent);
 }
 
 // ─── Accent (primary colour) choice ──────────────────────────────────────────
@@ -1204,7 +1252,7 @@ button.icon {
   }
 
   &.danger:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    background: var(--danger-soft);
     color: var(--danger);
   }
 
@@ -1282,7 +1330,7 @@ k-card.cdk-drag-preview {
   padding: 8px 10px;
   font-size: var(--text-md);
   color: var(--text);
-  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.25));
+  box-shadow: var(--shadow-drag);
   cursor: grabbing;
   overflow: hidden;
   transform: rotate(1.5deg);
@@ -1311,7 +1359,7 @@ k-up-next-panel .panel-rows k-card.cdk-drag-placeholder {
 }
 
 .cdk-drag-animating {
-  transition: transform 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: transform var(--dur) cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 // The lightweight card preview is a div, so the large-board k-card transition rule does not
@@ -1333,7 +1381,7 @@ body.is-large-board .card-drag-preview.cdk-drag-animating {
 }
 
 .cards.cdk-drop-list-dragging k-card:not(.cdk-drag-placeholder) {
-  transition: transform 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: transform var(--dur) cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .lists.is-card-dragging .cards.cdk-drop-list-dragging k-card:not(.cdk-drag-placeholder) {

@@ -129,7 +129,7 @@
   background: var(--surface);
   border-right: 1px solid var(--border);
   box-shadow: 8px 0 24px rgb(0 0 0 / 18%);
-  animation: slide-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: slide-in 0.22s var(--ease-drawer);
 
   // Fixed at top:0, so it sits under the iOS status bar. As the first flex item this spacer
   // reserves the notch height and pushes the header below it.

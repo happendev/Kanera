@@ -14447,7 +14447,8 @@
     "x-files": [
       "src/app/features/board/table-view/table-view.types.ts",
       "src/app/features/completed-cards/date-range-picker.popover.ts",
-      "src/app/features/dependencies/dependency-map.component.ts"
+      "src/app/features/dependencies/dependency-map.component.ts",
+      "src/app/shared/date-format.ts"
     ]
   },
   "9026083618139453880": "Later",
@@ -16225,6 +16226,13 @@
   },
   "2559848334566452330": "Loading your cards…",
   "@2559848334566452330": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "8533793576850646923": "Open work by list",
+  "@8533793576850646923": {
+    "description": "Portfolio section heading: open cards per workflow list",
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -27116,6 +27124,13 @@
       "src/app/shared/date-format.ts"
     ]
   },
+  "904263491421405349": "Earlier",
+  "@904263491421405349": {
+    "description": "Day group heading in an activity feed - older than a week",
+    "x-files": [
+      "src/app/shared/date-format.ts"
+    ]
+  },
   "4610500305880134634": "Updating permissions...",
   "@4610500305880134634": {
     "description": "Connection banner",
@@ -27369,6 +27384,13 @@
     "description": "Stat tile change, e.g. \"+3 vs last week\"",
     "x-files": [
       "src/app/shared/stat-tile.component.ts"
+    ]
+  },
+  "1511572156054675219": "{$list} · {$count}",
+  "@1511572156054675219": {
+    "description": "Status bar segment - list name and its card count",
+    "x-files": [
+      "src/app/shared/status-bar.component.ts"
     ]
   },
   "784157685329491743": "Your organisation's storage is full. Upgrade your plan to upload more files.",

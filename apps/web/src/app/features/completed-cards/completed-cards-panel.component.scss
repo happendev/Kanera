@@ -35,7 +35,7 @@
   border-left: 1px solid var(--border);
   box-shadow: -16px 0 40px rgb(0 0 0 / 18%);
   pointer-events: auto;
-  animation: completed-slide-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: completed-slide-in 0.22s var(--ease-drawer);
 
   // Fixed at top:0, so this spacer reserves the iOS notch height and pushes the
   // header below the status bar; --surface matches the panel for a solid bar.

@@ -389,7 +389,7 @@ const BULK_MENU_WIDTH = 232;
 
       &:hover:not(:disabled),
       &:active:not(:disabled) {
-        background: color-mix(in srgb, var(--danger) 10%, transparent);
+        background: var(--danger-soft);
       }
     }
 

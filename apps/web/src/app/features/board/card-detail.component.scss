@@ -1,3 +1,5 @@
+@use "../../shared/card-key" as key;
+
 // ── Watch button ──────────────────────────────────────────────────────────────
 
 .watch-btn.is-watching,
@@ -47,7 +49,7 @@
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  animation: slide-in 0.18s ease;
+  animation: slide-in var(--motion-base) var(--ease-drawer);
   overflow: hidden;
   // The @container card-panel queries further down this file are load-bearing, so this cannot be
   // dropped. It is safe for the popovers inside: unlike `transform`, `filter`, `backdrop-filter` and
@@ -364,7 +366,7 @@
 
   &.is-active {
     color: var(--success);
-    background: color-mix(in srgb, var(--success) 10%, transparent);
+    background: var(--success-soft);
   }
 
   &.is-active:hover {
@@ -398,14 +400,12 @@
 }
 
 .card-key {
-  flex: none;
+  @include key.card-key;
   padding: 2px 5px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: var(--text-xs);
+  line-height: inherit;
   cursor: copy;
 
   &:hover { background: var(--surface-hover); color: var(--text); }
@@ -1138,7 +1138,7 @@
 
 .checklist-block.cdk-drag-preview {
   box-sizing: border-box;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-drag);
   background: var(--surface-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 8px);
@@ -1439,7 +1439,7 @@
   border-left: 1px solid var(--border);
   background: var(--surface-overlay);
   box-shadow: -18px 0 48px rgba(0, 0, 0, 0.2);
-  animation: slide-in 0.18s ease;
+  animation: slide-in var(--motion-base) var(--ease-drawer);
 }
 
 .checklist-item-panel-scrim {
@@ -2093,7 +2093,7 @@
 
   &.overdue {
     color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    background: var(--danger-soft);
     border-color: color-mix(in srgb, var(--danger) 30%, transparent);
   }
 

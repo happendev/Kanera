@@ -237,7 +237,7 @@
   &.cdk-drag-preview {
     background: var(--surface);
     border-color: var(--border-strong);
-    box-shadow: var(--shadow-lg, 0 8px 24px rgb(0 0 0 / 22%));
+    box-shadow: var(--shadow-drag);
   }
 
   &.cdk-drag-placeholder {

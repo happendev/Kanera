@@ -1,13 +1,14 @@
-// The muted inline key chip, for surfaces that render it inside a dense metadata line. The board
-// tile, table, calendar, work-done and notification panels predate this and keep their own tuned
-// treatment; this exists so the four surfaces added with the toggle agree with each other.
+// The card key (DEV-123) wherever it appears beside a title: board tile, table cell, calendar chip,
+// work-done rows, notification rows, the agenda, queue rows and the detail header. Same face as the
+// UI (a monospace face was tried and read as heavier, and its wider glyphs overflowed the table's key
+// column), tabular digits so keys line up in columns, on the tertiary text tier so it is read but
+// never competes with the title. Surfaces add only layout (display, margin, max-width) on top.
 @mixin card-key {
   flex: none;
-  color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 500;
-  letter-spacing: 0.03em;
+  color: var(--text-3);
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
   white-space: nowrap;
-  opacity: 0.8;
 }

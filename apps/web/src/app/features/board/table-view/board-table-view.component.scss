@@ -1,6 +1,7 @@
 @use "../../../shared/breakpoints" as bp;
 @use "../../../shared/toolbar-styles" as toolbar;
 @use "../../../shared/rank-pill" as rank;
+@use "../../../shared/card-key" as key;
 
 :host {
   --tv-row-h: 36px;
@@ -1165,15 +1166,22 @@
 }
 
 .tv-card-key {
-  flex: none;
-  max-width: 11ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-3);
-  font-size: var(--text-xs);
+  @include key.card-key;
+  // Regular weight: the key sits inline before the title in a dense row, so a medium weight reads
+  // as part of the title instead of a prefix. The key is never clipped (a cut key identifies
+  // nothing); the title text gives way instead, and the grid drops the key altogether below
+  // COMPACT_TITLE_WIDTH. The key and the hidden sizer (the table's widest key) share one grid
+  // cell, so every key takes the widest key's width and the titles line up down the column.
+  display: inline-grid;
   font-weight: 400;
-  font-variant-numeric: tabular-nums;
+
+  > span {
+    grid-area: 1 / 1;
+  }
+
+  .tv-key-sizer {
+    visibility: hidden;
+  }
 }
 
 // Grid only: the stacked phone layout gives the key its own room as an inline prefix in full.
@@ -1839,10 +1847,15 @@ k-card-labels.tv-labels {
     white-space: normal;
   }
 
+  // Stacked rows wrap the key inline with the title, so the sizer slot gives way to the key's
+  // own width.
   .tv-card-key {
     display: inline;
-    max-width: none;
     margin-right: 6px;
+  }
+
+  .tv-key-sizer {
+    display: none;
   }
 
   .tv-title-trigger > .tv-unread {

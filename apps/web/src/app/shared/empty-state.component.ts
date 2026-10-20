@@ -74,7 +74,7 @@ import { booleanAttribute, ChangeDetectionStrategy, Component, input } from "@an
     /* The one empty state that earns colour is "nothing left to do", and it reads as completion
        (--success) rather than as the workspace accent, which inside a drawer means unread. */
     :host.is-success .es-icon {
-      background: color-mix(in srgb, var(--success) 10%, transparent);
+      background: var(--success-soft);
       color: var(--success);
     }
 
