@@ -146,7 +146,7 @@ const POPULAR_ICONS = [
       input {
         border: none;
         background: transparent;
-        font-size: 13px;
+        font-size: var(--text-base);
         color: var(--text);
         width: 100%;
         height: auto;
@@ -164,7 +164,7 @@ const POPULAR_ICONS = [
       align-items: center;
       justify-content: space-between;
       padding: 6px 12px 0;
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 500;
       color: var(--text-muted);
     }
@@ -215,7 +215,7 @@ const POPULAR_ICONS = [
     .ip-empty {
       grid-column: 1 / -1;
       text-align: center;
-      font-size: 12px;
+      font-size: var(--text-sm);
       color: var(--text-muted);
       padding: 16px 0;
     }

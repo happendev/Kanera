@@ -96,7 +96,7 @@
     justify-content: center;
     flex: none;
     width: 36px;
-    height: 36px;
+    height: var(--h-lg);
     padding: 0;
     color: var(--text-muted);
     background: transparent;
@@ -106,7 +106,7 @@
     transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
 
     i {
-      font-size: 16px;
+      font-size: var(--text-lg);
     }
 
     &:hover:not(:disabled) {

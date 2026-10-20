@@ -26,7 +26,7 @@
   padding: 32px 16px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   border: 1px dashed var(--border);
   border-radius: var(--radius);
   background: var(--surface-subtle);
@@ -44,7 +44,7 @@
   border: 1px dashed transparent;
   border-radius: var(--radius);
   text-align: center;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   opacity: 0;
   pointer-events: none;

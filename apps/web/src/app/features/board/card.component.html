@@ -98,11 +98,6 @@
       <i [class]="'ti ti-' + attention.icon"></i>
     </span>
     }
-    @if (inProgressMark(); as mark) {
-    <span class="card-in-progress" [class.is-alert]="mark.alert" [kTooltip]="mark.label" [attr.aria-label]="mark.label">
-      <i class="ti ti-progress"></i>
-    </span>
-    }
     @if (agentRunLabel(); as agentLabel) {
     <span class="card-agent-run" [class.is-blocked]="agentRunBlocked()" [kTooltip]="agentLabel" [attr.aria-label]="agentLabel">
       <i class="ti ti-sparkles"></i>
@@ -212,7 +207,7 @@
     <div class="assignee-stack">
       @for (m of visibleAssignees(); track m.userId) {
       <span class="assignee-avatar">
-        <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="24" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" [profile]="true" />
+        <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="avatarSize()" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" [profile]="true" />
       </span>
       }
       @if (assigneeOverflow()) {

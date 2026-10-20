@@ -1,3 +1,6 @@
+@use "../../../shared/toolbar-styles" as toolbar;
+@use "../../../shared/card-key" as key;
+
 :host {
   display: block;
   flex: 1;
@@ -84,49 +87,10 @@
 
 .cal-toolbar-title {
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 650;
   padding: 0 8px;
   white-space: nowrap;
-}
-
-.cal-toolbar-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
-
-  i {
-    color: var(--text-muted);
-    font-size: 14px;
-    line-height: 1;
-  }
-
-  &:hover {
-    background: var(--surface-hover);
-    border-color: var(--border-strong);
-  }
-
-  &.is-open {
-    background: var(--surface-hover);
-    border-color: var(--accent);
-    color: var(--text);
-  }
-}
-
-.cal-icon-btn {
-  width: 32px;
-  padding: 0;
-  justify-content: center;
 }
 
 // Day cards size to their own content, so the grid cannot be stretched to the pane height the way a
@@ -187,13 +151,13 @@
 
   h3 {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--text-md);
     font-weight: 650;
   }
 
   small {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 }
 
@@ -261,7 +225,7 @@
     gap: 8px;
     flex: none;
     padding: 8px 11px 2px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 700;
 
     // The date takes the slack so the count stays pinned right whether or not the badge is present.
@@ -332,7 +296,7 @@
   min-width: 0;
   background: var(--list-bg);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   overflow: hidden;
 
@@ -398,7 +362,7 @@
   max-width: 100%;
   padding: 9px;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-align: left;
   white-space: normal;
   // --card-bg, not --bg: the semantic pair with the cell's --list-bg, so the tile is lifted above its
@@ -440,9 +404,16 @@
       color: var(--text-muted);
     }
 
+    // Struck through as well as muted: the tick alone is easy to miss at tile scale. The line sits
+    // on the text span, not the title, so it never crosses the tick.
+    .cal-card-title-text {
+      text-decoration: line-through;
+      text-decoration-color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+    }
+
     .cal-time {
       color: var(--success);
-      background: color-mix(in srgb, var(--success) 12%, transparent);
+      background: var(--success-soft);
     }
 
     .cal-indicator,
@@ -451,14 +422,23 @@
     }
   }
 
-  .cal-complete-icon {
+  .cal-complete-icon,
+  .cal-list-icon {
     // inline-block, not inline: a strikethrough set on an ancestor propagates through inline children
     // and cannot be switched off, which would draw the line straight through the tick.
     display: inline-block;
-    color: var(--success);
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1;
     vertical-align: -2px;
+  }
+
+  .cal-complete-icon {
+    color: var(--success);
+  }
+
+  // Uncoloured lists keep the icon as a quiet grey mark; the colour comes inline when the list has one.
+  .cal-list-icon {
+    color: var(--text-muted);
   }
 
   &.is-overdue:not(.is-completed) {
@@ -471,7 +451,7 @@
 
     .cal-time {
       color: var(--danger);
-      background: color-mix(in srgb, var(--danger) 12%, transparent);
+      background: var(--danger-soft);
     }
 
     .cal-progress-fill {
@@ -493,6 +473,20 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+}
+
+// Labels on the left, assignees pinned top right; the labels wrap under themselves, never under
+// the avatars.
+.cal-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+
+  k-card-labels.cal-label-row {
+    flex: 1 1 auto;
+  }
 }
 
 // The calendar uses the shared label renderer at a denser scale; custom properties keep the
@@ -517,7 +511,7 @@ k-card-labels.cal-label-row {
   max-width: 100%;
   box-sizing: border-box;
   color: var(--text);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   font-weight: 600;
   line-height: 1.35;
   text-align: left;
@@ -532,20 +526,22 @@ k-card-labels.cal-label-row {
 }
 
 // flex: none so the key survives a narrow day column; the board name beside it ellipsises instead.
-.cal-card-key { flex: none; color: var(--text-muted); font-size: 10px; font-weight: 500; letter-spacing: 0.03em; font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0.8; }
+.cal-card-key { @include key.card-key; }
 
 .week-mode .cal-card-title {
   line-clamp: 3;
   -webkit-line-clamp: 3;
 }
 
+// Wraps rather than clips: the key and the due time must always be read in full, so a narrow tile
+// drops the time onto a second line instead of cutting it off at the edge.
 .cal-context-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
+  gap: 3px 5px;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
 }
 
 .cal-time {
@@ -563,7 +559,7 @@ k-card-labels.cal-label-row {
 
   &.is-overdue {
     color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    background: var(--danger-soft);
   }
 }
 
@@ -579,7 +575,7 @@ k-card-labels.cal-label-row {
   i {
     flex: none;
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--text-xs);
     line-height: 1;
   }
 }
@@ -593,11 +589,11 @@ k-card-labels.cal-label-row {
 
 .cal-meta-row {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 3px 6px;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
   white-space: nowrap;
 }
 
@@ -612,7 +608,7 @@ k-card-labels.cal-label-row {
   line-height: 1;
 
   i {
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
 }
 
@@ -669,30 +665,6 @@ k-card-labels.cal-label-row {
   background: var(--success);
 }
 
-// A tile squeezed to a narrow column drops the metadata row before it drops the title: beside the
-// assignee stack the row has ~90px, which clipped the checklist count mid-number.
-@container (max-width: 150px) {
-  .cal-context-row {
-    gap: 4px;
-  }
-
-  // The key gives way to the due time here: the time is what the calendar is for, and a fixed-width
-  // key pushed it past the clipped edge of the row.
-  .cal-card-key {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .cal-meta-row {
-    display: none;
-  }
-
-  .cal-assignees {
-    max-width: 36px;
-  }
-}
 
 .skeleton-day-number {
   width: 24px;
@@ -754,19 +726,8 @@ k-card-labels.cal-label-row {
     flex: 1;
   }
 
-  .cal-toolbar-btn {
-    height: 36px;
-    padding: 0 8px;
-    font-size: 12px;
-  }
-
-  // Auto tracks, so the arrows keep their own square size here and the coarse-pointer 44px below.
-  .cal-icon-btn {
-    width: 36px;
-  }
-
   .cal-toolbar-title {
-    font-size: 12px;
+    font-size: var(--text-sm);
     padding: 0 4px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -788,7 +749,7 @@ k-card-labels.cal-label-row {
 // CDK moves the preview under <body>; emulated encapsulation still reaches it through the clone's
 // content attribute, so the tile keeps its own look and just lifts.
 .cal-card.cdk-drag-preview {
-  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.25));
+  box-shadow: var(--shadow-drag);
   border-color: var(--border-strong);
   cursor: grabbing;
   transform: rotate(1.5deg);
@@ -852,7 +813,7 @@ k-card-labels.cal-label-row {
   }
 
   .cal-card-title {
-    font-size: 11px;
+    font-size: var(--text-xs);
     line-height: 1.3;
   }
 
@@ -864,8 +825,8 @@ k-card-labels.cal-label-row {
   }
 }
 
-// The bare day number; today fills it with the accent the badge used to carry, and the 1st (which
-// keeps its month, "1 Oct") stretches the same fill into a pill.
+// The day label; today fills it with the accent, and a label with its month ("1 Oct", or every day
+// in the full layout) stretches the same fill into a pill.
 .calendar-day-number {
   display: inline-flex;
   align-items: center;
@@ -877,7 +838,7 @@ k-card-labels.cal-label-row {
   padding: 0 5px;
   box-sizing: border-box;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   font-weight: 700;
   white-space: nowrap;
 
@@ -895,7 +856,7 @@ k-card-labels.cal-label-row {
 
 .is-compact .calendar-day > header > small {
   margin-left: auto;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
 }
 
 // "+N more" / "Show less" under a capped month cell. A quiet text button on the cell surface, so it
@@ -909,7 +870,7 @@ k-card-labels.cal-label-row {
   border: 0;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 
   &:hover:not(:disabled) {
@@ -1035,7 +996,7 @@ k-card-labels.cal-label-row {
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   line-height: 1;
   transition: background-color var(--motion-fast), color var(--motion-fast);
@@ -1107,13 +1068,13 @@ k-card-labels.cal-label-row {
     gap: 8px;
     min-height: 40px;
     padding: 0 12px;
-    font-size: 13px;
+    font-size: var(--text-base);
     font-weight: 650;
 
     small {
       margin-left: auto;
       color: var(--text-muted);
-      font-size: 11.5px;
+      font-size: var(--text-xs);
       font-weight: 500;
     }
   }
@@ -1154,10 +1115,10 @@ k-card-labels.cal-label-row {
 .cal-agenda-cards .cal-card {
   gap: 6px;
   padding: 10px 11px;
-  font-size: 13px;
+  font-size: var(--text-base);
 
   .cal-card-title {
-    font-size: 13px;
+    font-size: var(--text-base);
     line-clamp: 3;
     -webkit-line-clamp: 3;
   }
@@ -1165,7 +1126,7 @@ k-card-labels.cal-label-row {
   .cal-time,
   .cal-board,
   .cal-card-key {
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 
   .cal-time {
@@ -1194,14 +1155,6 @@ k-card-labels.cal-label-row {
 
 // Coarse pointers get 44px controls. The tiles are already taller than that; these are the chrome.
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
-  .cal-toolbar-btn {
-    height: 44px;
-  }
-
-  .cal-icon-btn {
-    width: 44px;
-  }
-
   .cal-more {
     height: 44px;
   }
@@ -1214,4 +1167,25 @@ k-card-labels.cal-label-row {
   .cal-agenda-day > header {
     min-height: 44px;
   }
+}
+
+// The full layout's date is the same pill as the compact number; it must not stretch (header's
+// first child takes the slack) or the fill would run the width of the cell.
+.calendar-day > header > .calendar-day-number,
+.calendar-slot-empty > header > .calendar-day-number {
+  flex: none;
+  margin-left: -4px;
+  padding: 0 6px;
+  font-size: var(--text-sm);
+}
+
+.calendar-day > header > .calendar-day-number + small {
+  margin-left: auto;
+}
+
+// Compact density (DensityService): the title truncates to one line so a day cell stays a list of
+// cards rather than a column of paragraphs.
+:host-context([data-density="compact"]) .cal-card-title {
+  line-clamp: 1;
+  -webkit-line-clamp: 1;
 }

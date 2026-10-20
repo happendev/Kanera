@@ -1,0 +1,46 @@
+// One pill for "this card is in list X": icon and name on a wash mixed from the list's own hue, the
+// text mixed towards --text so a single declaration lands legible in every theme. Lists with no
+// colour fall back to a neutral grey pill rather than losing the shape, which is what identifies the
+// value as a status at all. The table's status cell and run headers, the calendar tile and card
+// activity's "moved" rows all include this, so a list reads the same wherever it is named; each
+// surface sets `--list-color` (or leaves it unset for the neutral fallback) and adds layout on top.
+@mixin list-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 9px;
+  background: color-mix(in srgb, var(--list-color, var(--text-muted)) 15%, transparent);
+  color: color-mix(in srgb, var(--list-color, var(--text-muted)) 65%, var(--text));
+  border-radius: 999px;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.55;
+
+  > i {
+    flex: none;
+    font-size: var(--text-md);
+    opacity: .85;
+  }
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// Every workspace colour token as a modifier class, for surfaces that build their markup as an
+// HTML string (card activity) and so cannot bind a style: Angular's sanitizer strips inline
+// `style` from [innerHTML], but keeps classes.
+$list-colors: "rose", "pink", "red", "orange", "amber", "yellow", "lime", "green", "emerald", "teal", "cyan", "sky", "blue", "indigo", "violet", "purple", "fuchsia", "gray", "olive", "brown";
+
+@mixin list-color-classes {
+  @each $name in $list-colors {
+    &.is-#{$name} {
+      --list-color: var(--color-#{$name});
+    }
+  }
+}

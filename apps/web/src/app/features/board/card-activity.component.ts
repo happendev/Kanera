@@ -36,7 +36,7 @@ import { DescriptionViewerComponent } from "./description-viewer.component";
 import { formatDueDate, type DueDateSlotSelection } from "./due-date.util";
 import { ImageLightboxService } from "./image-lightbox.service";
 import { ReactionPopoverComponent } from "./reaction-popover.component";
-import { formatFeedTime } from "../../shared/date-format";
+import { feedDayGroup, feedDayGroupLabel, formatFeedTime, type FeedDayGroup } from "../../shared/date-format";
 import { icu } from "../../core/i18n/icu";
 import { appLocale } from "../../core/i18n/locale";
 import { formatTrackedDuration } from "./time-in-progress.util";
@@ -70,6 +70,7 @@ function cardFeedSortPriority(item: CardFeedItem): number {
 // every change detection pass (keystrokes, hovers, popover toggles).
 type CardFeedView =
   | { kind: "comment"; key: string; data: CommentRow; timeText: string; isMirror: boolean }
+  | { kind: "day"; key: string; label: string }
   | {
       kind: "activity";
       key: string;
@@ -180,8 +181,25 @@ export class CardActivityComponent {
   // feed change instead of per change detection. Recomputes when the feed, filter, or (for the
   // "moved" activity case) state.lists() change. timeText intentionally does not refresh on a
   // timer — it re-derives whenever the feed signal changes, which is acceptable for relative ages.
-  readonly feedViewItems = computed<CardFeedView[]>(() =>
-    this.filteredFeedItems().map((item) => {
+  // Rows are banded by local day (Today / Yesterday / This week / Earlier): a heading row is
+  // emitted where the band changes, so a feed that is all from today carries one heading and a
+  // long history reads as four. The feed is newest-first, so bands run in that order too.
+  readonly feedViewItems = computed<CardFeedView[]>(() => {
+    const now = new Date();
+    const rows: CardFeedView[] = [];
+    let group: FeedDayGroup | null = null;
+    for (const item of this.filteredFeedItems()) {
+      const itemGroup = feedDayGroup(item.data.createdAt, now);
+      if (itemGroup !== group) {
+        group = itemGroup;
+        rows.push({ kind: "day", key: `day:${itemGroup}`, label: feedDayGroupLabel(itemGroup) });
+      }
+      rows.push(this.feedRowFor(item));
+    }
+    return rows;
+  });
+
+  private feedRowFor(item: CardFeedItem): CardFeedView {
       const timeText = this.formatFeedTime(item.data.createdAt);
       if (item.type === "comment") {
         return { kind: "comment", key: item.data.id, data: item.data, timeText, isMirror: typeof item.data.mirrorId === "string" };
@@ -198,8 +216,7 @@ export class CardActivityComponent {
         hasDescriptionChanges: this.hasDescriptionChangesForActivity(item.data),
         attachmentPreview: this.attachmentPreviewForActivity(item.data),
       };
-    }),
-  );
+  }
 
   showAuthorPresence(authorKind: string, authorId: string | null): boolean {
     return authorKind === "user" && Boolean(authorId && this.memberIds().has(authorId));
@@ -900,12 +917,14 @@ export class CardActivityComponent {
       }
       case "moved": {
         const lists = this.state.lists();
-        const toName = lists.find((l) => l.id === p["toListId"])?.name ?? this.activityPayloadText(p, "toListName");
-        const fromName = lists.find((l) => l.id === p["fromListId"])?.name ?? this.activityPayloadText(p, "fromListName");
+        const to = lists.find((l) => l.id === p["toListId"]);
+        const from = lists.find((l) => l.id === p["fromListId"]);
+        const toName = to?.name ?? this.activityPayloadText(p, "toListName");
+        const fromName = from?.name ?? this.activityPayloadText(p, "fromListName");
         if (toName && fromName) {
-          return ` ${$localize`:Card activity after a person's name; arrow is an icon between the two list names:moved from ${this.v(fromName)}:fromList: ${this.arr()}:arrow: ${this.v(toName)}:toList:`}`;
+          return ` ${$localize`:Card activity after a person's name; arrow is an icon between the two list names:moved from ${this.listChip(fromName, from)}:fromList: ${this.arr()}:arrow: ${this.listChip(toName, to)}:toList:`}`;
         }
-        if (toName) return ` ${$localize`:Card activity after a person's name:moved to ${this.v(toName)}:list:`}`;
+        if (toName) return ` ${$localize`:Card activity after a person's name:moved to ${this.listChip(toName, to)}:list:`}`;
         return ` ${$localize`:Card activity after a person's name:moved this card`}`;
       }
       case "completed":
@@ -1441,6 +1460,19 @@ export class CardActivityComponent {
   private v(s: string, variant?: "overdue"): string {
     const variantClass = variant ? ` activity-value-${variant}` : "";
     return `<span class="activity-value${variantClass}">${this.esc(s)}</span>`;
+  }
+
+  /**
+   * A list named in a row wears the same icon-and-colour pill it has in the table and calendar, so
+   * "moved to Review" is recognisable at a glance. The colour rides on a class, not a style: this
+   * HTML goes through [innerHTML], whose sanitizer drops inline styles but keeps classes (the
+   * matching `.is-<colour>` rules are generated in shared/_list-chip.scss). A list that has been
+   * deleted since (name from the payload only) falls back to the plain value pill.
+   */
+  private listChip(name: string, list: { icon: string | null; color: string | null } | undefined): string {
+    if (!list) return this.v(name);
+    const color = list.color ? ` is-${this.esc(list.color)}` : "";
+    return `<span class="activity-list${color}"><i class="ti ti-${this.esc(list.icon || "list")}"></i><span>${this.esc(name)}</span></span>`;
   }
 
   private arr(): string {

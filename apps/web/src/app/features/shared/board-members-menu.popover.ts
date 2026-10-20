@@ -1,5 +1,5 @@
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, Injectable, inject, input, output, signal } from "@angular/core";
 import type { ServerToClientEvents, WireBoardMemberUser } from "@kanera/shared/events";
 import { appLocale } from "../../core/i18n/locale";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
@@ -50,6 +50,20 @@ function sortMembers<T extends RenderedMemberRow>(members: readonly T[]): T[] {
   });
 }
 
+type BoardMembersSnapshot = { members: BoardAccessMemberRow[]; scope: "workspace" | "organisation"; roster: BoardMemberCandidateRow[] };
+
+/**
+ * Last management view per viewer and board, so reopening the menu renders at once and revalidates
+ * in the background. Keyed by viewer as well because the tab can outlive a sign-in. The server
+ * still authorises every write, so a briefly stale row can only produce a rejected mutation.
+ */
+@Injectable({ providedIn: "root" })
+class BoardMembersSnapshotCache {
+  private readonly snapshots = new Map<string, BoardMembersSnapshot>();
+  get(key: string) { return this.snapshots.get(key); }
+  set(key: string, snapshot: BoardMembersSnapshot) { this.snapshots.set(key, snapshot); }
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const body = error.body as { message?: string } | undefined;
@@ -91,7 +105,7 @@ function errorMessage(error: unknown): string {
         </div>
       }
       @if (error()) { <p class="bmp-error"><i class="ti ti-alert-circle"></i> {{ error() }}</p> }
-      @if (loading()) { <p class="bmp-empty"><i class="ti ti-loader-2 spin"></i> <ng-container i18n>Loading members…</ng-container></p> }
+      @if (loading() && renderedMembers().length === 0) { <p class="bmp-empty"><i class="ti ti-loader-2 spin"></i> <ng-container i18n>Loading members…</ng-container></p> }
       @else {
         <section class="bmp-section">
           <div class="bmp-section-title" i18n="Section heading: board members">Members</div>
@@ -167,10 +181,10 @@ function errorMessage(error: unknown): string {
   styles: [
     ANCHORED_HOST_STYLES,
     `
-    .bmp-footer{padding-top:8px;border-top:1px solid var(--overlay-separator)}.bmp-leave{display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;min-height:34px;padding:7px 8px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--danger);font:inherit;font-size:12px;text-align:left;cursor:pointer;transition:background .15s ease}.bmp-leave i{font-size:16px}.bmp-leave:not(:disabled):hover{background:color-mix(in srgb,var(--danger) 10%,transparent)}.bmp-leave:focus-visible{outline:2px solid var(--danger);outline-offset:2px}
+    .bmp-footer{padding-top:8px;border-top:1px solid var(--overlay-separator)}.bmp-leave{display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;min-height:34px;padding:7px 8px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--danger);font:inherit;font-size: var(--text-sm);text-align:left;cursor:pointer;transition:background .15s ease}.bmp-leave i{font-size: var(--text-lg)}.bmp-leave:not(:disabled):hover{background:color-mix(in srgb,var(--danger) 10%,transparent)}.bmp-leave:focus-visible{outline:2px solid var(--danger);outline-offset:2px}
     .bmp-panel{width:100%;max-height:min(520px,calc(100vh - 24px));overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:12px;background:var(--surface-overlay);border:1px solid var(--overlay-border);border-radius:var(--radius-lg);box-shadow:0 8px 32px rgba(0,0,0,.25)}
-    .bmp-add{display:grid;grid-template-columns:minmax(0,1fr) 36px;gap:6px}.bmp-add select,.bmp-role-select{min-width:0;height:36px;padding:0 9px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:12px;outline:0;transition:border-color .15s ease,box-shadow .15s ease}.bmp-add select:focus-visible,.bmp-role-select:focus-visible{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}.bmp-member-select{grid-column:1/-1;width:100%}.bmp-add .bmp-role-select{width:100%}.bmp-add button,.bmp-remove{border:0;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);cursor:pointer}.bmp-add button[type="submit"]{width:36px;height:36px;border:1px solid var(--border);font-size:14px}.bmp-add button[type="submit"]:not(:disabled):hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,var(--surface-2));color:var(--accent)}.bmp-add .bmp-add-access{grid-column:1/-1;width:100%;justify-content:flex-start;padding:0 9px;border:1px solid var(--border);background:transparent;color:var(--text-muted)}.bmp-add .bmp-add-access.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.bmp-remove{width:28px;height:28px;color:var(--danger)}button:disabled,select:disabled{cursor:not-allowed;opacity:.55}.bmp-all-added{display:flex;align-items:center;gap:7px;padding:8px 9px;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text-muted);font-size:12px}.bmp-all-added i{color:var(--text)}
-    .bmp-section{display:flex;flex-direction:column;gap:4px}.bmp-guests{padding-top:8px;border-top:1px solid var(--overlay-separator)}.bmp-section-title{padding:0 4px 4px;color:var(--text-muted);font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}.bmp-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-height:44px;padding:6px;border-radius:var(--radius-sm)}.bmp-row:hover{background:var(--surface-hover)}.bmp-identity{display:flex;min-width:0;align-items:center;gap:8px}.bmp-person{display:flex;min-width:0;flex:1;flex-direction:column;gap:1px}.bmp-name,.bmp-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bmp-name{color:var(--text);font-size:13px;font-weight:600}.bmp-email,.bmp-you{color:var(--text-muted);font-size:10px}.bmp-actions{display:flex;flex:0 0 auto;align-items:center;gap:4px}.bmp-access-toggle{display:inline-flex;width:28px;height:28px;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}.bmp-access-toggle:hover{background:var(--surface-hover);color:var(--text)}.bmp-access-toggle.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.bmp-access-readonly{display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:11px;transition:background .15s ease,box-shadow .15s ease}.bmp-access-readonly:hover,.bmp-access-readonly:focus-visible{background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent);outline:0}.bmp-role{color:var(--text-muted);font-size:11px;font-weight:600}.bmp-role-admin{padding:4px 7px;border-radius:999px;background:var(--surface-3)}.bmp-role-select{width:84px;height:28px}.bmp-empty,.bmp-error{margin:0;padding:6px;color:var(--text-muted);font-size:12px}.bmp-error{color:var(--danger)}
+    .bmp-add{display:grid;grid-template-columns:minmax(0,1fr) 36px;gap:6px}.bmp-add select,.bmp-role-select{min-width:0;height:36px;padding:0 9px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size: var(--text-sm);outline:0;transition:border-color .15s ease,box-shadow .15s ease}.bmp-add select:focus-visible,.bmp-role-select:focus-visible{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}.bmp-member-select{grid-column:1/-1;width:100%}.bmp-add .bmp-role-select{width:100%}.bmp-add button,.bmp-remove{border:0;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);cursor:pointer}.bmp-add button[type="submit"]{width:36px;height:36px;border:1px solid var(--border);font-size: var(--text-md)}.bmp-add button[type="submit"]:not(:disabled):hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,var(--surface-2));color:var(--accent)}.bmp-add .bmp-add-access{grid-column:1/-1;width:100%;justify-content:flex-start;padding:0 9px;border:1px solid var(--border);background:transparent;color:var(--text-muted)}.bmp-add .bmp-add-access.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.bmp-remove{width:28px;height:28px;color:var(--danger)}button:disabled,select:disabled{cursor:not-allowed;opacity:.55}.bmp-all-added{display:flex;align-items:center;gap:7px;padding:8px 9px;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text-muted);font-size: var(--text-sm)}.bmp-all-added i{color:var(--text)}
+    .bmp-section{display:flex;flex-direction:column;gap:4px}.bmp-guests{padding-top:8px;border-top:1px solid var(--overlay-separator)}.bmp-section-title{padding:0 4px 4px;color:var(--text-muted);font-size: var(--text-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase}.bmp-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-height:44px;padding:6px;border-radius:var(--radius-sm)}.bmp-row:hover{background:var(--surface-hover)}.bmp-identity{display:flex;min-width:0;align-items:center;gap:8px}.bmp-person{display:flex;min-width:0;flex:1;flex-direction:column;gap:1px}.bmp-name,.bmp-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bmp-name{color:var(--text);font-size: var(--text-base);font-weight:600}.bmp-email,.bmp-you{color:var(--text-muted);font-size:10px}.bmp-actions{display:flex;flex:0 0 auto;align-items:center;gap:4px}.bmp-access-toggle{display:inline-flex;width:28px;height:28px;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font-size: var(--text-sm);cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}.bmp-access-toggle:hover{background:var(--surface-hover);color:var(--text)}.bmp-access-toggle.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.bmp-access-readonly{display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size: var(--text-xs);transition:background .15s ease,box-shadow .15s ease}.bmp-access-readonly:hover,.bmp-access-readonly:focus-visible{background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent);outline:0}.bmp-role{color:var(--text-muted);font-size: var(--text-xs);font-weight:600}.bmp-role-admin{padding:4px 7px;border-radius:999px;background:var(--surface-3)}.bmp-role-select{width:84px;height:28px}.bmp-empty,.bmp-error{margin:0;padding:6px;color:var(--text-muted);font-size: var(--text-sm)}.bmp-error{color:var(--danger)}
   `,
   ],
 })
@@ -185,10 +199,15 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   /** The deferred removal usually completes after the popover has closed; see removeMember. */
   private destroyed = false;
   private readonly sockets = inject(SocketService);
+  private readonly snapshots = inject(BoardMembersSnapshotCache);
+  /** Whether accessMembers/roster hold this board's management data (cached or fetched). */
+  private readonly accessLoaded = signal(false);
   readonly boardId = input.required<string>(); readonly workspaceId = input<string | null>(null); readonly ownerClientId = input<string | null>(null); readonly boardRoomManaged = input(false);
   readonly currentUserId = input<string | null>(null); readonly canManage = input(false); readonly members = input<WireBoardMemberUser[]>([]); readonly dismissed = output<void>(); readonly memberAdded = output<WireBoardMemberUser>(); readonly memberRemoved = output<string>();
   readonly accessMembers = signal<BoardAccessMemberRow[]>([]); readonly roster = signal<BoardMemberCandidateRow[]>([]); readonly candidateScope = signal<"workspace" | "organisation">("workspace"); readonly loading = signal(false); readonly busy = signal(false); readonly confirmingRemoval = signal(false); readonly error = signal<string | null>(null); readonly addUserId = signal(""); readonly addRole = signal<BoardRole>("observer"); readonly addAssignedItemsOnly = signal(false);
-  readonly renderedMembers = computed<RenderedMemberRow[]>(() => this.canManage() ? this.accessMembers() : this.members());
+  // Until the management rows arrive, show the roster the board page already holds (read-only) rather
+  // than a spinner; the role controls appear once the authoritative rows are in.
+  readonly renderedMembers = computed<RenderedMemberRow[]>(() => this.canManage() && this.accessLoaded() ? this.accessMembers() : this.members());
   readonly leavingMember = computed(() => this.renderedMembers().find(member => this.canLeave(member)) ?? null);
   readonly localMembers = computed(() => {
     if (!this.ownerClientId()) return sortMembers(this.renderedMembers());
@@ -222,9 +241,11 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
     // destroying this short-lived popover can eject the board page before a durable event arrives.
     if (!this.boardRoomManaged()) this.leaveBoard = this.sockets.joinBoard(this.boardId());
     this.socket.on("board:member:added", this.onMemberUpsert); this.socket.on("board:member:updated", this.onMemberUpsert); this.socket.on("board:member:removed", this.onMemberRemoved); this.socket.on("client:user:role-changed", this.onClientUserRoleChanged);
-    await this.reload();
+    const cached = this.snapshots.get(this.snapshotKey());
+    if (cached) { this.accessMembers.set(cached.members); this.candidateScope.set(cached.scope); this.roster.set(cached.roster); this.accessLoaded.set(true); }
+    await this.reload(!cached);
   }
-  ngOnDestroy() { this.socket?.off("board:member:added", this.onMemberUpsert); this.socket?.off("board:member:updated", this.onMemberUpsert); this.socket?.off("board:member:removed", this.onMemberRemoved); this.socket?.off("client:user:role-changed", this.onClientUserRoleChanged); this.leaveBoard?.() }
+  ngOnDestroy() { if (this.accessLoaded()) this.snapshots.set(this.snapshotKey(), { members: this.accessMembers(), scope: this.candidateScope(), roster: this.roster() }); this.socket?.off("board:member:added", this.onMemberUpsert); this.socket?.off("board:member:updated", this.onMemberUpsert); this.socket?.off("board:member:removed", this.onMemberRemoved); this.socket?.off("client:user:role-changed", this.onClientUserRoleChanged); this.leaveBoard?.() }
   isAccessRow(member: WireBoardMemberUser | BoardAccessMemberRow): member is BoardAccessMemberRow { return "pinned" in member; }
   roleLabel(role: string) { return ROLE_LABELS[role] ?? role.charAt(0).toUpperCase() + role.slice(1) }
   readonly selectOrganisationMember = $localize`:Select placeholder:Select an organisation member…`;
@@ -293,7 +314,8 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
       this.confirmingRemoval.set(false);
     }
   }
-  private async reload(showLoading = true) { if (showLoading) this.loading.set(true); this.error.set(null); try { const [members, candidates] = await Promise.all([this.api.get<BoardAccessMemberRow[]>(`/boards/${this.boardId()}/members`), this.api.get<BoardMemberCandidatesResponse>(`/boards/${this.boardId()}/member-candidates`)]); this.accessMembers.set(members); this.candidateScope.set(candidates.scope); this.roster.set(candidates.members) } catch (e) { this.error.set(errorMessage(e)) } finally { this.loading.set(false) } }
+  private snapshotKey() { return `${this.currentUserId() ?? ""}:${this.boardId()}`; }
+  private async reload(showLoading = true) { if (showLoading) this.loading.set(true); this.error.set(null); try { const [members, candidates] = await Promise.all([this.api.get<BoardAccessMemberRow[]>(`/boards/${this.boardId()}/members`), this.api.get<BoardMemberCandidatesResponse>(`/boards/${this.boardId()}/member-candidates`)]); this.accessMembers.set(members); this.candidateScope.set(candidates.scope); this.roster.set(candidates.members); this.accessLoaded.set(true) } catch (e) { this.error.set(errorMessage(e)) } finally { this.loading.set(false) } }
   // Realtime events omit email/addedAt, so preserve the authoritative row where possible and
   // borrow identity fields from the candidate roster until the next full fetch.
   private readonly onMemberUpsert = ({ boardId, member, user }: Parameters<ServerToClientEvents["board:member:added"]>[0]) => { if (boardId !== this.boardId()) return; this.accessMembers.update(rows => { const old = rows.find(r => r.userId === member.userId); const roster = this.roster().find(r => r.userId === member.userId); const next: BoardAccessMemberRow = { boardId, userId: member.userId, role: member.role, assignedItemsOnly: member.assignedItemsOnly, pinned: member.pinned, addedAt: old?.addedAt ?? new Date(), email: old?.email ?? roster?.email ?? "", displayName: user.displayName, avatarUrl: user.avatarUrl, lastOnlineAt: user.lastOnlineAt, clientId: user.clientId ?? old?.clientId ?? this.ownerClientId() ?? "", isOrganisationMember: user.isOrganisationMember ?? old?.isOrganisationMember ?? false }; return [...rows.filter(r => r.userId !== member.userId), next] }) };

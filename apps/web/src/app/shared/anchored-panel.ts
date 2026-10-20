@@ -285,7 +285,7 @@ export const ANCHORED_PANEL_STYLES = `
     flex: 1;
     min-width: 0;
     color: var(--text);
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 700;
   }
 
@@ -295,7 +295,7 @@ export const ANCHORED_PANEL_STYLES = `
     justify-content: center;
     flex: none;
     width: 26px;
-    height: 26px;
+    height: var(--h-sm);
     padding: 0;
     color: var(--text-muted);
     background: transparent;
@@ -329,7 +329,7 @@ export const PANEL_INPUT_STYLES = `
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     font: inherit;
-    font-size: 13px;
+    font-size: var(--text-base);
     outline: none;
     transition: border-color 0.15s, box-shadow 0.15s;
   }

@@ -14,19 +14,19 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text);
 
   i {
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 }
 
 .settings-section-hint {
   margin: -4px 0 0;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
 }
 
@@ -38,7 +38,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 6px 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 
   i { flex-shrink: 0; }
@@ -62,7 +62,7 @@
   align-items: center;
   justify-content: center;
   width: 30px;
-  height: 30px;
+  height: var(--h-md);
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-2);
@@ -83,14 +83,14 @@
   h3 {
     margin: 0;
     color: var(--text);
-    font-size: 14px;
+    font-size: var(--text-md);
     font-weight: 600;
   }
 
   p {
     margin: 0;
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1.45;
   }
 }
@@ -134,12 +134,12 @@
   min-width: 0;
 
   strong {
-    font-size: 13px;
+    font-size: var(--text-base);
     overflow-wrap: anywhere;
   }
 
   span {
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--text-muted);
   }
 }
@@ -151,13 +151,13 @@
   overflow: hidden;
 
   button {
-    height: 30px;
+    height: var(--h-md);
     border: 0;
     border-right: 1px solid var(--border);
     border-radius: 0;
     background: var(--surface-2);
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--text-sm);
 
     &:last-child { border-right: 0; }
     &.is-selected {
@@ -188,7 +188,7 @@ select,
 input[type="text"],
 .mapping-controls input,
 .field-row input {
-  min-height: 36px;
+  min-height: var(--h-lg);
 }
 
 .member-row {
@@ -224,7 +224,7 @@ input[type="text"],
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
   width: fit-content;
   flex-shrink: 0;
 
@@ -248,7 +248,7 @@ input[type="text"],
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface) 92%, var(--accent));
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   opacity: 0;
   transform: translateY(-2px);
@@ -264,7 +264,7 @@ input[type="text"],
   gap: 2px;
   min-width: 0;
   flex: 1;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -275,7 +275,7 @@ input[type="text"],
   min-width: 0;
   max-width: 100%;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
 
   i {
     color: var(--text-muted);
@@ -301,7 +301,7 @@ input[type="text"],
 .field-row {
   display: grid;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -326,7 +326,7 @@ input[type="text"],
   border-radius: var(--radius);
   background: var(--surface-2);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
 
   input {
     width: 16px;
@@ -346,7 +346,7 @@ input[type="text"],
   border-radius: var(--radius);
   background: var(--surface-2);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
 
   span {
     min-width: 0;
@@ -375,12 +375,12 @@ input[type="text"],
 
   strong {
     color: var(--text);
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   span {
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--text-sm);
     overflow-wrap: anywhere;
   }
 
@@ -409,7 +409,7 @@ input[type="text"],
   grid-column: 1 / -1;
   justify-self: stretch;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   overflow-wrap: anywhere;
   text-align: right;
 }
@@ -432,11 +432,11 @@ input[type="text"],
   gap: 12px;
   min-width: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 
   strong {
     color: var(--text);
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
   }
 
@@ -482,7 +482,7 @@ input[type="text"],
   gap: 8px;
   margin: 0;
   color: var(--danger);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .csv-options {
@@ -501,7 +501,7 @@ input[type="text"],
 
     > span {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
     }
   }
 }
@@ -509,7 +509,7 @@ input[type="text"],
 .csv-timezone {
   align-self: center;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .csv-columns {
@@ -525,7 +525,7 @@ input[type="text"],
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--divider);
 
   &:last-child { border-bottom: 0; }
 
@@ -547,7 +547,7 @@ input[type="text"],
   strong {
     max-width: 100%;
     overflow: hidden;
-    font-size: 13px;
+    font-size: var(--text-base);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -563,7 +563,7 @@ input[type="text"],
   background: var(--surface-2);
   color: var(--text-muted);
   font-family: monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

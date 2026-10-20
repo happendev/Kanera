@@ -42,7 +42,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
         align-items: center;
         gap: 8px;
         padding: 4px 6px;
-        font-size: 12px;
+        font-size: var(--text-sm);
         color: var(--text);
       }
       .reactor-avatar {

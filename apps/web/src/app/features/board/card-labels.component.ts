@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import { DensityService } from "../../core/theme/density.service";
 import { CardLabelDisplayService } from "../../shared/card-label-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
@@ -18,10 +19,12 @@ const LABEL_TRANSITION_FALLBACK_MS = 220;
   template: `
     @if (labels().length) {
     @let compressed = labelsCompressed();
+    @let dot = dotVariant();
     <div class="label-bar">
       @for (label of visibleLabels(); track label.id) {
       <span class="label-chip"
         [class.is-compressed]="compressed"
+        [class.is-dot]="dot"
         [style.--label-color]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"
         [attr.role]="interactive() ? 'button' : null"
         [attr.tabindex]="interactive() ? 0 : null"
@@ -48,6 +51,7 @@ export class CardLabelsComponent {
   // The root display service, never the route-scoped BoardMenuCoordinator: these chips also render
   // in shell chrome (the Up next drawer), which sits outside every route that provides it.
   private readonly labelDisplay = inject(CardLabelDisplayService);
+  private readonly density = inject(DensityService);
 
   readonly labels = input<CardLabelPresentation[]>([]);
   /** Dense views can cap named chips and optionally summarize the remainder with a neutral +N. */
@@ -61,6 +65,12 @@ export class CardLabelsComponent {
    */
   readonly interactive = input(true);
   readonly labelsCompressed = computed(() => !this.alwaysExpanded() && this.labelDisplay.labelsCompressed());
+  /**
+   * Compact density swaps the filled pill for a colour dot beside plain text, so three labels on a
+   * tile stay quiet. It is a device setting, so every surface follows it; the compressed (dot-only)
+   * toggle still works on top of it.
+   */
+  readonly dotVariant = computed(() => this.density.compact() && !this.labelsCompressed());
   readonly visibleLabels = computed(() => {
     const limit = this.limit();
     return limit === null ? this.labels() : this.labels().slice(0, Math.max(0, limit));

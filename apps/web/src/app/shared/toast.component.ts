@@ -68,7 +68,7 @@ import type { ToastVariant } from "./toast.service";
     .message {
       overflow-wrap: anywhere;
       min-width: 0;
-      font-size: 14px;
+      font-size: var(--text-md);
       line-height: 1.4;
       color: var(--text);
     }

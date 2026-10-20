@@ -38,6 +38,7 @@ import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../shared/activity-strip.component";
 import { StatTileComponent } from "../../shared/stat-tile.component";
+import { StatusBarComponent, type StatusBarSegment } from "../../shared/status-bar.component";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { BoardBackgroundPopover } from "../board/board-background.popover";
 import { BoardCanvasComponent } from "../board/board-canvas.component";
@@ -201,6 +202,7 @@ const MAX_UP_NEXT_ENTRIES = 50;
     GlobalCardDetailHostComponent,
     SaveViewPopover,
     StatTileComponent,
+    StatusBarComponent,
     DragScrollDirective,
   ],
   providers: [
@@ -1228,6 +1230,25 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   });
 
   readonly activityWindowDays = computed(() => this.state.portfolio()?.activityDays ?? PORTFOLIO_ACTIVITY_DAYS);
+
+  /**
+   * Open work per list, one bar per workspace: lists are workspace-scoped, so one blended bar
+   * across workspaces would put two unrelated "Backlog"s side by side. Rows arrive in workspace
+   * then list order, so grouping by first appearance keeps that order. Older offline snapshots
+   * carry no `lists`, so the section simply stays empty until the next refresh.
+   */
+  readonly portfolioListBars = computed<{ workspaceId: string; workspaceName: string; segments: StatusBarSegment[] }[]>(() => {
+    const groups = new Map<string, { workspaceId: string; workspaceName: string; segments: StatusBarSegment[] }>();
+    for (const row of this.state.portfolio()?.lists ?? []) {
+      let group = groups.get(row.workspaceId);
+      if (!group) {
+        group = { workspaceId: row.workspaceId, workspaceName: row.workspaceName, segments: [] };
+        groups.set(row.workspaceId, group);
+      }
+      group.segments.push({ id: row.listId, name: row.name, icon: row.icon, color: row.color, count: row.open });
+    }
+    return [...groups.values()];
+  });
 
   constructor() {
     document.addEventListener("keydown", this.handleDocumentKeydown);

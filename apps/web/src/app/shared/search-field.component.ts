@@ -52,7 +52,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
         display: flex;
         align-items: center;
         gap: 6px;
-        height: 36px;
+        height: var(--h-lg);
         padding: 0 4px 0 10px;
         background: var(--surface);
         border: 1px solid var(--border);
@@ -89,7 +89,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
         outline: none;
         box-shadow: none;
         font: inherit;
-        font-size: 13px;
+        font-size: var(--text-base);
       }
 
       :host .sf-input:focus {
@@ -103,7 +103,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
       }
 
       .sf-input::placeholder {
-        color: var(--text-muted);
+        color: var(--text-4);
       }
 
       .sf-clear {
@@ -112,7 +112,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
         justify-content: center;
         flex: none;
         width: 26px;
-        height: 26px;
+        height: var(--h-sm);
         padding: 0;
         color: var(--text-muted);
         background: transparent;
@@ -127,7 +127,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
       }
 
       .sf-clear i {
-        font-size: 12px;
+        font-size: var(--text-sm);
       }
 
       /* Coarse pointers get the shared 44px floor; see toolbar-styles.scss. */

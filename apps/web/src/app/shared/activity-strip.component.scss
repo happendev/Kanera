@@ -13,12 +13,12 @@
     gap: 4px 12px;
 
     strong {
-      font-size: 13px;
+      font-size: var(--text-base);
     }
 
     span {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
     }
 
     // Pushes the legend to the trailing edge without a wrapper element around the title pair.
@@ -36,7 +36,7 @@
   --cell-color: var(--accent);
 
   span {
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 
   .activity-cell {
@@ -59,13 +59,13 @@
   gap: 1px;
 
   strong {
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
   }
 
   span {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--text-xs);
     font-variant-numeric: tabular-nums;
   }
 }

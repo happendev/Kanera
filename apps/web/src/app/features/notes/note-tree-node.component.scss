@@ -6,12 +6,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
+  min-height: var(--h-lg);
   padding: 0 8px 0 calc(8px + var(--nt-indent, 0px));
   border-radius: var(--radius);
   cursor: pointer;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   user-select: none;
   position: relative;
   transition: background-color var(--motion-fast), color var(--motion-fast);
@@ -66,7 +66,7 @@
   padding: 0;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   flex: 0 0 auto;
   border-radius: var(--radius-sm);
 
@@ -82,7 +82,7 @@
 }
 
 .nt-icon {
-  font-size: 16px;
+  font-size: var(--text-lg);
   color: var(--text-muted);
   flex: 0 0 auto;
   width: 18px;
@@ -115,7 +115,7 @@
 
 .nt-lock {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   opacity: 0.7;
   flex: 0 0 auto;
 }
@@ -162,7 +162,7 @@
   color: var(--text-muted);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  font-size: 14px;
+  font-size: var(--text-md);
   padding: 0;
   touch-action: manipulation;
 

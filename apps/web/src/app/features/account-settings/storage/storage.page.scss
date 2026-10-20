@@ -20,13 +20,13 @@
 }
 
 .storage-usage-of {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
 }
 
 .storage-usage-percent {
   margin-left: auto;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
@@ -68,7 +68,7 @@
   column-gap: 10px;
   row-gap: 6px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: var(--text-base);
   flex: none;
 
   & + & {
@@ -80,7 +80,7 @@
     align-self: start;
     margin-top: 1px;
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 }
 
@@ -140,7 +140,7 @@
   border-radius: 0;
   background: transparent;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 400;
   text-align: left;
   justify-content: stretch;
@@ -160,7 +160,7 @@
   > i {
     grid-area: icon;
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   .storage-bar {
@@ -196,16 +196,16 @@
   flex: 1 1 150px;
   width: auto;
   max-width: 220px;
-  height: 30px;
+  height: var(--h-md);
   padding: 0 28px 0 10px;
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .storage-filter-check {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text);
   cursor: pointer;
 
@@ -301,7 +301,7 @@
   align-items: center;
   column-gap: 10px;
   row-gap: 2px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   min-width: 0;
 
@@ -329,12 +329,12 @@
   .source-badge {
     height: 18px;
     padding: 0 6px;
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 }
 
 .storage-file-size {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -348,7 +348,7 @@
   gap: 8px;
   padding: 24px 12px;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {

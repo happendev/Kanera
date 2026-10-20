@@ -1,5 +1,8 @@
 # API load test
 
+For before/after comparisons of independent UI database reads, see the
+[paired UI-read benchmark](ui-reads.README.md).
+
 For controlled 3,000-card hydration experiments, see
 [board hydration and event-loop benchmarks](board-hydration.README.md). The companion
 [payload benchmark](event-loop.README.md) compares serialization, worker copying, compression,

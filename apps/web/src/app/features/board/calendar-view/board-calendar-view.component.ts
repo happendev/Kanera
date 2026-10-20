@@ -449,6 +449,13 @@ export class BoardCalendarViewComponent {
     return this.labelsByCard().get(cardId) ?? [];
   }
 
+  private readonly listsById = computed(() => new Map(this.lists().map((list) => [list.id, list])));
+
+  /** The card's list, for the status icon on its tile; null when the host passed no lists. */
+  listFor(card: AnyCard): AnyList | null {
+    return this.listsById().get(card.listId) ?? null;
+  }
+
   assigneesForCard(cardId: string): CardAssigneePresentation[] {
     return this.assigneesByCard().get(cardId) ?? [];
   }
@@ -486,6 +493,11 @@ export class BoardCalendarViewComponent {
    */
   compactDayLabel(day: CalendarDay): string {
     return day.dayNumber === 1 ? this.dayLabel(day.key) : String(day.dayNumber);
+  }
+
+  /** Accessible name for today's cell date, which the filled circle conveys only visually. */
+  todayLabel(day: CalendarDay): string {
+    return $localize`:Accessible name of today's date in the calendar grid:Today, ${this.dayLabel(day.key)}:date:`;
   }
 
   /** Phone list heading: "Tue 6 Oct". The weekday is spelled because no column header names it. */

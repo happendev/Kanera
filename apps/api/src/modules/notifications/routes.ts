@@ -203,22 +203,28 @@ async function listNotificationsPage(req: FastifyRequest, options?: { includeRea
   const cursor = query.cursor ? decodeNotificationCursor(query.cursor) : null;
   const conditions = notificationFeedConditions(req, query, { includeRead: options?.includeRead, cursor });
 
-  const rows = await notificationFeedQueryJoins()
-    .where(and(...conditions))
-    .orderBy(desc(notifications.createdAt), desc(notifications.id))
-    .limit(query.limit + 1);
+  // The badge count is independent of paging and notification hydration.
+  const [{ items, hasMore, pageRows }, unreadCount] = await Promise.all([
+    (async () => {
+      const rows = await notificationFeedQueryJoins()
+        .where(and(...conditions))
+        .orderBy(desc(notifications.createdAt), desc(notifications.id))
+        .limit(query.limit + 1);
 
-  const hasMore = rows.length > query.limit;
-  const pageRows = hasMore ? rows.slice(0, query.limit) : rows;
-  const enrichedItems = await enrichNotifications(db, pageRows.map((r) => r.id));
-  // The browser also filters realtime rows locally. Preserve that this fetched page matched the
-  // server predicate because only the server knows permanent historical card-prefix aliases.
-  const items = query.q
-    ? enrichedItems.map((item) => ({ ...item, searchMatched: true }))
-    : enrichedItems;
-  // enrichNotifications orders by the same (createdAt, id) tuple, so the
-  // returned order already matches the page query and what the client expects.
-  const unreadCount = await countUnreadNotifications(req.auth.sub);
+      const hasMore = rows.length > query.limit;
+      const pageRows = hasMore ? rows.slice(0, query.limit) : rows;
+      const enrichedItems = await enrichNotifications(db, pageRows.map((r) => r.id));
+      // The browser also filters realtime rows locally. Preserve that this fetched page matched the
+      // server predicate because only the server knows permanent historical card-prefix aliases.
+      const items = query.q
+        ? enrichedItems.map((item) => ({ ...item, searchMatched: true }))
+        : enrichedItems;
+      // enrichNotifications orders by the same (createdAt, id) tuple, so the
+      // returned order already matches the page query and what the client expects.
+      return { items, hasMore, pageRows };
+    })(),
+    countUnreadNotifications(req.auth.sub),
+  ]);
   return {
     items,
     nextCursor: hasMore ? encodeNotificationCursor(pageRows[pageRows.length - 1]!) : null,

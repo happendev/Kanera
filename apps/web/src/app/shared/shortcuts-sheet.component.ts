@@ -141,7 +141,7 @@ interface ShortcutGroup {
       display: flex;
       align-items: center;
       gap: var(--space-2);
-      height: 36px;
+      height: var(--h-lg);
       padding: 0 4px 0 10px;
       background: var(--surface-2);
       border: 1px solid var(--border);
@@ -190,7 +190,7 @@ interface ShortcutGroup {
       justify-content: center;
       flex: none;
       width: 26px;
-      height: 26px;
+      height: var(--h-sm);
       padding: 0;
       color: var(--text-muted);
       background: transparent;
@@ -246,7 +246,7 @@ interface ShortcutGroup {
       align-items: center;
       justify-content: space-between;
       gap: var(--space-3);
-      min-height: 30px;
+      min-height: var(--h-md);
       font-size: var(--text-sm);
     }
 

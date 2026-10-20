@@ -273,7 +273,7 @@
       <div class="recent-strip">
         @for (board of recentBoards(); track board.id) {
         <button type="button" class="recent-chip" (click)="openBoard(board.id)">
-          <i class="ti ti-{{ board.icon || 'layout-kanban' }}" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <k-board-icon [icon]="board.icon" [color]="board.iconColor" [size]="22" />
           <span>{{ board.name }}</span>
         </button>
         }

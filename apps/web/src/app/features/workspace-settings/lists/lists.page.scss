@@ -17,7 +17,7 @@
   border-radius: 999px;
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
   }
 
   &:hover:not(:disabled) {

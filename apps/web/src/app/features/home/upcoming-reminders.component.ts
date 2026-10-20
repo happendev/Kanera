@@ -90,7 +90,7 @@ const VISIBLE_LIMIT = 5;
       border-radius: 999px;
       background: var(--surface-2);
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 600;
       text-align: center;
     }
@@ -157,7 +157,7 @@ const VISIBLE_LIMIT = 5;
     .reminder-title {
       min-width: 0;
       overflow: hidden;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 550;
       line-height: 1.35;
       text-overflow: ellipsis;
@@ -167,7 +167,7 @@ const VISIBLE_LIMIT = 5;
     .reminder-key {
       margin-left: 4px;
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 500;
     }
 
@@ -178,15 +178,15 @@ const VISIBLE_LIMIT = 5;
       align-items: center;
       gap: 5px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
 
-      i { color: var(--board-color); font-size: 14px; }
+      i { color: var(--board-color); font-size: var(--text-md); }
       span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     }
 
     .reminder-when {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       white-space: nowrap;
     }
@@ -221,7 +221,7 @@ const VISIBLE_LIMIT = 5;
       border-radius: var(--radius-sm);
       background: transparent;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       cursor: pointer;
 

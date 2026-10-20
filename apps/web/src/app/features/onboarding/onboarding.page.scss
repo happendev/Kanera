@@ -69,7 +69,7 @@
   border: 1.5px solid var(--border-strong);
   background: transparent;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -78,7 +78,7 @@
   transition: background var(--motion-base), border-color var(--motion-base), color var(--motion-base);
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 }
 
@@ -90,7 +90,7 @@
 }
 
 .ob-step-label {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-muted);
   white-space: nowrap;
@@ -131,21 +131,21 @@
   }
 
   p {
-    font-size: 14px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     line-height: 1.6;
   }
 
   .ob-subtext {
     margin-top: 6px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--text-subtle, var(--text-muted));
     opacity: 0.75;
   }
 }
 
 .ob-optional {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
   background: var(--surface-2);
@@ -233,12 +233,12 @@
 .ob-kind-description,
 .ob-kind-fit {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.5;
 }
 
 .ob-kind-fit {
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .ob-kind-action {
@@ -247,7 +247,7 @@
   gap: 6px;
   margin-top: auto;
   color: var(--accent);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 700;
 }
 
@@ -269,14 +269,14 @@
   h2 {
     margin: 0 0 3px;
     color: var(--text);
-    font-size: 14px;
+    font-size: var(--text-md);
     font-weight: 700;
   }
 
   p {
     margin: 0;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
 }
 
@@ -306,7 +306,7 @@
   align-items: center;
   gap: 8px;
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 700;
 
   i {
@@ -331,7 +331,7 @@
 }
 
 .ob-model-shared-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -351,13 +351,13 @@
     border-radius: 999px;
     background: var(--surface);
     color: var(--text);
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 600;
     white-space: nowrap;
 
     i {
       color: var(--accent);
-      font-size: 13px;
+      font-size: var(--text-base);
     }
   }
 }
@@ -387,7 +387,7 @@
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
 
   i {
@@ -411,7 +411,7 @@
   max-width: 520px;
   margin: 20px 0 0;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.5;
   text-align: center;
 }
@@ -431,7 +431,7 @@
   gap: 6px;
 
   label {
-    font-size: 13px;
+    font-size: var(--text-base);
     font-weight: 600;
     color: var(--text);
     display: flex;
@@ -441,7 +441,7 @@
 }
 
 .ob-label-hint {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 400;
   color: var(--text-muted);
 }
@@ -519,7 +519,7 @@
 
 .ob-template-name {
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 700;
   color: var(--text);
   overflow-wrap: anywhere;
@@ -528,7 +528,7 @@
 .ob-template-description {
   min-width: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.35;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -560,7 +560,7 @@
   border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.45;
   box-sizing: border-box;
 
@@ -581,7 +581,7 @@
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
   color: var(--text);
   cursor: default;
@@ -620,18 +620,18 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 26px;
+  height: var(--h-sm);
   padding: 0 8px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
   cursor: pointer;
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   &:hover:not(:disabled) {
@@ -642,7 +642,7 @@
 
   &.is-active {
     border-color: color-mix(in srgb, var(--success) 32%, transparent);
-    background: color-mix(in srgb, var(--success) 12%, transparent);
+    background: var(--success-soft);
     color: var(--success);
 
     &:hover:not(:disabled) {
@@ -692,7 +692,7 @@
 
 .ob-item-meta {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-muted);
   background: var(--surface-hover);
@@ -787,7 +787,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 // ─── Add row ──────────────────────────────────────────────────────────────────
@@ -807,7 +807,7 @@
   select {
     width: 100px;
     flex-shrink: 0;
-    height: 36px;
+    height: var(--h-lg);
     padding: 0 8px;
   }
 }
@@ -829,7 +829,7 @@
 
 .ob-validation {
   margin: -16px 0 20px;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
 }
 
@@ -843,7 +843,7 @@
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--danger) 8%, var(--surface));
   color: var(--danger);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.45;
 
   i {
@@ -860,7 +860,7 @@
   justify-content: center;
   gap: 4px 10px;
   margin: 18px 0 0;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   text-align: center;
 
@@ -928,16 +928,16 @@
   .ob-template-icon {
     width: 30px;
     height: 30px;
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   .ob-template-name {
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1.25;
   }
 
   .ob-template-description {
-    font-size: 11px;
+    font-size: var(--text-xs);
     line-height: 1.3;
   }
 
@@ -945,7 +945,7 @@
     position: absolute;
     top: 10px;
     right: 10px;
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   // Add-row submit buttons: icon only, freeing space for the text input.
@@ -985,13 +985,13 @@
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-drag);
   display: flex;
   align-items: center;
   gap: 10px;
   height: 40px;
   padding: 0 12px;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
   color: var(--text);
 }

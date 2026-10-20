@@ -72,12 +72,35 @@ Phones, tablets and the installed PWA are first-class, so design for them up fro
   them to the viewport. Use `dvh`, not `vh`, and `env(safe-area-inset-*)` for safe areas.
 - Breakpoints in use: 480, 640, 720, 768, 1024. Reuse them.
 
+## Scale tokens
+
+`styles.scss` defines the scale; new styles use it rather than a literal, and a value off the scale
+needs a comment. Type: `--text-xs/sm/base/md/lg`. Control heights: `--h-xs/sm/md/lg` (22/26/30/36).
+Text tiers: `--text` → `--text-3` (card meta, secondary cells) → `--text-muted` (hints, labels) →
+`--text-4` (placeholders only). Rows inside a list or sheet divide with `--divider`, not `--border`.
+Toolbar controls come from `shared/toolbar-styles.scss` (`.k-toolbar-btn`, `.k-toolbar-icon-btn`,
+`.k-toolbar-trigger`, `.k-toolbar-clear`); don't invent a per-view button.
+Elevation by role: `--shadow-card` / `--shadow-card-hover` (tiles, with the element's own 1px border as
+the ring), `--shadow-pop` (menus, popovers, pickers), `--shadow-drag` (CDK previews); `--shadow-sm` and
+`--shadow` remain for chrome. Status washes: `--accent-soft`, `--success-soft`, `--danger-soft`,
+`--warning-soft`, never an inline `color-mix(... 10%, transparent)`. Motion: `--motion-fast` for colour,
+`--dur` for transforms, `--motion-base` + `--ease-drawer` for panels and drawers, `--spring` for small
+pops only. Card keys use the `card-key` mixin in `shared/_card-key.scss` (`--text-xs`,
+`--text-3`); add layout on top, never retype it. A list named anywhere (status cell, run header,
+calendar tile, activity row) wears the `list-chip` mixin from `shared/_list-chip.scss` with
+`--list-color` set to its hue; a board's identity is `k-board-icon` (tinted tile), not a bare glyph.
+Density: `DensityService` stamps `[data-density="compact"]` on `<html>` (per device, never on the
+account). Branch on it with `:host-context([data-density="compact"])` and change sizing only — never
+colour, contrast or the 44px coarse-pointer floor. Theme previews come from `k-theme-picker`: an
+element with its own `data-theme` / `data-accent` resolves the real tokens, so never hardcode a
+theme's hexes for a swatch.
+
 ## CSS traps
 
 These look like rendering bugs but are specificity or sizing problems.
 
-- **Global resets in `styles.scss`.** `button` is pinned to `height: 36px` with an accent background,
-  hover and focus ring. `input` is pinned to `width: 100%; height: 36px`, and `textarea` has
+- **Global resets in `styles.scss`.** `button` is pinned to `height: var(--h-lg)` (36px) with an accent
+  background, hover and focus ring. `input` is pinned to `width: 100%; height: var(--h-lg)`, and `textarea` has
   `min-height: 64px`. Angular's scoping attribute leaves a plain `.my-btn` rule at lower specificity
   than `button:hover:not(:disabled)`, so custom buttons flood with accent on hover. Fixes:
   - Restate the background inside your own `:hover:not(:disabled)`.

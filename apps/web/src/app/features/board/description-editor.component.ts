@@ -527,7 +527,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       border: 1px solid transparent;
       border-radius: var(--radius-sm, 4px);
       color: var(--text);
-      font-size: 14px;
+      font-size: var(--text-md);
       cursor: pointer;
       transition: background-color 0.12s, border-color 0.12s;
     }
@@ -551,7 +551,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
 
     .de-host .ProseMirror {
       outline: none;
-      font-size: 14px;
+      font-size: var(--text-md);
       line-height: 1.6;
       color: var(--text);
       background: var(--surface);
@@ -611,7 +611,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       border: 1px solid var(--border-strong);
       border-radius: 4px;
       padding: 1px 5px;
-      font-size: 12.5px;
+      font-size: var(--text-base);
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       color: var(--text);
     }
@@ -640,7 +640,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       border-collapse: collapse;
       width: 100%;
       margin: 0 0 10px;
-      font-size: 13px;
+      font-size: var(--text-base);
       table-layout: fixed;
     }
     .de-host .ProseMirror th,
@@ -690,7 +690,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       padding: 6px 12px;
       background: var(--surface-2);
       border-top: 1px solid var(--border);
-      font-size: 12px;
+      font-size: var(--text-sm);
       color: var(--text-muted);
       display: flex;
       align-items: center;
@@ -702,7 +702,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       background: rgba(220, 38, 38, 0.08);
       border-top: 1px solid var(--border);
       color: #dc2626;
-      font-size: 12px;
+      font-size: var(--text-sm);
     }
 
     .de-mention-popover {
@@ -758,7 +758,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       display: flex;
       align-items: stretch;
       gap: 6px;
-      height: 30px;
+      height: var(--h-md);
       flex: 1;
       min-width: 0;
       border: 1px solid var(--border);
@@ -780,7 +780,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       padding: 0 6px 0 9px;
       color: var(--text-muted);
       flex-shrink: 0;
-      font-size: 13px;
+      font-size: var(--text-base);
       pointer-events: none;
     }
 
@@ -794,14 +794,14 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       outline: 0;
       background: transparent;
       color: var(--text);
-      font-size: 13px;
+      font-size: var(--text-base);
       line-height: normal;
       box-shadow: none;
       appearance: none;
     }
 
     .de-emoji-search input::placeholder {
-      color: var(--text-muted);
+      color: var(--text-4);
     }
 
     .de-emoji-search input::-webkit-search-cancel-button {
@@ -810,7 +810,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
 
     .de-emoji-close {
       width: 30px;
-      height: 30px;
+      height: var(--h-md);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -856,7 +856,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
     }
 
     .de-emoji-tab .de-emoji-char {
-      font-size: 14px;
+      font-size: var(--text-md);
     }
 
     .de-emoji-popover .de-emoji-tab:hover:not(:disabled) {
@@ -911,7 +911,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       grid-column: 1 / -1;
       padding: 14px 8px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       text-align: center;
     }
 
@@ -949,7 +949,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       justify-content: center;
       overflow: hidden;
       color: var(--text);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 600;
       flex: 0 0 auto;
     }
@@ -961,7 +961,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
     }
 
     .de-mention-name {
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 500;
       white-space: nowrap;
       overflow: hidden;
@@ -972,7 +972,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
     .de-mention-empty {
       padding: 8px 10px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
     }
 
     .de-actions {

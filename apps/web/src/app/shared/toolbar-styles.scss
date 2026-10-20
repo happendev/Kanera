@@ -34,13 +34,13 @@
   align-items: center;
   gap: 7px;
   max-width: 260px;
-  height: 36px;
+  height: var(--h-lg);
   padding: 0 9px;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
 
@@ -66,7 +66,7 @@
   > i {
     flex: none;
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   > span {
@@ -93,20 +93,20 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 36px;
+  height: var(--h-lg);
   padding: 0 11px;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
 
   i {
     flex: none;
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   &:hover:not(:disabled),
@@ -147,7 +147,7 @@
   flex: none;
   position: relative;
   width: 36px;
-  height: 36px;
+  height: var(--h-lg);
   padding: 0;
   color: var(--text-muted);
   background: transparent;
@@ -156,7 +156,7 @@
   cursor: pointer;
 
   i {
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   &:hover:not(:disabled),
@@ -259,7 +259,7 @@
   transition: background-color var(--motion-fast), color var(--motion-fast);
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   // `:not(:disabled)` for specificity as much as for state: the reset's own

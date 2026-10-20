@@ -68,7 +68,7 @@ type SourceListOption = Pick<WireList, "id" | "name">;
 
     .bp-empty {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       margin: 0;
       padding: 8px 4px;
       text-align: center;

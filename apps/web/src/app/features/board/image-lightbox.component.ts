@@ -286,7 +286,7 @@ class PreviewTooLargeError extends Error {}
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 999px;
       color: rgba(255, 255, 255, 0.85);
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 500;
       letter-spacing: 0.02em;
       cursor: default;
@@ -300,7 +300,7 @@ class PreviewTooLargeError extends Error {}
     }
 
     .lb-zoom-pct {
-      font-size: 13px;
+      font-size: var(--text-base);
       color: rgba(255, 255, 255, 0.7);
       min-width: 46px;
       text-align: center;
@@ -452,7 +452,7 @@ class PreviewTooLargeError extends Error {}
 
     .lb-file-hint {
       color: rgba(255, 255, 255, 0.58);
-      font-size: 14px;
+      font-size: var(--text-md);
       text-align: center;
     }
 
@@ -485,8 +485,8 @@ class PreviewTooLargeError extends Error {}
 
     .lb-text-body {
       margin: 0;
-      font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-      font-size: 13px;
+      font-family: var(--mono);
+      font-size: var(--text-base);
       line-height: 1.55;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
@@ -532,12 +532,12 @@ class PreviewTooLargeError extends Error {}
     }
 
     .lb-footer-sep {
-      font-size: 14px;
+      font-size: var(--text-md);
       color: rgba(255, 255, 255, 0.4);
     }
 
     .lb-footer-date {
-      font-size: 13px;
+      font-size: var(--text-base);
       color: rgba(255, 255, 255, 0.6);
     }
 

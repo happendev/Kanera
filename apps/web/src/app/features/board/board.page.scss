@@ -133,8 +133,8 @@ k-empty-state.board-empty {
   margin-bottom: 12px;
 
   > div { display: flex; flex-direction: column; gap: 2px; }
-  strong { font-size: 13px; }
-  span { color: var(--text-muted); font-size: 11px; }
+  strong { font-size: var(--text-base); }
+  span { color: var(--text-muted); font-size: var(--text-xs); }
 }
 
 .board-overview-metrics {
@@ -200,7 +200,7 @@ k-empty-state.board-empty {
   margin-top: 8px;
   padding: 8px 10px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface-overlay));
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--ov-tile-border));
   border-radius: var(--radius);
@@ -214,13 +214,7 @@ k-empty-state.board-empty {
 }
 
 .board-overview-lists {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-
-  > div { display: flex; align-items: center; justify-content: space-between; min-height: 28px; font-size: 11px; }
-  span { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-muted); }
-  i { font-size: 14px; }
+  margin-top: 2px;
 }
 
 .board-overview-actions {
@@ -242,7 +236,7 @@ k-empty-state.board-empty {
     border: 1px solid var(--ov-tile-border);
     border-radius: var(--radius);
     font: inherit;
-    font-size: 11px;
+    font-size: var(--text-xs);
     cursor: pointer;
   }
   button:hover { background: var(--ov-tile-bg-hover); border-color: var(--border-strong); }
@@ -323,13 +317,13 @@ k-empty-state.board-empty {
   background: transparent;
   border: 0;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--text-base);
   cursor: pointer;
 
   > i:first-child {
     width: 16px;
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: var(--text-lg);
     text-align: center;
   }
 
@@ -355,7 +349,7 @@ k-empty-state.board-empty {
 }
 
 .group-by-check {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--accent);
   opacity: 0;
 
@@ -399,11 +393,11 @@ k-empty-state.board-empty {
   display: none;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 700;
 
   i {
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 }
 
@@ -431,7 +425,7 @@ k-empty-state.board-empty {
 .board-member-overflow {
   background: var(--surface-2);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -462,7 +456,7 @@ k-empty-state.board-empty {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: 30px;
+  height: var(--h-md);
   padding: 2px;
   border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
   border-radius: var(--radius);
@@ -490,12 +484,12 @@ k-empty-state.board-empty {
 .bulk-selection-trigger {
   gap: 6px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 700;
   white-space: nowrap;
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
   }
 }
 
@@ -504,7 +498,7 @@ k-empty-state.board-empty {
   padding: 0;
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 }
 
@@ -518,12 +512,12 @@ k-empty-state.board-empty {
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
 
   i {
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: var(--text-md);
     flex-shrink: 0;
   }
 }
@@ -538,12 +532,12 @@ k-empty-state.board-empty {
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
   background: color-mix(in srgb, var(--accent) 7%, var(--surface));
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 
   i {
     flex-shrink: 0;
     color: var(--accent);
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 }
 

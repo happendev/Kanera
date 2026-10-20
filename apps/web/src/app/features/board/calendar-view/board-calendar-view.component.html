@@ -8,14 +8,14 @@
   @if (navigation() === "paged") {
   <div class="calendar-toolbar" (click)="$event.stopPropagation()">
     <div class="calendar-toolbar-left">
-      <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="previous()" aria-label="Previous" i18n-aria-label="Button - go to the previous month or week" kTooltip="Previous" i18n-kTooltip="Button - go to the previous month or week">
+      <button type="button" class="k-toolbar-icon-btn" (click)="previous()" aria-label="Previous" i18n-aria-label="Button - go to the previous month or week" kTooltip="Previous" i18n-kTooltip="Button - go to the previous month or week">
         <i class="ti ti-chevron-left"></i>
       </button>
-      <button type="button" class="cal-toolbar-btn" (click)="today()">
+      <button type="button" class="k-toolbar-btn" (click)="today()">
         <i class="ti ti-calendar-event"></i>
         <span i18n="Button - jump the calendar to today">Today</span>
       </button>
-      <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="next()" aria-label="Next" i18n-aria-label="Button - go to the next month or week" kTooltip="Next" i18n-kTooltip="Button - go to the next month or week">
+      <button type="button" class="k-toolbar-icon-btn" (click)="next()" aria-label="Next" i18n-aria-label="Button - go to the next month or week" kTooltip="Next" i18n-kTooltip="Button - go to the next month or week">
         <i class="ti ti-chevron-right"></i>
       </button>
       <span class="cal-toolbar-title">{{ title() }}</span>
@@ -244,15 +244,12 @@
 <!-- Grid cell date. A compact column only has room for the number, so "today" becomes a filled
      number rather than a separate badge. -->
 <ng-template #dayHeading let-day>
+  <!-- Today is the filled number in both layouts: a month is a wall of near-identical cells and the
+       accent circle anchors the user to "now" without a badge competing with the card count. -->
   @if (layout() === "compact") {
   <span class="calendar-day-number" [class.is-today]="day.isToday">{{ compactDayLabel(day) }}</span>
   } @else {
-  <span>{{ dayLabel(day.key) }}</span>
-  @if (day.isToday) {
-  <!-- A month is a wall of near-identical cells; the badge anchors the user to "now" without
-       making them find the date. -->
-  <span class="calendar-today-badge" i18n="Badge on the calendar cell for today">Today</span>
-  }
+  <span class="calendar-day-number" [class.is-today]="day.isToday" [attr.aria-label]="day.isToday ? todayLabel(day) : null">{{ dayLabel(day.key) }}</span>
   }
 </ng-template>
 
@@ -294,21 +291,30 @@
 
 <ng-template #tileContent let-card>
   @if (labelsForCard(card.id).length) {
-  <!-- Named chips, not colour bars: a colour alone means nothing to anyone who has not learned
-       the board's palette, and the tile has room for the words. A compact column keeps one and folds the rest into "+N". -->
-  <k-card-labels class="cal-label-row" [labels]="labelsForCard(card.id)" [limit]="layout() === 'compact' ? 1 : 3" [showOverflow]="true" />
+  <!-- The assignees share the label row's right end instead of a column beside the text: the title
+       and its time/key line get the tile's full width, so they wrap rather than clip. -->
+  <span class="cal-card-top">
+    <!-- Named chips, not colour bars: a colour alone means nothing to anyone who has not learned
+         the board's palette, and the tile has room for the words. A compact column keeps one and folds the rest into "+N". -->
+    <k-card-labels class="cal-label-row" [labels]="labelsForCard(card.id)" [limit]="layout() === 'compact' ? 1 : 3" [showOverflow]="true" />
+    <ng-container [ngTemplateOutlet]="tileAssignees" [ngTemplateOutletContext]="{ $implicit: card }" />
+  </span>
   }
 
-  <!-- The approved global-work tile: title first, then its context line, with the assignees
-       pinned to the right of the whole text column. -->
+  <!-- The approved global-work tile: title first, then its context line. Without a label row the
+       assignees sit top right beside the title instead. -->
   <span class="cal-card-body">
     <span class="cal-card-text">
       <span class="cal-card-title">
         @if (card.completedAt) {
           <!-- Same green tick a completed k-card carries, so "done" reads the same everywhere. -->
           <i class="ti ti-circle-check cal-complete-icon" kTooltip="Completed" i18n-kTooltip="Tooltip on the tick shown beside a completed card's title"></i>
+        } @else if (listFor(card); as list) {
+          <!-- The list's own icon in its colour, the same mark the lane header and table status cell
+               carry, so a tile says where the card stands without a chip of its own. -->
+          <i class="cal-list-icon" [class]="'ti ti-' + (list.icon || 'list') + ' cal-list-icon'" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null" [kTooltip]="list.name"></i>
         }
-        {{ card.title }}
+        <span class="cal-card-title-text">{{ card.title }}</span>
       </span>
       <!-- The key shares the context row with time and board instead of taking a row of its own:
            day cells are the tightest surface in the app and the key is the least-read item in them. -->
@@ -350,23 +356,29 @@
       }
     </span>
 
-    @if (assigneesForCard(card.id).length) {
-    <span class="cal-assignees">
-      @for (member of visibleAssignees(card.id); track member.userId) {
-      <span class="cal-avatar">
-        <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="20" [userId]="member.userId" [workspaceId]="workspaceIdFor(card)" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
-      </span>
-      }
-      @if (assigneeOverflow(card.id); as more) {
-      <span class="cal-avatar cal-avatar-more" [kTooltip]="moreAssigneesTooltip(more)">+{{ more }}</span>
-      }
-    </span>
+    @if (!labelsForCard(card.id).length) {
+    <ng-container [ngTemplateOutlet]="tileAssignees" [ngTemplateOutletContext]="{ $implicit: card }" />
     }
   </span>
 
   @if (summary(card).checklistTotalCount) {
   <span class="cal-progress" [kTooltip]="checklistProgressTooltip(card)">
     <span class="cal-progress-fill" [style.width.%]="(summary(card).checklistDoneCount ?? 0) / (summary(card).checklistTotalCount ?? 1) * 100"></span>
+  </span>
+  }
+</ng-template>
+
+<ng-template #tileAssignees let-card>
+  @if (assigneesForCard(card.id).length) {
+  <span class="cal-assignees">
+    @for (member of visibleAssignees(card.id); track member.userId) {
+    <span class="cal-avatar">
+      <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="20" [userId]="member.userId" [workspaceId]="workspaceIdFor(card)" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
+    </span>
+    }
+    @if (assigneeOverflow(card.id); as more) {
+    <span class="cal-avatar cal-avatar-more" [kTooltip]="moreAssigneesTooltip(more)">+{{ more }}</span>
+    }
   </span>
   }
 </ng-template>

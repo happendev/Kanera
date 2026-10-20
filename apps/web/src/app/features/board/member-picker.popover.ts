@@ -102,7 +102,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
     }
 
     .mp-title {
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       color: var(--text);
     }
@@ -113,7 +113,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
       border-radius: var(--radius-sm);
       color: var(--text);
       padding: 6px 8px;
-      font-size: 13px;
+      font-size: var(--text-base);
       outline: none;
       &:focus { border-color: var(--accent, var(--text)); }
     }
@@ -130,7 +130,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
 
     .mp-empty {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       margin: 0;
       padding: 8px 4px;
       text-align: center;
@@ -169,7 +169,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
       border-radius: 50%;
       background: var(--surface-hover);
       color: var(--text);
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       border: 1px solid var(--border);
       img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -177,7 +177,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
 
     .mp-name {
       flex: 1;
-      font-size: 13px;
+      font-size: var(--text-base);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -185,7 +185,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
 
     .mp-check {
       color: var(--accent, var(--text));
-      font-size: 14px;
+      font-size: var(--text-md);
     }
 
     .mp-clear {
@@ -199,7 +199,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
       background: transparent;
       color: var(--text-muted);
       cursor: pointer;
-      font-size: 13px;
+      font-size: var(--text-base);
       text-align: left;
       &:hover {
         background: var(--surface-2);

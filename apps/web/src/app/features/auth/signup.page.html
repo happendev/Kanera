@@ -83,24 +83,7 @@
       <div class="field">
         <label><i class="ti ti-palette"></i> <ng-container i18n="Field label: theme picker">Appearance</ng-container></label>
         <p class="field-help" i18n>Choose the theme used on this device.</p>
-        <div class="theme-options" role="radiogroup" aria-label="Theme color" i18n-aria-label>
-          <button type="button" class="theme-option" [class.active]="theme.theme() === 'dark'" [attr.aria-checked]="theme.theme() === 'dark'" role="radio" (click)="setTheme('dark')">
-            <i class="ti ti-moon"></i>
-            <ng-container i18n="Theme name">Dark</ng-container>
-          </button>
-          <button type="button" class="theme-option" [class.active]="theme.theme() === 'carbon'" [attr.aria-checked]="theme.theme() === 'carbon'" role="radio" (click)="setTheme('carbon')">
-            <i class="ti ti-moon-stars"></i>
-            <ng-container i18n="Theme name">Carbon</ng-container>
-          </button>
-          <button type="button" class="theme-option" [class.active]="theme.theme() === 'light'" [attr.aria-checked]="theme.theme() === 'light'" role="radio" (click)="setTheme('light')">
-            <i class="ti ti-sun"></i>
-            <ng-container i18n="Theme name">Light</ng-container>
-          </button>
-          <button type="button" class="theme-option" [class.active]="theme.theme() === 'paper'" [attr.aria-checked]="theme.theme() === 'paper'" role="radio" (click)="setTheme('paper')">
-            <i class="ti ti-note"></i>
-            <ng-container i18n="Theme name">Paper</ng-container>
-          </button>
-        </div>
+        <k-theme-picker [value]="theme.theme()" (picked)="setTheme($event)" />
       </div>
 
       @if (turnstileSiteKey()) {

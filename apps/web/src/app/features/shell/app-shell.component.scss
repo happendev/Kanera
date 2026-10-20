@@ -148,7 +148,7 @@ k-support-session-banner {
   width: 28px;
   height: 28px;
   padding: 0;
-  font-size: 16px;
+  font-size: var(--text-lg);
   color: var(--text-muted);
   border-radius: var(--radius);
   flex-shrink: 0;
@@ -306,7 +306,7 @@ k-support-session-banner {
   font-size: var(--text-base);
 
   i {
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 }
 
@@ -352,7 +352,7 @@ k-support-session-banner {
     display: inline-flex;
     justify-content: center;
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 }
 
@@ -419,7 +419,7 @@ k-support-session-banner {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: var(--h-md);
   padding: 0 6px;
   background: transparent;
   color: var(--nav-text-strong);
@@ -440,7 +440,7 @@ k-support-session-banner {
   }
 
   .ws-icon i {
-    font-size: 16px;
+    font-size: var(--text-lg);
     color: var(--accent);
   }
 
@@ -609,8 +609,8 @@ k-support-session-banner {
 // disclosure looking selected after it toggles, while keyboard focus remains clearly visible.
 .ws-toggle,
 .board-group-toggle {
-  height: 30px;
-  min-height: 30px;
+  height: var(--h-md);
+  min-height: var(--h-md);
   padding-block: 0;
 
   &:focus {
@@ -659,7 +659,7 @@ k-support-session-banner {
   font-size: var(--text-md);
 
   i {
-    font-size: 16px;
+    font-size: var(--text-lg);
     flex-shrink: 0;
   }
 
@@ -791,7 +791,7 @@ k-support-session-banner {
   align-items: center;
   justify-content: center;
   flex: 1 1 0;
-  height: 36px;
+  height: var(--h-lg);
   min-width: 0;
   padding: 0;
   border: 1px solid var(--border);
@@ -954,7 +954,7 @@ k-support-session-banner {
   &.lg {
     width: 40px;
     height: 40px;
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 }
 
@@ -1218,7 +1218,7 @@ k-support-session-banner {
 
   > i:first-child {
     width: auto;
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   &:hover:not(:disabled) {
@@ -1386,7 +1386,7 @@ k-support-session-banner {
     border-radius: var(--radius);
 
     i {
-      font-size: 16px;
+      font-size: var(--text-lg);
     }
   }
 
@@ -1458,7 +1458,7 @@ k-support-session-banner {
     border-radius: var(--radius);
 
     i {
-      font-size: 16px;
+      font-size: var(--text-lg);
     }
   }
 
@@ -1500,7 +1500,7 @@ k-support-session-banner {
   .nav-item.user-link k-avatar,
   .ws-me .board-link k-avatar {
     width: 22px;
-    height: 22px;
+    height: var(--h-xs);
     font-size: var(--text-xs);
   }
 
@@ -1510,7 +1510,7 @@ k-support-session-banner {
     margin: 6px auto 0;
     color: var(--text-muted);
     border-radius: var(--radius);
-    font-size: 16px;
+    font-size: var(--text-lg);
 
     &:hover {
       background: var(--surface-2);
@@ -1568,25 +1568,25 @@ k-support-session-banner {
   .sidebar.collapsed .nav-item,
   .sidebar.collapsed .ws-icon-link {
     width: 36px;
-    height: 36px;
+    height: var(--h-lg);
 
     i {
-      font-size: 16px;
+      font-size: var(--text-lg);
     }
   }
 
   .sidebar.collapsed .board-link {
     width: 36px;
-    height: 36px;
+    height: var(--h-lg);
 
     i {
-      font-size: 16px;
+      font-size: var(--text-lg);
     }
   }
 
   .sidebar.collapsed .new-ws-icon {
     width: 36px;
-    height: 36px;
+    height: var(--h-lg);
   }
 
   // ── Mobile overlay sidebar ──────────────────────────────────────────────────
@@ -1649,4 +1649,37 @@ k-support-session-banner {
 .nav-board-drop-list .cdk-drag-placeholder { opacity: .25; }
 .nav-board-drop-list.cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder):not(.cdk-drag-preview),
 .cdk-drag-animating { transition: transform 140ms cubic-bezier(.2, 0, 0, 1); }
-.cdk-drag-preview { box-sizing: border-box; background: var(--surface); border-radius: 6px; box-shadow: 0 4px 12px rgb(0 0 0 / 15%); }
+.cdk-drag-preview { box-sizing: border-box; background: var(--surface); border-radius: 6px; box-shadow: var(--shadow-drag); }
+
+// ─── Compact density ──────────────────────────────────────────────────────────
+// [data-density="compact"] is stamped on <html> by DensityService (a per-device choice). Only the
+// row metrics tighten: 36px rows become 30px by trading vertical padding, type and colour stay as
+// they are, and the collapsed rail and coarse-pointer sizes above are untouched because a 44px
+// touch target is a floor the density setting is not allowed to cross.
+:host-context([data-density="compact"]) {
+  .nav {
+    gap: 1px;
+  }
+
+  .nav-item,
+  .board-link {
+    min-height: var(--h-md);
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+
+  .board-nav-group {
+    gap: 0;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  :host-context([data-density="compact"]) {
+    .nav-item,
+    .board-link {
+      min-height: var(--h-lg);
+      padding-top: 6px;
+      padding-bottom: 6px;
+    }
+  }
+}

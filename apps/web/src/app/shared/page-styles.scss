@@ -144,7 +144,7 @@
 
         i {
           width: 18px;
-          font-size: 16px;
+          font-size: var(--text-lg);
         }
       }
 
@@ -187,7 +187,7 @@
   border-radius: var(--radius);
   padding: 0 14px;
   height: 40px;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
   text-align: left;
   justify-content: flex-start;
@@ -229,7 +229,7 @@
 
   .board-icon,
   .grip {
-    font-size: 16px;
+    font-size: var(--text-lg);
     color: var(--text-muted);
     flex-shrink: 0;
   }
@@ -280,7 +280,7 @@
 
 .field-type-badge {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-muted);
   background: var(--surface-hover);
@@ -305,7 +305,7 @@
 }
 
 .danger-label {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--danger);
 }
@@ -336,7 +336,7 @@
   height: 32px;
   border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  background: var(--danger-soft);
   color: var(--danger);
   font-size: 17px;
 }
@@ -350,13 +350,13 @@
 
 .danger-action-title {
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
 }
 
 .danger-action-desc {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.35;
 }
 
@@ -367,12 +367,12 @@
   &:hover {
     color: var(--danger);
     border-color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    background: var(--danger-soft);
   }
 }
 
 .empty-hint {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
   padding: 4px 2px;
 }
@@ -403,7 +403,7 @@
 
   p {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     line-height: 1.5;
   }
@@ -435,13 +435,13 @@
     gap: 3px;
 
     strong {
-      font-size: 14px;
+      font-size: var(--text-md);
       font-weight: 600;
       color: var(--text);
     }
 
     span {
-      font-size: 13px;
+      font-size: var(--text-base);
       color: var(--text-muted);
     }
   }
@@ -592,7 +592,7 @@
     >button[type="submit"] {
       grid-column: 2;
       min-width: 36px;
-      height: 36px;
+      height: var(--h-lg);
       padding: 0 10px;
       justify-content: center;
       white-space: nowrap;
@@ -658,7 +658,7 @@
 // ─── CDK drag-drop visuals ───────────────────────────────────────────────────
 
 .cdk-drag-preview {
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-drag);
 }
 
 .cdk-drag-placeholder {

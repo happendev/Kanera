@@ -53,7 +53,7 @@
 }
 
 .invalid p {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
   margin: 0;
   line-height: 1.5;
@@ -65,7 +65,7 @@
 
 .invite-org {
   display: inline-block;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
   margin-bottom: 10px;
@@ -80,20 +80,20 @@
 }
 
 .invite-subtitle {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   margin: 0;
 }
 
 .invite-note {
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.45;
   color: var(--text-muted);
   margin: 14px 0 0;
 }
 
 .auth-prompt {
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text-muted);
   margin: 0 0 20px;
 }
@@ -122,7 +122,7 @@
   gap: 6px;
   padding: 10px 20px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
   cursor: pointer;
   border: none;
@@ -133,7 +133,7 @@
     pointer-events: none;
   }
 
-  i { font-size: 16px; }
+  i { font-size: var(--text-lg); }
 }
 
 .btn-primary {
@@ -152,7 +152,7 @@
 }
 
 .error-msg {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--danger);
   margin: 10px 0 0;
 }

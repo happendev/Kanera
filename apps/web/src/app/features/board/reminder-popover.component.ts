@@ -182,11 +182,11 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       padding-bottom: 8px;
       border-bottom: 1px solid var(--border);
 
-      > i { color: var(--accent); font-size: 16px; }
+      > i { color: var(--accent); font-size: var(--text-lg); }
     }
 
     .rp-title {
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 700;
     }
 
@@ -200,7 +200,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       border-radius: 999px;
       background: color-mix(in srgb, var(--accent) 12%, transparent);
       color: var(--accent);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 600;
 
       &.is-fired {
@@ -248,7 +248,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
     }
 
     .rp-preset-label {
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       line-height: 1.2;
     }
@@ -259,7 +259,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 500;
       line-height: 1.2;
     }
@@ -274,13 +274,13 @@ function instantFor(dayKey: string, minutes: number): Date | null {
 
     .rp-month-label {
       text-align: center;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 700;
     }
 
     .rp-icon-btn {
       width: 30px;
-      height: 30px;
+      height: var(--h-md);
       flex: none;
       display: inline-flex;
       align-items: center;
@@ -304,7 +304,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
         opacity: 0.35;
       }
 
-      i { font-size: 16px; }
+      i { font-size: var(--text-lg); }
     }
 
     .rp-weekdays,
@@ -320,7 +320,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       align-items: center;
       justify-content: center;
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 700;
     }
 
@@ -334,7 +334,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       background: transparent;
       color: var(--text);
       cursor: pointer;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 600;
       transition: background-color 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
 
@@ -411,7 +411,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       box-shadow: none;
       color: var(--text);
       font: inherit;
-      font-size: 14px;
+      font-size: var(--text-md);
       font-weight: 600;
       font-variant-numeric: tabular-nums;
       text-align: center;
@@ -437,7 +437,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
 
       &.is-error { color: var(--danger); }
@@ -446,11 +446,11 @@ function instantFor(dayKey: string, minutes: number): Date | null {
     .rp-clear,
     .rp-set {
       flex: none;
-      height: 30px;
+      height: var(--h-md);
       padding: 0 10px;
       border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 600;
     }
 
@@ -460,7 +460,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       color: var(--text-muted);
 
       &:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--danger) 10%, transparent);
+        background: var(--danger-soft);
         color: var(--danger);
       }
     }

@@ -1,5 +1,8 @@
 @use "../../../shared/breakpoints" as bp;
+@use "../../../shared/toolbar-styles" as toolbar;
 @use "../../../shared/rank-pill" as rank;
+@use "../../../shared/card-key" as key;
+@use "../../../shared/list-chip" as chip;
 
 :host {
   --tv-row-h: 36px;
@@ -22,7 +25,7 @@
   // rule is deliberately faint. Reversing these two (the grid drawn as a cage) is what made the
   // table hard to scan: the vertical lines were louder than the rows they were dividing.
   --tv-line: color-mix(in srgb, var(--border) 45%, transparent);
-  --tv-line-row: var(--border);
+  --tv-line-row: var(--divider);
 
   // Hover is a neutral lift, not --surface-2. --surface-2 is a saturated navy in dark mode and
   // reads as "this row is selected", which then collides with the real selected and bulk-selected
@@ -90,7 +93,7 @@
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-2);
   min-height: 42px;
   padding: 5px 12px;
   border-bottom: 1px solid var(--border);
@@ -104,7 +107,7 @@
   gap: 6px;
   width: min(260px, 35vw);
   min-width: 130px;
-  height: 30px;
+  height: var(--h-md);
   padding: 0 8px;
   color: var(--text-muted);
   background: var(--surface-2);
@@ -117,7 +120,7 @@
   }
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
   }
 
   input {
@@ -129,7 +132,7 @@
     background: transparent;
     border: 0;
     outline: 0;
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
 }
 
@@ -140,87 +143,6 @@
 .tv-menu-wrap {
   position: relative;
   display: inline-flex;
-}
-
-.tv-toolbar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 30px;
-  padding: 0 8px;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  cursor: pointer;
-
-  &:hover,
-  &.is-open {
-    color: var(--text);
-    background: var(--surface-2);
-    border-color: var(--border);
-  }
-
-  // The canonical engaged treatment from shared/toolbar-styles.scss. Written out rather than
-  // @use'd because this button is 30px to fit the table's denser toolbar.
-  &.is-set {
-    color: var(--accent);
-    background: var(--accent-soft);
-    border-color: var(--accent);
-  }
-
-  &.has-clear {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-  }
-}
-
-// The dense counterpart of .k-toolbar-clear (see shared/toolbar-styles.scss for why the × is a
-// sibling and what it is for). Only rendered while its trigger is .is-set, so it always sits beside
-// the accent fill it borrows.
-.tv-toolbar-clear {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  // Stretches to the 30px trigger beside it. `height: auto` is load-bearing — the global button
-  // reset in styles.scss pins 36px, and an explicit height beats `align-self: stretch`.
-  align-self: stretch;
-  height: auto;
-  width: 22px;
-  padding: 0;
-  margin-left: -1px;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  cursor: pointer;
-  transition: background-color var(--motion-fast), color var(--motion-fast);
-
-  i {
-    font-size: 12px;
-  }
-
-  // :not(:disabled) to outrank the reset's own button:hover:not(:disabled).
-  &:hover:not(:disabled) {
-    color: var(--danger);
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-  }
-
-  &:focus-visible {
-    position: relative;
-    z-index: 1;
-    outline: 2px solid var(--border-strong);
-    outline-offset: 1px;
-  }
-}
-
-@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
-  .tv-toolbar-clear {
-    width: 32px;
-  }
 }
 
 .tv-small-menu,
@@ -300,7 +222,7 @@
   margin: 0;
   padding: 2px 8px 4px;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 
@@ -405,8 +327,10 @@
   top: 0;
   z-index: 8;
   height: var(--tv-head-h);
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border-strong);
+  // Quiet: same surface as the sheet, hairline rule, muted 500-weight labels. A filled, heavily ruled
+  // header read as a second toolbar above the rows it labels.
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 
   // --tv-head-h is the header's border box, so its content box is a pixel shorter than the cells'
   // own height. Left at that height the opaque title cell overhangs and paints out the rule beneath
@@ -436,13 +360,13 @@
   height: var(--tv-head-h);
   color: var(--text-muted);
   // 10px read as fine print next to 13.5px cells; 12px is still clearly a label but legible at a glance.
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: 500;
   letter-spacing: .01em;
   user-select: none;
 
   >i {
-    font-size: 13px;
+    font-size: var(--text-base);
     opacity: .8;
   }
 
@@ -479,8 +403,8 @@
 
 .tv-header .tv-title-cell {
   z-index: 9;
-  background: var(--surface-2);
-  border-right-color: var(--border-strong);
+  background: var(--surface);
+  border-right-color: var(--border);
 }
 
 // Column reordering. Handle-scoped and hover-only: a permanently visible grip on every header would
@@ -496,7 +420,7 @@
   cursor: grab;
   transition: opacity var(--motion-fast);
 
-  > i { font-size: 13px; }
+  > i { font-size: var(--text-base); }
   &:active { cursor: grabbing; }
 }
 
@@ -515,7 +439,7 @@
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   box-shadow: 0 12px 24px rgb(0 0 0 / 35%);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
 
   .tv-col-drag-handle,
@@ -572,7 +496,7 @@
   justify-content: center;
   width: 26px;
   height: auto;
-  min-height: 26px;
+  min-height: var(--h-sm);
   padding: 0;
   color: var(--text-muted);
   background: transparent;
@@ -662,7 +586,7 @@
   min-width: 19px;
   height: 19px;
   padding: 0 4px;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   font-weight: 650;
   line-height: 1;
@@ -749,14 +673,14 @@
 
   .tv-chip {
     padding: 3px 11px;
-    font-size: 12.5px;
+    font-size: var(--text-base);
     font-weight: 700;
   }
 
   // The run's card count. Quieter than the name — it is context, not the label.
   em {
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-style: normal;
     font-weight: 600;
   }
@@ -826,10 +750,10 @@
   justify-content: center;
   width: 26px;
   min-width: 0;
-  height: 26px;
+  height: var(--h-sm);
   padding: 0;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -846,7 +770,7 @@
   flex: none;
   margin-left: -3px;
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--text-md);
   opacity: .55;
   transition: opacity var(--motion-fast) ease;
 }
@@ -858,11 +782,6 @@
 }
 
 // Icon-only toolbar controls keep the button's square footprint without reserving label width.
-.tv-icon-btn {
-  width: 30px;
-  padding: 0;
-}
-
 .tv-run-foot {
   display: flex;
   align-items: center;
@@ -875,7 +794,7 @@
 // in the sheet rather than as a floating panel: a cross-tab that does not line up with its columns is
 // just a list of numbers.
 .tv-sum-row {
-  min-height: 30px;
+  min-height: var(--h-md);
   background: var(--tv-sum-bg);
   border-top: 1px solid var(--tv-line-row);
 
@@ -907,7 +826,7 @@
   padding: 0 var(--tv-cell-pad-x) 0 var(--tv-gutter-w);
   background: var(--tv-sum-bg);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -980,7 +899,7 @@
   input {
     width: 100%;
     min-width: 0;
-    height: 26px;
+    height: var(--h-sm);
     padding: 2px 6px;
     color: var(--text);
     background: var(--surface-2);
@@ -1003,14 +922,14 @@
   align-items: center;
   gap: 8px;
   max-width: 420px;
-  min-height: 36px;
+  min-height: var(--h-lg);
   padding: 7px 13px;
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   box-shadow: 0 16px 32px rgb(0 0 0 / 45%);
-  font-size: 13px;
+  font-size: var(--text-base);
 
   .tv-cell:not(.tv-title-cell),
   .tv-drag-handle,
@@ -1062,7 +981,7 @@
   justify-content: center;
   width: 15px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: .65;
   transition: opacity var(--motion-fast);
   pointer-events: none;
@@ -1248,15 +1167,22 @@
 }
 
 .tv-card-key {
-  flex: none;
-  max-width: 11ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-muted);
-  font-size: 11px;
+  @include key.card-key;
+  // Regular weight: the key sits inline before the title in a dense row, so a medium weight reads
+  // as part of the title instead of a prefix. The key is never clipped (a cut key identifies
+  // nothing); the title text gives way instead, and the grid drops the key altogether below
+  // COMPACT_TITLE_WIDTH. The key and the hidden sizer (the table's widest key) share one grid
+  // cell, so every key takes the widest key's width and the titles line up down the column.
+  display: inline-grid;
   font-weight: 400;
-  font-variant-numeric: tabular-nums;
+
+  > span {
+    grid-area: 1 / 1;
+  }
+
+  .tv-key-sizer {
+    visibility: hidden;
+  }
 }
 
 // Grid only: the stacked phone layout gives the key its own room as an inline prefix in full.
@@ -1289,18 +1215,18 @@
   gap: 8px;
   padding: 8px 12px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 
   > span { flex: 1; min-width: 160px; overflow-wrap: anywhere; }
   strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
   &:not(.is-error) { pointer-events: none; }
   &.is-error { color: var(--danger); }
-  button { flex: none; font-size: 12px; }
+  button { flex: none; font-size: var(--text-sm); }
 }
 
 .tv-cell-input {
   width: 100%;
-  height: 26px;
+  height: var(--h-sm);
   padding: 2px 5px;
   color: var(--text);
   background: var(--surface);
@@ -1333,31 +1259,8 @@
  * value as a status at all.
  */
 .tv-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  padding: 2px 9px;
-  background: color-mix(in srgb, var(--tv-status-color, var(--text-muted)) 15%, transparent);
-  color: color-mix(in srgb, var(--tv-status-color, var(--text-muted)) 65%, var(--text));
-  border-radius: 999px;
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.55;
-
-  > i {
-    flex: none;
-    font-size: 14px;
-    opacity: .85;
-  }
-
-  > span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  @include chip.list-chip;
+  --list-color: var(--tv-status-color, var(--text-muted));
 }
 
 .tv-muted {
@@ -1375,7 +1278,7 @@
 
   > i {
     flex: none;
-    font-size: 14px;
+    font-size: var(--text-md);
     opacity: .85;
   }
 
@@ -1409,7 +1312,7 @@
   font-weight: 550;
   font-variant-numeric: tabular-nums;
 
-  i { font-size: 14px; }
+  i { font-size: var(--text-md); }
 
   &.is-done { color: var(--text-muted); font-weight: 500; }
   // Past the workspace's in-progress alert (see the card tile's matching chip).
@@ -1430,8 +1333,8 @@
 
 .tv-checklist-count {
   flex: none;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--text-3);
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
@@ -1464,11 +1367,11 @@
 
 .tv-checkbox-value {
   cursor: pointer;
-  color: var(--text-muted);
+  color: var(--text-3);
 }
 
 .tv-checkbox-value i {
-  color: var(--text-muted);
+  color: var(--text-3);
   font-size: 18px;
 }
 
@@ -1531,7 +1434,7 @@ k-card-labels.tv-labels {
   // label like "Feature / Enhancement" even when the column had ample room for the full chip.
   --label-chip-max-width: 100%;
   --label-chip-text-max-width: none;
-  --label-chip-font-size: 11px;
+  --label-chip-font-size: var(--text-xs);
   --label-chip-padding-x: 7px;
   --label-bar-row-gap: 0;
 }
@@ -1641,7 +1544,7 @@ k-card-labels.tv-labels {
   // left costs the value nothing, and fading the chevron out never shifts the number.
   >i {
     flex: none;
-    font-size: 13px;
+    font-size: var(--text-base);
     opacity: .6;
   }
 
@@ -1682,20 +1585,6 @@ k-card-labels.tv-labels {
 
 .tv-aggregate-menu {
   padding: 5px;
-}
-
-// The label is the first thing to go, matching the shared label-drop rule in
-// shared/toolbar-styles.scss so the table's controls and the page toolbar's above it lose their
-// labels at the same width instead of one waiting for 480 and the other for 700.
-@media (max-width: bp.$bp-compact) {
-  .tv-toolbar-label {
-    display: none;
-  }
-
-  .tv-toolbar-btn {
-    width: 30px;
-    padding: 0;
-  }
 }
 
 // The toolbar wraps on its own, earlier breakpoint: it runs out of room for a fixed-width search
@@ -1780,7 +1669,7 @@ k-card-labels.tv-labels {
     align-items: flex-start;
     min-height: 44px;
     padding: 0;
-    font-size: 14px;
+    font-size: var(--text-md);
     border-right: 0;
   }
 
@@ -1936,10 +1825,15 @@ k-card-labels.tv-labels {
     white-space: normal;
   }
 
+  // Stacked rows wrap the key inline with the title, so the sizer slot gives way to the key's
+  // own width.
   .tv-card-key {
     display: inline;
-    max-width: none;
     margin-right: 6px;
+  }
+
+  .tv-key-sizer {
+    display: none;
   }
 
   .tv-title-trigger > .tv-unread {
@@ -2043,5 +1937,5 @@ k-card-labels.tv-labels {
 
 // Empty status groups still need a hit area; collapsed and read-only groups stay compact.
 .tv-run-rows:not(.cdk-drop-list-disabled):empty {
-  min-height: 36px;
+  min-height: var(--h-lg);
 }
