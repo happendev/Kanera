@@ -1,29 +1,35 @@
-// Registered before Angular's worker so it runs first and can stop ngsw's own handler. ngsw's
-// navigateLastFocusedOrOpen awaits a full navigate() before focus(); by then the click's
-// user-activation window has expired, so Android refuses focus() and the card never surfaces
-// (and an uncontrolled client makes navigate() reject outright). Focus first, inside the
-// activation window, then navigate, falling back to a new window if either step fails.
+// Handle navigation before Angular so one click cannot also run its navigate-then-focus path.
+// Include openWindow payloads from the earlier direct-open change so queued pushes also reuse tabs.
 self.addEventListener("notificationclick", (event) => {
-  const target = event.notification.data?.onActionClick?.default;
-  if (event.action || !target?.url) return;
+  const action = event.action || "default";
+  const target = event.notification.data?.onActionClick?.[action];
+  if (target?.operation !== "navigateLastFocusedOrOpen" && target?.operation !== "openWindow") return;
 
   event.stopImmediatePropagation();
   event.notification.close();
-  const url = new URL(target.url, self.registration.scope).href;
+  const url = new URL(target.url ?? "", self.registration.scope).href;
 
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    const client = windows.find((candidate) => candidate.url.startsWith(self.registration.scope));
-    if (client) {
-      try {
-        const focused = await client.focus();
-        if (focused.url !== url) await focused.navigate(url);
-        return;
-      } catch {
-        // Fall through to opening a fresh window at the card.
-      }
+    const scope = new URL(self.registration.scope);
+    const matching = windows.filter((candidate) => {
+      const location = new URL(candidate.url);
+      return location.origin === scope.origin && location.pathname.startsWith(scope.pathname);
+    });
+    // matchAll returns windows in most-recently-focused order. Prefer the exact destination if
+    // already open; otherwise reuse the most recent Kanera tab or installed PWA window.
+    const client = matching.find((candidate) => candidate.url === url) ?? matching[0];
+    if (!client) {
+      await self.clients.openWindow(url);
+      return;
     }
-    await self.clients.openWindow(url);
+
+    // Request focus before navigation can spend the notification's user activation. Keep the
+    // navigation independent: GNOME/browser focus rejection must not lose the destination or
+    // trigger a second activation by opening a duplicate tab.
+    const focus = client.focus().catch(() => undefined);
+    if (client.url !== url) await client.navigate(url);
+    await focus;
   })());
 });
 
