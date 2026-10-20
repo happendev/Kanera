@@ -36,12 +36,13 @@ All notable changes to Kanera are documented here.
 - **Faster boards and global views:** large boards open with less server work, while My Cards and Team Cards refresh around 65% faster with over 40% less API CPU in large-workload benchmarks.
 - **More efficient realtime and background processing:** notifications and emails arrive sooner under load, with less repeated work and fewer processing pauses across automations, push delivery, webhooks, daily digests and cleanup.
 - **Faster card reads for AI agents:** opening a card with many links (the API's card detail and the MCP `cards.get` tool) no longer slows down while background link repair runs, cutting typical response time from about 24–32 ms to 7 ms in benchmarks.
-- Hosted subscription payment analytics are recorded against the organisation creator, so PostHog's first-touch acquisition properties attribute revenue.
 - Cards with unread activity now stand out on busy boards: alongside the bold title and dot, the tile gets a faint accent tint and an accent ring.
 - Emails now show dates in the recipient's language and its date order, with the month named (for example "12 Oct 2026" in UK English), instead of US month-first order for everyone.
 - Tabs left open, or returned to after a while, renew their sign-in just before it lapses instead of first having a request rejected, so counts and priorities refresh in one round-trip.
 
 ### Fixed
+
+- Reordering inline images in descriptions, comments, notes and scratchpad no longer uploads a duplicate image.
 
 - Closing a profile while it is still loading no longer causes an Angular error when the response arrives.
 - Board mirrors now copy attachments uploaded by guests from another organisation, instead of failing to find the file and retrying the card indefinitely. A card that still can't sync (for example, its source file is gone) stops retrying after about a day and resumes when the source card changes or the mirror is resumed; one broken card no longer holds up the rest of the mirror.
