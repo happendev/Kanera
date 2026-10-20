@@ -44,7 +44,21 @@ interface AccessScope {
 
 // Compute the user's full accessible scope once, in bulk, rather than per-row.
 async function buildAccessScope(claims: AuthClaims, requestedScope?: WorkScope): Promise<AccessScope> {
-  const accessibleBoards = await loadAccessibleBoards(claims);
+  // Interactive workspace scope and board scope use the same claims independently.
+  // Personal credentials still derive workspace reach from their accessible-board result.
+  const interactive = claims.authKind !== "apiKey" && claims.apiKeyKind !== "personal";
+  const [accessibleBoards, memberWorkspaces, orgWorkspaces] = await Promise.all([
+    loadAccessibleBoards(claims),
+    interactive ? db
+      .select({ id: workspaceMembers.workspaceId })
+      .from(workspaceMembers)
+      .innerJoin(workspaces, and(eq(workspaces.id, workspaceMembers.workspaceId), isNull(workspaces.archivedAt)))
+      .where(eq(workspaceMembers.userId, claims.sub)) : [],
+    interactive && isOrgAdmin(claims) ? db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(and(eq(workspaces.clientId, claims.cid), isNull(workspaces.archivedAt))) : [],
+  ]);
   let workspaceIds: string[];
   // Personal keys mirror the owner's real reach, so they follow the normal-user path below with the
   // owner's actual org-admin visibility. Only pinned workspace keys use the single-workspace scope.
@@ -55,21 +69,7 @@ async function buildAccessScope(claims: AuthClaims, requestedScope?: WorkScope):
         accessibleBoards.filter((board) => board.canAccessWorkspace).map((board) => board.workspaceId),
       ));
   } else {
-    const memberWorkspaces = await db
-      .select({ id: workspaceMembers.workspaceId })
-      .from(workspaceMembers)
-      .innerJoin(workspaces, and(eq(workspaces.id, workspaceMembers.workspaceId), isNull(workspaces.archivedAt)))
-      .where(eq(workspaceMembers.userId, claims.sub));
-    const ids = new Set(memberWorkspaces.map((row) => row.id));
-    // Org admins implicitly access every workspace in their client.
-    if (isOrgAdmin(claims)) {
-      const orgWorkspaces = await db
-        .select({ id: workspaces.id })
-        .from(workspaces)
-        .where(and(eq(workspaces.clientId, claims.cid), isNull(workspaces.archivedAt)));
-      for (const row of orgWorkspaces) ids.add(row.id);
-    }
-    workspaceIds = [...ids];
+    workspaceIds = [...new Set([...memberWorkspaces, ...orgWorkspaces].map((row) => row.id))];
   }
 
   if (!requestedScope || requestedScope.allAccessible) {

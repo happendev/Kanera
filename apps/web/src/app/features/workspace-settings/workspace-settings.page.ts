@@ -1187,20 +1187,23 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const detail = await this.api.get<{ organisationInProgressEnabled?: boolean; workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[]; automationExecutionsRemaining: number | null }>(`/workspaces/${workspaceId}`);
     const ws = { ...detail.workspace, role: detail.role } as Workspace & { role: WorkspaceRole };
     const canManageApi = detail.role === "admin" || this.auth.isOrgAdmin();
-    const [members, orgUsers, boards, boardGroups] = await Promise.all([
-      this.api.get<MemberRow[]>(`/workspaces/${workspaceId}/members`),
-      this.api.get<{ id: string; email: string; displayName: string }[]>(`/workspaces/${workspaceId}/member-candidates`),
-      this.api.get<Board[]>(`/workspaces/${workspaceId}/boards`),
-      this.api.get<BoardGroup[]>(`/workspaces/${workspaceId}/board-groups`),
+    // Both groups need the workspace role, but neither needs the other group.
+    const [[members, orgUsers, boards, boardGroups], [apiKeys, agentConnections, webhooks, guests]] = await Promise.all([
+      Promise.all([
+        this.api.get<MemberRow[]>(`/workspaces/${workspaceId}/members`),
+        this.api.get<{ id: string; email: string; displayName: string }[]>(`/workspaces/${workspaceId}/member-candidates`),
+        this.api.get<Board[]>(`/workspaces/${workspaceId}/boards`),
+        this.api.get<BoardGroup[]>(`/workspaces/${workspaceId}/board-groups`),
+      ]),
+      canManageApi
+        ? Promise.all([
+          this.api.get<WorkspaceApiKeyRow[]>(`/workspaces/${workspaceId}/api-keys`),
+          this.api.get<AgentConnectionRow[]>(`/workspaces/${workspaceId}/agent-connections`),
+          this.api.get<WebhookEndpointRow[]>(`/workspaces/${workspaceId}/webhooks`),
+          this.api.get<WorkspaceGuestsResponse>(`/workspaces/${workspaceId}/guests`),
+        ])
+        : [[] as WorkspaceApiKeyRow[], [] as AgentConnectionRow[], [] as WebhookEndpointRow[], null] as const,
     ]);
-    const [apiKeys, agentConnections, webhooks, guests] = canManageApi
-      ? await Promise.all([
-        this.api.get<WorkspaceApiKeyRow[]>(`/workspaces/${workspaceId}/api-keys`),
-        this.api.get<AgentConnectionRow[]>(`/workspaces/${workspaceId}/agent-connections`),
-        this.api.get<WebhookEndpointRow[]>(`/workspaces/${workspaceId}/webhooks`),
-        this.api.get<WorkspaceGuestsResponse>(`/workspaces/${workspaceId}/guests`),
-      ])
-      : [[] as WorkspaceApiKeyRow[], [] as AgentConnectionRow[], [] as WebhookEndpointRow[], null];
     if (workspaceId !== this.workspaceId()) return;
     this.organisationInProgressEnabled.set(detail.organisationInProgressEnabled !== false);
     this.applyWorkspace(ws, true);

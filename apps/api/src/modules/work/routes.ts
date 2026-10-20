@@ -415,13 +415,13 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
   ]);
   const alertDaysByWorkspace = new Map(alertRows.map((row) => [row.id, row.inProgressAlertDays]));
   const timeZoneByWorkspace = new Map(alertRows.map((row) => [row.id, row.timeZone]));
-  // Attach all field options in one query; the former per-workspace loader multiplied this pair of
-  // catalog reads by every workspace visible in Global Work.
-  const wireFields = await attachFieldOptions(fieldRows);
   const boardClientIds = new Map(scopeBoards.map((board) => [board.id, board.clientId]));
   const memberUserIds = [...new Set(memberRows.map((member) => member.userId))];
-  const membershipRows = memberUserIds.length
-    ? await db
+  // Batch field options across workspaces, alongside independent membership enrichment.
+  const [wireFields, membershipRows] = await Promise.all([
+    attachFieldOptions(fieldRows),
+    memberUserIds.length
+      ? db
         .select({ userId: clientMembers.userId, clientId: clientMembers.clientId })
         .from(clientMembers)
         .where(and(
@@ -429,7 +429,8 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
           inArray(clientMembers.clientId, [...new Set(boardClientIds.values())]),
           isNull(clientMembers.removedAt),
         ))
-    : [];
+      : [],
+  ]);
   const memberships = new Set(membershipRows.map((row) => `${row.userId}:${row.clientId}`));
 
   const organisations = new Map<string, WorkCatalog["organisations"][number]>();
@@ -861,58 +862,62 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
   const filters = dto.workFiltersSchema.parse({ ...(query.filters ?? {}), completion: "all" });
   const conditions = baseCardConditions(authUserId, scopeBoards, filters, { portfolio: true, blockerBoards: allBoards }, cardDueColumns);
 
-  const rows = await db
-    .select({
-      organisationId: workspaces.clientId,
-      workspaceId: workspaces.id,
-      boardId: boards.id,
-      active: sql<number>`count(*) filter (where ${cards.completedAt} is null)::integer`,
-      overdue: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${overdueSql(cardDueColumns)})::integer`,
-      dueSoon: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${dueSoonSql(cardDueColumns)})::integer`,
-      unassigned: sql<number>`count(*) filter (where ${cards.completedAt} is null and not exists (
-        select 1 from card_assignee portfolio_assignee where portfolio_assignee.card_id = ${cards.id}
-      ))::integer`,
-      inactive: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.updatedAt} <= now() - make_interval(days => ${workspaces.inactiveCardsDays}))::integer`,
-      inProgress: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.inProgressSince} is not null)::integer`,
-      inProgressTooLong: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${inProgressTooLongSql(cards.inProgressSince)})::integer`,
-      blocked: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${hasOpenBlockerSql(cards.id)})::integer`,
-      atRisk: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${dependencyAtRiskSql(authUserId, allBoards, cardDueColumns)})::integer`,
-      completed: sql<number>`count(*) filter (where ${cards.completedAt} >= ${from})::integer`,
-    })
-    .from(cards)
-    .innerJoin(boards, eq(boards.id, cards.boardId))
-    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-    .where(and(...conditions))
-    .groupBy(workspaces.clientId, workspaces.id, boards.id);
-
-  const boardById = new Map(scopeBoards.map((board) => [board.id, board]));
   const restrictedBoardIds = scopeBoards.filter((board) => board.assignedItemsOnly).map((board) => board.id);
-  const checklistCountRows = await db
-    .select({
-      boardId: cards.boardId,
-      count: sql<number>`count(*)::integer`,
-    })
-    .from(cardChecklistItems)
-    .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-    .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
-    .innerJoin(boards, eq(boards.id, cards.boardId))
-    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-    .innerJoin(lists, eq(lists.id, cards.listId))
-    .where(and(
-      ...conditions,
-      isNull(cards.completedAt),
-      isNull(cardChecklistItems.completedAt),
-      isNotNull(cardChecklistItems.assigneeId),
-      isNull(lists.archivedAt),
-      overdueChecklistItemSql(),
-      restrictedBoardIds.length
-        ? or(
-            notInArray(cards.boardId, restrictedBoardIds),
-            eq(cardChecklistItems.assigneeId, authUserId),
-          )
-        : undefined,
-    ))
-    .groupBy(cards.boardId);
+  // Each projection uses the same resolved scope; none consumes another projection.
+  const [rows, checklistCountRows, activity] = await Promise.all([
+    db
+      .select({
+        organisationId: workspaces.clientId,
+        workspaceId: workspaces.id,
+        boardId: boards.id,
+        active: sql<number>`count(*) filter (where ${cards.completedAt} is null)::integer`,
+        overdue: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${overdueSql(cardDueColumns)})::integer`,
+        dueSoon: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${dueSoonSql(cardDueColumns)})::integer`,
+        unassigned: sql<number>`count(*) filter (where ${cards.completedAt} is null and not exists (
+          select 1 from card_assignee portfolio_assignee where portfolio_assignee.card_id = ${cards.id}
+        ))::integer`,
+        inactive: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.updatedAt} <= now() - make_interval(days => ${workspaces.inactiveCardsDays}))::integer`,
+        inProgress: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.inProgressSince} is not null)::integer`,
+        inProgressTooLong: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${inProgressTooLongSql(cards.inProgressSince)})::integer`,
+        blocked: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${hasOpenBlockerSql(cards.id)})::integer`,
+        atRisk: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${dependencyAtRiskSql(authUserId, allBoards, cardDueColumns)})::integer`,
+        completed: sql<number>`count(*) filter (where ${cards.completedAt} >= ${from})::integer`,
+      })
+      .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .where(and(...conditions))
+      .groupBy(workspaces.clientId, workspaces.id, boards.id),
+
+    db
+      .select({
+        boardId: cards.boardId,
+        count: sql<number>`count(*)::integer`,
+      })
+      .from(cardChecklistItems)
+      .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+      .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(lists, eq(lists.id, cards.listId))
+      .where(and(
+        ...conditions,
+        isNull(cards.completedAt),
+        isNull(cardChecklistItems.completedAt),
+        isNotNull(cardChecklistItems.assigneeId),
+        isNull(lists.archivedAt),
+        overdueChecklistItemSql(),
+        restrictedBoardIds.length
+          ? or(
+              notInArray(cards.boardId, restrictedBoardIds),
+              eq(cardChecklistItems.assigneeId, authUserId),
+            )
+          : undefined,
+      ))
+      .groupBy(cards.boardId),
+    portfolioActivity(scopeBoards, conditions, query.timeZone),
+  ]);
+  const boardById = new Map(scopeBoards.map((board) => [board.id, board]));
   const overdueChecklistByBoard = new Map(checklistCountRows.map((row) => [row.boardId, row.count]));
 
   const buckets: PortfolioBucket[] = rows.flatMap((row) => {
@@ -944,8 +949,6 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
     - (boardById.get(b.boardId)?.navigationOrder ?? Number.MAX_SAFE_INTEGER)
     || a.boardId.localeCompare(b.boardId)
   );
-
-  const activity = await portfolioActivity(scopeBoards, conditions, query.timeZone);
 
   const totals = buckets.reduce((sum, bucket) => ({
     cards: sum.cards + bucket.active + bucket.completed,

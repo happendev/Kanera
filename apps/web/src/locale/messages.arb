@@ -11161,6 +11161,13 @@
       "src/app/features/board/card-detail.component.html"
     ]
   },
+  "1118578891930839262": "Agent runs",
+  "@1118578891930839262": {
+    "description": "Card detail section heading: AI agents currently working on the card",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
   "5158037517542024141": "Card mirror status",
   "@5158037517542024141": {
     "x-files": [
@@ -11176,13 +11183,6 @@
   },
   "3830487495946043372": "No description",
   "@3830487495946043372": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "1118578891930839262": "Agent runs",
-  "@1118578891930839262": {
-    "description": "Card detail section heading: AI agents currently working on the card",
     "x-files": [
       "src/app/features/board/card-detail.component.html"
     ]

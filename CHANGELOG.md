@@ -19,12 +19,13 @@ All notable changes to Kanera are documented here.
 - **Thumbs-up notifications:** when someone gives your comment or uploaded file a thumbs-up, you now get an inbox notification and a push notification. Email is off by default; turn it on under Profile settings → Notifications ("Thumbs-up on your comment or file"). Removing the thumbs-up takes the notification back. Duplicated cards keep the thumbs-ups on their copied files.
 - **Work done report:** Work done has a new **Report** layout on boards, My Cards and Team Cards: a plain-language summary of the period, the key counts with changes against the previous period, a daily flow chart, where open work sits, what needs attention right now with the cards named, activity and workload per person, and breakdowns by workspace, board, label, select field and checklist. Sections appear only when there is something to show.
 - **Date range presets:** the completed-cards, table and Work done date pickers now offer This week, Last week, This month, Last month and Last quarter alongside the Last N days shortcuts.
-- **Faster pickers:** label, member and select pickers support arrow keys, Home/End and Enter, highlight the text you searched for, and workspace admins can create a missing label straight from the card's label picker.
+- **Picker shortcuts:** label, member and select pickers support arrow keys, Home/End and Enter, highlight the text you searched for, and workspace admins can create a missing label straight from the card's label picker.
 - **Plan usage meters (hosted):** Account Plan settings show live usage of boards, members or seats, active automations and this month's automation executions against your plan, with a warning as you near a limit.
 - **Kanera speaks your language:** the whole app, including onboarding, boards, cards, notifications, settings, emails and push notifications, is now available in English (US), English (UK), Spanish, Brazilian Portuguese, French, German, Japanese, Dutch, Norwegian Bokmål, Simplified Chinese and Traditional Chinese. Choose a language under Profile settings → Language (or from the sign-in page). It is saved to your account, so every device and every email follows it.
 
 ### Changed
 
+- **Performance:** faster boards, card details, global views, navigation, search, notifications and settings, with quicker member menus and fewer requests when returning to an open tab. API and AI-agent reads, realtime delivery and background jobs also run more efficiently.
 - **More reliable agent handoffs:** Kanera skills, CLI setup instructions and MCP guidance now make live runs, outcome comments, verification and appropriate list moves part of carrying out a card, including boards with custom workflows.
 
 - Account settings now have a Security page for two-factor authentication and password changes, and a Preferences page for Card Keys and Scratchpad visibility, with links to both guides.
@@ -33,12 +34,8 @@ All notable changes to Kanera are documented here.
 
 - Table view on tablets now stays a real table, with column headers and a pinned Title column you scroll sideways from, instead of stacking every row into a card. Only phones stack.
 - On phones and tablets the board header keeps New card and the board menu beside the title; Board overview and Watch move into the board menu.
-- **Faster boards and global views:** large boards open with less server work, while My Cards and Team Cards refresh around 65% faster with over 40% less API CPU in large-workload benchmarks.
-- **More efficient realtime and background processing:** notifications and emails arrive sooner under load, with less repeated work and fewer processing pauses across automations, push delivery, webhooks, daily digests and cleanup.
-- **Faster card reads for AI agents:** opening a card with many links (the API's card detail and the MCP `cards.get` tool) no longer slows down while background link repair runs, cutting typical response time from about 24–32 ms to 7 ms in benchmarks.
 - Cards with unread activity now stand out on busy boards: alongside the bold title and dot, the tile gets a faint accent tint and an accent ring.
 - Emails now show dates in the recipient's language and its date order, with the month named (for example "12 Oct 2026" in UK English), instead of US month-first order for everyone.
-- Tabs left open, or returned to after a while, renew their sign-in just before it lapses instead of first having a request rejected, so counts and priorities refresh in one round-trip.
 
 ### Fixed
 

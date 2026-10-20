@@ -943,8 +943,10 @@ export async function boardRoutes(app: FastifyInstance) {
       };
     }
 
-    const explicitMembers = await db
-      .select({
+    // The two rosters are independent; read them concurrently so opening the board members menu
+    // waits on one round-trip here instead of two.
+    const [explicitMembers, inheritedAdmins] = await Promise.all([
+      db.select({
         userId: users.id,
         email: users.email,
         displayName: users.displayName,
@@ -955,10 +957,8 @@ export async function boardRoutes(app: FastifyInstance) {
       .from(workspaceMembers)
       .innerJoin(users, eq(users.id, workspaceMembers.userId))
       .where(eq(workspaceMembers.workspaceId, ctx.workspaceId))
-      .orderBy(asc(workspaceMembers.addedAt));
-    const explicitUserIds = new Set(explicitMembers.map((member) => member.userId));
-    const inheritedAdmins = await db
-      .select({
+      .orderBy(asc(workspaceMembers.addedAt)),
+      db.select({
         userId: users.id,
         email: users.email,
         displayName: users.displayName,
@@ -975,7 +975,9 @@ export async function boardRoutes(app: FastifyInstance) {
         isNull(clientMembers.removedAt),
         isNull(users.deletedAt),
       ))
-      .orderBy(asc(clientMembers.addedAt));
+      .orderBy(asc(clientMembers.addedAt)),
+    ]);
+    const explicitUserIds = new Set(explicitMembers.map((member) => member.userId));
     return {
       scope: "workspace" as const,
       members: [...explicitMembers, ...inheritedAdmins.filter((member) => !explicitUserIds.has(member.userId))]
