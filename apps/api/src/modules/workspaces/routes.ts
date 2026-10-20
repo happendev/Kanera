@@ -616,18 +616,22 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     const { role } = await assertWorkspaceAccess(req.auth, id);
     const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
     if (!workspace) throw notFound();
-    const [workspaceLists, workspaceFields, workspaceLabels, checklistTemplates, automations, automationExecutionsRemaining, [organisation]] = await Promise.all([
+    // Keep each settings stage small: helper loaders also fetch child rows, and launching
+    // every projection together makes one settings request occupy many connections at once.
+    const [workspaceLists, workspaceLabels, [organisation]] = await Promise.all([
       db.select().from(lists).where(and(eq(lists.workspaceId, id), isNull(lists.archivedAt))).orderBy(asc(lists.position)),
-      loadWorkspaceCustomFields(id),
       db.select().from(cardLabels).where(eq(cardLabels.workspaceId, id)).orderBy(asc(cardLabels.position)),
-      loadChecklistTemplates(id),
-      loadAutomations(id),
-      // Workspace settings is available to workspace admins as well as organisation admins. Return
-      // the small organisation-wide usage value here so that surface does not load the much heavier
-      // home agenda endpoint merely to decide whether its allowance callout should be shown.
-      role === "admin" ? getAutomationExecutionsRemaining(req.auth.cid) : Promise.resolve(null),
       db.select({ inProgressEnabled: clients.inProgressEnabled }).from(clients).where(eq(clients.id, workspace.clientId)),
     ]);
+    const [workspaceFields, checklistTemplates, automations] = await Promise.all([
+      loadWorkspaceCustomFields(id),
+      loadChecklistTemplates(id),
+      loadAutomations(id),
+    ]);
+    // Workspace settings is available to workspace admins as well as organisation admins. Return
+    // the small organisation-wide usage value here so that surface does not load the much heavier
+    // home agenda endpoint merely to decide whether its allowance callout should be shown.
+    const automationExecutionsRemaining = role === "admin" ? await getAutomationExecutionsRemaining(req.auth.cid) : null;
     return { organisationInProgressEnabled: organisation!.inProgressEnabled, workspace: toWireWorkspace(workspace), role, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations, automationExecutionsRemaining };
   });
 
@@ -1964,7 +1968,10 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     }
 
     async function loadDirectory() {
-      const [groups, guestGroups] = await Promise.all([loadOrganisationGroups(), loadGuestGroups()]);
+      // Each directory loader already overlaps its enrichment queries. Stage the loaders so
+      // their nested groups do not multiply the connection demand of a sidebar refresh.
+      const groups = await loadOrganisationGroups();
+      const guestGroups = await loadGuestGroups();
       const referencedStandaloneGroupIds = [...new Set(
         [...groups, ...guestGroups].flatMap((group) => group.boards.map((board) => board.standaloneGroupId).filter((id): id is string => !!id)),
       )];
@@ -2002,14 +2009,12 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       };
       // Home's due projection uses the same canonical active-board resolver as global work and
       // search, so guest, standalone, archived, and assigned-items-only sources cannot drift.
-      const [accessibleBoards, [userRow]] = await Promise.all([
-        loadAccessibleBoards(req.auth),
-        db.select({ timezone: users.timezone }).from(users).where(eq(users.id, userId)).limit(1),
-      ]);
+      const accessibleBoards = await loadAccessibleBoards(req.auth);
       const accessibleDueBoardIds = accessibleBoards.map((board) => board.id);
       let dueSoon: DueSoonCard[] = [];
       let overdueChecklistItems = 0;
       if (accessibleDueBoardIds.length > 0) {
+        const [userRow] = await db.select({ timezone: users.timezone }).from(users).where(eq(users.id, userId)).limit(1);
         const today = localDateInTimezone(new Date(), userRow?.timezone ?? "UTC");
         const tomorrow = addDays(today, 1);
         const [dueRows, assignedChecklistItems] = await Promise.all([
@@ -2076,13 +2081,14 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       return { dueSoon, overdueChecklistItems };
     }
 
-    // Directory, invitations and due items are independent projections. Start each branch
-    // together, retaining its own visibility checks and ID-dependent enrichment queries.
-    const [directory, pendingBoardInvitations, due] = await Promise.all([
+    // Keep the two longest projections overlapping, but stage invitations separately.
+    // The directory stages its own loaders so these branches cannot multiply into the
+    // much wider query burst of running every independent loader together.
+    const [directory, due] = await Promise.all([
       loadDirectory(),
-      loadInvitations(),
       loadDueItems(),
     ]);
+    const pendingBoardInvitations = await loadInvitations();
     return { ...directory, ...due, pendingBoardInvitations };
   };
 

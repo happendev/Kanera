@@ -1,5 +1,9 @@
 # Parallel UI reads: benchmark and verification
 
+Follow-up: [mixed traffic with a 20-connection pool](ui-reads-pool20.README.md) measures 1–100
+concurrent requests and pool queueing. It reveals regressions on some endpoints that aggregate
+latency improvements alone conceal.
+
 Independent database reads now overlap in sidebar navigation, Portfolio, workspace members,
 notifications, search, Global Work catalog and workspace detail. The shared accessible-board
 resolver overlaps admin and explicit grants while preserving admin precedence. Workspace settings

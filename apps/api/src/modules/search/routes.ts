@@ -44,11 +44,11 @@ interface AccessScope {
 
 // Compute the user's full accessible scope once, in bulk, rather than per-row.
 async function buildAccessScope(claims: AuthClaims, requestedScope?: WorkScope): Promise<AccessScope> {
-  // Interactive workspace scope and board scope use the same claims independently.
-  // Personal credentials still derive workspace reach from their accessible-board result.
+  // Board resolution already overlaps its grant queries. Complete it before the workspace
+  // pair to avoid multiplying pool demand for concurrent searches.
+  const accessibleBoards = await loadAccessibleBoards(claims);
   const interactive = claims.authKind !== "apiKey" && claims.apiKeyKind !== "personal";
-  const [accessibleBoards, memberWorkspaces, orgWorkspaces] = await Promise.all([
-    loadAccessibleBoards(claims),
+  const [memberWorkspaces, orgWorkspaces] = await Promise.all([
     interactive ? db
       .select({ id: workspaceMembers.workspaceId })
       .from(workspaceMembers)
