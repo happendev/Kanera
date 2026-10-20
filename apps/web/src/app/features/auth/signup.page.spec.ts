@@ -201,7 +201,7 @@ describe("SignupPage", () => {
     expect(element.textContent).toContain("Appearance");
     expect(element.textContent).toContain("Choose the theme used on this device.");
     // Grouped by family, dark pair first — signup and account settings must offer the same set.
-    expect([...element.querySelectorAll(".theme-option")].map((b) => b.textContent?.trim())).toEqual(["Dark", "Carbon", "Light", "Paper"]);
+    expect([...element.querySelectorAll('k-theme-picker [role="radio"]')].map((b) => b.textContent?.trim())).toEqual(["Dark", "Carbon", "Light", "Paper"]);
   });
 
   it("shows the environment banner for non-production environments", async () => {
