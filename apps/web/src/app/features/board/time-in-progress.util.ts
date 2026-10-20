@@ -70,8 +70,11 @@ export function hasTimeInProgress(card: TimedCard): boolean {
   return isInProgressRunning(card) || Math.max(0, card.inProgressSeconds ?? 0) * SECOND >= MINUTE;
 }
 
+// Locale changes reload the app, so every tile and table row can share this formatter.
+const HOURS_FORMAT = new Intl.NumberFormat(appLocale(), { maximumFractionDigits: 0 });
+
 function formatHours(hours: number): string {
-  return new Intl.NumberFormat(appLocale(), { maximumFractionDigits: 0 }).format(hours);
+  return HOURS_FORMAT.format(hours);
 }
 
 /**
@@ -145,9 +148,8 @@ export function isInProgressTooLong(card: TimedCard, now: number, alertDays: num
  * "past the 7-day alert" once the stint crosses it; the calendar span and the tracked total differ
  * because tracking counts working hours only. Stopped: "96 hours tracked in progress".
  */
-function describeTimeInProgress(card: TimedCard, now: number, alertDays: number, timeZone: TimeZone): string | null {
-  if (!hasTimeInProgress(card)) return null;
-  const tracked = trackedWords(timeInProgressMs(card, now, timeZone));
+function describeTimeInProgress(card: TimedCard, now: number, alertDays: number, trackedMs: number): string {
+  const tracked = trackedWords(trackedMs);
   if (!isInProgressRunning(card)) return $localize`:Tooltip on a stopped time-in-progress total, e.g. 96 hours tracked in progress:${tracked}:tracked: tracked in progress`;
   const since = formatDate(card.inProgressSince ?? null);
   const span = calendarWords(currentStintMs(card, now) ?? 0);
@@ -177,7 +179,8 @@ export function timeInProgressChip(card: TimedCard, now: number, alertDays: numb
   const ms = timeInProgressMs(card, now, timeZone);
   return {
     text: formatTimeInProgress(ms),
-    label: describeTimeInProgress(card, now, alertDays, timeZone)!,
+    // The tooltip and compact text describe the same total; working-hours calculation is costly.
+    label: describeTimeInProgress(card, now, alertDays, ms),
     running: isInProgressRunning(card),
     alert: isInProgressTooLong(card, now, alertDays),
     ms,

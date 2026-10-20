@@ -1982,12 +1982,29 @@ export class BoardTableViewComponent implements OnDestroy {
     return this.crossBoard() ? this.sourceBoardById().get(card.boardId)?.inProgressEnabled !== false : this.state.inProgressEnabled();
   }
 
+  // Table cells share one component, so selection, menus and column resizing re-evaluate every
+  // mounted row. Cache by immutable card identity, minute and workspace settings; a realtime card
+  // replacement or source-setting change must refresh the chip even on cross-workspace sheets.
+  // Weak keys also let removed cards go without keeping a second copy of the table's card set.
+  private readonly progressChips = new WeakMap<AnyCard, {
+    now: number;
+    alertDays: number;
+    timeZone: string;
+    chip: TimeInProgressChip | null;
+  }>();
+
   timeInProgress(card: AnyCard): TimeInProgressChip | null {
     const now = this.clock.now();
-    // The alert setting is only resolved for a card that has time to show.
+    // Read signal-backed settings before consulting the cache so they remain reactive dependencies.
     if (!hasTimeInProgress(card)) return null;
     if (!this.progressEnabledFor(card)) return null;
-    return timeInProgressChip(card, now, this.inProgressAlertDaysFor(card), this.timeZoneFor(card));
+    const alertDays = this.inProgressAlertDaysFor(card);
+    const timeZone = this.timeZoneFor(card);
+    const cached = this.progressChips.get(card);
+    if (cached && cached.now === now && cached.alertDays === alertDays && cached.timeZone === timeZone) return cached.chip;
+    const chip = timeInProgressChip(card, now, alertDays, timeZone);
+    this.progressChips.set(card, { now, alertDays, timeZone, chip });
+    return chip;
   }
 
   /**
