@@ -14,8 +14,8 @@ test("board overview and portfolio show card counts without health verdicts or s
   await trigger.click();
   const overview = page.getByRole("region", { name: "Board overview", exact: true });
   await expect(overview).toBeVisible();
-  await expect(overview).not.toContainText(/On track|Needs attention|At risk|Automatic work-risk/);
-  for (const label of ["Active", "Overdue", "Unassigned", "Inactive", "In progress", "Too long"]) {
+  await expect(overview).not.toContainText(/On track|Needs attention|Automatic work-risk/);
+  for (const label of ["Active", "Overdue", "Blocked", "At risk", "Unassigned", "Inactive", "In progress", "Too long"]) {
     await expect(overview.getByRole("button", { name: new RegExp(label) })).toBeVisible();
   }
   // The panel fits its content: no scrollbar on a desktop viewport.

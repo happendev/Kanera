@@ -1,3 +1,4 @@
+@use "../../shared/list-chip" as chip;
 :host {
   display: block;
 }
@@ -18,12 +19,12 @@
   align-items: center;
   gap: 7px;
   min-height: 28px;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-muted);
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
   }
 }
 
@@ -37,7 +38,7 @@
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -68,7 +69,7 @@
     background: transparent;
     color: var(--text-muted);
     font: inherit;
-    font-size: 11px;
+    font-size: var(--text-xs);
     font-weight: 600;
     text-transform: none;
     cursor: pointer;
@@ -124,7 +125,7 @@
 .comment-search-icon {
   position: absolute;
   left: 8px;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   pointer-events: none;
 }
@@ -136,7 +137,7 @@ input.comment-search-input {
   border-radius: var(--radius-sm);
   color: var(--text);
   padding: 6px 30px 6px 28px;
-  font-size: 13px;
+  font-size: var(--text-base);
   outline: none;
   transition: border-color var(--motion-fast);
 
@@ -145,7 +146,7 @@ input.comment-search-input {
   }
 
   &::placeholder {
-    color: var(--text-muted);
+    color: var(--text-4);
   }
 }
 
@@ -153,8 +154,8 @@ input.comment-search-input {
   position: absolute;
   right: 3px;
   width: 22px;
-  height: 22px;
-  font-size: 11px;
+  height: var(--h-xs);
+  font-size: var(--text-xs);
   color: var(--text-muted);
 
   &:hover {
@@ -174,7 +175,7 @@ input.comment-search-input {
   width: 100%;
   height: auto;
   padding: 14px 10px;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 400;
   line-height: normal;
   color: var(--text-muted);
@@ -187,7 +188,7 @@ input.comment-search-input {
   transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
     opacity: 0.7;
   }
 
@@ -203,6 +204,31 @@ input.comment-search-input {
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+}
+
+// Day band heading. Uppercase micro-label with a hairline running to the right edge, so it reads
+// as a rule between bands rather than as a row of its own; the first band needs no top gap.
+.feed-day {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+
+  &::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--divider);
+  }
+
+  &:first-child {
+    margin-top: 0;
+  }
 }
 
 .feed-scroll-sentinel {
@@ -254,7 +280,7 @@ input.comment-search-input {
   height: 32px;
   background: var(--surface-hover);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .comment-content {
@@ -278,7 +304,7 @@ input.comment-search-input {
 }
 
 .comment-author {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text);
   overflow-wrap: anywhere;
@@ -287,12 +313,16 @@ input.comment-search-input {
 .comment-date,
 .comment-edited,
 .comment-copied-author {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .comment-date {
   font-variant-numeric: tabular-nums;
+  // Time sits on the right edge of the row, in line with the activity rows below it.
+  .comment-meta:not(.is-mirror) > & {
+    margin-left: auto;
+  }
 }
 
 .comment-copied-author {
@@ -326,7 +356,7 @@ input.comment-search-input {
   align-items: center;
   gap: 8px;
   margin-top: 4px;
-  min-height: 22px;
+  min-height: var(--h-xs);
 }
 
 .comment-reactions {
@@ -341,9 +371,9 @@ input.comment-search-input {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 22px;
+  height: var(--h-xs);
   padding: 0 8px;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-muted);
   background: var(--surface-subtle);
@@ -353,7 +383,7 @@ input.comment-search-input {
   transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1;
   }
 
@@ -378,7 +408,7 @@ input.comment-search-input {
   align-items: center;
   justify-content: center;
   width: 22px;
-  height: 22px;
+  height: var(--h-xs);
   padding: 0;
   border-radius: var(--radius-sm);
   background: none;
@@ -389,7 +419,7 @@ input.comment-search-input {
   transition: background var(--motion-fast), color var(--motion-fast), opacity var(--motion-fast);
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
     line-height: 1;
   }
 
@@ -407,9 +437,9 @@ input.comment-search-input {
 }
 
 button.xs {
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   padding: 2px 7px;
-  height: 22px;
+  height: var(--h-xs);
   border-radius: var(--radius-sm);
   background: none;
   border: none;
@@ -452,7 +482,7 @@ button.xs {
   height: 32px;
   background: var(--surface-hover);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--text-sm);
   border: 1px solid var(--border);
 }
 
@@ -464,8 +494,19 @@ button.xs {
   min-width: 0;
 }
 
+// Sentence on the left, relative time pinned to the right edge on the same first line. The time
+// keeps its column across rows, so a scan down the right edge reads as a timeline.
+.activity-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
 .activity-text {
-  font-size: 13px;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--text-base);
   color: var(--text-muted);
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -485,7 +526,7 @@ button.xs {
   margin: 0 4px;
   padding: 0 6px;
   border-radius: 10px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   line-height: 18px;
   color: var(--accent);
@@ -493,10 +534,24 @@ button.xs {
   white-space: nowrap;
   vertical-align: baseline;
 
-  i { font-size: 12px; }
+  i { font-size: var(--text-sm); }
 }
 
 :host ::ng-deep {
+  // "moved from X to Y" names its lists with the shared list pill, sized to sit inside a sentence.
+  .activity-list {
+    @include chip.list-chip;
+    @include chip.list-color-classes;
+    padding: 0 7px 0 5px;
+    font-size: 0.9em;
+    line-height: 1.5;
+    vertical-align: baseline;
+
+    > i {
+      font-size: 1em;
+    }
+  }
+
   .activity-value {
     display: inline-block;
     max-width: 100%;
@@ -514,13 +569,13 @@ button.xs {
 
   .activity-value-overdue {
     color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    background: var(--danger-soft);
     border-color: color-mix(in srgb, var(--danger) 30%, transparent);
   }
 
   .activity-arrow {
     display: inline-block;
-    font-size: 14px;
+    font-size: var(--text-md);
     vertical-align: middle;
     color: var(--text-muted);
     margin: 0 1px;
@@ -529,7 +584,8 @@ button.xs {
 }
 
 .activity-date {
-  font-size: 11px;
+  flex: none;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   opacity: 0.7;
   // The feed stacks timestamps in a column, so proportional digits make consecutive entries look
@@ -576,7 +632,7 @@ button.xs {
   }
 
   button.xs i {
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   // Touch gets 44px-tall targets without inflating the compact chips: an invisible hit area grows
@@ -608,7 +664,7 @@ button.xs {
   border-radius: var(--radius-sm);
   background: var(--surface-subtle);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-decoration: none;
 
   img,
@@ -661,7 +717,7 @@ button.xs {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 26px;
+  min-height: var(--h-sm);
   margin-top: 4px;
   padding: 3px 7px;
   border: 1px solid var(--border);
@@ -669,7 +725,7 @@ button.xs {
   background: var(--surface);
   color: var(--text-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
   transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 
@@ -680,7 +736,7 @@ button.xs {
   }
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
   }
 }
 
@@ -722,7 +778,7 @@ button.xs {
     gap: 8px;
     margin: 0;
     color: var(--text);
-    font-size: 16px;
+    font-size: var(--text-lg);
     line-height: 1.25;
     font-weight: 650;
 
@@ -735,7 +791,7 @@ button.xs {
   p {
     margin: 3px 0 0;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
 }
 
@@ -756,10 +812,10 @@ button.xs {
   border-radius: var(--radius-sm);
   background: var(--surface-subtle);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
 
   i {
-    font-size: 16px;
+    font-size: var(--text-lg);
     flex: 0 0 auto;
   }
 }
@@ -795,7 +851,7 @@ button.xs {
 
   &.is-removed {
     color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 8%, transparent);
+    background: var(--danger-soft);
 
     .is-changed {
       background: color-mix(in srgb, var(--danger) 13%, transparent);
@@ -822,7 +878,7 @@ button.xs {
   user-select: none;
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 }
 
@@ -850,8 +906,8 @@ button.xs {
 .description-diff-line {
   margin: 0;
   padding: 2px 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: var(--text-sm);
   line-height: 1.7;
   color: var(--text);
   white-space: pre-wrap;
@@ -869,7 +925,7 @@ button.xs {
 }
 
 .no-activity {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   margin: 0;
   display: flex;
@@ -878,7 +934,7 @@ button.xs {
   font-style: italic;
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
     opacity: 0.6;
     font-style: normal;
   }
@@ -967,7 +1023,7 @@ button.xs {
 
   .description-diff-unified-line.is-added {
     color: var(--success);
-    background: color-mix(in srgb, var(--success) 9%, transparent);
+    background: var(--success-soft);
 
     .is-changed {
       background: color-mix(in srgb, var(--success) 14%, transparent);
@@ -992,7 +1048,7 @@ button.xs {
 
     .description-diff-unified-line.is-added {
       color: var(--success);
-      background: color-mix(in srgb, var(--success) 9%, transparent);
+      background: var(--success-soft);
 
       .is-changed {
         background: color-mix(in srgb, var(--success) 14%, transparent);

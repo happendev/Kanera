@@ -5,6 +5,7 @@ import { AvatarComponent } from "../../../shared/avatar.component";
 import { CardLabelsComponent } from "../card-labels.component";
 import { CardKeyDisplayService } from "../../../shared/card-key-display.service";
 import { StatTileComponent } from "../../../shared/stat-tile.component";
+import { StatusBarComponent, type StatusBarSegment } from "../../../shared/status-bar.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { ATTENTION_CARD_LIMIT, type ReportAttentionGroup, type ReportAttentionKind, type ReportPerson, type WorkDoneReport } from "./work-done-report";
 
@@ -24,7 +25,7 @@ const MAX_ROW_ASSIGNEES = 3;
 @Component({
   selector: "k-work-done-report",
   standalone: true,
-  imports: [AvatarComponent, CardLabelsComponent, StatTileComponent, TooltipDirective],
+  imports: [AvatarComponent, CardLabelsComponent, StatTileComponent, StatusBarComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./work-done-report.component.html",
   styleUrl: "./work-done-report.component.scss",
@@ -33,6 +34,10 @@ export class WorkDoneReportComponent {
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   readonly report = input.required<WorkDoneReport>();
+
+  readonly openListSegments = computed<StatusBarSegment[]>(() =>
+    this.report().lists.map((bar) => ({ id: bar.id, name: bar.name, icon: bar.icon, color: bar.color, count: bar.value })),
+  );
   /** A refetch is in flight: the previous render stays up at reduced opacity rather than flashing a skeleton. */
   readonly refreshing = input(false);
   readonly workspaceId = input<string | null>(null);

@@ -189,16 +189,7 @@ describe("BoardMembersMenu", () => {
     fixture.componentRef.setInput("ownerClientId", "owner");
     fixture.componentRef.setInput("canManage", true);
     fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.componentInstance.accessMembers.set(rows);
-    fixture.componentInstance.roster.set([{
-      userId: "candidate",
-      displayName: "Candidate",
-      email: "candidate@example.com",
-      avatarUrl: null,
-      clientId: "owner",
-    }]);
-    fixture.componentInstance.loading.set(false);
+    await vi.waitFor(() => expect(fixture.componentInstance.loading()).toBe(false));
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
@@ -206,6 +197,42 @@ describe("BoardMembersMenu", () => {
     expect(host.querySelector(".bmp-member-select")?.textContent).toContain("Select a workspace member");
     expect(host.querySelectorAll(".bmp-role-select")).toHaveLength(2);
     expect(host.querySelectorAll(".bmp-remove")).toHaveLength(2);
+  });
+
+  it("shows the board roster on first open and the cached management view on reopen while refetching", async () => {
+    const rows: BoardAccessMemberRow[] = [
+      { boardId: "board-1", userId: "member", clientId: "owner", displayName: "Member", email: "member@example.com", avatarUrl: null, role: "editor", pinned: false, addedAt: new Date() },
+    ];
+    api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates") ? { scope: "workspace", members: rows } : rows));
+    const open = () => {
+      const fixture = TestBed.createComponent(BoardMembersMenu);
+      fixture.componentRef.setInput("boardId", "board-1");
+      fixture.componentRef.setInput("currentUserId", "self");
+      fixture.componentRef.setInput("canManage", true);
+      fixture.componentRef.setInput("members", [member("member", "owner")]);
+      return fixture;
+    };
+
+    const first = open();
+    first.detectChanges();
+    const firstHost = first.nativeElement as HTMLElement;
+    expect(firstHost.querySelector(".bmp-empty")).toBeNull();
+    expect(firstHost.querySelector(".bmp-name")?.textContent).toBe("member");
+    expect(firstHost.querySelector(".bmp-role-select")).toBeNull();
+    await vi.waitFor(() => expect(first.componentInstance.loading()).toBe(false));
+    first.detectChanges();
+    expect(firstHost.querySelectorAll(".bmp-role-select")).toHaveLength(1);
+    first.destroy();
+
+    api.get.mockImplementation(() => new Promise(() => undefined));
+    const second = open();
+    second.detectChanges();
+    const secondHost = second.nativeElement as HTMLElement;
+    expect(second.componentInstance.loading()).toBe(false);
+    expect(secondHost.querySelector(".bmp-name")?.textContent).toBe("Member");
+    expect(secondHost.querySelectorAll(".bmp-role-select")).toHaveLength(1);
+    expect(api.get).toHaveBeenCalledWith("/boards/board-1/members");
+    second.destroy();
   });
 
   it("renders inherited admins without role or removal controls", async () => {
@@ -229,9 +256,7 @@ describe("BoardMembersMenu", () => {
     fixture.componentRef.setInput("ownerClientId", "owner");
     fixture.componentRef.setInput("canManage", true);
     fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.componentInstance.accessMembers.set([inheritedAdmin]);
-    fixture.componentInstance.loading.set(false);
+    await vi.waitFor(() => expect(fixture.componentInstance.loading()).toBe(false));
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 

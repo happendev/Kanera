@@ -109,7 +109,7 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
     }
 
     .bg-title {
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       color: var(--text);
     }
@@ -121,13 +121,13 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
       background: transparent;
       border: none;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       cursor: pointer;
       padding: 4px 6px;
       border-radius: var(--radius-sm);
       &:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
       &:disabled { opacity: 0.4; cursor: default; }
-      i { font-size: 13px; }
+      i { font-size: var(--text-base); }
     }
 
     .bg-group-title {
@@ -178,7 +178,7 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
       position: absolute;
       top: 5px;
       right: 6px;
-      font-size: 14px;
+      font-size: var(--text-md);
     }
   `,
   ],

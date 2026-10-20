@@ -17,10 +17,10 @@
   align-items: center;
   gap: 4px;
   color: var(--accent);
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-decoration: none;
 
   &:hover { color: var(--accent-hover, var(--accent)); }
 
-  i { font-size: 12px; }
+  i { font-size: var(--text-sm); }
 }

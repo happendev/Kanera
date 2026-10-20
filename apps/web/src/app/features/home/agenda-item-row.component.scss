@@ -67,7 +67,7 @@
 
 .agenda-title {
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 550;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -80,12 +80,12 @@
   gap: 4px;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 
   i {
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
 }
 
@@ -118,7 +118,7 @@
   // A shade smaller than on a kanban card. There the chips are the card's only colour and sit in
   // open space; in a dense agenda row at full size they out-shout the title they belong to.
   --label-chip-height: 18px;
-  --label-chip-font-size: 10.5px;
+  --label-chip-font-size: var(--text-xs);
   --label-chip-padding-x: 6px;
   --label-chip-radius: 9px;
   --label-chip-max-width: 200px;
@@ -141,13 +141,13 @@
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   white-space: nowrap;
 
   i {
     flex: none;
     color: var(--board-color);
-    font-size: 14px;
+    font-size: var(--text-md);
   }
 }
 
@@ -172,7 +172,7 @@
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
@@ -180,7 +180,7 @@
   grid-column: 6;
   justify-self: end;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   // Dates vary in width ("Jul 28" vs "Jul 28 · 17:00"), so they align on their right edge.

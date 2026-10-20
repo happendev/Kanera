@@ -115,9 +115,9 @@ test("detail multi-select and user selections compose while their first writes a
   const selectRow = detail.locator(".cf-row").filter({ hasText: "Concurrent options" });
   try {
     await selectRow.locator(".cf-trigger").click();
-    await page.locator("k-select-picker").getByRole("button", { name: "First choice", exact: true }).click();
+    await page.locator("k-select-picker").getByRole("option", { name: "First choice", exact: true }).click();
     await expect.poll(() => writes.length).toBe(1);
-    await page.locator("k-select-picker").getByRole("button", { name: "Second choice", exact: true }).click();
+    await page.locator("k-select-picker").getByRole("option", { name: "Second choice", exact: true }).click();
     await expect(page.locator("k-select-picker .lp-row.is-selected")).toHaveCount(2);
   } finally {
     pending.release();

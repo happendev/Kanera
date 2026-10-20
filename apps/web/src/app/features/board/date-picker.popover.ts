@@ -140,14 +140,14 @@ type CalendarDay = {
 
     .dp-title {
       text-align: center;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 700;
       color: var(--text);
     }
 
     .dp-icon-btn {
       width: 30px;
-      height: 30px;
+      height: var(--h-md);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -166,7 +166,7 @@ type CalendarDay = {
       }
 
       i {
-        font-size: 16px;
+        font-size: var(--text-lg);
       }
     }
 
@@ -197,13 +197,13 @@ type CalendarDay = {
       }
 
       .dp-sc-label {
-        font-size: 12px;
+        font-size: var(--text-sm);
         font-weight: 600;
         line-height: 1.2;
       }
 
       .dp-sc-date {
-        font-size: 11px;
+        font-size: var(--text-xs);
         color: var(--text-muted);
         font-weight: 500;
         line-height: 1.2;
@@ -249,7 +249,7 @@ type CalendarDay = {
     }
 
     .dp-slot-name {
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 600;
       text-align: center;
       line-height: 1.2;
@@ -275,7 +275,7 @@ type CalendarDay = {
       align-items: center;
       justify-content: center;
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 700;
     }
 
@@ -287,7 +287,7 @@ type CalendarDay = {
       background: transparent;
       color: var(--text);
       cursor: pointer;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 600;
       padding: 0;
       transition: background-color 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
@@ -366,7 +366,7 @@ type CalendarDay = {
       padding: 0 8px;
       border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 600;
     }
 
@@ -376,7 +376,7 @@ type CalendarDay = {
       color: var(--text-muted);
 
       &:hover {
-        background: color-mix(in srgb, var(--danger) 10%, transparent);
+        background: var(--danger-soft);
         color: var(--danger);
       }
     }

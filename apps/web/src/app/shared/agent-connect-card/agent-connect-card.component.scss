@@ -55,7 +55,7 @@
 
   p {
     margin: 4px 0 0;
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1.5;
     color: var(--text-muted);
   }
@@ -124,7 +124,7 @@
 }
 
 .agent-card-snippet-label {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text);
 }
@@ -137,7 +137,7 @@
 
 .agent-card-snippet-where {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -172,7 +172,7 @@
   align-items: center;
   gap: 4px;
   justify-self: start;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   text-decoration: none;
 

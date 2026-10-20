@@ -26,7 +26,7 @@ import { ToastComponent } from "./toast.component";
       background: transparent; color: var(--text-muted); cursor: pointer; flex-shrink: 0; }
     button:hover { color: var(--text); background: var(--surface-hover); }
     /* The undo affordance reads as the toast's primary action: bold, accent-coloured, comfortably tappable. */
-    .action { padding: 4px 8px; margin-left: 4px; font-size: 13px; font-weight: 600; color: var(--accent); }
+    .action { padding: 4px 8px; margin-left: 4px; font-size: var(--text-base); font-weight: 600; color: var(--accent); }
     .action:hover { color: var(--accent); background: var(--surface-hover); }
   `,
 })

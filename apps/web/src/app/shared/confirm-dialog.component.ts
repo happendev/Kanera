@@ -67,7 +67,7 @@ import { Subject } from "rxjs";
     }
 
     .message {
-      font-size: 13px;
+      font-size: var(--text-base);
       color: var(--text-muted);
       margin: 0 0 20px;
       line-height: 1.5;
@@ -84,13 +84,13 @@ import { Subject } from "rxjs";
       gap: 8px;
       margin: 0 0 20px;
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: var(--text-base);
     }
 
     .confirmation-field strong { color: var(--text); }
     .confirmation-field input { width: 100%; }
 
-    .confirmation-choice { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 13px; color: var(--text-muted); }
+    .confirmation-choice { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: var(--text-base); color: var(--text-muted); }
     .confirmation-choice input { width: 16px; height: 16px; flex: none; }
     @media (hover: none), (pointer: coarse), (any-pointer: coarse) { .confirmation-choice { min-height: 44px; } .actions button { min-height: 44px; } }
     .actions {

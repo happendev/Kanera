@@ -891,6 +891,17 @@ void test("portfolio summaries match access-filtered card drill-downs", async ()
   );
   assert.ok(!summary.buckets.some((bucket) => bucket.boardId === f.archivedBoard.id));
 
+  // The per-list bar counts the same open cards as the Active tile, under the same access boundary:
+  // the restricted board contributes only the viewer's own card, and no row names a list in a
+  // workspace the viewer cannot see.
+  const openByList = summary.lists ?? [];
+  assert.equal(
+    openByList.reduce((sum, row) => sum + row.open, 0),
+    summary.buckets.reduce((sum, bucket) => sum + bucket.active, 0),
+  );
+  assert.ok(openByList.every((row) => summary.buckets.some((bucket) => bucket.workspaceId === row.workspaceId)));
+  assert.ok(openByList.every((row) => row.open > 0 && row.workspaceName.length > 0));
+
   const restricted = summary.buckets.find((bucket) => bucket.boardId === f.restrictedBoard.id);
   assert.equal(restricted?.active, 1);
   assert.equal(restricted?.inactive, 1);

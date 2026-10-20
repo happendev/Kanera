@@ -380,8 +380,10 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
     }));
   }
 
-  if (isOrgAdmin(auth)) {
-    const rows = await db
+  // Admin and explicit grants are independent reads. Merge admins first so a narrower
+  // explicit membership cannot replace their effective authority.
+  const [adminRows, explicitRows] = await Promise.all([
+    isOrgAdmin(auth) ? db
       .select({
         ...accessibleBoardColumns,
       })
@@ -395,67 +397,66 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
         isNull(workspaces.archivedAt),
         isNull(boards.archivedAt),
       ))
-      .orderBy(asc(workspaces.createdAt), asc(boards.position));
-
-    for (const row of rows) {
-      byId.set(row.boardId, {
-        id: row.boardId,
-        workspaceId: row.workspaceId,
-        workspaceName: row.workspaceName,
-        workspaceIcon: row.workspaceIcon,
-        workspaceAccentColor: row.workspaceAccentColor,
-        workspaceKind: row.workspaceKind,
-        clientId: row.clientId,
-        clientName: row.clientName,
-        name: row.boardName,
-        icon: row.boardIcon,
-        iconColor: row.boardIconColor,
-        inProgressEnabled: row.inProgressEnabled,
-        viewerRole: readOnlyCredential ? "observer" : "editor",
-        assignedItemsOnly: false,
-        canAccessWorkspace: true,
-      });
-    }
-  }
-
-  const explicitRows = await db
-    .select({
-      ...accessibleBoardColumns,
-      role: boardMembers.role,
-      assignedItemsOnly: boardMembers.assignedItemsOnly,
-      workspaceMemberId: workspaceMembers.userId,
-    })
-    .from(boardMembers)
-    .innerJoin(boards, eq(boards.id, boardMembers.boardId))
-    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-    .innerJoin(clients, eq(clients.id, workspaces.clientId))
-    .leftJoin(clientMembers, and(
-      eq(clientMembers.clientId, workspaces.clientId),
-      eq(clientMembers.userId, auth.sub),
-    ))
-    .leftJoin(workspaceMembers, and(
-      eq(workspaceMembers.workspaceId, workspaces.id),
-      eq(workspaceMembers.userId, auth.sub),
-    ))
-    .where(and(
-      eq(boardMembers.userId, auth.sub),
-      // An organisation deletion removes memberships synchronously and purges board rows in the
-      // background. Keep the host status in the access predicate so an old board grant cannot be
-      // reclassified as guest access in between those two operations.
-      isNull(clients.suspendedAt),
-      isNull(clients.deletedAt),
-      or(
-        and(
-          eq(workspaces.clientId, auth.cid),
-          isNull(clientMembers.suspendedAt),
-          isNull(clientMembers.removedAt),
+      .orderBy(asc(workspaces.createdAt), asc(boards.position)) : [],
+    db
+      .select({
+        ...accessibleBoardColumns,
+        role: boardMembers.role,
+        assignedItemsOnly: boardMembers.assignedItemsOnly,
+        workspaceMemberId: workspaceMembers.userId,
+      })
+      .from(boardMembers)
+      .innerJoin(boards, eq(boards.id, boardMembers.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(clients, eq(clients.id, workspaces.clientId))
+      .leftJoin(clientMembers, and(
+        eq(clientMembers.clientId, workspaces.clientId),
+        eq(clientMembers.userId, auth.sub),
+      ))
+      .leftJoin(workspaceMembers, and(
+        eq(workspaceMembers.workspaceId, workspaces.id),
+        eq(workspaceMembers.userId, auth.sub),
+      ))
+      .where(and(
+        eq(boardMembers.userId, auth.sub),
+        // An organisation deletion removes memberships synchronously and purges board rows in the
+        // background. Keep the host status in the access predicate so an old board grant cannot be
+        // reclassified as guest access in between those two operations.
+        isNull(clients.suspendedAt),
+        isNull(clients.deletedAt),
+        or(
+          and(
+            eq(workspaces.clientId, auth.cid),
+            isNull(clientMembers.suspendedAt),
+            isNull(clientMembers.removedAt),
+          ),
+          isNull(clientMembers.userId),
         ),
-        isNull(clientMembers.userId),
-      ),
-      isNull(workspaces.archivedAt),
-      isNull(boards.archivedAt),
-    ))
-    .orderBy(asc(workspaces.createdAt), asc(boards.position));
+        isNull(workspaces.archivedAt),
+        isNull(boards.archivedAt),
+      ))
+      .orderBy(asc(workspaces.createdAt), asc(boards.position)),
+  ]);
+
+  for (const row of adminRows) {
+    byId.set(row.boardId, {
+      id: row.boardId,
+      workspaceId: row.workspaceId,
+      workspaceName: row.workspaceName,
+      workspaceIcon: row.workspaceIcon,
+      workspaceAccentColor: row.workspaceAccentColor,
+      workspaceKind: row.workspaceKind,
+      clientId: row.clientId,
+      clientName: row.clientName,
+      name: row.boardName,
+      icon: row.boardIcon,
+      iconColor: row.boardIconColor,
+      inProgressEnabled: row.inProgressEnabled,
+      viewerRole: readOnlyCredential ? "observer" : "editor",
+      assignedItemsOnly: false,
+      canAccessWorkspace: true,
+    });
+  }
 
   for (const row of explicitRows) {
     if (byId.has(row.boardId)) continue;

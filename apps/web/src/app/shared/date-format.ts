@@ -231,6 +231,32 @@ export function dayGroupLabel(key: string, now: Date = new Date()): string {
   return formatDate(key, "weekday", { now });
 }
 
+export type FeedDayGroup = "today" | "yesterday" | "week" | "earlier";
+
+/**
+ * Which heading an activity feed row sits under: Today / Yesterday / This week (the five days
+ * before yesterday, so a full week is always visible as three bands) / Earlier. Local calendar
+ * days, like dayGroupLabel, so a comment posted at 23:50 stays under Today until midnight passes.
+ */
+export function feedDayGroup(value: DateInput, now: Date = new Date()): FeedDayGroup {
+  const date = toDate(value);
+  if (!date) return "earlier";
+  const key = localDateKey(date);
+  if (key === localDateKey(now)) return "today";
+  if (key === localDateKey(addDays(now, -1))) return "yesterday";
+  if (key >= localDateKey(addDays(now, -6))) return "week";
+  return "earlier";
+}
+
+export function feedDayGroupLabel(group: FeedDayGroup): string {
+  switch (group) {
+    case "today": return $localize`:Day group heading:Today`;
+    case "yesterday": return $localize`:Day group heading:Yesterday`;
+    case "week": return $localize`:Day group heading in an activity feed - the last seven days:This week`;
+    case "earlier": return $localize`:Day group heading in an activity feed - older than a week:Earlier`;
+  }
+}
+
 /** Full-sentence day label for a YYYY-MM-DD day key, e.g. "Sunday, 26 July 2026". */
 export function dayFullLabel(key: string): string {
   return formatDate(key, "long");

@@ -65,14 +65,14 @@ import type { UploadItem } from "./attachment-upload-queue.service";
         border: 1px solid var(--border);
         border-radius: var(--radius-sm, 6px);
         background: var(--surface-subtle, transparent);
-        font-size: 12px;
+        font-size: var(--text-sm);
       }
       .upl-row.is-error {
         border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
       }
       .upl-row > .ti {
         flex: none;
-        font-size: 16px;
+        font-size: var(--text-lg);
         color: var(--muted, #888);
       }
       .upl-row.is-error > .ti {
@@ -126,7 +126,7 @@ import type { UploadItem } from "./attachment-upload-queue.service";
         border-radius: var(--radius-sm, 6px);
         background: var(--surface, transparent);
         color: inherit;
-        font-size: 12px;
+        font-size: var(--text-sm);
         cursor: pointer;
       }
       .upl-btn:hover {

@@ -5999,53 +5999,48 @@
       "src/app/features/auth/signup.page.html"
     ]
   },
-  "4033858450934162644": "Choose the theme and accent colour used on this device.",
-  "@4033858450934162644": {
+  "3334708804868032865": "Choose the theme, accent colour and density used on this device.",
+  "@3334708804868032865": {
     "x-files": [
       "src/app/features/account-settings/profile/profile.page.html"
     ]
   },
-  "4894605301713712393": "Theme color",
-  "@4894605301713712393": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "3892161059518616136": "Dark",
-  "@3892161059518616136": {
-    "description": "Theme name",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "6190467973682237388": "Carbon",
-  "@6190467973682237388": {
-    "description": "Theme name",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "413116577994876478": "Light",
-  "@413116577994876478": {
-    "description": "Theme name",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "7181896157659764503": "Paper",
-  "@7181896157659764503": {
-    "description": "Theme name",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
   "2034345101105818566": "Accent colour",
   "@2034345101105818566": {
+    "x-files": [
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "4583661526350417559": "Density",
+  "@4583661526350417559": {
+    "x-files": [
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "597360384236921330": "Comfortable",
+  "@597360384236921330": {
+    "description": "Density option name",
+    "x-files": [
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "947650454684228649": "Roomier sidebar rows and board cards.",
+  "@947650454684228649": {
+    "description": "Density option description",
+    "x-files": [
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "4046649033157042513": "Compact",
+  "@4046649033157042513": {
+    "description": "Density option name",
+    "x-files": [
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "1732282785929411941": "Tighter rows, smaller cards and labels as dots.",
+  "@1732282785929411941": {
+    "description": "Density option description",
     "x-files": [
       "src/app/features/account-settings/profile/profile.page.html"
     ]
@@ -9695,6 +9690,13 @@
       "src/app/features/board/calendar-view/board-calendar-view.component.ts"
     ]
   },
+  "8108361640026971950": "Today, {$date}",
+  "@8108361640026971950": {
+    "description": "Accessible name of today's date in the calendar grid",
+    "x-files": [
+      "src/app/features/board/calendar-view/board-calendar-view.component.ts"
+    ]
+  },
   "1960421436715009477": "{count, plural, one {{date}, # card due} other {{date}, # cards due}}",
   "@1960421436715009477": {
     "description": "Accessible name for a calendar day with cards due, e.g. \"Tuesday, 6 October 2026, 2 cards due\"",
@@ -11161,6 +11163,13 @@
       "src/app/features/board/card-detail.component.html"
     ]
   },
+  "1118578891930839262": "Agent runs",
+  "@1118578891930839262": {
+    "description": "Card detail section heading: AI agents currently working on the card",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
   "5158037517542024141": "Card mirror status",
   "@5158037517542024141": {
     "x-files": [
@@ -11176,13 +11185,6 @@
   },
   "3830487495946043372": "No description",
   "@3830487495946043372": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "1118578891930839262": "Agent runs",
-  "@1118578891930839262": {
-    "description": "Card detail section heading: AI agents currently working on the card",
     "x-files": [
       "src/app/features/board/card-detail.component.html"
     ]
@@ -11337,7 +11339,8 @@
   "@899983344489847167": {
     "description": "Sub-checklist progress, e.g. 2/5 items done",
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail.component.html",
+      "src/app/shared/board-tile-summary.component.ts"
     ]
   },
   "8309285169711415702": "Checklist item actions",
@@ -14447,7 +14450,8 @@
     "x-files": [
       "src/app/features/board/table-view/table-view.types.ts",
       "src/app/features/completed-cards/date-range-picker.popover.ts",
-      "src/app/features/dependencies/dependency-map.component.ts"
+      "src/app/features/dependencies/dependency-map.component.ts",
+      "src/app/shared/date-format.ts"
     ]
   },
   "9026083618139453880": "Later",
@@ -14889,7 +14893,8 @@
   "@3338771948482786055": {
     "description": "Report people row - overdue assignments now",
     "x-files": [
-      "src/app/features/board/work-done-view/work-done-report.component.ts"
+      "src/app/features/board/work-done-view/work-done-report.component.ts",
+      "src/app/shared/board-tile-summary.component.ts"
     ]
   },
   "5538206717712454870": "{count, plural, one {# card without a value} other {# cards without a value}}",
@@ -16225,6 +16230,13 @@
   },
   "2559848334566452330": "Loading your cards…",
   "@2559848334566452330": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "8533793576850646923": "Open work by list",
+  "@8533793576850646923": {
+    "description": "Portfolio section heading: open cards per workflow list",
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -26913,6 +26925,48 @@
       "src/app/shared/avatar.component.ts"
     ]
   },
+  "6674850178976368452": "Checklist items done on open cards",
+  "@6674850178976368452": {
+    "description": "Board tile tooltip on the checklist count",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "8288945552627986494": "Next due date",
+  "@8288945552627986494": {
+    "description": "Board tile tooltip on the next due date",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "1936573498549727489": "{done, plural, one {# of {total} cards done} other {# of {total} cards done}}",
+  "@1936573498549727489": {
+    "description": "Board tile progress bar label - completed cards out of every card on the board",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "8886723139090848520": "{count, plural, =0 {No open cards} one {# open} other {# open}}",
+  "@8886723139090848520": {
+    "description": "Board tile count of open cards",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "6084766080270264075": "Updated {$time}",
+  "@6084766080270264075": {
+    "description": "Board tile - when the board's cards last changed, e.g. \"Updated 2h ago\"",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "6737089387506614204": "{count, plural, one {# more member} other {# more members}}",
+  "@6737089387506614204": {
+    "description": "Board tile tooltip on the \"+N\" member overflow",
+    "x-files": [
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
   "5786363460327756403": "Rose",
   "@5786363460327756403": {
     "description": "Colour name in the colour picker",
@@ -27112,6 +27166,13 @@
   "4482087882881647182": "{$count}y ago",
   "@4482087882881647182": {
     "description": "Compact relative time in years",
+    "x-files": [
+      "src/app/shared/date-format.ts"
+    ]
+  },
+  "904263491421405349": "Earlier",
+  "@904263491421405349": {
+    "description": "Day group heading in an activity feed - older than a week",
     "x-files": [
       "src/app/shared/date-format.ts"
     ]
@@ -27371,6 +27432,13 @@
       "src/app/shared/stat-tile.component.ts"
     ]
   },
+  "1511572156054675219": "{$list} · {$count}",
+  "@1511572156054675219": {
+    "description": "Status bar segment - list name and its card count",
+    "x-files": [
+      "src/app/shared/status-bar.component.ts"
+    ]
+  },
   "784157685329491743": "Your organisation's storage is full. Upgrade your plan to upload more files.",
   "@784157685329491743": {
     "description": "Upload error shown to an organisation admin",
@@ -27425,6 +27493,41 @@
     "description": "Button: end the support session",
     "x-files": [
       "src/app/shared/support-session-banner.component.ts"
+    ]
+  },
+  "3892161059518616136": "Dark",
+  "@3892161059518616136": {
+    "description": "Theme name",
+    "x-files": [
+      "src/app/shared/theme-picker.component.ts"
+    ]
+  },
+  "6190467973682237388": "Carbon",
+  "@6190467973682237388": {
+    "description": "Theme name",
+    "x-files": [
+      "src/app/shared/theme-picker.component.ts"
+    ]
+  },
+  "413116577994876478": "Light",
+  "@413116577994876478": {
+    "description": "Theme name",
+    "x-files": [
+      "src/app/shared/theme-picker.component.ts"
+    ]
+  },
+  "7181896157659764503": "Paper",
+  "@7181896157659764503": {
+    "description": "Theme name",
+    "x-files": [
+      "src/app/shared/theme-picker.component.ts"
+    ]
+  },
+  "7103588127254721505": "Theme",
+  "@7103588127254721505": {
+    "description": "Aria label on the theme radio group",
+    "x-files": [
+      "src/app/shared/theme-picker.component.ts"
     ]
   },
   "8348072798509355617": "Dismiss notification",

@@ -1,5 +1,12 @@
 # API load test
 
+For before/after comparisons of independent UI database reads, see the
+[paired UI-read benchmark](ui-reads.README.md).
+
+For mixed UI traffic with a 20-connection pool, see the [pool-size follow-up](ui-reads-pool20.README.md).
+The [staged-query follow-up](ui-reads-staged.README.md) implements smaller groups and measures
+the reduction in contention, including the sidebar latency trade-off.
+
 For controlled 3,000-card hydration experiments, see
 [board hydration and event-loop benchmarks](board-hydration.README.md). The companion
 [payload benchmark](event-loop.README.md) compares serialization, worker copying, compression,

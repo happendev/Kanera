@@ -285,7 +285,7 @@
   padding: 6px 12px 6px 14px;
   border-bottom: 1px solid var(--border);
 
-  > i { flex: none; color: var(--text-muted); font-size: 16px; }
+  > i { flex: none; color: var(--text-muted); font-size: var(--text-lg); }
 }
 
 .dm-chain-badges {
@@ -404,7 +404,7 @@
   top: 10px;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: var(--tracking-label, 0.04em);
   text-transform: uppercase;
@@ -493,7 +493,7 @@
   touch-action: none;
   transition: opacity var(--motion-fast, 120ms) ease, transform var(--motion-fast, 120ms) ease;
 
-  i { font-size: 12px; }
+  i { font-size: var(--text-sm); }
 
   /* A bigger target than the dot, for touch especially. */
   &::before { content: ""; position: absolute; inset: -9px; }
@@ -571,7 +571,7 @@
 
 .dm-status-icon {
   flex: none;
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .is-blocked .dm-status-icon { color: var(--dm-blocked); }
@@ -582,8 +582,8 @@
 
 .dm-key {
   flex: none;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
+  font-family: var(--mono);
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
@@ -596,7 +596,7 @@
   &::before { content: "·"; margin-right: 1px; }
   &.is-board::before { content: none; }
 
-  i { flex: none; font-size: 12px; }
+  i { flex: none; font-size: var(--text-sm); }
 }
 
 .dm-place-name {
@@ -610,7 +610,7 @@
   flex: none;
   margin-left: auto;
   color: var(--dm-risk);
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .dm-title {
@@ -639,7 +639,7 @@
   --label-bar-gap: 0;
   --label-chip-height: 18px;
   --label-chip-max-width: 96px;
-  --label-chip-font-size: 10.5px;
+  --label-chip-font-size: var(--text-xs);
   --label-chip-padding-x: 6px;
 }
 
@@ -663,7 +663,7 @@
   line-height: 16px;
   white-space: nowrap;
 
-  > i { flex: none; font-size: 12px; }
+  > i { flex: none; font-size: var(--text-sm); }
   &.is-more { font-style: italic; }
 }
 
@@ -685,7 +685,7 @@
   color: var(--text);
   text-overflow: ellipsis;
 
-  i { margin-right: 2px; font-size: 12px; vertical-align: -1px; }
+  i { margin-right: 2px; font-size: var(--text-sm); vertical-align: -1px; }
 }
 
 .dm-chip {
@@ -697,7 +697,7 @@
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--text);
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   line-height: 15px;
   text-overflow: ellipsis;
 
@@ -711,7 +711,7 @@
 .dm-row-labels {
   --label-bar-gap: 0;
   --label-chip-height: 18px;
-  --label-chip-font-size: 10.5px;
+  --label-chip-font-size: var(--text-xs);
 }
 
 .dm-avatars {
@@ -738,7 +738,7 @@
   gap: 3px;
   white-space: nowrap;
 
-  i { font-size: 13px; }
+  i { font-size: var(--text-base); }
   &.is-overdue { color: var(--danger); }
 }
 
@@ -750,7 +750,7 @@
   gap: 2px;
   color: var(--dm-blocked);
 
-  i { font-size: 13px; }
+  i { font-size: var(--text-base); }
 }
 
 .dm-status {
@@ -760,7 +760,7 @@
   text-overflow: ellipsis;
   padding: 1px 6px;
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   white-space: nowrap;
   background: var(--surface-2);
@@ -815,10 +815,10 @@
   border-radius: 999px;
   background: var(--surface);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 
-  i { font-size: 14px; }
+  i { font-size: var(--text-md); }
 
   .is-active > & {
     border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
@@ -915,7 +915,7 @@
   color: var(--dm-critical);
   font-weight: 500;
 
-  i { font-size: 13px; }
+  i { font-size: var(--text-base); }
 }
 
 .dm-row-face {
@@ -947,7 +947,7 @@
   font-size: var(--text-xs);
   line-height: 18px;
 
-  i { flex: none; font-size: 13px; line-height: 18px; }
+  i { flex: none; font-size: var(--text-base); line-height: 18px; }
   &.is-waiting i { color: var(--dm-blocked); }
   &.is-risk { color: var(--dm-risk); }
 }

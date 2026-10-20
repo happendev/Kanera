@@ -25,6 +25,7 @@ import { formatDueDate, isDueSoon, isOverdue } from "./due-date.util";
 import { formatDate, formatDateTime } from "../../shared/date-format";
 import { hasTimeInProgress, timeInProgressChip, type TimeInProgressChip } from "./time-in-progress.util";
 import { MinuteClockService } from "../../shared/minute-clock.service";
+import { DensityService } from "../../core/theme/density.service";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { blockedChipLabel } from "./card-relations.util";
 
@@ -63,6 +64,9 @@ export class CardComponent {
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly dragCoordinator = inject(CardDragCoordinator);
   private readonly clock = inject(MinuteClockService);
+  private readonly density = inject(DensityService);
+  // Avatar size is a component input, not CSS, so the compact density has to reach it here.
+  protected readonly avatarSize = computed(() => (this.density.compact() ? 20 : 24));
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   readonly card = input.required<AnyCard>();
@@ -194,12 +198,6 @@ export class CardComponent {
    * lists. It stays on the tile after the card leaves progress or is completed (muted, stopped), and
    * ticks with the shared minute clock rather than a per-tile timer while it runs.
    */
-  /** Title icon for open work with a running clock, beside the agent and inactivity marks. */
-  readonly inProgressMark = computed(() => {
-    const timer = this.timeInProgress();
-    return timer?.running ? { label: timer.label, alert: timer.alert } : null;
-  });
-
   readonly timeInProgress = computed<TimeInProgressChip | null>(() => {
     const card = this.card();
     const now = this.clock.now();

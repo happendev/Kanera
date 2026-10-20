@@ -77,6 +77,31 @@
   }
 }
 
+// Dot variant (compact density): the colour becomes a 7px mark in front of plain text, with no fill
+// or border, so a row of three reads as a line of text rather than three buttons. The dot is the
+// same ::before the compressed state uses, taken out of absolute centring into the flex row.
+.label-chip.is-dot {
+  height: var(--label-chip-height, 22px);
+  gap: 5px;
+  padding: 0 4px 0 2px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-3);
+  font-weight: 500;
+
+  &::before {
+    position: static;
+    flex: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  &:hover {
+    background: var(--surface-2);
+    border-color: transparent;
+  }
+}
+
 // max-width and padding trigger layout. Animating them on every label made a global-work click
 // reflow hundreds of chips on every frame; animate only the control under the pointer while the
 // rest adopt the shared preference in one layout pass.

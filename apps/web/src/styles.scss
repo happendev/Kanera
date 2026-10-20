@@ -70,7 +70,7 @@
   background: var(--surface-overlay);
   color: var(--text);
   box-shadow: var(--shadow-lg, 0 10px 30px -8px rgba(0, 0, 0, 0.24));
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -243,10 +243,10 @@ k-list.is-drop-target {
 //      the overlay container and body-appended dialogs both attach after the app root.
 // ─── Scale tokens ────────────────────────────────────────────────────────────
 //
-// Spacing is a 4px scale with seven steps; type is four sizes plus one micro-label size; motion is two
-// durations and one curve. New styles should reach for these rather than inventing a value, and a
-// value outside the scale needs a comment saying why. Hierarchy comes from weight, colour and space,
-// not from a tenth font size — the shell alone used to carry ten.
+// Spacing is a 4px scale with seven steps; type is four sizes plus one micro-label size; controls
+// come in four heights; motion is two durations and one curve. New styles should reach for these
+// rather than inventing a value, and a value outside the scale needs a comment saying why. Hierarchy
+// comes from weight, colour and space, not from a tenth font size — the shell alone used to carry ten.
 :root {
   --space-1: 4px;
   --space-2: 8px;
@@ -262,11 +262,31 @@ k-list.is-drop-target {
   --text-md: 14px; // body copy, navigation
   --text-lg: 16px; // section headings
 
+  // Control heights. The global button / input reset pins --h-lg; denser chrome (toolbars inside a
+  // table, card meta, filter chips, checklist rows) picks a named step instead of restating a pixel
+  // value per component, so a density change is a one-line edit.
+  --h-xs: 22px; // inline chips, reaction pills, tiny clears
+  --h-sm: 26px; // checklist rows, in-cell editors, small icon buttons
+  --h-md: 30px; // dense toolbars, sidebar toggles, compact selects
+  --h-lg: 36px; // default controls (the global reset)
+
   // Colour, opacity and border changes on hover; --motion-base for panels sliding or fading in.
   // Layout properties are never transitioned.
   --motion-fast: 120ms;
   --motion-base: 180ms;
+  // Movement (transforms): a card lifting, a drag settling, a chip popping. Shorter than
+  // --motion-base because a moving element that lingers reads as lag, not polish.
+  --dur: 140ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  // Drawers and the card detail panel: fast start, long settle, so a 480px panel arrives without
+  // the "ease" plateau that made it look slow to open.
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  // Small pops only (a chip appearing, a toggle thumb). Overshoots, so never on layout or panels.
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  // Identifiers (card keys, API keys, short codes). One stack so DEV-123 scans the same in a card
+  // tile, a table cell and the detail header.
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   --z-sticky: 20;
   --z-panel: 300;
@@ -314,6 +334,14 @@ k-list.is-drop-target {
   --text: #e8f0f8;
   --text-muted: #a3b5cc;
   --muted: #a3b5cc;
+  // Four text tiers, not two. --text-3 sits between --text and --text-muted for secondary content that
+  // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
+  // is placeholders only, the one tier allowed to fall below body contrast.
+  --text-3: #c5d1df;
+  --text-4: #7d8ea4;
+  // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
+  // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
+  --divider: #1e2a3c;
 
   // Emphasis tone for sidebar nav rows (top-level items, workspace headers, boards
   // with unread attention). On dark it is just the normal foreground; on light the
@@ -397,7 +425,7 @@ k-list.is-drop-target {
   --accent-graphite-hover: #b4c1d2;
 
   --danger: #f87171;
-  --danger-bg: rgba(248, 113, 113, 0.1);
+  --danger-bg: var(--danger-soft);
   --danger-border: rgba(248, 113, 113, 0.2);
 
   // Completed work. Components have long referenced --success (with a #16a34a fallback) without it
@@ -409,6 +437,14 @@ k-list.is-drop-target {
   // run failed, a chat destination with a stale mapping. Same hazard as --success above — callers
   // already write var(--warning, #a16207), so declare it in all three theme blocks.
   --warning: #fbbf24;
+
+  // Soft washes for the status colours, the counterparts of --accent-soft: "this row/chip is in
+  // that state" fills (overdue chips, completed cards, needs-attention banners). Derived from the
+  // solids in the same block so every wash tracks its theme's tone; a literal rgba() here drifted
+  // from --success/--danger every time one of them was retuned.
+  --success-soft: color-mix(in srgb, var(--success) 12%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 10%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 12%, transparent);
 
   // Derived, never a literal: --accent is repointed on this same element by the [data-accent]
   // blocks, and a var(--accent) inside a custom property resolves against the element's winning
@@ -452,6 +488,17 @@ k-list.is-drop-target {
   // The 1px ring is the part that does the work on dark: a soft shadow alone vanishes against
   // same-hue navy, and the ring gives the menu a hard edge the eye can find.
   --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 16px 40px -10px rgba(0, 0, 0, 0.7);
+
+  // Elevation tiers by role. Card tiles sit on a whisper shadow and rely on their own 1px border
+  // for the ring (a ring in box-shadow would paint outside the box and shift every card by a pixel
+  // inside its lane); hover deepens the shadow and swaps the border to --border-strong instead of
+  // translating, because a transform on the tile would turn it into the containing block for its
+  // fixed-position action menu. Popovers and menus take --shadow-pop; CDK drag previews take
+  // --shadow-drag, the one tier allowed to be heavy because the element is literally in the air.
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-pop: var(--shadow-lg);
+  --shadow-drag: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.45);
 
   // ─── Kanban surfaces (semantic) ──────────────────────────────────────────────
   // Dark mode keeps the existing visual: lists lighter than bg, cards lighter still.
@@ -653,6 +700,14 @@ k-list.is-drop-target {
   --text: #0f172a;
   --text-muted: #52647a;
   --muted: #52647a;
+  // Four text tiers, not two. --text-3 sits between --text and --text-muted for secondary content that
+  // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
+  // is placeholders only, the one tier allowed to fall below body contrast.
+  --text-3: #334155;
+  --text-4: #8494a8;
+  // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
+  // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
+  --divider: #e8ecf1;
 
   --nav-text-strong: #334155;
   --nav-active-bg: #dfe6ef;
@@ -695,11 +750,15 @@ k-list.is-drop-target {
   --accent-graphite-hover: #334155;
 
   --danger: #dc2626;
-  --danger-bg: rgba(220, 38, 38, 0.07);
+  --danger-bg: var(--danger-soft);
   --danger-border: rgba(220, 38, 38, 0.2);
 
   --success: #16a34a;
   --warning: #a16207;
+  // See the dark block. Lighter alphas: the same 12% that reads as a tint on navy is a slab on white.
+  --success-soft: color-mix(in srgb, var(--success) 10%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 8%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 10%, transparent);
 
   --ring-strength: 30%;
   --ring: color-mix(in srgb, var(--accent) var(--ring-strength), transparent);
@@ -707,6 +766,12 @@ k-list.is-drop-target {
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
   --shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
   --shadow-lg: 0 10px 30px -8px rgba(15, 23, 42, 0.18);
+  // See the dark block. Light recesses, so the card tier is the ~4% whisper the ring does the work
+  // for; paper restates these in its warm cast below.
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-card-hover: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-pop: var(--shadow-lg);
+  --shadow-drag: 0 12px 28px -6px rgba(15, 23, 42, 0.22), 0 2px 6px rgba(15, 23, 42, 0.08);
 
   // Flip the kanban hierarchy: gray "tray" lists, near-white "elevated" cards.
   // --list-bg is pinned rather than tracking --surface-2: that token is also the inset/chrome
@@ -797,12 +862,15 @@ k-list.is-drop-target {
 
   --border: #e2ddd4;
   --border-strong: #cec7ba;
+  --divider: #ebe7e0;
 
   // Warm near-black rather than the light base's slate, so body text does not read blue-tinted
   // against the ivory surfaces.
   --text: #26221d;
   --text-muted: #6b6459;
   --muted: #6b6459;
+  --text-3: #48423a;
+  --text-4: #9a9287;
 
   --nav-text-strong: #3d382f;
   --nav-active-bg: #e4dfd6;
@@ -833,6 +901,9 @@ k-list.is-drop-target {
   --shadow-sm: 0 1px 2px rgba(60, 50, 38, 0.08), 0 1px 1px rgba(60, 50, 38, 0.04);
   --shadow: 0 2px 8px rgba(60, 50, 38, 0.10), 0 1px 3px rgba(60, 50, 38, 0.06);
   --shadow-lg: 0 10px 30px -8px rgba(60, 50, 38, 0.20);
+  --shadow-card: 0 1px 2px rgba(60, 50, 38, 0.06);
+  --shadow-card-hover: 0 2px 8px rgba(60, 50, 38, 0.10), 0 1px 3px rgba(60, 50, 38, 0.06);
+  --shadow-drag: 0 12px 28px -6px rgba(60, 50, 38, 0.24), 0 2px 6px rgba(60, 50, 38, 0.08);
 
   // Label chip ink follows the page's warm near-black, as the light base's follows its slate.
   --label-chip-ink-base: #26221d;
@@ -878,6 +949,14 @@ k-list.is-drop-target {
   --text: #f0f6fc;
   --text-muted: #9198a1;
   --muted: #9198a1;
+  // Four text tiers, not two. --text-3 sits between --text and --text-muted for secondary content that
+  // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
+  // is placeholders only, the one tier allowed to fall below body contrast.
+  --text-3: #c9d1d9;
+  --text-4: #6e7681;
+  // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
+  // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
+  --divider: #262d37;
 
   // A deliberately desaturated blue. In Kanera the accent is link text and active-state chrome as
   // often as it is a fill, and a single token has to serve both: a fully saturated blue (~73%
@@ -896,10 +975,14 @@ k-list.is-drop-target {
   --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
 
   --danger: #f85149;
-  --danger-bg: rgba(248, 81, 73, 0.1);
+  --danger-bg: var(--danger-soft);
   --danger-border: rgba(248, 81, 73, 0.22);
   --success: #3fb950;
   --warning: #d29922;
+  // Restated because color-mix() resolves where it is declared, and carbon's solids differ.
+  --success-soft: color-mix(in srgb, var(--success) 12%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 10%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 12%, transparent);
 }
 
 // ─── Accent (primary colour) choice ──────────────────────────────────────────
@@ -1056,10 +1139,10 @@ a.sm {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 36px;
+  height: var(--h-lg);
   padding: 0 14px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
   // Not 1: Inter's glyph box is ~1.21em tall, so at line-height 1 any truncating label inside a
   // button (overflow: hidden + ellipsis) clips its descenders and accents. Fixed-height buttons
@@ -1149,9 +1232,9 @@ button.destructive {
 
 button.sm,
 a.sm {
-  height: 30px;
+  height: var(--h-md);
   padding: 0 10px;
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 button.icon {
@@ -1169,7 +1252,7 @@ button.icon {
   }
 
   &.danger:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    background: var(--danger-soft);
     color: var(--danger);
   }
 
@@ -1196,7 +1279,7 @@ input,
 textarea,
 select {
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text);
   // Checkboxes and radios inherit this rule too, so the neutral base stays transparent
   // here and the themed field fill is applied to text-like inputs below.
@@ -1207,8 +1290,7 @@ select {
   width: 100%;
 
   &::placeholder {
-    color: var(--text-muted);
-    opacity: 0.6;
+    color: var(--text-4);
   }
 
   &:focus {
@@ -1219,13 +1301,13 @@ select {
 }
 
 input:not([type="checkbox"]):not([type="radio"]) {
-  height: 36px;
+  height: var(--h-lg);
   padding: 0 10px;
   background: var(--input-bg);
 }
 
 select {
-  height: 36px;
+  height: var(--h-lg);
   padding: 0 10px;
   background: var(--select-bg);
 }
@@ -1246,9 +1328,9 @@ k-card.cdk-drag-preview {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   padding: 8px 10px;
-  font-size: 14px;
+  font-size: var(--text-md);
   color: var(--text);
-  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.25));
+  box-shadow: var(--shadow-drag);
   cursor: grabbing;
   overflow: hidden;
   transform: rotate(1.5deg);
@@ -1277,7 +1359,7 @@ k-up-next-panel .panel-rows k-card.cdk-drag-placeholder {
 }
 
 .cdk-drag-animating {
-  transition: transform 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: transform var(--dur) cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 // The lightweight card preview is a div, so the large-board k-card transition rule does not
@@ -1299,7 +1381,7 @@ body.is-large-board .card-drag-preview.cdk-drag-animating {
 }
 
 .cards.cdk-drop-list-dragging k-card:not(.cdk-drag-placeholder) {
-  transition: transform 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: transform var(--dur) cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .lists.is-card-dragging .cards.cdk-drop-list-dragging k-card:not(.cdk-drag-placeholder) {
@@ -1350,7 +1432,7 @@ k-app-shell {
   gap: 6px;
   margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.4;
 
   i {
@@ -1437,7 +1519,7 @@ k-app-shell {
     flex: none;
     width: 16px;
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: var(--text-lg);
     text-align: center;
   }
 
@@ -1555,8 +1637,8 @@ button.icon.sm {
 }
 
 button.icon.lg {
-  width: 36px;
-  height: 36px;
+  width: var(--h-lg);
+  height: var(--h-lg);
 }
 
 // ─── Layout utilities ─────────────────────────────────────────────────────────
@@ -1641,7 +1723,7 @@ button.icon.lg {
     padding: var(--space-3);
 
     > .ti {
-      font-size: 16px;
+      font-size: var(--text-lg);
     }
   }
 }

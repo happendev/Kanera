@@ -56,13 +56,13 @@ h3 {
   padding: 4px 6px;
   color: var(--text);
   border-radius: var(--radius);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
 
   i {
     flex-shrink: 0;
     align-self: center;
-    font-size: 16px;
+    font-size: var(--text-lg);
     line-height: 1;
   }
 
@@ -116,13 +116,13 @@ h3 {
   align-items: center;
   justify-content: center;
   width: 26px;
-  height: 26px;
+  height: var(--h-sm);
   padding: 0;
   color: var(--text-muted);
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: var(--text-lg);
   cursor: pointer;
 
   &:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
@@ -201,7 +201,7 @@ k-card-labels.card-drag-preview-labels {
   align-items: baseline;
   // Match CardComponent's title row exactly so the title does not shift when the preview replaces it.
   gap: 5px;
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.5;
   word-break: break-word;
 }
@@ -215,7 +215,7 @@ k-card-labels.card-drag-preview-labels {
 
 .card-drag-preview-title {
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 400;
   line-height: 1.5;
   word-break: break-word;

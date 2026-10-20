@@ -86,7 +86,7 @@ export type SegmentedOption<T extends string = string> = {
         align-items: center;
         flex: none;
         gap: 2px;
-        height: 36px;
+        height: var(--h-lg);
         padding: 3px;
         /* A subtle track with a raised pill for the active segment, rather than per-button borders
            that clashed with tinted toolbar backgrounds. */
@@ -109,7 +109,7 @@ export type SegmentedOption<T extends string = string> = {
         background: transparent;
         border: 0;
         border-radius: calc(var(--radius) - 3px);
-        font-size: 13px;
+        font-size: var(--text-base);
         font-weight: 500;
         cursor: pointer;
         transition: background 0.12s, color 0.12s, box-shadow 0.12s;
@@ -222,12 +222,12 @@ export type SegmentedOption<T extends string = string> = {
       .sg-track.is-sm .sg-btn {
         min-width: 24px;
         padding: 0 8px;
-        font-size: 11px;
+        font-size: var(--text-xs);
         font-weight: 600;
       }
 
       .sg-track.is-sm .sg-btn i {
-        font-size: 13px;
+        font-size: var(--text-base);
       }
 
       /* Coarse pointers get the shared 44px floor; see toolbar-styles.scss. The sm variant stops at

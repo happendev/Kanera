@@ -10,6 +10,7 @@ import { isMfaEnrollmentRequired, MFA_ENROLLMENT_HANDOFF_KEY, parseAuthResponse 
 import { appLocale } from "../../core/i18n/locale";
 import { LogoComponent } from "../../shared/logo.component";
 import { LocaleSwitcherComponent } from "./locale-switcher.component";
+import { ThemePickerComponent } from "../../shared/theme-picker.component";
 import { ThemeService, type Theme } from "../../core/theme/theme.service";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 
@@ -56,7 +57,7 @@ function signupAcquisition() {
 @Component({
   selector: "k-signup",
   standalone: true,
-  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent],
+  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent, ThemePickerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./signup.page.html",
   styleUrl: "./signup.page.scss",

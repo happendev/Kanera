@@ -71,14 +71,14 @@ const DEFAULT_TEMPLATE = LOCALIZED_TEMPLATES.find((template) => template.id === 
     .create-board-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
     header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
     h2 { font-size: 18px; margin: 0 0 4px; }
-    p { color: var(--muted-foreground); font-size: 13px; margin: 0; }
-    label { display: grid; gap: 7px; margin-top: 14px; font-size: 13px; font-weight: 600; }
+    p { color: var(--muted-foreground); font-size: var(--text-base); margin: 0; }
+    label { display: grid; gap: 7px; margin-top: 14px; font-size: var(--text-base); font-weight: 600; }
     input, select { width: 100%; }
     .template-preview { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 12px; margin-top: 10px; padding: 12px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
     .template-icon { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); color: var(--accent); font-size: 18px; }
     .template-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; overflow: hidden; }
-    .template-name { min-width: 0; color: var(--text); font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
-    .template-description { min-width: 0; color: var(--text-muted); font-size: 12px; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
+    .template-name { min-width: 0; color: var(--text); font-size: var(--text-md); font-weight: 700; overflow-wrap: anywhere; }
+    .template-description { min-width: 0; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
     .error { color: var(--danger); margin-top: 12px; }
     footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
   `],

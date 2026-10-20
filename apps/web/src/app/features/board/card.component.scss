@@ -1,4 +1,5 @@
 @use "../../shared/rank-pill" as rank;
+@use "../../shared/card-key" as key;
 
 :host {
   display: block;
@@ -48,16 +49,14 @@
 }
 
 // Opens the tile on its own top-left line. Quiet at rest so the labels and title lead; lifted to
-// full muted tone on hover, for when you actually want to read or quote the reference.
+// full tone on hover, for when you actually want to read or quote the reference. 10px rather than
+// the mixin's --text-xs: on a tile the key is a whisper above the title, not a cell of its own.
 .card-key {
+  @include key.card-key;
   display: block;
   margin-bottom: 3px;
-  color: var(--text-muted);
   font-size: 10px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
   line-height: 1.3;
-  white-space: nowrap;
   opacity: 0.7;
   transition: opacity var(--motion-fast);
 }
@@ -75,8 +74,8 @@
   border-radius: var(--radius-sm);
   background: var(--surface);
   border: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--text-muted);
+  font-size: var(--text-sm);
+  color: var(--text-3);
   max-width: 100%;
 
   &.is-clickable {
@@ -90,7 +89,7 @@
   }
 
   i {
-    font-size: 12px;
+    font-size: var(--text-sm);
     line-height: 1;
   }
 
@@ -131,7 +130,7 @@
   transition: opacity var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast);
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
     line-height: 1;
   }
 
@@ -180,13 +179,13 @@
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--text-md);
   cursor: pointer;
   opacity: 0;
   transition: opacity var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast);
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
     line-height: 1;
   }
 
@@ -356,24 +355,17 @@
   background: color-mix(in srgb, var(--accent) 10%, var(--card-bg-hover));
 }
 
-// Both dark-family themes get the same lifted card shadow; light recesses instead (below).
-:host-context([data-theme="dark"]),
-:host-context([data-theme="carbon"]) {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-
-  &:hover {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  }
+// Elevation: the tile's own 1px border is the ring, --shadow-card the whisper beneath it (each
+// theme tunes both in styles.scss). Hover only deepens the shadow. It never touches the border:
+// the accent rings above (unread, selected, Up next) must survive a hover, and a plain :host:hover
+// stays below them in specificity. No translate either: a transform would make :host the
+// containing block for the fixed-position action menu nested inside it.
+:host {
+  box-shadow: var(--shadow-card);
 }
 
-:host-context([data-theme="light"]),
-:host-context([data-theme="paper"]) {
-  box-shadow: var(--shadow-sm);
-  border-color: var(--border);
-
-  &:hover {
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
-  }
+:host:hover {
+  box-shadow: var(--shadow-card-hover);
 }
 
 .card-cover {
@@ -394,11 +386,10 @@
   }
 }
 
+// Block flow, not flex: the leading marks sit inline with the title's first line so a wrapped title
+// returns to the tile's left edge instead of hanging indented past every mark.
 .card-body {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.5;
   color: var(--text);
   word-break: break-word;
@@ -412,8 +403,8 @@
   height: 7px;
   border-radius: 999px;
   background: var(--accent);
-  flex: 0 0 7px;
-  transform: translateY(-1px);
+  margin-right: 5px;
+  vertical-align: 2px;
 }
 
 // "Agent working" chip. The flash is the only motion on a tile and is what says "live right now"
@@ -422,16 +413,16 @@
 .card-agent-run {
   display: inline-grid;
   place-items: center;
-  flex: 0 0 17px;
+  margin-right: 5px;
+  vertical-align: 0;
   width: 17px;
   height: 17px;
   border-radius: 5px;
-  transform: translateY(2px);
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   animation: card-agent-run-flash 1.2s ease-in-out infinite;
 
-  i { font-size: 12px; }
+  i { font-size: var(--text-sm); }
 
   &.is-blocked {
     color: var(--color-amber, #b45309);
@@ -452,36 +443,15 @@
 .card-attention {
   display: inline-grid;
   place-items: center;
-  flex: 0 0 17px;
+  margin-right: 5px;
+  vertical-align: 0;
   width: 17px;
   height: 17px;
   border-radius: 5px;
-  transform: translateY(2px);
 
-  i { font-size: 12px; }
+  i { font-size: var(--text-sm); }
   color: var(--text-muted);
   background: var(--surface-2);
-}
-
-// Open work with a running time-in-progress clock. Same footprint as the agent and inactivity
-// marks; accent while running, amber once the current stint passes the workspace alert.
-.card-in-progress {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 17px;
-  width: 17px;
-  height: 17px;
-  border-radius: 5px;
-  transform: translateY(2px);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-
-  i { font-size: 12px; }
-
-  &.is-alert {
-    color: var(--color-amber);
-    background: color-mix(in srgb, var(--color-amber) 14%, transparent);
-  }
 }
 
 .card-title-text {
@@ -535,7 +505,7 @@
 
 .cf-badge>.ti {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   flex-shrink: 0;
 }
 
@@ -590,7 +560,7 @@
   }
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1;
   }
 }
@@ -644,10 +614,10 @@
   font-weight: 600;
   line-height: 1.5;
   color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  background: var(--danger-soft);
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1;
     position: relative;
     top: -0.5px;
@@ -670,7 +640,7 @@
 
   i {
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1;
     position: relative;
     top: -0.5px;
@@ -681,7 +651,7 @@
 
   &.overdue {
     color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    background: var(--danger-soft);
     border-color: color-mix(in srgb, var(--danger) 25%, transparent);
   }
 
@@ -710,7 +680,7 @@
   flex-shrink: 0;
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1;
     position: relative;
     top: -0.5px;
@@ -758,10 +728,10 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  color: var(--text-muted);
+  color: var(--text-3);
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 }
 
@@ -837,7 +807,7 @@
   justify-content: space-between;
   gap: 8px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -871,7 +841,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.45;
   text-align: left;
   white-space: normal;
@@ -884,7 +854,7 @@
   justify-content: stretch;
   column-gap: 5px;
   width: 100%;
-  min-height: 30px;
+  min-height: var(--h-md);
   padding: 3px 4px;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -951,7 +921,7 @@
   }
 
   i {
-    font-size: 16px;
+    font-size: var(--text-lg);
     line-height: 1;
   }
 }
@@ -969,7 +939,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.4;
   text-align: left;
   overflow-wrap: anywhere;
@@ -1006,7 +976,7 @@
   i {
     flex: 0 0 auto;
     margin-top: 1px;
-    font-size: 14px;
+    font-size: var(--text-md);
     line-height: 1;
     animation: checklist-loading-spin 0.8s linear infinite;
   }
@@ -1019,7 +989,7 @@
 }
 
 .card-indicator-count {
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1;
 }
 
@@ -1040,7 +1010,7 @@
   background: var(--list-bg);
   border: 2px solid var(--card-bg);
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   margin-left: -6px;
   flex: 0 0 auto;
@@ -1080,5 +1050,69 @@
 
   .card-footer:not(:has(.card-due, .card-time-in-progress, .assignee-stack)) {
     display: none;
+  }
+}
+
+// ─── Compact density ──────────────────────────────────────────────────────────
+// [data-density="compact"] on <html> (DensityService, per device). Distinct from the per-board
+// .compact-cards view above, which removes rows: this keeps every row and shrinks the metrics —
+// padding, body type one step down the scale, chips one line-height tighter, labels as dots with
+// text (card-labels.component.ts). The three padding mirrors (:host, .card-link, .card-cover) must
+// move together or the link's hit area and the cover's bleed drift from the tile edge.
+:host-context([data-density="compact"]) {
+  padding: 5px 8px 6px;
+
+  .card-link {
+    margin: -5px -8px -6px;
+    padding: 5px 8px 6px;
+  }
+
+  .card-cover {
+    margin: -5px -8px 6px;
+    width: calc(100% + 16px);
+  }
+
+  .card-key {
+    margin-bottom: 2px;
+  }
+
+  .card-body {
+    font-size: var(--text-base);
+    line-height: 1.45;
+  }
+
+  k-card-labels {
+    --label-bar-gap: 3px;
+    --label-bar-row-gap: 2px;
+    --label-chip-height: 18px;
+    --label-chip-font-size: 10px;
+  }
+
+  .cf-badge,
+  .card-blocked,
+  .card-due,
+  .card-time-in-progress {
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 1.45;
+  }
+
+  .cf-chip {
+    line-height: 15px;
+  }
+
+  .card-footer {
+    margin-top: 4px;
+    gap: 5px;
+  }
+
+  .card-footer-left {
+    gap: 5px;
+  }
+
+  .assignee-avatar {
+    width: 20px;
+    height: 20px;
+    margin-left: -5px;
   }
 }

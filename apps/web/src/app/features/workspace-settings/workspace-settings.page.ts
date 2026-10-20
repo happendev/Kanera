@@ -6,13 +6,14 @@ import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
 import type { ColorToken } from "@kanera/shared/colors";
-import type { AutomationActionBody, AutomationTriggerCustomFieldValueDto, AutomationTriggerTypeDto, CustomFieldTypeName, DeletionImpactResponse, DueDateSlot } from "@kanera/shared/dto";
+import type { AutomationActionBody, AutomationTriggerCustomFieldValueDto, AutomationTriggerTypeDto, BoardTileSummary, CustomFieldTypeName, DeletionImpactResponse, DueDateSlot } from "@kanera/shared/dto";
 import { API_KEY_NAME_MAX_LENGTH, CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import type { ServerToClientEvents, WireAutomation, WireAutomationAction, WireCardLabel, WireChecklistTemplate, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kanera/shared/schema";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_IN_PROGRESS_ALERT_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { BoardTileSummariesService } from "../../core/boards/board-tile-summaries.service";
 import { AutosaveTracker } from "../../shared/autosave-tracker";
 import { ToastService } from "../../shared/toast.service";
 import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
@@ -677,6 +678,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly inProgressAlertDaysDefault = DEFAULT_IN_PROGRESS_ALERT_DAYS;
 
   private readonly api = inject(ApiClient);
+  private readonly tileSummaries = inject(BoardTileSummariesService);
   private readonly toasts = inject(ToastService);
   private readonly appTitle = inject(AppTitleService);
   private readonly auth = inject(AuthService);
@@ -760,6 +762,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly newLabel = signal("");
   readonly newLabelColor = signal<ColorToken | null>(null);
   readonly boardList = signal<Board[]>([]);
+  /** The counts row under each board on the Boards tab, keyed by board id; empty until loaded. */
+  readonly boardTileSummaries = signal<ReadonlyMap<string, BoardTileSummary>>(new Map());
   readonly boardGroups = signal<BoardGroup[]>([]);
   readonly newBoardGroupTitle = signal("");
   readonly editingBoardGroupId = signal<string | null>(null);
@@ -1156,6 +1160,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.editingFieldId.set(null);
     this.customFieldError.set(null);
     this.boardList.set([]);
+    this.boardTileSummaries.set(new Map());
     this.boardGroups.set([]);
     this.newBoardGroupTitle.set("");
     this.editingBoardGroupId.set(null);
@@ -1183,24 +1188,34 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.revealedWebhookSecret.set(null);
   }
 
+  /** Fetched after the board list rather than with it: the rows render at once and the counts fill in. */
+  private async loadBoardTileSummaries(workspaceId: string, boardIds: string[]) {
+    const rows = await this.tileSummaries.load(boardIds);
+    if (workspaceId !== this.workspaceId()) return;
+    this.boardTileSummaries.set(new Map(rows.map((row) => [row.boardId, row])));
+  }
+
   async reload(workspaceId = this.workspaceId()) {
     const detail = await this.api.get<{ organisationInProgressEnabled?: boolean; workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[]; automationExecutionsRemaining: number | null }>(`/workspaces/${workspaceId}`);
     const ws = { ...detail.workspace, role: detail.role } as Workspace & { role: WorkspaceRole };
     const canManageApi = detail.role === "admin" || this.auth.isOrgAdmin();
-    const [members, orgUsers, boards, boardGroups] = await Promise.all([
-      this.api.get<MemberRow[]>(`/workspaces/${workspaceId}/members`),
-      this.api.get<{ id: string; email: string; displayName: string }[]>(`/workspaces/${workspaceId}/member-candidates`),
-      this.api.get<Board[]>(`/workspaces/${workspaceId}/boards`),
-      this.api.get<BoardGroup[]>(`/workspaces/${workspaceId}/board-groups`),
+    // Both groups need the workspace role, but neither needs the other group.
+    const [[members, orgUsers, boards, boardGroups], [apiKeys, agentConnections, webhooks, guests]] = await Promise.all([
+      Promise.all([
+        this.api.get<MemberRow[]>(`/workspaces/${workspaceId}/members`),
+        this.api.get<{ id: string; email: string; displayName: string }[]>(`/workspaces/${workspaceId}/member-candidates`),
+        this.api.get<Board[]>(`/workspaces/${workspaceId}/boards`),
+        this.api.get<BoardGroup[]>(`/workspaces/${workspaceId}/board-groups`),
+      ]),
+      canManageApi
+        ? Promise.all([
+          this.api.get<WorkspaceApiKeyRow[]>(`/workspaces/${workspaceId}/api-keys`),
+          this.api.get<AgentConnectionRow[]>(`/workspaces/${workspaceId}/agent-connections`),
+          this.api.get<WebhookEndpointRow[]>(`/workspaces/${workspaceId}/webhooks`),
+          this.api.get<WorkspaceGuestsResponse>(`/workspaces/${workspaceId}/guests`),
+        ])
+        : [[] as WorkspaceApiKeyRow[], [] as AgentConnectionRow[], [] as WebhookEndpointRow[], null] as const,
     ]);
-    const [apiKeys, agentConnections, webhooks, guests] = canManageApi
-      ? await Promise.all([
-        this.api.get<WorkspaceApiKeyRow[]>(`/workspaces/${workspaceId}/api-keys`),
-        this.api.get<AgentConnectionRow[]>(`/workspaces/${workspaceId}/agent-connections`),
-        this.api.get<WebhookEndpointRow[]>(`/workspaces/${workspaceId}/webhooks`),
-        this.api.get<WorkspaceGuestsResponse>(`/workspaces/${workspaceId}/guests`),
-      ])
-      : [[] as WorkspaceApiKeyRow[], [] as AgentConnectionRow[], [] as WebhookEndpointRow[], null];
     if (workspaceId !== this.workspaceId()) return;
     this.organisationInProgressEnabled.set(detail.organisationInProgressEnabled !== false);
     this.applyWorkspace(ws, true);
@@ -1212,6 +1227,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.members.set(members);
     this.orgUsers.set(orgUsers);
     this.boardList.set(sortBoards(boards));
+    void this.loadBoardTileSummaries(workspaceId, boards.map((board) => board.id));
     this.boardGroups.set(sortBoardGroups(boardGroups));
     this.automationExecutionsRemaining.set(typeof detail.automationExecutionsRemaining === "number" ? detail.automationExecutionsRemaining : null);
     this.guestBoards.set(sortBoards(guests?.boards ?? boards));

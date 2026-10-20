@@ -94,34 +94,34 @@ const STANDALONE_BOARDS = $localize`:Group label in a board picker:Standalone bo
     .dialog { width: min(560px, 100%); max-height: min(760px, 90vh); overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
     header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
     h2 { margin: 0 0 4px; color: var(--text); font-size: 18px; }
-    header p, .step-copy span { margin: 0; color: var(--text-muted); font-size: 13px; }
+    header p, .step-copy span { margin: 0; color: var(--text-muted); font-size: var(--text-base); }
     .direction-rule, .topology-error { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
     .direction-rule > i, .topology-error > i { flex: 0 0 auto; margin-top: 1px; font-size: 17px; }
     .direction-rule > i { color: var(--accent); }
     .direction-rule div, .topology-error div { display: flex; flex-direction: column; gap: 3px; }
-    .direction-rule strong, .topology-error strong { color: var(--text); font-size: 13px; }
-    .direction-rule span, .topology-error span { color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+    .direction-rule strong, .topology-error strong { color: var(--text); font-size: var(--text-base); }
+    .direction-rule span, .topology-error span { color: var(--text-muted); font-size: var(--text-sm); line-height: 1.4; }
     .topology-error { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
     .topology-error > i, .topology-error strong { color: var(--danger); }
-    .field { display: grid; gap: 7px; color: var(--text); font-size: 13px; font-weight: 600; }
+    .field { display: grid; gap: 7px; color: var(--text); font-size: var(--text-base); font-weight: 600; }
     .step-copy { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
-    .step-copy strong { color: var(--text); font-size: 14px; }
+    .step-copy strong { color: var(--text); font-size: var(--text-md); }
     .list-grid { display: grid; gap: 8px; }
     .list-grid-heading, .list-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, 1fr); gap: 16px; align-items: center; }
-    .list-grid-heading { padding: 0 12px; color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .list-grid-heading { padding: 0 12px; color: var(--text-muted); font-size: var(--text-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
     .list-row { min-height: 52px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
     .list-grid:not(.has-targets) .list-row { grid-template-columns: 1fr; }
-    .list-choice { display: flex; min-width: 0; align-items: center; gap: 10px; color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; }
+    .list-choice { display: flex; min-width: 0; align-items: center; gap: 10px; color: var(--text); font-size: var(--text-base); font-weight: 600; cursor: pointer; }
     .list-choice input { width: 16px; height: 16px; flex: 0 0 auto; }
     .list-choice span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .list-row select:disabled { opacity: .55; }
     .target-list-field { display: grid; gap: 4px; }
-    .field-error { color: var(--danger); font-size: 11px; }
+    .field-error { color: var(--danger); font-size: var(--text-xs); }
     select[aria-invalid="true"] { border-color: var(--danger); outline-color: var(--danger); }
-    .state { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 0; color: var(--text-muted); font-size: 13px; }
-    .eligibility-note { display: flex; align-items: flex-start; gap: 6px; margin: 9px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+    .state { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 0; color: var(--text-muted); font-size: var(--text-base); }
+    .eligibility-note { display: flex; align-items: flex-start; gap: 6px; margin: 9px 0 0; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.4; }
     .eligibility-note i { margin-top: 1px; color: var(--success); }
-    .error { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; color: var(--danger); font-size: 13px; }
+    .error { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; color: var(--danger); font-size: var(--text-base); }
     footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 22px; }
     @media (max-width: 560px) {
       .backdrop { padding: 8px; }

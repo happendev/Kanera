@@ -568,6 +568,19 @@
             }
           </div>
           <k-activity-strip [series]="activitySeries()" [windowDays]="activityWindowDays()" />
+          @if (portfolioListBars().length) {
+          <section class="portfolio-lists" aria-labelledby="portfolio-lists-title">
+            <h3 id="portfolio-lists-title" i18n="Portfolio section heading: open cards per workflow list">Open work by list</h3>
+            @for (bar of portfolioListBars(); track bar.workspaceId) {
+            <div class="portfolio-lists-workspace">
+              @if (portfolioListBars().length > 1) {
+              <span class="portfolio-lists-workspace-name">{{ bar.workspaceName }}</span>
+              }
+              <k-status-bar [segments]="bar.segments" legendLayout="grid" />
+            </div>
+            }
+          </section>
+          }
           <!-- The rollup is wider than a phone or a narrow window. Touch already pans it natively;
                kDragScroll gives a mouse or trackpad the same click-and-drag pan as the kanban lane,
                since a plain overflow container only scrolls by wheel or scrollbar. -->
@@ -856,6 +869,7 @@
           <k-board-calendar-view
             navigation="stacked"
             [cards]="state.cards()"
+            [lists]="tableLists()"
             [labelsByCard]="boardLabelsByCard()"
             [assigneesByCard]="boardAssigneesByCard()"
             [boardSummariesById]="boardsById()"

@@ -58,7 +58,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
 
     .wp-toggle {
       width: 100%;
-      min-height: 36px;
+      min-height: var(--h-lg);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -68,7 +68,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
       background: var(--surface-2);
       color: var(--text);
       font: inherit;
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 600;
       cursor: pointer;
     }
@@ -86,7 +86,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
     .wp-title {
       margin: 10px 4px 4px;
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--text-xs);
       font-weight: 700;
     }
 
@@ -97,7 +97,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
     }
 
     .wp-row {
-      min-height: 36px;
+      min-height: var(--h-lg);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -114,7 +114,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
       flex: 1;
       overflow: hidden;
       color: var(--text);
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 500;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -124,7 +124,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
       margin: 0;
       padding: 8px 6px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
     }
   `,
   ],

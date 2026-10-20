@@ -551,9 +551,11 @@ export async function enrichNotifications(
   const attachmentIds = baseRows
     .map(notificationAttachmentId)
     .filter((v): v is string => Boolean(v));
-  const attachmentMap = new Map<string, NotificationCardThumbnail>();
-  if (attachmentIds.length > 0) {
-    const rows = await tx
+  const commentIds = baseRows
+    .filter((r) => r.activity_entityType === ACTIVITY_ENTITY_TYPE.COMMENT && r.activity_entityId)
+    .map((r) => r.activity_entityId!);
+  const [attachmentRows, commentRows] = await Promise.all([
+    attachmentIds.length > 0 ? tx
       .select({
         id: cardAttachments.id,
         url: cardAttachments.url,
@@ -562,21 +564,14 @@ export async function enrichNotifications(
         fileName: cardAttachments.fileName,
       })
       .from(cardAttachments)
-      .where(inArray(cardAttachments.id, attachmentIds));
-    for (const row of rows) attachmentMap.set(row.id, row);
-  }
-
-  const commentIds = baseRows
-    .filter((r) => r.activity_entityType === ACTIVITY_ENTITY_TYPE.COMMENT && r.activity_entityId)
-    .map((r) => r.activity_entityId!);
-  const commentBodyMap = new Map<string, string>();
-  if (commentIds.length > 0) {
-    const rows = await tx
+      .where(inArray(cardAttachments.id, attachmentIds)) : [],
+    commentIds.length > 0 ? tx
       .select({ id: comments.id, body: comments.body })
       .from(comments)
-      .where(inArray(comments.id, commentIds));
-    for (const row of rows) commentBodyMap.set(row.id, row.body);
-  }
+      .where(inArray(comments.id, commentIds)) : [],
+  ]);
+  const attachmentMap = new Map<string, NotificationCardThumbnail>(attachmentRows.map((row) => [row.id, row]));
+  const commentBodyMap = new Map(commentRows.map((row) => [row.id, row.body]));
 
   return baseRows.map((r) => {
     const attachmentId = notificationAttachmentId(r);

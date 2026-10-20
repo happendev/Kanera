@@ -217,13 +217,13 @@ function formatFieldNumber(value: number | string): string {
       padding: 18px 20px 12px;
     }
     .title { font-size: 15px; font-weight: 600; color: var(--text); margin: 0; }
-    .sub { font-size: 12px; color: var(--text-muted); margin: 2px 0 0; }
+    .sub { font-size: var(--text-sm); color: var(--text-muted); margin: 2px 0 0; }
     .icon-btn {
       border: none;
       background: transparent;
       color: var(--text-muted);
       cursor: pointer;
-      font-size: 16px;
+      font-size: var(--text-lg);
       padding: 2px;
       border-radius: var(--radius-sm);
     }
@@ -240,10 +240,10 @@ function formatFieldNumber(value: number | string): string {
       gap: 8px;
       text-align: center;
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: var(--text-base);
     }
     .saving-state > i { margin-bottom: 4px; color: var(--accent, var(--text)); font-size: 24px; }
-    .saving-state > strong { color: var(--text); font-size: 14px; font-weight: 600; }
+    .saving-state > strong { color: var(--text); font-size: var(--text-md); font-weight: 600; }
     .fields { overflow-y: auto; padding: 0 12px; flex: 1; }
     .field { border-bottom: 1px solid var(--border); }
     .field:last-child { border-bottom: none; }
@@ -261,10 +261,10 @@ function formatFieldNumber(value: number | string): string {
     }
     .field-head:hover { background: var(--surface-hover); }
     .field-head .fi { width: 16px; flex: 0 0 16px; color: var(--text-muted); }
-    .fname { font-size: 13px; font-weight: 500; flex: 0 0 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .fsummary { flex: 1; min-width: 0; font-size: 12px; color: var(--text-muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fname { font-size: var(--text-base); font-weight: 500; flex: 0 0 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fsummary { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text-muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .is-staged .fsummary { color: var(--accent, var(--text)); font-weight: 500; }
-    .chev { font-size: 13px; color: var(--text-muted); flex: 0 0 auto; }
+    .chev { font-size: var(--text-base); color: var(--text-muted); flex: 0 0 auto; }
     .editor { padding: 4px 8px 14px; display: flex; flex-direction: column; gap: 10px; }
     .in {
       width: 100%;
@@ -273,7 +273,7 @@ function formatFieldNumber(value: number | string): string {
       border-radius: var(--radius-sm);
       background: var(--surface-2, var(--surface));
       color: var(--text);
-      font-size: 13px;
+      font-size: var(--text-base);
     }
     .in:focus { outline: none; border-color: var(--accent, var(--border-strong)); }
     .seg, .scope {
@@ -288,7 +288,7 @@ function formatFieldNumber(value: number | string): string {
       background: var(--surface);
       color: var(--text-muted);
       padding: 6px 12px;
-      font-size: 12px;
+      font-size: var(--text-sm);
       cursor: pointer;
     }
     .seg button + button, .scope button + button { border-left: 1px solid var(--border); }
@@ -310,22 +310,22 @@ function formatFieldNumber(value: number | string): string {
       text-align: left;
     }
     .row:hover, .row.sel { background: var(--surface-2); }
-    .row .rlabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-    .row > i { color: var(--accent, var(--text)); font-size: 14px; }
+    .row .rlabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-base); }
+    .row > i { color: var(--accent, var(--text)); font-size: var(--text-md); }
     .dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 12px; }
     .editor-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .clear-btn {
       border: none;
       background: transparent;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       cursor: pointer;
       padding: 4px 6px;
       border-radius: var(--radius-sm);
     }
     .clear-btn:hover { background: var(--surface-hover); color: var(--danger); }
     .clear-btn.on { color: var(--danger); font-weight: 600; }
-    .empty { margin: 0; padding: 14px 8px; color: var(--text-muted); font-size: 13px; text-align: center; }
+    .empty { margin: 0; padding: 14px 8px; color: var(--text-muted); font-size: var(--text-base); text-align: center; }
     .notice {
       display: flex;
       align-items: center;
@@ -333,7 +333,7 @@ function formatFieldNumber(value: number | string): string {
       margin: 0;
       padding: 16px 20px;
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: var(--text-base);
     }
     .notice.skip { padding: 8px 20px; }
     .foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px 18px; border-top: 1px solid var(--border); }

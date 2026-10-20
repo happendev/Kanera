@@ -304,6 +304,7 @@ describe("WorkspaceSettingsPage", () => {
         return Promise.resolve({});
       }),
       post: vi.fn((path: string) => {
+        if (path === "/boards/tile-summaries/query") return Promise.resolve([]);
         if (path.endsWith("/guests/seat-preview")) return Promise.resolve({ paidGuestSeatRequired: false, paidGuestSeatActive: false });
         return Promise.resolve({});
       }),
@@ -385,6 +386,10 @@ describe("WorkspaceSettingsPage", () => {
     await flushAsyncEffects();
     fixture.componentInstance.selectedTab.set("boards");
     fixture.detectChanges();
+
+    // Board counts load through a POST query during setup; mutation assertions below measure
+    // only the action under test, after that initial read has settled.
+    api.post.mockClear();
 
     return {
       api,

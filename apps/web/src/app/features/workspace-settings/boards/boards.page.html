@@ -14,14 +14,14 @@
         @if (settings.generalSettingsError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
         <div class="boards" cdkDropList [cdkDropListData]="settings.boardList()" (cdkDropListDropped)="settings.dropBoard($event)">
           @for (board of settings.boardList(); track board.id) {
-          <div cdkDrag class="board-tile">
+          <div cdkDrag class="board-tile board-row">
             <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (settings.accentColor() ? 'var(--color-' + settings.accentColor() + ')' : null)"></i>
+            <k-board-icon [icon]="board.icon" [color]="board.iconColor || settings.accentColor()" [size]="26" />
             @if (settings.editingBoardId() === board.id) {
             <input class="inline-name-input grow" [value]="settings.editingBoardName()" (input)="settings.editingBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveBoardName(board.id)" (keydown.enter)="settings.saveBoardName(board.id)"
               (keydown.escape)="settings.cancelEditBoard()" autofocus />
             } @else {
-            <span (click)="settings.startEditBoard(board)" kTooltip="Click to rename" i18n-kTooltip class="grow" style="cursor:pointer">{{ board.name }}</span>
+            <span class="board-name grow" (click)="settings.startEditBoard(board)" kTooltip="Click to rename" i18n-kTooltip>{{ board.name }}</span>
             }
             <label class="board-progress-toggle">
               <input type="checkbox" [checked]="board.inProgressEnabled" [disabled]="!settings.organisationInProgressEnabled() || !!settings.progressBoardSaving()" (change)="settings.updateBoardInProgress(board.id, $any($event.target).checked, $any($event.target))" />
@@ -50,6 +50,7 @@
                 <i [class]="settings.deletionPreviewKey() === 'board:' + board.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
               </button>
             </div>
+            <k-board-tile-summary class="board-counts" [summary]="settings.boardTileSummaries().get(board.id) ?? null" />
           </div>
           }
           @if (settings.boardList().length === 0) {

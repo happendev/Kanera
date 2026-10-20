@@ -122,14 +122,20 @@ Screenshot at desktop and phone width; small screens and the PWA are first-class
 
 When the user asks you to carry out a specific Kanera card, keep the card updated as part of the
 assignment. Use the connected Kanera skill/instructions: read the card and relevant comments,
-check for another live agent run, start your run before substantive work, and move to the board's
+record the original list ID/name/meaning, check for another live agent run, start your run before
+substantive work, and move to the board's
 actual active list. Update progress at milestones and at least every ten minutes. On a blocker,
 record what is needed in both the run and a card comment, and use the appropriate waiting list.
 
 Before your final reply, post an outcome comment with changes, verification results, relevant
-PR/commit/artifact links, and remaining work; end the run appropriately and move the card to
-Review when acceptance remains, or Done only when the agreed workflow permits completion.
-Verify the saved comment, run status, and resulting card list; report any write that failed.
+PR/commit/artifact links, and remaining work; end the run appropriately. Before moving the card,
+re-read the card and board. Consider the original list, available lists and their meanings,
+completed work and remaining work; choose the list that reflects the card's actual state in this
+board's workflow. Returning to the original list may be appropriate but is not automatic. Do not
+assume list names or choose by list order or the in-progress flag alone. Explain the choice in the
+comment. If unclear, leave the list unchanged, save other tracking and ask. A successful run may
+cover only part of a card; complete the card only when the agreed workflow permits it and its
+criteria are met. Verify the saved comment, run status, and card list; report any failed write.
 Reading or exploratory planning alone causes no tracking writes; explicit user restrictions win.
 This applies to real-data work the user assigns, and does not authorise using production Kanera
 for local verification or updating an unrelated card.

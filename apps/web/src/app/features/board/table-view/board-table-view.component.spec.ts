@@ -1,10 +1,12 @@
-import { provideZonelessChangeDetection } from "@angular/core";
+import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { CardCustomFieldValue, CustomField } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../../core/api/api.client";
 import { STORAGE_KEYS, viewPreferenceKey } from "../../../core/browser/browser-contracts";
 import { NotificationsService } from "../../../core/notifications/notifications.service";
+import { MinuteClockService } from "../../../shared/minute-clock.service";
+import { timeInProgressChip } from "../time-in-progress.util";
 import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
 import { BoardState } from "../board-state";
 import type { AnyCard, AnyList, CardGroup } from "./table-view.types";
@@ -140,6 +142,50 @@ describe("BoardTableViewComponent", () => {
     fixture.detectChanges();
     return fixture;
   }
+
+  // Browser timing cannot reliably catch redundant chip work or a cache that misses one input.
+  it("reuses progress chips while refreshing for minute ticks, card replacements and source settings", () => {
+    const now = signal(Date.parse("2026-10-19T15:00:00Z"));
+    TestBed.overrideProvider(MinuteClockService, { useValue: { now } });
+    const running = {
+      ...card("running"), workspaceId: "workspace-1",
+      inProgressSince: new Date("2026-10-16T09:00:00Z"), inProgressSeconds: 0,
+    } as AnyCard;
+    const view = fixture([running]);
+    const component = view.componentInstance;
+    const workspace = { id: "workspace-1", name: "Workspace", timeZone: "UTC", inProgressAlertDays: 7 };
+    view.componentRef.setInput("sourceWorkspaces", [workspace]);
+    view.componentRef.setInput("sourceBoards", [{ id: "board-1", inProgressEnabled: true }]);
+
+    const first = component.timeInProgress(running);
+    expect(first).toEqual(timeInProgressChip(running, now(), 7, "UTC"));
+    expect(component.timeInProgress(running)).toBe(first);
+    view.componentRef.setInput("bulkSelectedCardIds", new Set([running.id]));
+    expect(component.timeInProgress(running)).toBe(first);
+
+    now.update((value) => value + 60_000);
+    const ticked = component.timeInProgress(running);
+    expect(ticked).not.toBe(first);
+    expect(ticked?.ms).toBe(first!.ms + 60_000);
+
+    expect(ticked?.alert).toBe(false);
+    view.componentRef.setInput("sourceWorkspaces", [{ ...workspace, inProgressAlertDays: 1 }]);
+    expect(component.timeInProgress(running)?.alert).toBe(true);
+
+    view.componentRef.setInput("sourceWorkspaces", [{ ...workspace, timeZone: "America/New_York", inProgressAlertDays: 1 }]);
+    expect(component.timeInProgress(running)).toEqual(timeInProgressChip(running, now(), 1, "America/New_York"));
+    expect(component.timeInProgress(running)?.ms).not.toBe(ticked?.ms);
+
+    const updated = { ...running, inProgressSeconds: 3600 } as AnyCard;
+    view.componentRef.setInput("cards", [updated]);
+    expect(component.timeInProgress(updated)).toEqual(timeInProgressChip(updated, now(), 1, "America/New_York"));
+    expect(component.timeInProgress(updated)?.ms).toBe(component.timeInProgress(running)!.ms + 3_600_000);
+
+    view.componentRef.setInput("sourceBoards", [{ id: "board-1", inProgressEnabled: false }]);
+    expect(component.timeInProgress(updated)).toBeNull();
+    view.componentRef.setInput("sourceBoards", [{ id: "board-1", inProgressEnabled: true }]);
+    expect(component.timeInProgress(updated)).not.toBeNull();
+  });
 
   it("shows title, status, assignees, due date, time in progress, labels, and every custom field by default, including showOnCard=false", () => {
     const component = fixture().componentInstance;

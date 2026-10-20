@@ -53,7 +53,7 @@ import { MenuDirective } from "./menu.directive";
       border-radius: var(--radius-md);
       background: transparent;
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: var(--text-base);
       font-weight: 500;
       box-shadow: none;
     }
@@ -74,13 +74,13 @@ import { MenuDirective } from "./menu.directive";
     :host(.is-field) .lm-trigger {
       width: 100%;
       max-width: 280px;
-      height: 36px;
+      height: var(--h-lg);
       gap: var(--space-2);
       border-color: var(--border-strong);
       border-radius: var(--radius);
       background: var(--select-bg);
       color: var(--text);
-      font-size: 14px;
+      font-size: var(--text-md);
       font-weight: 400;
     }
     :host(.is-field) .lm-trigger > .ti { color: var(--text-muted); }

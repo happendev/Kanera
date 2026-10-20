@@ -73,6 +73,9 @@
           <span>{{ openCountLabel() }}</span>
         </div>
       </header>
+      <!-- The bar is the gestalt (how open work splits across the workflow); the rows beneath are
+           its legend, so the shared component renders the bar alone here. -->
+      <k-status-bar class="rp-status-bar" [segments]="openListSegments()" [legend]="false" />
       <ul class="rp-hbars">
         @for (bar of r.lists; track bar.id; let i = $index) {
         @if (bar.group && bar.group !== r.lists[i - 1]?.group) {

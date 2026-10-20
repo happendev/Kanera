@@ -24,7 +24,7 @@ button, a { font: inherit; }
 
 .consent-copy { flex: 1; min-width: 0; }
 h2 { margin: 0 0 6px; font-size: 17px; line-height: 1.25; }
-p { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+p { margin: 0; color: var(--text-muted); font-size: var(--text-base); line-height: 1.5; }
 
 .consent-actions, .dialog-actions { display: flex; align-items: center; gap: 8px; }
 button { border-radius: var(--radius); cursor: pointer; }
@@ -57,11 +57,11 @@ button.text:hover { color: var(--text); }
 .category { display: flex; align-items: center; gap: 18px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-subtle); }
 .category + .category { margin-top: 10px; }
 .category span { display: grid; flex: 1; gap: 4px; }
-.category strong { font-size: 14px; }
-.category small { color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.category strong { font-size: var(--text-md); }
+.category small { color: var(--text-muted); font-size: var(--text-sm); line-height: 1.45; }
 .category input { width: 18px; height: 18px; accent-color: var(--accent); }
 .category.locked { opacity: 0.8; }
-.policy { margin-top: 16px; font-size: 12px; }
+.policy { margin-top: 16px; font-size: var(--text-sm); }
 .policy a { color: var(--accent); }
 .dialog-actions { justify-content: flex-end; margin-top: 20px; }
 

@@ -40,12 +40,42 @@
 // On narrow screens the shared media query already collapses guest rows to a single stacked
 // column with data-labels, so no extra handling is needed here.
 
+// A board row carries its counts row (k-board-tile-summary) on a second, full-width line under
+// the name, so the name keeps its room beside the action cluster and the counts can run wide. The
+// row therefore always wraps and grows past the shared 40px tile height.
+.board-tile.board-row {
+  height: auto;
+  min-height: 40px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.board-name {
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-counts {
+  --bts-ring: var(--surface-2);
+  flex: 1 0 100%;
+  // Lines the counts up under the name: past the grip glyph (18px), the icon tile (26px) and the two row gaps.
+  padding-left: 64px;
+}
+
+@media (max-width: 640px) {
+  // The row stacks on phones and the toggle already indents past the grip; indent the counts to match.
+  .board-counts { padding-left: 26px; }
+}
+
 .board-progress-toggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   flex: none;
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 

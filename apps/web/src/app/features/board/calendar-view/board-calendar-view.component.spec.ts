@@ -389,6 +389,21 @@ describe("BoardCalendarViewComponent", () => {
     expect(body?.querySelector(":scope > .cal-assignees k-avatar")).toBeTruthy();
   });
 
+  it("pins the assignees to the label row when the card has labels", async () => {
+    const fixture = await create();
+    fixture.componentRef.setInput("labelsByCard", new Map([
+      ["card-1", [{ id: "l1", name: "Bug", color: "red" }]],
+    ]));
+    fixture.componentRef.setInput("assigneesByCard", new Map([
+      ["card-1", [member({ userId: "user-1" })]],
+    ]));
+    fixture.detectChanges();
+
+    const tile = fixture.nativeElement as HTMLElement;
+    expect(tile.querySelector(".cal-card-top > .cal-assignees k-avatar")).toBeTruthy();
+    expect(tile.querySelector(".cal-card-body .cal-assignees")).toBeNull();
+  });
+
   it("emits card opens", async () => {
     const fixture = await create();
     const opened = vi.fn();

@@ -6,12 +6,14 @@ import { BoardMembersMenu } from "../../shared/board-members-menu.popover";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { ColorPickerComponent } from "../../../shared/color-picker.component";
 import { IconPickerComponent } from "../../../shared/icon-picker.component";
+import { BoardIconComponent } from "../../../shared/board-icon.component";
+import { BoardTileSummaryComponent } from "../../../shared/board-tile-summary.component";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
 
 @Component({
   selector: "k-workspace-settings-boards",
   standalone: true,
-  imports: [EmptyStateComponent, BoardMembersMenu, CdkDrag, CdkDragHandle, CdkDropList, ColorPickerComponent, DocsLinkComponent, IconPickerComponent, TooltipDirective],
+  imports: [EmptyStateComponent, BoardIconComponent, BoardMembersMenu, BoardTileSummaryComponent, CdkDrag, CdkDragHandle, CdkDropList, ColorPickerComponent, DocsLinkComponent, IconPickerComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./boards.page.html",
   styleUrl: "./boards.page.scss",

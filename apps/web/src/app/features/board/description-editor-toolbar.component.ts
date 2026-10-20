@@ -120,7 +120,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
     }
 
     .de-link-icon {
-      font-size: 14px;
+      font-size: var(--text-md);
       color: var(--text-muted);
       flex-shrink: 0;
     }
@@ -129,7 +129,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
       flex: 1;
       height: 28px;
       padding: 0 8px;
-      font-size: 13px;
+      font-size: var(--text-base);
       background: var(--surface);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-sm, 4px);
@@ -141,7 +141,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
     .de-link-apply {
       height: 28px;
       padding: 0 10px;
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 500;
       background: var(--accent);
       border: 1px solid var(--accent);

@@ -86,11 +86,7 @@
         }
         @if (overview.listCounts.length) {
         <div class="board-overview-section-title" i18n>Cards by list</div>
-        <div class="board-overview-lists">
-          @for (entry of overview.listCounts; track entry.id) {
-          <div><span><i [class]="'ti ti-' + entry.icon"></i>{{ entry.name }}</span><strong>{{ entry.count }}</strong></div>
-          }
-        </div>
+        <k-status-bar class="board-overview-lists" [segments]="overview.listCounts" />
         }
         <div class="board-overview-actions">
           <button type="button" (click)="setView('history'); overviewOpen.set(false)"><i class="ti ti-history"></i> <ng-container i18n="Button: open the Work done view">Work done</ng-container></button>

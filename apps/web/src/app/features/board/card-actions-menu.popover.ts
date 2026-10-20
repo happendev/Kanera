@@ -244,7 +244,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
     }
 
     .cam-confirm-label {
-      font-size: 12px;
+      font-size: var(--text-sm);
       color: var(--text-muted);
       flex: 1 1 auto;
       min-width: 0;
@@ -252,7 +252,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
     }
 
     .cam-confirm-yes {
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       padding: 3px 7px;
       border-radius: var(--radius-sm);
@@ -280,7 +280,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
     }
 
     .cam-confirm-cancel {
-      font-size: 12px;
+      font-size: var(--text-sm);
       padding: 3px 5px;
       border-radius: var(--radius-sm);
       border: none;

@@ -122,7 +122,7 @@ const CREATE_KEY = "__create__";
     }
 
     .lp-title {
-      font-size: 12px;
+      font-size: var(--text-sm);
       font-weight: 600;
       color: var(--text);
     }
@@ -133,7 +133,7 @@ const CREATE_KEY = "__create__";
       border-radius: var(--radius-sm);
       color: var(--text);
       padding: 6px 8px;
-      font-size: 13px;
+      font-size: var(--text-base);
       outline: none;
       &:focus { border-color: var(--accent, var(--text)); }
     }
@@ -150,7 +150,7 @@ const CREATE_KEY = "__create__";
 
     .lp-empty {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
       margin: 0;
       padding: 8px 4px;
       text-align: center;
@@ -188,7 +188,7 @@ const CREATE_KEY = "__create__";
     .lp-create-icon {
       flex: 0 0 12px;
       width: 12px;
-      font-size: 13px;
+      font-size: var(--text-base);
       text-align: center;
     }
 
@@ -201,7 +201,7 @@ const CREATE_KEY = "__create__";
 
     .lp-name {
       flex: 1;
-      font-size: 13px;
+      font-size: var(--text-base);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -209,7 +209,7 @@ const CREATE_KEY = "__create__";
 
     .lp-check {
       color: var(--accent, var(--text));
-      font-size: 14px;
+      font-size: var(--text-md);
     }
   `,
   ],

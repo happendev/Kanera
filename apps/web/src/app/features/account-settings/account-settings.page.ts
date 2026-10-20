@@ -23,6 +23,7 @@ import { icu } from "../../core/i18n/icu";
 import { appLocale, applyLocale } from "../../core/i18n/locale";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
+import { DensityService } from "../../core/theme/density.service";
 import { ThemeService, type Accent, type Theme } from "../../core/theme/theme.service";
 import { AutosaveTracker } from "../../shared/autosave-tracker";
 import { ConfirmService } from "../../shared/confirm.service";
@@ -246,6 +247,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly theme = inject(ThemeService);
   // Theme-scoped, not the full vocabulary: the Blue/Green slot shows only the one this theme offers.
   readonly accentOptions = this.theme.accentOptions;
+  /** Name of the selected accent, spelled out once beside the row of dots. */
+  readonly accentLabel = computed(() => this.accentOptions().find((option) => option.value === this.theme.accent())?.label ?? "");
+  readonly density = inject(DensityService);
   private detachSocket: (() => void) | null = null;
 
   private readonly routeTab = signal<string | undefined>(undefined);

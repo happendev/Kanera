@@ -21,6 +21,10 @@ import { formatDate } from "../../../shared/date-format";
 import { localDateKey } from "../../../shared/day-key.util";
 import { byPosition } from "../../../shared/position-sort";
 
+// The interface locale is fixed for a page load. Reuse its collator across sort comparisons
+// instead of constructing locale machinery for every pair of cards or group labels.
+const TEXT_COLLATOR = new Intl.Collator(appLocale());
+
 const UNKNOWN_PERSON = $localize`:Stand-in name for a person who is no longer a member:Unknown`;
 
 export interface GroupingContext {
@@ -182,7 +186,7 @@ function groupByUserField(cards: AnyCard[], field: AnyCustomField, ctx: Grouping
     ? [...new Set([...ctx.members.map((member) => member.userId), ...byUser.keys()])]
     : [...byUser.keys()];
   const orderedUserIds = candidateUserIds.sort((a, b) =>
-    (memberById.get(a)?.displayName ?? "").localeCompare(memberById.get(b)?.displayName ?? "", appLocale()),
+    TEXT_COLLATOR.compare(memberById.get(a)?.displayName ?? "", memberById.get(b)?.displayName ?? ""),
   );
   const groups = orderedUserIds.map((userId) => {
     const member = memberById.get(userId);
@@ -222,7 +226,7 @@ function groupByTextField(cards: AnyCard[], field: AnyCustomField, ctx: Grouping
   }
 
   const groups = [...byValue.keys()]
-    .sort((a, b) => a.localeCompare(b, appLocale()))
+    .sort((a, b) => TEXT_COLLATOR.compare(a, b))
     .map((value) => customFieldGroup(field, value, value, byValue.get(value) ?? [], sortMode));
   appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
   return groups;
@@ -440,7 +444,7 @@ function groupByAssignee(cards: AnyCard[], ctx: GroupingContext, sortMode: SortB
   const orderedMembers = [...ctx.members].sort((a, b) => {
     if (a.userId === ctx.currentUserId) return -1;
     if (b.userId === ctx.currentUserId) return 1;
-    return (a.displayName ?? "").localeCompare(b.displayName ?? "", appLocale());
+    return TEXT_COLLATOR.compare(a.displayName ?? "", b.displayName ?? "");
   });
 
   for (const member of orderedMembers) {
@@ -605,9 +609,9 @@ export function sortGroupCards(cards: AnyCard[], mode: SortBy): AnyCard[] {
     case "position":
       return arr.sort(byPosition);
     case "title-asc":
-      return arr.sort((a, b) => a.title.localeCompare(b.title, appLocale()));
+      return arr.sort((a, b) => TEXT_COLLATOR.compare(a.title, b.title));
     case "title-desc":
-      return arr.sort((a, b) => b.title.localeCompare(a.title, appLocale()));
+      return arr.sort((a, b) => TEXT_COLLATOR.compare(b.title, a.title));
     case "due-asc":
       return arr.sort(byNullableString((c) => c.dueDateLocalDate, "asc"));
     case "due-desc":

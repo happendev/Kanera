@@ -35,12 +35,12 @@ import { TooltipDirective } from "./tooltip.directive";
       border-radius: var(--radius);
       background: var(--surface-2);
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--text-sm);
     }
 
     i {
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: var(--text-base);
     }
 
     span {

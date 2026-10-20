@@ -48,6 +48,9 @@ export const STORAGE_KEYS = {
   // Accent (primary colour) choice, stored per device alongside THEME. Read by the index.html
   // pre-paint script as well as ThemeService, so the literal is duplicated there intentionally.
   ACCENT: "kanera-accent",
+  // Interface density (comfortable / compact), per device like the scratchpad geometry: it answers
+  // "how big is this screen", not "who is signed in". Read by the index.html pre-paint script too.
+  DENSITY: "kanera-density",
   // Which account the two keys above were last painted for. Without it, signing in as someone who
   // has never chosen an appearance leaves the previous user's theme on screen.
   APPEARANCE_OWNER: "kanera-appearance-owner",

@@ -86,7 +86,9 @@
     <p class="no-activity"><i class="ti ti-message-circle-off"></i>@if (commentSearchQuery()) {<ng-container i18n>No comments match "{{ commentSearchQuery() // i18n(ph="query") }}".</ng-container>} @else {<ng-container i18n>No comments yet.</ng-container>}</p>
     }
     @for (item of feedViewItems(); track item.key) {
-    @if (item.kind === 'comment') {
+    @if (item.kind === 'day') {
+    <div class="feed-day" role="separator">{{ item.label }}</div>
+    } @else if (item.kind === 'comment') {
     <div class="comment" [class.is-system]="item.data.authorKind === 'system'" [class.is-mirror]="item.isMirror">
       @if (item.isMirror) {
       <div class="activity-mirror-icon" aria-label="Board mirror comment" i18n-aria-label kTooltip="Synced by Board mirror" i18n-kTooltip="Tooltip; Board mirror is the feature that syncs cards between boards">
@@ -180,16 +182,18 @@
       </div>
       }
       <div class="activity-content">
-        <span class="activity-text">
-          @if (item.actorText) {
-          <strong class="activity-actor">{{ item.actorText }}</strong>
-          }
-          @if (item.data.actorKind === 'agent') {
-          <span class="via-agent" [kTooltip]="doneByAgentTooltip(item.data.agentName, item.data.actorName)"><i class="ti ti-sparkles"></i>{{ viaAgentLabel(item.data.agentName) }}</span>
-          }
-          <span [innerHTML]="item.html"></span>
-        </span>
-        <span class="activity-date">{{ item.timeText }}</span>
+        <div class="activity-head">
+          <span class="activity-text">
+            @if (item.actorText) {
+            <strong class="activity-actor">{{ item.actorText }}</strong>
+            }
+            @if (item.data.actorKind === 'agent') {
+            <span class="via-agent" [kTooltip]="doneByAgentTooltip(item.data.agentName, item.data.actorName)"><i class="ti ti-sparkles"></i>{{ viaAgentLabel(item.data.agentName) }}</span>
+            }
+            <span [innerHTML]="item.html"></span>
+          </span>
+          <span class="activity-date">{{ item.timeText }}</span>
+        </div>
         @if (item.attachmentPreview; as preview) {
         @if (preview.kind === 'image') {
         <div class="activity-attachment-preview">
