@@ -387,7 +387,8 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
   const workspaceIds = [...new Set(scopeBoards.map((board) => board.workspaceId))];
   const workspaceOrder = new Map(workspaceIds.map((workspaceId, index) => [workspaceId, index]));
   const boardIds = scopeBoards.map((board) => board.id);
-  const [listRows, labelRows, memberRows, fieldRows, alertRows] = await Promise.all([
+  // Stage broad catalog reads so concurrent navigation requests share the pool fairly.
+  const [listRows, labelRows, memberRows] = await Promise.all([
     workspaceIds.length
       ? db.select().from(lists).where(and(inArray(lists.workspaceId, workspaceIds), isNull(lists.archivedAt))).orderBy(asc(lists.position))
       : [],
@@ -407,6 +408,8 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
           .innerJoin(users, eq(users.id, boardMembers.userId))
           .where(inArray(boardMembers.boardId, boardIds))
       : [],
+  ]);
+  const [fieldRows, alertRows] = await Promise.all([
     workspaceIds.length
       ? db.select().from(customFields).where(and(inArray(customFields.workspaceId, workspaceIds), isNull(customFields.archivedAt))).orderBy(asc(customFields.position))
       : [],
@@ -864,8 +867,9 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
   const conditions = baseCardConditions(authUserId, scopeBoards, filters, { portfolio: true, blockerBoards: allBoards }, cardDueColumns);
 
   const restrictedBoardIds = scopeBoards.filter((board) => board.assignedItemsOnly).map((board) => board.id);
-  // Each projection uses the same resolved scope; none consumes another projection.
-  const [rows, checklistCountRows, listRows, activity] = await Promise.all([
+  // These projections are independent, but running all of them at once increases queueing
+  // for other UI requests. Use pairs while retaining the same resolved access scope.
+  const [rows, checklistCountRows] = await Promise.all([
     db
       .select({
         organisationId: workspaces.clientId,
@@ -916,7 +920,8 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
           : undefined,
       ))
       .groupBy(cards.boardId),
-
+  ]);
+  const [listRows, activity] = await Promise.all([
     // Open work per workflow list, for the segmented status bar. Same conditions as the buckets so
     // the bar reports on exactly the cards the tiles count; archived lists are dropped as the board
     // overview drops them, so a card parked in a retired list is in the Active tile but no segment.
