@@ -1771,7 +1771,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   };
 
   private isFileDrag(data: DataTransfer | null): boolean {
-    return this.allowAttachments() && hasDraggedFiles(data);
+    // Browsers can include a file when dragging an existing image. ProseMirror owns that drag:
+    // let it move/copy the original node and maintain selection/history instead of re-uploading it.
+    return !this.editor?.view.dragging && this.allowAttachments() && hasDraggedFiles(data);
   }
 
   onSave() {
