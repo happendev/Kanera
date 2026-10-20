@@ -64,43 +64,49 @@
 
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-palette"></i><span i18n="Settings section heading">Appearance</span></h3>
-        <p class="settings-section-help" i18n>Choose the theme and accent colour used on this device.</p>
-        <div class="theme-options" role="radiogroup" aria-label="Theme color" i18n-aria-label>
-          <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'dark'" [attr.aria-checked]="settings.theme.theme() === 'dark'" role="radio" (click)="settings.setTheme('dark')">
-            <i class="ti ti-moon"></i>
-            <ng-container i18n="Theme name">Dark</ng-container>
-          </button>
-          <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'carbon'" [attr.aria-checked]="settings.theme.theme() === 'carbon'" role="radio" (click)="settings.setTheme('carbon')">
-            <i class="ti ti-moon-stars"></i>
-            <ng-container i18n="Theme name">Carbon</ng-container>
-          </button>
-          <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'light'" [attr.aria-checked]="settings.theme.theme() === 'light'" role="radio" (click)="settings.setTheme('light')">
-            <i class="ti ti-sun"></i>
-            <ng-container i18n="Theme name">Light</ng-container>
-          </button>
-          <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'paper'" [attr.aria-checked]="settings.theme.theme() === 'paper'" role="radio" (click)="settings.setTheme('paper')">
-            <i class="ti ti-note"></i>
-            <ng-container i18n="Theme name">Paper</ng-container>
-          </button>
-        </div>
+        <p class="settings-section-help" i18n>Choose the theme, accent colour and density used on this device.</p>
+        <k-theme-picker [value]="settings.theme.theme()" (picked)="settings.setTheme($event)" />
 
         <p class="settings-section-help accent-help" i18n>Accent colour</p>
-        <div class="accent-options" role="radiogroup" aria-label="Accent colour" i18n-aria-label>
-          @for (accent of settings.accentOptions(); track accent.value) {
-          <button
-            type="button"
-            class="accent-option"
-            [class.active]="settings.theme.accent() === accent.value"
-            [attr.aria-checked]="settings.theme.accent() === accent.value"
-            role="radio"
-            (click)="settings.setAccent(accent.value)"
-          >
-            <!-- The swatch reads the option's token rather than a hardcoded hex, so it previews the
-                 tone this accent actually resolves to in the theme currently applied. -->
-            <span class="accent-swatch" [style.background]="'var(' + accent.token + ')'" aria-hidden="true"></span>
-            {{ accent.label }}
+        <div class="accent-row">
+          <div class="accent-options" role="radiogroup" aria-label="Accent colour" i18n-aria-label>
+            @for (accent of settings.accentOptions(); track accent.value) {
+            <!-- A row of colour dots rather than labelled tiles: the colour is the whole choice, and
+                 the selected name is spelled out once beside the row. The swatch reads the option's
+                 token rather than a hardcoded hex, so it previews the tone this accent actually
+                 resolves to in the theme currently applied. -->
+            <button
+              type="button"
+              class="accent-dot"
+              [class.active]="settings.theme.accent() === accent.value"
+              [attr.aria-checked]="settings.theme.accent() === accent.value"
+              [attr.aria-label]="accent.label"
+              [kTooltip]="accent.label"
+              role="radio"
+              [style.--accent-dot]="'var(' + accent.token + ')'"
+              (click)="settings.setAccent(accent.value)"
+            ></button>
+            }
+          </div>
+          <span class="accent-caption">{{ settings.accentLabel() }}</span>
+        </div>
+
+        <p class="settings-section-help accent-help" i18n>Density</p>
+        <div class="density-options" role="radiogroup" aria-label="Density" i18n-aria-label>
+          <button type="button" class="density-option" role="radio" [class.active]="settings.density.density() === 'comfortable'" [attr.aria-checked]="settings.density.density() === 'comfortable'" (click)="settings.density.setDensity('comfortable')">
+            <i class="ti ti-layout-rows"></i>
+            <span class="density-option-text">
+              <span i18n="Density option name">Comfortable</span>
+              <small i18n="Density option description">Roomier sidebar rows and board cards.</small>
+            </span>
           </button>
-          }
+          <button type="button" class="density-option" role="radio" [class.active]="settings.density.density() === 'compact'" [attr.aria-checked]="settings.density.density() === 'compact'" (click)="settings.density.setDensity('compact')">
+            <i class="ti ti-layout-list"></i>
+            <span class="density-option-text">
+              <span i18n="Density option name">Compact</span>
+              <small i18n="Density option description">Tighter rows, smaller cards and labels as dots.</small>
+            </span>
+          </button>
         </div>
       </div>
 

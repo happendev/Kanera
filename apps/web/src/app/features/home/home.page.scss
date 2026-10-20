@@ -381,9 +381,10 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   max-width: 100%;
-  padding: 6px 12px;
+  // Tighter on the left so the icon tile sits inside the pill's curve rather than floating in it.
+  padding: 5px 12px 5px 6px;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -394,11 +395,6 @@
   &:hover {
     background: var(--surface-2);
     border-color: var(--border-strong);
-  }
-
-  i {
-    color: var(--text-muted);
-    font-size: 15px;
   }
 
   span {

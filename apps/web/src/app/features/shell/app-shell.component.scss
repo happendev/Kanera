@@ -1650,3 +1650,36 @@ k-support-session-banner {
 .nav-board-drop-list.cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder):not(.cdk-drag-preview),
 .cdk-drag-animating { transition: transform 140ms cubic-bezier(.2, 0, 0, 1); }
 .cdk-drag-preview { box-sizing: border-box; background: var(--surface); border-radius: 6px; box-shadow: var(--shadow-drag); }
+
+// ─── Compact density ──────────────────────────────────────────────────────────
+// [data-density="compact"] is stamped on <html> by DensityService (a per-device choice). Only the
+// row metrics tighten: 36px rows become 30px by trading vertical padding, type and colour stay as
+// they are, and the collapsed rail and coarse-pointer sizes above are untouched because a 44px
+// touch target is a floor the density setting is not allowed to cross.
+:host-context([data-density="compact"]) {
+  .nav {
+    gap: 1px;
+  }
+
+  .nav-item,
+  .board-link {
+    min-height: var(--h-md);
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+
+  .board-nav-group {
+    gap: 0;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  :host-context([data-density="compact"]) {
+    .nav-item,
+    .board-link {
+      min-height: var(--h-lg);
+      padding-top: 6px;
+      padding-bottom: 6px;
+    }
+  }
+}

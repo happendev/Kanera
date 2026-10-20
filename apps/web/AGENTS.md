@@ -86,7 +86,14 @@ the ring), `--shadow-pop` (menus, popovers, pickers), `--shadow-drag` (CDK previ
 `--warning-soft`, never an inline `color-mix(... 10%, transparent)`. Motion: `--motion-fast` for colour,
 `--dur` for transforms, `--motion-base` + `--ease-drawer` for panels and drawers, `--spring` for small
 pops only. Card keys use the `card-key` mixin in `shared/_card-key.scss` (`--text-xs`,
-`--text-3`); add layout on top, never retype it.
+`--text-3`); add layout on top, never retype it. A list named anywhere (status cell, run header,
+calendar tile, activity row) wears the `list-chip` mixin from `shared/_list-chip.scss` with
+`--list-color` set to its hue; a board's identity is `k-board-icon` (tinted tile), not a bare glyph.
+Density: `DensityService` stamps `[data-density="compact"]` on `<html>` (per device, never on the
+account). Branch on it with `:host-context([data-density="compact"])` and change sizing only — never
+colour, contrast or the 44px coarse-pointer floor. Theme previews come from `k-theme-picker`: an
+element with its own `data-theme` / `data-accent` resolves the real tokens, so never hardcode a
+theme's hexes for a swatch.
 
 ## CSS traps
 

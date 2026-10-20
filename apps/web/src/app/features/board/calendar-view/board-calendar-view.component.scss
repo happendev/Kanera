@@ -404,6 +404,13 @@
       color: var(--text-muted);
     }
 
+    // Struck through as well as muted: the tick alone is easy to miss at tile scale. The line sits
+    // on the text span, not the title, so it never crosses the tick.
+    .cal-card-title-text {
+      text-decoration: line-through;
+      text-decoration-color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+    }
+
     .cal-time {
       color: var(--success);
       background: var(--success-soft);
@@ -415,14 +422,23 @@
     }
   }
 
-  .cal-complete-icon {
+  .cal-complete-icon,
+  .cal-list-icon {
     // inline-block, not inline: a strikethrough set on an ancestor propagates through inline children
     // and cannot be switched off, which would draw the line straight through the tick.
     display: inline-block;
-    color: var(--success);
     font-size: var(--text-base);
     line-height: 1;
     vertical-align: -2px;
+  }
+
+  .cal-complete-icon {
+    color: var(--success);
+  }
+
+  // Uncoloured lists keep the icon as a quiet grey mark; the colour comes inline when the list has one.
+  .cal-list-icon {
+    color: var(--text-muted);
   }
 
   &.is-overdue:not(.is-completed) {
@@ -457,6 +473,20 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+}
+
+// Labels on the left, assignees pinned top right; the labels wrap under themselves, never under
+// the avatars.
+.cal-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+
+  k-card-labels.cal-label-row {
+    flex: 1 1 auto;
+  }
 }
 
 // The calendar uses the shared label renderer at a denser scale; custom properties keep the
@@ -503,13 +533,15 @@ k-card-labels.cal-label-row {
   -webkit-line-clamp: 3;
 }
 
+// Wraps rather than clips: the key and the due time must always be read in full, so a narrow tile
+// drops the time onto a second line instead of cutting it off at the edge.
 .cal-context-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
+  gap: 3px 5px;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
 }
 
 .cal-time {
@@ -557,11 +589,11 @@ k-card-labels.cal-label-row {
 
 .cal-meta-row {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 3px 6px;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
   white-space: nowrap;
 }
 
@@ -633,30 +665,6 @@ k-card-labels.cal-label-row {
   background: var(--success);
 }
 
-// A tile squeezed to a narrow column drops the metadata row before it drops the title: beside the
-// assignee stack the row has ~90px, which clipped the checklist count mid-number.
-@container (max-width: 150px) {
-  .cal-context-row {
-    gap: 4px;
-  }
-
-  // The key gives way to the due time here: the time is what the calendar is for, and a fixed-width
-  // key pushed it past the clipped edge of the row.
-  .cal-card-key {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .cal-meta-row {
-    display: none;
-  }
-
-  .cal-assignees {
-    max-width: 36px;
-  }
-}
 
 .skeleton-day-number {
   width: 24px;
@@ -817,8 +825,8 @@ k-card-labels.cal-label-row {
   }
 }
 
-// The bare day number; today fills it with the accent the badge used to carry, and the 1st (which
-// keeps its month, "1 Oct") stretches the same fill into a pill.
+// The day label; today fills it with the accent, and a label with its month ("1 Oct", or every day
+// in the full layout) stretches the same fill into a pill.
 .calendar-day-number {
   display: inline-flex;
   align-items: center;
@@ -1159,4 +1167,25 @@ k-card-labels.cal-label-row {
   .cal-agenda-day > header {
     min-height: 44px;
   }
+}
+
+// The full layout's date is the same pill as the compact number; it must not stretch (header's
+// first child takes the slack) or the fill would run the width of the cell.
+.calendar-day > header > .calendar-day-number,
+.calendar-slot-empty > header > .calendar-day-number {
+  flex: none;
+  margin-left: -4px;
+  padding: 0 6px;
+  font-size: var(--text-sm);
+}
+
+.calendar-day > header > .calendar-day-number + small {
+  margin-left: auto;
+}
+
+// Compact density (DensityService): the title truncates to one line so a day cell stays a list of
+// cards rather than a column of paragraphs.
+:host-context([data-density="compact"]) .cal-card-title {
+  line-clamp: 1;
+  -webkit-line-clamp: 1;
 }

@@ -62,6 +62,9 @@
         if (a === 'blue' && t === 'carbon') a = 'green';
         else if (a === 'green' && t !== 'carbon') a = 'blue';
         document.documentElement.dataset.accent = a;
+        // Density (DensityService) only ever stamps the non-default value, so the attribute's
+        // absence is "comfortable" and no stylesheet has to name it.
+        if (localStorage.getItem('kanera-density') === 'compact') document.documentElement.dataset.density = 'compact';
       } catch (e) {}
     })();
   </script>

@@ -1,3 +1,4 @@
+@use "../../shared/list-chip" as chip;
 :host {
   display: block;
 }
@@ -537,6 +538,20 @@ button.xs {
 }
 
 :host ::ng-deep {
+  // "moved from X to Y" names its lists with the shared list pill, sized to sit inside a sentence.
+  .activity-list {
+    @include chip.list-chip;
+    @include chip.list-color-classes;
+    padding: 0 7px 0 5px;
+    font-size: 0.9em;
+    line-height: 1.5;
+    vertical-align: baseline;
+
+    > i {
+      font-size: 1em;
+    }
+  }
+
   .activity-value {
     display: inline-block;
     max-width: 100%;

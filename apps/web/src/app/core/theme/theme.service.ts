@@ -57,6 +57,15 @@ function isCoolAccent(accent: Accent): accent is CoolAccent {
   return accent === "blue" || accent === "green";
 }
 
+/**
+ * The accent a stored choice resolves to under a given theme — the same blue/green slot rule
+ * reconcileAccent() applies when the theme changes, but as a pure lookup so a preview of another
+ * theme (the picker thumbnails) can show the accent the user would actually land on there.
+ */
+export function accentForTheme(theme: Theme, accent: Accent): Accent {
+  return isCoolAccent(accent) ? THEME_COOL_ACCENT[theme] : accent;
+}
+
 export function isDarkTheme(theme: Theme): theme is DarkTheme {
   return (DARK_THEMES as readonly Theme[]).includes(theme);
 }

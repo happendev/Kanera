@@ -16,7 +16,7 @@
           @for (board of settings.boardList(); track board.id) {
           <div cdkDrag class="board-tile">
             <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (settings.accentColor() ? 'var(--color-' + settings.accentColor() + ')' : null)"></i>
+            <k-board-icon [icon]="board.icon" [color]="board.iconColor || settings.accentColor()" [size]="26" />
             @if (settings.editingBoardId() === board.id) {
             <input class="inline-name-input grow" [value]="settings.editingBoardName()" (input)="settings.editingBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveBoardName(board.id)" (keydown.enter)="settings.saveBoardName(board.id)"
               (keydown.escape)="settings.cancelEditBoard()" autofocus />

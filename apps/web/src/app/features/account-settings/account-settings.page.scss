@@ -517,87 +517,115 @@
   }
 }
 
-.theme-options {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 180px));
-  gap: 8px;
-}
-
-.theme-option {
-  height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: var(--text-md);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
-
-  i {
-    font-size: var(--text-lg);
-  }
-
-  // `:not(:disabled)` is here for specificity, not semantics: the global `button:hover:not(:disabled)`
-  // rule (0,2,1) outranks a plain `.theme-option:hover` (0,2,0) and painted the accent fill under
-  // accent-coloured text, so the selected theme's label vanished on hover.
-  &:hover:not(:disabled) {
-    background: var(--surface-2);
-    color: var(--text);
-    border-color: var(--border-strong);
-  }
-
-  &.active,
-  &.active:hover:not(:disabled) {
-    background: var(--accent-soft);
-    border-color: var(--accent);
-    color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent);
-  }
-}
-
-// ── Accent picker ── Shares the theme picker's tile chrome; the only structural difference is the
-// swatch replacing the icon. Five columns rather than four because the labels are single words.
+// ── Accent picker ── A row of colour dots; the colour is the whole choice, so the selected option's
+// name is spelled out once beside the row (.accent-caption) rather than on every tile.
 .accent-help {
   margin-top: 14px;
 }
 
+.accent-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
 .accent-options {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.accent-dot {
+  // Both pinned: the global `button` rule sets a 36px height and an accent fill, neither of which
+  // a swatch can carry.
+  width: 28px;
+  height: 28px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent-dot);
+  // A hairline in the page's own ink keeps the graphite swatch from dissolving into the surface,
+  // without reading as a border on the saturated options.
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent);
+  cursor: pointer;
+  transition: transform var(--dur), box-shadow var(--motion-fast);
+
+  // See .theme-option in theme-picker: `:not(:disabled)` is specificity against the global
+  // button:hover rule, which would repaint the dot in the live accent.
+  &:hover:not(:disabled) {
+    background: var(--accent-dot);
+    transform: scale(1.1);
+  }
+
+  // The selected dot wears a ring in its own colour, with a gap in the page surface so it reads as
+  // a ring and not as a bigger dot.
+  &.active,
+  &.active:hover:not(:disabled) {
+    background: var(--accent-dot);
+    box-shadow:
+      0 0 0 2px var(--surface),
+      0 0 0 4px var(--accent-dot);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+
+    &:hover:not(:disabled) {
+      transform: none;
+    }
+  }
+}
+
+.accent-caption {
+  color: var(--text-3);
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+
+// ── Density ── Two tall tiles rather than a row of pills: each option needs a second line to say
+// what actually changes, and the choice is rare enough to deserve the room.
+.density-options {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 144px));
+  grid-template-columns: repeat(2, minmax(0, 300px));
   gap: 8px;
 }
 
-.accent-option {
-  // Height is pinned for the same reason .theme-option pins it: the global `button` rule in
-  // styles.scss sets height: 36px, which would leave these a row shorter than the theme tiles.
-  height: 38px;
-  display: inline-flex;
+.density-option {
+  height: auto;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 12px;
+  // The global button reset sets nowrap; the second line has to wrap at phone width.
+  white-space: normal;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text-muted);
-  font-size: var(--text-md);
-  font-weight: 500;
+  text-align: left;
   cursor: pointer;
   transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
 
-  // See .theme-option: `:not(:disabled)` is specificity against the global button:hover rule.
+  i {
+    flex: none;
+    font-size: var(--text-lg);
+  }
+
   &:hover:not(:disabled) {
     background: var(--surface-2);
     color: var(--text);
     border-color: var(--border-strong);
   }
 
-  // The active tile is tinted with the *live* accent, so selecting an option immediately repaints
-  // this control in the colour it just applied.
   &.active,
   &.active:hover:not(:disabled) {
     background: var(--accent-soft);
@@ -607,14 +635,19 @@
   }
 }
 
-.accent-swatch {
-  width: 14px;
-  height: 14px;
-  flex: none;
-  border-radius: 999px;
-  // A hairline in the page's own ink keeps the graphite swatch from dissolving into the tile it
-  // sits on, without reading as a border on the saturated options.
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent);
+.density-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: var(--text-md);
+  font-weight: 500;
+
+  small {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    font-weight: 400;
+  }
 }
 
 .storage-usage-row {
@@ -1865,15 +1898,8 @@
     grid-template-columns: 1fr;
   }
 
-  // ── Theme picker ── 2x2 rather than four cramped columns; at this width four tiles leave no
-  // room for the icon and label to sit on one line.
-  .theme-options {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  // Five accent tiles do not fit a phone row; two keeps the swatch and label on one line, matching
-  // the theme picker above it.
-  .accent-options {
+  // The theme picker folds to 2x2 on its own; the density tiles follow it.
+  .density-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

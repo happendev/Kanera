@@ -5,6 +5,7 @@ import { RouterOutlet } from "@angular/router";
 import { AuthService } from "./core/auth/auth.service";
 import { AuthSyncService } from "./core/auth/auth-sync.service";
 import { CookieConsentComponent } from "./core/consent/cookie-consent.component";
+import { DensityService } from "./core/theme/density.service";
 import { ThemeService } from "./core/theme/theme.service";
 
 @Component({
@@ -27,6 +28,9 @@ export class AppComponent {
   private hadSession = false;
 
   constructor() {
+    // Constructed here, not where the setting is edited, so the stored density is stamped before the
+    // shell renders rather than when the user first opens Appearance.
+    inject(DensityService);
     // Appearance lives on the account, so the session is what carries it: this covers first load,
     // a refreshed session and an organisation switch alike. The effect re-fires on every unrelated
     // change to the user (unread counts, entitlements), which is why hydrate() is idempotent and

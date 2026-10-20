@@ -1052,3 +1052,67 @@
     display: none;
   }
 }
+
+// ─── Compact density ──────────────────────────────────────────────────────────
+// [data-density="compact"] on <html> (DensityService, per device). Distinct from the per-board
+// .compact-cards view above, which removes rows: this keeps every row and shrinks the metrics —
+// padding, body type one step down the scale, chips one line-height tighter, labels as dots with
+// text (card-labels.component.ts). The three padding mirrors (:host, .card-link, .card-cover) must
+// move together or the link's hit area and the cover's bleed drift from the tile edge.
+:host-context([data-density="compact"]) {
+  padding: 5px 8px 6px;
+
+  .card-link {
+    margin: -5px -8px -6px;
+    padding: 5px 8px 6px;
+  }
+
+  .card-cover {
+    margin: -5px -8px 6px;
+    width: calc(100% + 16px);
+  }
+
+  .card-key {
+    margin-bottom: 2px;
+  }
+
+  .card-body {
+    font-size: var(--text-base);
+    line-height: 1.45;
+  }
+
+  k-card-labels {
+    --label-bar-gap: 3px;
+    --label-bar-row-gap: 2px;
+    --label-chip-height: 18px;
+    --label-chip-font-size: 10px;
+  }
+
+  .cf-badge,
+  .card-blocked,
+  .card-due,
+  .card-time-in-progress {
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 1.45;
+  }
+
+  .cf-chip {
+    line-height: 15px;
+  }
+
+  .card-footer {
+    margin-top: 4px;
+    gap: 5px;
+  }
+
+  .card-footer-left {
+    gap: 5px;
+  }
+
+  .assignee-avatar {
+    width: 20px;
+    height: 20px;
+    margin-left: -5px;
+  }
+}

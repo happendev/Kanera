@@ -196,47 +196,6 @@ input[readonly] {
   }
 }
 
-// 2x2: the auth card is ~360px of usable width, which four tiles cannot share without truncating
-// the labels.
-.theme-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.theme-option {
-  height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: var(--text-md);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
-
-  i {
-    font-size: var(--text-lg);
-  }
-
-  &:hover {
-    background: var(--surface-2);
-    color: var(--text);
-    border-color: var(--border-strong);
-  }
-
-  &.active {
-    background: var(--accent-soft);
-    border-color: var(--accent);
-    color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent);
-  }
-}
-
 .turnstile-field {
   min-height: 65px;
   display: flex;

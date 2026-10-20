@@ -8,13 +8,14 @@ import { AvatarComponent } from "../../../shared/avatar.component";
 import { AccountSettingsPage } from "../account-settings.page";
 
 import { LanguageMenuComponent } from "../../../shared/language-menu.component";
+import { ThemePickerComponent } from "../../../shared/theme-picker.component";
+import { TooltipDirective } from "../../../shared/tooltip.directive";
 @Component({
   selector: "k-account-settings-profile",
   standalone: true,
-  imports: [AutosaveStatusComponent, AvatarComponent, LanguageMenuComponent],
+  imports: [AutosaveStatusComponent, AvatarComponent, LanguageMenuComponent, ThemePickerComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./profile.page.html",
-  styleUrl: "./profile.page.scss",
 })
 export class AccountSettingsProfilePage implements OnDestroy {
   private readonly api = inject(ApiClient);

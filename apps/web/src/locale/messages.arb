@@ -5999,53 +5999,48 @@
       "src/app/features/auth/signup.page.html"
     ]
   },
-  "4033858450934162644": "Choose the theme and accent colour used on this device.",
-  "@4033858450934162644": {
+  "3334708804868032865": "Choose the theme, accent colour and density used on this device.",
+  "@3334708804868032865": {
     "x-files": [
       "src/app/features/account-settings/profile/profile.page.html"
     ]
   },
-  "4894605301713712393": "Theme color",
-  "@4894605301713712393": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "3892161059518616136": "Dark",
-  "@3892161059518616136": {
-    "description": "Theme name",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "6190467973682237388": "Carbon",
-  "@6190467973682237388": {
-    "description": "Theme name",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "413116577994876478": "Light",
-  "@413116577994876478": {
-    "description": "Theme name",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "7181896157659764503": "Paper",
-  "@7181896157659764503": {
-    "description": "Theme name",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
   "2034345101105818566": "Accent colour",
   "@2034345101105818566": {
+    "x-files": [
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "4583661526350417559": "Density",
+  "@4583661526350417559": {
+    "x-files": [
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "597360384236921330": "Comfortable",
+  "@597360384236921330": {
+    "description": "Density option name",
+    "x-files": [
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "947650454684228649": "Roomier sidebar rows and board cards.",
+  "@947650454684228649": {
+    "description": "Density option description",
+    "x-files": [
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "4046649033157042513": "Compact",
+  "@4046649033157042513": {
+    "description": "Density option name",
+    "x-files": [
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "1732282785929411941": "Tighter rows, smaller cards and labels as dots.",
+  "@1732282785929411941": {
+    "description": "Density option description",
     "x-files": [
       "src/app/features/account-settings/profile/profile.page.html"
     ]
@@ -9691,6 +9686,13 @@
   "3198158141036823013": "Could not change the due date",
   "@3198158141036823013": {
     "description": "Toast when dragging a card to another day fails",
+    "x-files": [
+      "src/app/features/board/calendar-view/board-calendar-view.component.ts"
+    ]
+  },
+  "8108361640026971950": "Today, {$date}",
+  "@8108361640026971950": {
+    "description": "Accessible name of today's date in the calendar grid",
     "x-files": [
       "src/app/features/board/calendar-view/board-calendar-view.component.ts"
     ]
@@ -27447,6 +27449,41 @@
     "description": "Button: end the support session",
     "x-files": [
       "src/app/shared/support-session-banner.component.ts"
+    ]
+  },
+  "3892161059518616136": "Dark",
+  "@3892161059518616136": {
+    "description": "Theme name",
+    "x-files": [
+      "src/app/shared/theme-picker.component.ts"
+    ]
+  },
+  "6190467973682237388": "Carbon",
+  "@6190467973682237388": {
+    "description": "Theme name",
+    "x-files": [
+      "src/app/shared/theme-picker.component.ts"
+    ]
+  },
+  "413116577994876478": "Light",
+  "@413116577994876478": {
+    "description": "Theme name",
+    "x-files": [
+      "src/app/shared/theme-picker.component.ts"
+    ]
+  },
+  "7181896157659764503": "Paper",
+  "@7181896157659764503": {
+    "description": "Theme name",
+    "x-files": [
+      "src/app/shared/theme-picker.component.ts"
+    ]
+  },
+  "7103588127254721505": "Theme",
+  "@7103588127254721505": {
+    "description": "Aria label on the theme radio group",
+    "x-files": [
+      "src/app/shared/theme-picker.component.ts"
     ]
   },
   "8348072798509355617": "Dismiss notification",

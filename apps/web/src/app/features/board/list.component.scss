@@ -771,3 +771,9 @@ h3 {
   background: var(--color-primary, #18181b);
   color: white;
 }
+
+// Compact density (DensityService): cards close up by a third so a lane shows one more tile per
+// screen without any tile losing content; the tile's own padding tightens in card.component.scss.
+:host-context([data-density="compact"]) .cards {
+  gap: 4px;
+}

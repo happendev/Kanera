@@ -917,12 +917,14 @@ export class CardActivityComponent {
       }
       case "moved": {
         const lists = this.state.lists();
-        const toName = lists.find((l) => l.id === p["toListId"])?.name ?? this.activityPayloadText(p, "toListName");
-        const fromName = lists.find((l) => l.id === p["fromListId"])?.name ?? this.activityPayloadText(p, "fromListName");
+        const to = lists.find((l) => l.id === p["toListId"]);
+        const from = lists.find((l) => l.id === p["fromListId"]);
+        const toName = to?.name ?? this.activityPayloadText(p, "toListName");
+        const fromName = from?.name ?? this.activityPayloadText(p, "fromListName");
         if (toName && fromName) {
-          return ` ${$localize`:Card activity after a person's name; arrow is an icon between the two list names:moved from ${this.v(fromName)}:fromList: ${this.arr()}:arrow: ${this.v(toName)}:toList:`}`;
+          return ` ${$localize`:Card activity after a person's name; arrow is an icon between the two list names:moved from ${this.listChip(fromName, from)}:fromList: ${this.arr()}:arrow: ${this.listChip(toName, to)}:toList:`}`;
         }
-        if (toName) return ` ${$localize`:Card activity after a person's name:moved to ${this.v(toName)}:list:`}`;
+        if (toName) return ` ${$localize`:Card activity after a person's name:moved to ${this.listChip(toName, to)}:list:`}`;
         return ` ${$localize`:Card activity after a person's name:moved this card`}`;
       }
       case "completed":
@@ -1458,6 +1460,19 @@ export class CardActivityComponent {
   private v(s: string, variant?: "overdue"): string {
     const variantClass = variant ? ` activity-value-${variant}` : "";
     return `<span class="activity-value${variantClass}">${this.esc(s)}</span>`;
+  }
+
+  /**
+   * A list named in a row wears the same icon-and-colour pill it has in the table and calendar, so
+   * "moved to Review" is recognisable at a glance. The colour rides on a class, not a style: this
+   * HTML goes through [innerHTML], whose sanitizer drops inline styles but keeps classes (the
+   * matching `.is-<colour>` rules are generated in shared/_list-chip.scss). A list that has been
+   * deleted since (name from the payload only) falls back to the plain value pill.
+   */
+  private listChip(name: string, list: { icon: string | null; color: string | null } | undefined): string {
+    if (!list) return this.v(name);
+    const color = list.color ? ` is-${this.esc(list.color)}` : "";
+    return `<span class="activity-list${color}"><i class="ti ti-${this.esc(list.icon || "list")}"></i><span>${this.esc(name)}</span></span>`;
   }
 
   private arr(): string {

@@ -2,6 +2,7 @@
 @use "../../../shared/toolbar-styles" as toolbar;
 @use "../../../shared/rank-pill" as rank;
 @use "../../../shared/card-key" as key;
+@use "../../../shared/list-chip" as chip;
 
 :host {
   --tv-row-h: 36px;
@@ -1258,31 +1259,8 @@
  * value as a status at all.
  */
 .tv-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  padding: 2px 9px;
-  background: color-mix(in srgb, var(--tv-status-color, var(--text-muted)) 15%, transparent);
-  color: color-mix(in srgb, var(--tv-status-color, var(--text-muted)) 65%, var(--text));
-  border-radius: 999px;
-  font-size: var(--text-base);
-  font-weight: 600;
-  line-height: 1.55;
-
-  > i {
-    flex: none;
-    font-size: var(--text-md);
-    opacity: .85;
-  }
-
-  > span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  @include chip.list-chip;
+  --list-color: var(--tv-status-color, var(--text-muted));
 }
 
 .tv-muted {

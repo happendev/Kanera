@@ -25,6 +25,7 @@ import { formatDueDate, isDueSoon, isOverdue } from "./due-date.util";
 import { formatDate, formatDateTime } from "../../shared/date-format";
 import { hasTimeInProgress, timeInProgressChip, type TimeInProgressChip } from "./time-in-progress.util";
 import { MinuteClockService } from "../../shared/minute-clock.service";
+import { DensityService } from "../../core/theme/density.service";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { blockedChipLabel } from "./card-relations.util";
 
@@ -63,6 +64,9 @@ export class CardComponent {
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly dragCoordinator = inject(CardDragCoordinator);
   private readonly clock = inject(MinuteClockService);
+  private readonly density = inject(DensityService);
+  // Avatar size is a component input, not CSS, so the compact density has to reach it here.
+  protected readonly avatarSize = computed(() => (this.density.compact() ? 20 : 24));
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   readonly card = input.required<AnyCard>();
