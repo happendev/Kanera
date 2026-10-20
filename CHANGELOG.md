@@ -18,6 +18,7 @@ All notable changes to Kanera are documented here.
 - **React to and comment on uploads:** when someone attaches a file, such as a screenshot of what they've built, the activity row now has a thumbs-up and a Comment button right under it. Comment starts a reply that links the file and mentions whoever uploaded it.
 - **Thumbs-up notifications:** when someone gives your comment or uploaded file a thumbs-up, you now get an inbox notification and a push notification. Email is off by default; turn it on under Profile settings → Notifications ("Thumbs-up on your comment or file"). Removing the thumbs-up takes the notification back. Duplicated cards keep the thumbs-ups on their copied files.
 - **Work done report:** Work done has a new **Report** layout on boards, My Cards and Team Cards: a plain-language summary of the period, the key counts with changes against the previous period, a daily flow chart, where open work sits, what needs attention right now with the cards named, activity and workload per person, and breakdowns by workspace, board, label, select field and checklist. Sections appear only when there is something to show.
+- **Board counts in workspace settings:** the Boards list in workspace settings now shows, under each board's name, its done share as a thin bar, open and overdue counts, checklist progress, the next due date, when it was last updated and who is on it. The counts respect assigned-only access and match the Portfolio.
 - **Date range presets:** the completed-cards, table and Work done date pickers now offer This week, Last week, This month, Last month and Last quarter alongside the Last N days shortcuts.
 - **Picker shortcuts:** label, member and select pickers support arrow keys, Home/End and Enter, highlight the text you searched for, and workspace admins can create a missing label straight from the card's label picker.
 - **Plan usage meters (hosted):** Account Plan settings show live usage of boards, members or seats, active automations and this month's automation executions against your plan, with a warning as you near a limit.
@@ -25,7 +26,8 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
-- **Performance:** faster boards, card details, global views, navigation, search, notifications and settings, with quicker member menus and fewer requests when returning to an open tab. API and AI-agent reads, realtime delivery and background jobs also run more efficiently.
+- **Appearance and visual polish:** new Comfortable and Compact density options, theme previews and accent swatches; clearer list icons and colours across calendars, activity and reports; consistent shadows, status tints and drawer motion; and tidier board icons and activity grouping.
+- **Performance:** faster boards, tables, card details, global views, navigation, search, notifications and settings, with quicker member menus and fewer requests when returning to an open tab. Sorting, time formatting and progress chips do less repeated work; API and AI-agent reads, realtime delivery and background jobs also run more efficiently.
 - **More reliable agent handoffs:** Kanera skills, CLI setup instructions and MCP guidance now make live runs, outcome comments, verification and appropriate list moves part of carrying out a card, including boards with custom workflows.
 
 - Account settings now have a Security page for two-factor authentication and password changes, and a Preferences page for Card Keys and Scratchpad visibility, with links to both guides.
@@ -40,6 +42,7 @@ All notable changes to Kanera are documented here.
 ### Fixed
 
 - Reordering inline images in descriptions, comments, notes and scratchpad no longer uploads a duplicate image.
+- Calendar tiles no longer cut off the due time beside the card key; assignees sit top right in the label row so the title and its details get the full width.
 
 - Closing a profile while it is still loading no longer causes an Angular error when the response arrives.
 - Board mirrors now copy attachments uploaded by guests from another organisation, instead of failing to find the file and retrying the card indefinitely. A card that still can't sync (for example, its source file is gone) stops retrying after about a day and resumes when the source card changes or the mirror is resumed; one broken card no longer holds up the rest of the mirror.
