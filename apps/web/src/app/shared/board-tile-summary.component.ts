@@ -6,8 +6,8 @@ import { formatDate, formatRelativeTime } from "./date-format";
 import { TooltipDirective } from "./tooltip.directive";
 
 /**
- * The quiet counts row under a board's name on a board tile: done share as a thin bar, then open,
- * overdue, checklist progress, the next due date, when the board last moved, and who is on it.
+ * The quiet counts row under a board's name on a board tile: open and overdue counts, checklist
+ * progress, the next due date, when the board last moved, and who is on it.
  *
  * Used by the workspace settings board list; written as a shared component so any other surface
  * that offers boards as tiles reads the same. Renders nothing until a summary arrives, so a tile is never
@@ -21,11 +21,6 @@ import { TooltipDirective } from "./tooltip.directive";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (summary(); as s) {
-      @if (total() > 0) {
-        <div class="bts-progress" role="img" [attr.aria-label]="progressLabel()" [kTooltip]="progressLabel()">
-          <span class="bts-fill" [style.width.%]="progressPercent()"></span>
-        </div>
-      }
       <div class="bts-row">
         <span class="bts-stat">{{ openLabel() }}</span>
         @if (s.overdue > 0) {
@@ -69,22 +64,6 @@ import { TooltipDirective } from "./tooltip.directive";
 
       :host:empty {
         display: none;
-      }
-
-      .bts-progress {
-        height: 4px;
-        border-radius: 2px;
-        background: var(--surface-2);
-        box-shadow: inset 0 0 0 1px var(--border);
-        overflow: hidden;
-      }
-
-      .bts-fill {
-        display: block;
-        height: 100%;
-        border-radius: inherit;
-        background: var(--success);
-        transition: width var(--motion-base) var(--ease-out);
       }
 
       .bts-row {
@@ -162,21 +141,6 @@ import { TooltipDirective } from "./tooltip.directive";
 })
 export class BoardTileSummaryComponent {
   readonly summary = input<BoardTileSummary | null>(null);
-
-  protected readonly total = computed(() => {
-    const s = this.summary();
-    return s ? s.open + s.completed : 0;
-  });
-
-  protected readonly progressPercent = computed(() => {
-    const total = this.total();
-    return total === 0 ? 0 : Math.round(((this.summary()?.completed ?? 0) / total) * 100);
-  });
-
-  protected readonly progressLabel = computed(() => {
-    const done = this.summary()?.completed ?? 0;
-    return icu($localize`:Board tile progress bar label - completed cards out of every card on the board:{done, plural, one {# of {total} cards done} other {# of {total} cards done}}`, { done, total: this.total() });
-  });
 
   protected readonly openLabel = computed(() =>
     icu($localize`:Board tile count of open cards:{count, plural, =0 {No open cards} one {# open} other {# open}}`, { count: this.summary()?.open ?? 0 }));

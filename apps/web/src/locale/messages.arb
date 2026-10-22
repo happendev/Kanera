@@ -26953,13 +26953,6 @@
       "src/app/shared/board-tile-summary.component.ts"
     ]
   },
-  "1936573498549727489": "{done, plural, one {# of {total} cards done} other {# of {total} cards done}}",
-  "@1936573498549727489": {
-    "description": "Board tile progress bar label - completed cards out of every card on the board",
-    "x-files": [
-      "src/app/shared/board-tile-summary.component.ts"
-    ]
-  },
   "8886723139090848520": "{count, plural, =0 {No open cards} one {# open} other {# open}}",
   "@8886723139090848520": {
     "description": "Board tile count of open cards",

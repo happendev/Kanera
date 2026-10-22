@@ -3877,7 +3877,6 @@
     "3163273237132918103": "minder dan een minuut geleden",
     "6674850178976368452": "Afgeronde checklistitems op open kaarten",
     "8288945552627986494": "Volgende vervaldatum",
-    "1936573498549727489": "{done, plural, one {# van {total} kaarten gedaan} other {# van {total} kaarten gedaan}}",
     "8886723139090848520": "{count, plural, =0 {Geen open kaarten} one {# open} other {# open}}",
     "6084766080270264075": "Bijgewerkt {$time}",
     "6737089387506614204": "{count, plural, one {nog # lid} other {nog # leden}}",
