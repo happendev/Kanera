@@ -44,11 +44,10 @@ describe("BoardTileSummaryComponent", () => {
     expect(host.querySelector(".bts-row")).toBeNull();
   });
 
-  it("shows the done share, counts, next due date, last activity and member stack", () => {
+  it("shows counts, next due date, last activity and member stack without a completion bar", () => {
     const host = render(summary());
     const text = host.textContent?.replace(/\s+/g, " ") ?? "";
-    expect(host.querySelector<HTMLElement>(".bts-fill")?.style.width).toBe("20%");
-    expect(host.querySelector(".bts-progress")?.getAttribute("aria-label")).toBe("1 of 5 cards done");
+    expect(host.querySelector(".bts-progress")).toBeNull();
     expect(text).toContain("4 open");
     expect(text).toContain("1 overdue");
     expect(text).toContain("1/2");
