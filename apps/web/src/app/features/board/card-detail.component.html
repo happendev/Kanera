@@ -575,7 +575,7 @@
           }
           @if (topLevelChecklists().length) {
           <span class="section-label-actions">
-            <button type="button" class="ghost xs checklist-hide-toggle" [class.is-active]="hideCompletedChecklistItems()" (click)="toggleCompletedChecklistItems()"
+            <button type="button" class="outline sm checklist-hide-toggle" [class.is-active]="hideCompletedChecklistItems()" (click)="toggleCompletedChecklistItems()"
               [kTooltip]="hideCompletedChecklistItems() ? labels.showCompletedItems : labels.hideCompletedItems">
               <i [class]="hideCompletedChecklistItems() ? 'ti ti-eye' : 'ti ti-eye-off'"></i>
               @if (hideCompletedChecklistItems()) {<ng-container i18n="Button: show completed checklist items">Show completed</ng-container>} @else {<ng-container i18n="Button: hide completed checklist items">Hide completed</ng-container>}
@@ -1095,7 +1095,7 @@
           @if (openItemSubChecklists().length) { <span class="count">{{ openItemSubChecklists().length }}</span> }
           @if (openItemSubChecklists().length) {
           <span class="section-label-actions">
-            <button type="button" class="ghost xs checklist-hide-toggle" [class.is-active]="hideCompletedChecklistItems()" (click)="toggleCompletedChecklistItems()"
+            <button type="button" class="outline sm checklist-hide-toggle" [class.is-active]="hideCompletedChecklistItems()" (click)="toggleCompletedChecklistItems()"
               [kTooltip]="hideCompletedChecklistItems() ? labels.showCompletedItems : labels.hideCompletedItems">
               <i [class]="hideCompletedChecklistItems() ? 'ti ti-eye' : 'ti ti-eye-off'"></i>
               @if (hideCompletedChecklistItems()) {<ng-container i18n="Button: show completed checklist items">Show completed</ng-container>} @else {<ng-container i18n="Button: hide completed checklist items">Hide completed</ng-container>}
