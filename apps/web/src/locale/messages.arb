@@ -10370,6 +10370,20 @@
       "src/app/features/board/card-activity.component.ts"
     ]
   },
+  "4249454143159826613": "{count, plural, other {added # checklist items to {checklist}}}",
+  "@4249454143159826613": {
+    "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "8048918396986168685": "{count, plural, other {added # checklist items}}",
+  "@8048918396986168685": {
+    "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
   "5914293188121814934": "added checklist item {$item}",
   "@5914293188121814934": {
     "description": "Card activity after a person's name",

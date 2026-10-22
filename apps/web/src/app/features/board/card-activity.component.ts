@@ -1033,6 +1033,12 @@ export class CardActivityComponent {
         return ` ${$localize`:Card activity after a person's name; arrow is an icon between the old and new names:renamed a checklist: ${from}:from: ${this.arr()}:arrow: ${to}:to:`}`;
       }
       case "checklistItem:created": {
+        if (count > 1) {
+          const checklistTitle = this.activityPayloadText(p, "checklistTitle");
+          return checklistTitle
+            ? ` ${icu($localize`:Card activity after a person's name:{count, plural, other {added # checklist items to {checklist}}}`, { count, checklist: this.v(checklistTitle) })}`
+            : ` ${icu($localize`:Card activity after a person's name:{count, plural, other {added # checklist items}}`, { count })}`;
+        }
         const text = this.activityPayloadText(p, "text");
         return text
           ? ` ${$localize`:Card activity after a person's name:added checklist item ${this.v(text)}:item:`}`

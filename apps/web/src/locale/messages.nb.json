@@ -1453,6 +1453,8 @@
     "7680326425868947029": "fullført en sjekkliste",
     "2708982262770550686": "{count, plural, other {endret navn på en sjekkliste # ganger: {from} {arrow} {to}}}",
     "921120309779854489": "endret navn til en sjekkliste: {$from} {$arrow} {$to}",
+    "4249454143159826613": "{count, plural, other {la til # sjekklisteelementer i {checklist}}}",
+    "8048918396986168685": "{count, plural, other {la til # sjekklisteelementer}}",
     "5914293188121814934": "lagt til sjekklisteelement {$item}",
     "7808209061948434453": "lagt til et sjekklisteelement",
     "3684736949394135489": "slettet sjekklisteelement {$item}",

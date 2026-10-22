@@ -195,6 +195,7 @@ export type DynamicActivityCoalesceKey =
   | `checklistItem:${string}:description`
   | `checklistItem:${string}:assignee`
   | `checklistItem:${string}:dueDate`
+  | `checklist:${string}:items:created`
   | `checklist:${string}:items:assignee`
   | `checklist:${string}:items:dueDate`;
 
