@@ -4,6 +4,18 @@
   margin-top: 24px;
 }
 
+.board-section + .board-section {
+  margin-top: var(--space-5);
+}
+
+.board-section-heading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
 // Per-board access panel. Reuses the global guest-list/guest-row grid, but with three columns
 // (member / role / action) instead of the guests page's four.
 .board-access-panel {
@@ -66,8 +78,22 @@
 }
 
 @media (max-width: 640px) {
+  // Reserve the first line for the grip, icon and name so the progress toggle cannot squeeze it.
+  .board-row .board-name,
+  .board-row .inline-name-input {
+    flex-basis: calc(100% - 64px);
+    min-width: 0;
+  }
+
   // The row stacks on phones and the toggle already indents past the grip; indent the counts to match.
   .board-counts { padding-left: 26px; }
+
+  // The group picker and four action buttons cannot fit on one line beside the phone sidebar.
+  .board-row .row-actions {
+    flex: 1 1 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
 }
 
 .board-progress-toggle {

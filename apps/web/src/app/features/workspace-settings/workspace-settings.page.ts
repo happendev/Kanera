@@ -3660,10 +3660,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async dropBoard(event: CdkDragDrop<Board[]>) {
-    const move = reorderByIndex(this.boardList(), event.previousIndex, event.currentIndex);
+    const move = reorderByIndex(event.container.data, event.previousIndex, event.currentIndex);
     if (!move) return;
     const { moved, reordered } = move;
-    this.boardList.set(reordered);
+    // CDK indices belong to the visible group, not the workspace's interleaved global positions.
+    // Replace only that group's slots so other groups keep their current order while saving.
+    const replacements = new Map(event.container.data.map((board, index) => [board.id, reordered[index]!]));
+    this.boardList.update((boards) => boards.map((board) => replacements.get(board.id) ?? board));
     const body = moveAnchorBody(reordered, event.currentIndex, "beforeBoardId", "afterBoardId");
     const result = await this.api.post<{ id: string; position: string }>(`/boards/${moved.id}/move`, body);
     this.boardList.update((bs) => sortBoards(bs.map((b) => (b.id === result.id ? { ...b, position: result.position } : b))));

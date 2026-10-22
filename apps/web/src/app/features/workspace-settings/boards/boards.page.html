@@ -12,8 +12,19 @@
         <p class="plan-limit-hint"><i class="ti ti-lock"></i> <ng-container i18n>Your existing boards stay active on Free. Add another board to review the exact Pro price for your team.</ng-container></p>
         }
         @if (settings.generalSettingsError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
-        <div class="boards" cdkDropList [cdkDropListData]="settings.boardList()" (cdkDropListDropped)="settings.dropBoard($event)">
-          @for (board of settings.boardList(); track board.id) {
+        @for (section of boardSections(); track section.id) {
+        <section class="board-section">
+          @if (settings.boardGroups().length > 0) {
+          <h3 class="board-section-heading">
+            @if (section.title !== null) {
+            {{ section.title }}
+            } @else {
+            <ng-container i18n="The board is in no group">Ungrouped</ng-container>
+            }
+          </h3>
+          }
+        <div class="boards" cdkDropList [cdkDropListData]="section.boards" (cdkDropListDropped)="settings.dropBoard($event)">
+          @for (board of section.boards; track board.id) {
           <div cdkDrag class="board-tile board-row">
             <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
             <k-board-icon [icon]="board.icon" [color]="board.iconColor || settings.accentColor()" [size]="26" />
@@ -53,10 +64,12 @@
             <k-board-tile-summary class="board-counts" [summary]="settings.boardTileSummaries().get(board.id) ?? null" />
           </div>
           }
-          @if (settings.boardList().length === 0) {
-          <k-empty-state size="sm" icon="layout-kanban" title="No boards yet" i18n-title text="Create a board above. It will share this workspace’s lists, fields and labels." i18n-text />
-          }
         </div>
+        </section>
+        }
+        @if (settings.boardList().length === 0) {
+          <k-empty-state size="sm" icon="layout-kanban" title="No boards yet" i18n-title text="Create a board above. It will share this workspace’s lists, fields and labels." i18n-text />
+        }
 
         <div class="role-ref-panel">
           <div class="role-ref-col">

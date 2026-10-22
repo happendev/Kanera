@@ -3877,7 +3877,6 @@
     "3163273237132918103": "for mindre enn ett minutt siden",
     "6674850178976368452": "Fullførte sjekklistepunkter på åpne kort",
     "8288945552627986494": "Neste forfallsdato",
-    "1936573498549727489": "{done, plural, one {# av {total} kort ferdig} other {# av {total} kort ferdig}}",
     "8886723139090848520": "{count, plural, =0 {Ingen åpne kort} one {# åpent} other {# åpne}}",
     "6084766080270264075": "Oppdatert {$time}",
     "6737089387506614204": "{count, plural, one {# medlem til} other {# medlemmer til}}",
