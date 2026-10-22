@@ -26,6 +26,8 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- Adding checklist items in card detail now shows in the card's activity. Items you add to one checklist in quick succession are grouped into a single "added N checklist items" entry.
+
 - **Appearance and visual polish:** new Comfortable and Compact density options, theme previews and accent swatches; clearer list icons and colours across calendars, activity and reports; consistent shadows, status tints and drawer motion; and tidier board icons and activity grouping.
 - **Performance:** faster boards, tables, card details, global views, navigation, search, notifications and settings, with quicker member menus and fewer requests when returning to an open tab. Sorting, time formatting and progress chips do less repeated work; smaller parallel API query groups limit database contention, while AI-agent reads, realtime delivery and background jobs also run more efficiently.
 - **More reliable agent handoffs:** Kanera skills, CLI setup instructions and MCP guidance now make live runs, outcome comments, verification and appropriate list moves part of carrying out a card, including boards with custom workflows.

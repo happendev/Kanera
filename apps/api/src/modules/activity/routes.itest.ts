@@ -95,7 +95,7 @@ void test("board activity shows card creation before same-timestamp card activit
   assert.deepEqual(body.map((item) => item.data.action).slice(0, 2), ["created", "completed"]);
 });
 
-void test("checklist item creation and deletion do not create activity or notifications", async () => {
+void test("checklist item adds coalesce per checklist without notifications; deletion records nothing", async () => {
   const app = await buildIntegrationServer();
 
   const signup = await app.inject({
@@ -172,23 +172,48 @@ void test("checklist item creation and deletion do not create activity or notifi
     .returning();
   assert.ok(checklist);
 
-  const createItem = await app.inject({
-    method: "POST",
-    url: `/cards/${card.id}/checklists/${checklist.id}/items`,
-    headers: { authorization: `Bearer ${accessToken}` },
-    payload: { text: "Draft release note" },
-  });
-  assert.equal(createItem.statusCode, 201);
+  const [otherChecklist] = await db
+    .insert(cardChecklists)
+    .values({
+      cardId: card.id,
+      title: "Follow-up",
+      position: "2000.0000000000",
+    })
+    .returning();
+  assert.ok(otherChecklist);
 
-  const item = createItem.json();
+  const addItem = async (checklistId: string, text: string) => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/cards/${card.id}/checklists/${checklistId}/items`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { text },
+    });
+    assert.equal(response.statusCode, 201);
+    return response.json();
+  };
+  const item = await addItem(checklist.id, "Draft release note");
+  await addItem(checklist.id, "Tag the release");
+  await addItem(otherChecklist.id, "Announce");
 
-  const [createdActivity] = await db
+  const createdActivities = await db
     .select()
     .from(activityEvents)
     .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, "checklistItem:created")))
-    .orderBy(activityEvents.createdAt)
-    .limit(1);
-  assert.equal(createdActivity, undefined);
+    .orderBy(activityEvents.createdAt);
+  assert.deepEqual(
+    createdActivities.map((activity) => ({
+      checklistId: (activity.payload as { checklistId?: string }).checklistId,
+      checklistTitle: (activity.payload as { checklistTitle?: string }).checklistTitle,
+      text: (activity.payload as { text?: string }).text,
+      coalescedCount: activity.coalescedCount,
+      feedVisible: activity.feedVisible,
+    })),
+    [
+      { checklistId: checklist.id, checklistTitle: "Launch", text: "Tag the release", coalescedCount: 2, feedVisible: true },
+      { checklistId: otherChecklist.id, checklistTitle: "Follow-up", text: "Announce", coalescedCount: 1, feedVisible: true },
+    ],
+  );
 
   const boardActivity = await app.inject({
     method: "GET",
@@ -197,10 +222,10 @@ void test("checklist item creation and deletion do not create activity or notifi
   });
   assert.equal(boardActivity.statusCode, 200);
   assert.equal(
-    boardActivity.json().some((item: { type: string; data: { action?: string } }) =>
+    boardActivity.json().filter((item: { type: string; data: { action?: string } }) =>
       item.type === "activity" && item.data.action === "checklistItem:created"
-    ),
-    false,
+    ).length,
+    2,
   );
 
   const createdNotifications = await db

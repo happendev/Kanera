@@ -1453,6 +1453,8 @@
     "7680326425868947029": "a terminé une checklist",
     "2708982262770550686": "{count, plural, one {a renommé une checklist # fois : {from} {arrow} {to}} other {a renommé une checklist # fois : {from} {arrow} {to}}}",
     "921120309779854489": "a renommé une checklist : {$from} {$arrow} {$to}",
+    "4249454143159826613": "{count, plural, other {a ajouté # éléments de checklist à {checklist}}}",
+    "8048918396986168685": "{count, plural, other {a ajouté # éléments de checklist}}",
     "5914293188121814934": "a ajouté l'élément de checklist {$item}",
     "7808209061948434453": "a ajouté un élément de checklist",
     "3684736949394135489": "a supprimé l'élément de checklist {$item}",

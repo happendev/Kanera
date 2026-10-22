@@ -3015,7 +3015,7 @@ export async function cardRoutes(
     params: { id: string; checklistId: string },
     items: readonly dto.NewChecklistItem[],
     anchor: { afterItemId?: string | null; beforeItemId?: string | null },
-    options: { itemPath: (index: number) => IssuePath; recordCreated: boolean },
+    options: { itemPath: (index: number) => IssuePath; created: "perItem" | "coalesced" },
   ): Promise<CreatedItemTree[]> {
     const { id, checklistId } = params;
     const { card, ctx } = await loadEditableCard(req.auth, id);
@@ -3027,7 +3027,7 @@ export async function cardRoutes(
     if (checklist.parentItemId) assertLeafItems(items, options.itemPath);
     const newItems = await prepareNewChecklistItems(card.boardId, ctx.workspaceId, req.auth.sub, items, options.itemPath);
 
-    const { trees, rebalanced, activities, automationEffects } = await db.transaction(async (tx) => {
+    const { trees, rebalanced, activities, coalescedCreated, automationEffects } = await db.transaction(async (tx) => {
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
       await lockWorkspaceRelations(tx, ctx.workspaceId);
@@ -3067,10 +3067,30 @@ export async function cardRoutes(
         checklist,
         trees,
         assigneeNames: newItems.assigneeNames,
-        recordCreated: options.recordCreated,
+        recordCreated: options.created === "perItem",
       });
+      // The card UI adds items one Enter at a time, so a burst of adds by one person on one
+      // checklist folds into a single "added N checklist items" row instead of N feed rows.
+      const coalescedCreated: CoalescedActivityResult[] = [];
+      if (options.created === "coalesced") {
+        for (const { item } of trees) {
+          coalescedCreated.push(await recordCoalescedActivity(tx, {
+            boardId: card.boardId,
+            workspaceId: ctx.workspaceId,
+            actorId: req.auth.sub,
+            entityType: "card",
+            entityId: id,
+            action: ACTIVITY_ACTION.CHECKLIST_ITEM_CREATED,
+            coalesceKey: `checklist:${checklistId}:items:created`,
+            windowMs: 60_000,
+            fromValue: null,
+            toValue: item.text,
+            payload: { checklistId, checklistTitle: checklist.title, itemId: item.id, text: item.text },
+          }));
+        }
+      }
       const automationEffects = await runCompletionAutomationsForNewItems(tx, card, ctx, req.auth.sub, checklist.parentItemId, items);
-      return { trees, rebalanced, activities, automationEffects };
+      return { trees, rebalanced, activities, coalescedCreated, automationEffects };
     });
 
     // Existing rows renumbered by a dense insert are announced before the created items, matching
@@ -3079,6 +3099,7 @@ export async function cardRoutes(
       await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_REBALANCED, { boardId: card.boardId, cardId: id, checklistId, positions: rebalanced });
     }
     await emitCreatedItemTrees(card, checklist, trees, activities, { emitItems: true });
+    for (const result of coalescedCreated) await emitCoalescedCardActivityFeedItem(card.boardId, id, result, { notify: false });
     await emitAutomationEffects(automationEffects);
     return trees;
   }
@@ -3086,11 +3107,9 @@ export async function cardRoutes(
   app.post("/cards/:id/checklists/:checklistId/items", async (req, reply) => {
     const params = req.params as { id: string; checklistId: string };
     const { afterItemId, beforeItemId, ...item } = dto.createChecklistItemBody.parse(req.body);
-    // The first-party UI adds one plain item per keystroke-Enter, which has never written a feed row;
-    // only assignment and due-date rows are recorded here, as they would be by a follow-up edit.
     const [tree] = await createChecklistItems(req, params, [item], { afterItemId, beforeItemId }, {
       itemPath: () => [],
-      recordCreated: false,
+      created: "coalesced",
     });
     return reply.status(201).send({ ...tree!.item, subChecklists: tree!.subChecklists });
   });
@@ -3102,7 +3121,7 @@ export async function cardRoutes(
     // in the board-level bulk create.
     const trees = await createChecklistItems(req, params, body.items, body, {
       itemPath: (index) => ["items", index],
-      recordCreated: true,
+      created: "perItem",
     });
     return reply.status(201).send({ items: trees.map((tree) => ({ ...tree.item, subChecklists: tree.subChecklists })) });
   });

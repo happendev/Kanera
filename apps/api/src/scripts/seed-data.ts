@@ -4058,6 +4058,7 @@ async function insertSeedMovementHistory(input: {
   cardCreatedAt: Date;
   completedAt: Date | null;
   timeZone: string;
+  showcaseDay?: Date;
 }): Promise<number> {
   const { tx, listByName, movementPath, cardCreatedAt, completedAt } = input;
   if (movementPath.length < 2) return 0;
@@ -4081,10 +4082,12 @@ async function insertSeedMovementHistory(input: {
   for (let step = 0; step < steps; step++) {
     const fromList = listByName.get(movementPath[step]!)!;
     const toList = listByName.get(movementPath[step + 1]!)!;
-    const movedAt = addMinutes(
-      new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1))),
-      0,
-    );
+    const movedAt = input.showcaseDay
+      ? addHours(input.showcaseDay, 1 + step / 4)
+      : addMinutes(
+        new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1))),
+        0,
+      );
     await insertSeedActivity(tx, {
       boardId: input.boardId,
       workspaceId: input.workspaceId,
@@ -5839,6 +5842,14 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           summary.notes += boardNotes.notes;
           summary.attachments += boardNotes.attachments;
 
+          // A repeatable recording range: the previous calendar week’s Monday–Friday, in UTC.
+          // Keep this on one existing board so the board filter gives a compact demo even as
+          // other fixtures grow. Other boards retain their broad historical activity.
+          const demoMonday = addDays(baseDate, -((baseDate.getUTCDay() + 6) % 7) - 7);
+          const isWorkDoneShowcase = boardSeed.key === "autumn-campaign-launch";
+          let showcaseCompletedIndex = 0;
+          let showcaseChecklistIndex = 0;
+          let showcaseMovedIndex = 0;
           const cardCountsByList = new Map<string, number>();
           const boardCardIdentities = await allocateCardKeys(tx, workspace!.id, boardSeed.cards.length);
           for (const [cardIndex, cardSeed] of boardSeed.cards.entries()) {
@@ -5853,12 +5864,29 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             const completedDaysAgo = cardSeed.completedDaysAgo
               ?? (isCompletedList(cardSeed.list) ? Math.max(1, Math.abs(cardSeed.dueOffsetDays ?? 1)) : undefined);
             const completedBy = cardSeed.completedBy ?? (completedDaysAgo === undefined ? undefined : cardSeed.assignees[0] ?? cardSeed.createdBy);
+            // Two visible rows per weekday: a completion plus either one move or one tick.
+            // Keep the rest of the board's history before this range so Wednesday–Friday fit
+            // together without collapsing days or changing the real Work done presentation.
+            const hasCompletedItems = cardSeed.checklists?.some(
+              (checklist) => checklist.items.some((item) => item.completedBy),
+            );
+            const checklistDay = isWorkDoneShowcase && hasCompletedItems
+              ? [0, 1, 3][showcaseChecklistIndex++] : undefined;
+            const moveDay = isWorkDoneShowcase && completedDaysAgo === undefined && !hasCompletedItems
+              && workspaceSeed.listFlow && seedMovementPath(
+                cardSeed.list, workspaceSeed.listFlow, workspaceSeed.listSideEntries ?? {},
+              ).length > 1 ? [2, 4][showcaseMovedIndex++] : undefined;
+            const showcaseDay = !isWorkDoneShowcase ? undefined : addDays(demoMonday,
+              completedDaysAgo !== undefined ? showcaseCompletedIndex++ % 5 : moveDay ?? -7);
+            let showcaseTickUsed = false;
             const completedAt = completedDaysAgo === undefined
               ? null
-              : addHours(addDays(baseDate, -completedDaysAgo), 16);
+              : showcaseDay ? addHours(showcaseDay, 6) : addHours(addDays(baseDate, -completedDaysAgo), 16);
             // Three weeks keeps the replayed progress stage across a weekday, even
             // when the evenly spaced moves would otherwise land entirely on a weekend.
-            const cardCreatedAt = completedAt
+            const cardCreatedAt = isWorkDoneShowcase
+              ? addDays(demoMonday, -7 - cardIndex % 5)
+              : completedAt
               ? addDays(completedAt, -21)
               : cardSeed.createdDaysAgo === undefined
                 ? addHours(addDays(boardCreatedAt, cardIndex), cardIndex % 5)
@@ -5910,7 +5938,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             summary.cardMoves += await insertSeedMovementHistory({
               tx, card: card!, boardId: board!.id, workspaceId: workspace!.id,
               actorId: userIdByKey.get(cardSeed.assignees[0] ?? cardSeed.createdBy)!,
-              listByName, movementPath, cardCreatedAt, completedAt, timeZone: workspace!.timeZone,
+              listByName, movementPath, cardCreatedAt, completedAt, timeZone: workspace!.timeZone, showcaseDay,
             });
 
             if (completedAt) {
@@ -6083,7 +6111,10 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                     const completedAt =
                       itemSeed.completedBy === undefined
                         ? null
-                        : addHours(cardCreatedAt, itemSeed.completedOffsetHours ?? itemIndex + checklistIndex + 2);
+                        : checklistDay !== undefined && !showcaseTickUsed
+                          ? addHours(addDays(demoMonday, checklistDay), 4)
+                          : addHours(cardCreatedAt, itemSeed.completedOffsetHours ?? itemIndex + checklistIndex + 2);
+                    if (itemSeed.completedBy !== undefined) showcaseTickUsed = true;
                     const itemUpdatedAt = completedAt ?? checklistCreatedAt;
                     latestCardTimestamp = itemUpdatedAt > latestCardTimestamp ? itemUpdatedAt : latestCardTimestamp;
 

@@ -1978,8 +1978,12 @@
   font-weight: 500;
 }
 
-.checklist-hide-toggle {
-  height: 24px;
+button.checklist-hide-toggle {
+  height: var(--h-sm);
+  padding: 0 8px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  border-color: var(--border);
   gap: 4px;
   text-transform: none;
   letter-spacing: 0;
@@ -2473,6 +2477,10 @@
 }
 
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  button.checklist-hide-toggle {
+    min-height: 44px;
+  }
+
   .detail-time-edit,
   .detail-time-editor input.detail-time-input,
   .detail-time-editor button {
