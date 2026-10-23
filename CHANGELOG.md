@@ -26,6 +26,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Home:** restructured and showing blocked
 - Adding checklist items in card detail now shows in the card's activity. Items you add to one checklist in quick succession are grouped into a single "added N checklist items" entry.
 
 - **Appearance and visual polish:** new Comfortable and Compact density options, theme previews and accent swatches; clearer list icons and colours across calendars, activity and reports; consistent shadows, status tints and drawer motion; and tidier board icons and activity grouping.

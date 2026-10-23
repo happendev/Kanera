@@ -4,7 +4,7 @@ import { Dialog } from "@angular/cdk/dialog";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
-import type { BillingDowngradePreviewResponse, HomeDueBucket, HomeItem } from "@kanera/shared/dto";
+import type { BillingDowngradePreviewResponse, HomeActivityItem, HomeDueBucket, HomeItem } from "@kanera/shared/dto";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -24,6 +24,7 @@ import { PriorityQueueComponent } from "../../shared/priority-queue/priority-que
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { AgendaGroupComponent } from "./agenda-group.component";
 import { GettingStartedComponent } from "./getting-started.component";
+import { HomeActivityComponent } from "./home-activity.component";
 import { UpcomingRemindersComponent } from "./upcoming-reminders.component";
 import { HomeState } from "./home.state";
 import { icu } from "../../core/i18n/icu";
@@ -42,6 +43,11 @@ const TREND_DAYS_NARROW = 14;
 
 /** Matches MOBILE_BREAKPOINT in app-shell, where the sidebar itself moves behind a drawer. */
 const NARROW_QUERY = "(max-width: 640px)";
+
+/** Whole days from one YYYY-MM-DD wall-clock date to another, compared as dates, never instants. */
+function daysBetween(from: string, to: string): number {
+  return Math.max(0, Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000));
+}
 
 type AccountStatusBanner = {
   kind: "free" | "trial" | "paid" | "pastDue" | "selfHosted";
@@ -73,7 +79,7 @@ const HERO_SCATTER: readonly ScatterItem[] = [
 @Component({
   selector: "k-home",
   standalone: true,
-  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, BoardIconComponent, GettingStartedComponent, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent, UpcomingRemindersComponent],
+  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, BoardIconComponent, GettingStartedComponent, HomeActivityComponent, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent, UpcomingRemindersComponent],
   // BoardMenuCoordinator owns the shared "labels compressed" preference that k-card-labels reads.
   // It is deliberately not root-provided (it holds document listeners), so every surface rendering
   // board chips provides it — same as GlobalWorkPage.
@@ -321,6 +327,50 @@ export class HomePage implements OnInit {
     return $localize`:Agenda filter chip - Showing ...:Showing tomorrow`;
   });
 
+  /*
+   * One line of context under each due tile, from the agenda payload already on the page. Every
+   * tile says something even at zero, so the row keeps one shape and a quiet day still reads as
+   * an answer rather than a blank.
+   */
+
+  readonly overdueCaption = computed(() => {
+    if (this.state.overdueTotal() === 0) return $localize`:Caption under the Overdue tile when nothing is late:Nothing late`;
+    const today = this.state.response().today;
+    const oldest = this.state.response().items
+      .filter((item) => item.bucket === "overdue")
+      .reduce<string | null>((min, item) => (min === null || item.dueDateLocalDate < min ? item.dueDateLocalDate : min), null);
+    if (!oldest || !today) return null;
+    // Overdue can include work due earlier today whose time slot has passed, hence the =0 case.
+    return icu($localize`:Caption under the Overdue tile - how late the oldest overdue item is:{count, plural, =0 {Due earlier today} one {Oldest is # day late} other {Oldest is # days late}}`, { count: daysBetween(oldest, today) });
+  });
+
+  readonly todayCaption = computed(() => {
+    if (this.state.dueTodayTotal() === 0) return $localize`:Caption under the Due today tile when nothing is due:Nothing due today`;
+    return this.boardSpread(this.state.response().items.filter((item) => item.bucket === "today"));
+  });
+
+  readonly weekCaption = computed(() => {
+    if (this.state.dueWithin7DaysTotal() === 0) return $localize`:Caption under the Next 7 days tile when nothing is due:Nothing scheduled`;
+    const counts = this.state.counts();
+    const tomorrow = counts.dueTomorrowCards + counts.dueTomorrowChecklistItems;
+    if (tomorrow > 0) return icu($localize`:Caption under the Next 7 days tile:{count, plural, other {# due tomorrow}}`, { count: tomorrow });
+    return this.boardSpread(this.state.response().items.filter((item) => item.bucket !== "overdue"));
+  });
+
+  readonly blockedCaption = computed(() => {
+    if (this.state.blockedTotal() === 0) return $localize`:Caption under the Blocked tile when nothing is blocked:Nothing blocked`;
+    const due = this.state.blockedDueWithin7Days();
+    if (due === 0) return $localize`:Caption under the Blocked tile when none of the blocked cards is due within 7 days:None due this week`;
+    return icu($localize`:Caption under the Blocked tile - blocked cards that are overdue or due within 7 days:{count, plural, other {# due this week}}`, { count: due });
+  });
+
+  /** "On 1 board" / "Across 3 boards"; null when the capped list holds none of the bucket's items. */
+  private boardSpread(items: HomeItem[]): string | null {
+    const boards = new Set(items.map((item) => item.boardId)).size;
+    if (boards === 0) return null;
+    return icu($localize`:Caption under a home due tile - how many boards the due work is spread over:{count, plural, one {On # board} other {Across # boards}}`, { count: boards });
+  }
+
   /** Narrow viewports halve the trend window; see TREND_DAYS_NARROW. */
   private readonly narrow = mediaQuerySignal(NARROW_QUERY);
   readonly visibleTrendDays = computed(() => (this.narrow() ? TREND_DAYS_NARROW : TREND_DAYS));
@@ -394,6 +444,17 @@ export class HomePage implements OnInit {
     void this.router.navigate(["/b", item.boardId, "c", item.cardId], {
       browserUrl: cardPath(item.organisationKey, item.cardKey),
     });
+  }
+
+  openActivity(item: HomeActivityItem): void {
+    void this.router.navigate(["/b", item.board.id, "c", item.card.id], {
+      browserUrl: cardPath(item.card.organisationKey, item.card.key),
+    });
+  }
+
+  /** My Cards with only the Blocked filter on, across every board: the same set the tile counts. */
+  openBlocked(): void {
+    void this.router.navigate(["/my-cards"], { queryParams: { filter: "blocked" } });
   }
 
   openBoard(boardId: string): void {

@@ -1,5 +1,5 @@
 import { DestroyRef, Injectable, computed, inject, signal } from "@angular/core";
-import type { HomeDueBucket, HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
+import type { HomeActivityItem, HomeActivityResponse, HomeDueBucket, HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -45,6 +45,8 @@ const EMPTY_RESPONSE: HomeTodayResponse = {
     dueWithin7DaysChecklistItems: 0,
     assignedCards: 0,
     assignedChecklistItems: 0,
+    blockedCards: 0,
+    blockedDueWithin7DaysCards: 0,
   },
   items: [],
   itemsTruncated: false,
@@ -112,6 +114,9 @@ export class HomeState {
   readonly dueTodayTotal = computed(() => this.counts().dueTodayCards + this.counts().dueTodayChecklistItems);
   readonly dueWithin7DaysTotal = computed(() =>
     this.counts().dueWithin7DaysCards + this.counts().dueWithin7DaysChecklistItems);
+  /** `?? 0`: an offline snapshot cached before the blocked counts existed has neither field. */
+  readonly blockedTotal = computed(() => this.counts().blockedCards ?? 0);
+  readonly blockedDueWithin7Days = computed(() => this.counts().blockedDueWithin7DaysCards ?? 0);
   readonly completedThisWeek = computed(() => this.trend().thisWeek.completedCards);
   readonly completedLastWeek = computed(() => this.trend().lastWeek.completedCards);
   readonly weekDelta = computed(() => this.completedThisWeek() - this.completedLastWeek());
@@ -137,6 +142,15 @@ export class HomeState {
   });
 
   readonly isAllClear = computed(() => this.response().items.length === 0);
+
+  /**
+   * Recent activity across the viewer's boards. Rides along with every agenda load (initial,
+   * debounced realtime refresh, poll, reconnect) rather than keeping its own socket subscriptions:
+   * it is a glance at what moved, and a few minutes' lag on a board home has not joined is fine.
+   * Null until the first answer, so the panel can tell "nothing happened" from "not loaded".
+   * Never cached offline: someone else's stale activity is not worth showing.
+   */
+  readonly activity = signal<HomeActivityItem[] | null>(null);
 
   // "Your priorities" is no longer fetched or cached here: the queue is a shell-wide surface owned
   // by `MyPrioritiesService`, which the Home block reads directly. That is what makes the block, the
@@ -267,7 +281,10 @@ export class HomeState {
     // falls back to their profile zone when this is unavailable.
     const timeZone = this.browserTimeZone();
     const url = timeZone ? `/home/today?timeZone=${encodeURIComponent(timeZone)}` : "/home/today";
-    const response = await this.api.get<HomeTodayResponse>(url);
+    const agenda = this.api.get<HomeTodayResponse>(url);
+    // In parallel and not awaited: a slow feed must never hold the agenda's loading state open.
+    void this.loadActivity(version);
+    const response = await agenda;
     if (version !== this.requestVersion) return;
     this.response.set(response);
     this.error.set(null);
@@ -276,6 +293,15 @@ export class HomeState {
     this.lastSyncedAt.set(new Date().toISOString());
     this.updateRooms();
     await this.offlineCache.saveHomeToday(this.cacheKey(), response).catch(() => undefined);
+  }
+
+  private async loadActivity(version: number): Promise<void> {
+    try {
+      const { items } = await this.api.get<HomeActivityResponse>("/home/activity");
+      if (version === this.requestVersion) this.activity.set(items);
+    } catch {
+      // A failed feed keeps whatever was showing; the agenda's own error handling covers outages.
+    }
   }
 
   private browserTimeZone(): string | null {
@@ -339,13 +365,15 @@ export class HomeState {
       [SERVER_EVENTS.NOTIFICATION_CREATED]: ({ notification }) => {
         // Card events are board-scoped and home only joins rooms for boards it currently shows, so
         // a first assignment on an unseen board arrives in no joined room. The user-room
-        // notification is the only signal that always reaches us. These three reasons are exactly
-        // the ones that can change the agenda; "mentioned"/"watching" cannot, so they must not
-        // cause a refetch.
+        // notification is the only signal that always reaches us. These reasons are exactly the
+        // ones that can change the agenda or its tiles ("dependency" is a card becoming blocked or
+        // unblocked, which moves the Blocked tile even for undated cards on unjoined boards);
+        // "mentioned"/"watching" cannot, so they must not cause a refetch.
         if (
           notification.reason === "assigned"
           || notification.reason === "overdue"
           || notification.reason === "checklist_item_overdue"
+          || notification.reason === "dependency"
         ) refresh();
       },
     });

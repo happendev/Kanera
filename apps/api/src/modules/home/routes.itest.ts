@@ -1,6 +1,6 @@
 import "../../test/setup.integration.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
-import type { HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
+import type { HomeActivityResponse, HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
 import {
   ACTIVITY_ACTION,
   activityEvents,
@@ -12,9 +12,11 @@ import {
   cardChecklists,
   cardLabelAssignments,
   cardLabels,
+  cardRelations,
   cards,
   clientMembers,
   clients,
+  comments,
   lists,
   planActions,
   workspaceMembers,
@@ -756,5 +758,127 @@ void test("the endpoint is absent from the public API server", async () => {
     assert.ok(!Object.keys(spec.json<{ paths: Record<string, unknown> }>().paths).includes("/home/today"));
   } finally {
     await app.close();
+  }
+});
+
+/**
+ * The Blocked tile must agree with the board's Blocked filter: only open blockers count, and a
+ * completed card is not waiting on anything.
+ */
+void test("GET /home/today counts the viewer's open cards that wait on an open blocker", async () => {
+  const f = await seed();
+  try {
+    const today = localDateInTimezone(new Date(), "UTC");
+    const card = (title: string, fields: { dueDateLocalDate?: string; completedAt?: Date; assigneeId?: string } = {}) =>
+      addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title, createdById: f.teammate.id, assigneeId: f.viewer.id, ...fields });
+    const openBlocker = await card("Open blocker", { assigneeId: f.teammate.id });
+    const doneBlocker = await card("Done blocker", { assigneeId: f.teammate.id, completedAt: new Date() });
+    const blockedSoon = await card("Blocked, due soon", { dueDateLocalDate: addDays(today, 2) });
+    const blockedLate = await card("Blocked, overdue", { dueDateLocalDate: addDays(today, -3) });
+    const blockedUndated = await card("Blocked, undated");
+    const blockedLater = await card("Blocked, due next month", { dueDateLocalDate: addDays(today, 30) });
+    const clearedByDone = await card("Only a done blocker");
+    const finished = await card("Blocked but finished", { completedAt: new Date() });
+    const notMine = await card("Someone else's blocked card", { assigneeId: f.teammate.id });
+    const blocks = (target: { id: string }, source = openBlocker) =>
+      ({ workspaceId: f.homeWorkspace.id, sourceCardId: source.id, targetCardId: target.id, kind: "blocks" as const });
+    await db.insert(cardRelations).values([
+      blocks(blockedSoon),
+      blocks(blockedLate),
+      blocks(blockedUndated),
+      blocks(blockedLater),
+      blocks(clearedByDone, doneBlocker),
+      blocks(finished),
+      blocks(notMine),
+    ]);
+
+    const response = await f.app.inject({ method: "GET", url: "/home/today?timeZone=UTC", headers: auth(f.viewerToken) });
+    assert.equal(response.statusCode, 200);
+    const { counts } = response.json<HomeTodayResponse>();
+    assert.equal(counts.blockedCards, 4);
+    // Due soon and overdue; undated and next month's are blocked but not this week's problem.
+    assert.equal(counts.blockedDueWithin7DaysCards, 2);
+  } finally {
+    await f.app.close();
+  }
+});
+
+/**
+ * My recent activity reads across every board, so it has to repeat each board feed's access rules
+ * itself, and keep to the viewer's own actions: a missed rule leaks someone else's work or a card
+ * title from a board the viewer can no longer open.
+ */
+void test("GET /home/activity shows what the viewer did on cards they can open, newest first", async () => {
+  const f = await seed();
+  try {
+    const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+    const event = (fields: {
+      boardId: string;
+      cardId: string;
+      createdAt: Date;
+      actorId?: string;
+      actorKind?: "user" | "agent" | "apiKey" | "support";
+      agentName?: string;
+      action?: string;
+      payload?: Record<string, unknown>;
+      feedVisible?: boolean;
+      entityType?: string;
+      entityId?: string;
+    }) =>
+      db.insert(activityEvents).values({
+        clientId: f.homeClient.id,
+        boardId: fields.boardId,
+        entityType: fields.entityType ?? "card",
+        entityId: fields.entityId ?? fields.cardId,
+        action: fields.action ?? "created",
+        actorId: fields.actorId ?? f.viewer.id,
+        actorKind: fields.actorKind ?? "user",
+        agentName: fields.agentName,
+        payload: fields.payload ?? {},
+        feedVisible: fields.feedVisible ?? true,
+        createdAt: fields.createdAt,
+      });
+
+    const moved = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Moved card", createdById: f.viewer.id });
+    const reopened = await addCard({ boardId: f.secondBoard.id, listId: f.secondList.id, title: "Reopened card", createdById: f.viewer.id });
+    const mine = await addCard({ boardId: f.restrictedBoard.id, listId: f.homeList.id, title: "Assigned to me", createdById: f.teammate.id, assigneeId: f.viewer.id });
+    const notMine = await addCard({ boardId: f.restrictedBoard.id, listId: f.homeList.id, title: "Restricted secret", createdById: f.teammate.id });
+    const archived = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Archived card", createdById: f.viewer.id, archivedAt: new Date() });
+    const hiddenBoard = await addCard({ boardId: f.archivedBoard.id, listId: f.homeList.id, title: "Archived board card", createdById: f.viewer.id });
+    const [comment] = await db.insert(comments).values({ cardId: mine.id, authorId: f.viewer.id, body: "Looks good" }).returning();
+
+    await event({ boardId: f.sharedBoard.id, cardId: moved.id, action: "moved", payload: { toListId: f.homeList.id }, createdAt: minutesAgo(5) });
+    await event({ boardId: f.secondBoard.id, cardId: reopened.id, action: "completion:set", payload: { toValue: false }, actorKind: "agent", agentName: "Claude", createdAt: minutesAgo(10) });
+    await event({ boardId: f.restrictedBoard.id, cardId: mine.id, entityType: "comment", entityId: comment!.id, payload: { cardId: mine.id }, createdAt: minutesAgo(15) });
+    // Someone else's action, an API key's, a since-deleted comment, an assigned-items-only card the
+    // viewer cannot see, an archived card, an inaccessible board, a hidden row, an edit, and
+    // anything past the window.
+    await event({ boardId: f.sharedBoard.id, cardId: moved.id, actorId: f.teammate.id, action: "completed", createdAt: minutesAgo(1) });
+    await event({ boardId: f.sharedBoard.id, cardId: moved.id, actorKind: "apiKey", action: "completed", createdAt: minutesAgo(1) });
+    await event({ boardId: f.restrictedBoard.id, cardId: mine.id, entityType: "comment", entityId: crypto.randomUUID(), payload: { cardId: mine.id }, createdAt: minutesAgo(1) });
+    await event({ boardId: f.restrictedBoard.id, cardId: notMine.id, createdAt: minutesAgo(1) });
+    await event({ boardId: f.sharedBoard.id, cardId: archived.id, action: "completed", createdAt: minutesAgo(1) });
+    await event({ boardId: f.archivedBoard.id, cardId: hiddenBoard.id, createdAt: minutesAgo(1) });
+    await event({ boardId: f.sharedBoard.id, cardId: moved.id, feedVisible: false, createdAt: minutesAgo(1) });
+    await event({ boardId: f.sharedBoard.id, cardId: moved.id, action: "updated", payload: { title: "Renamed" }, createdAt: minutesAgo(1) });
+    await event({ boardId: f.sharedBoard.id, cardId: moved.id, createdAt: minutesAgo(60 * 24 * 30) });
+
+    const response = await f.app.inject({ method: "GET", url: "/home/activity", headers: auth(f.viewerToken) });
+    assert.equal(response.statusCode, 200);
+    const { items } = response.json<HomeActivityResponse>();
+    assert.deepEqual(
+      items.map((item) => [item.kind, item.card.title, item.viaAgent]),
+      [
+        ["moved", "Moved card", false],
+        ["reopened", "Reopened card", true],
+        ["commented", "Assigned to me", false],
+      ],
+    );
+    assert.equal(items[0]!.list?.name, "Doing");
+    assert.equal(items[0]!.board.name, "Shared");
+    assert.equal(items[1]!.agentName, "Claude");
+    assert.equal(items[1]!.list, null);
+  } finally {
+    await f.app.close();
   }
 });

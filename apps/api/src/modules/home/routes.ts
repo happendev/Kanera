@@ -1,5 +1,6 @@
 import { dto } from "@kanera/shared";
 import type {
+  HomeActivityResponse,
   HomeCounts,
   HomeDueBucket,
   HomeGettingStartedResponse,
@@ -39,6 +40,7 @@ import { cardAccessCondition, cardSummaryDueColumns, overdueChecklistItemSql, ov
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { activityCompletedPredicate, activityDayExpr } from "../../lib/work-done.js";
 import { getAutomationExecutionsRemaining } from "../../lib/tier-limits.js";
+import { loadHomeActivity } from "./activity.js";
 import { loadGettingStarted, updateGettingStarted } from "./getting-started.js";
 
 
@@ -63,6 +65,8 @@ const EMPTY_COUNTS: HomeCounts = {
   dueWithin7DaysChecklistItems: 0,
   assignedCards: 0,
   assignedChecklistItems: 0,
+  blockedCards: 0,
+  blockedDueWithin7DaysCards: 0,
 };
 
 /** Sort key for a slot, used both in SQL and when merging the two item streams in JS. */
@@ -318,6 +322,10 @@ export async function homeRoutes(app: FastifyInstance) {
           dueToday: sql<number>`count(*) filter (where not ${overdue} and ${cardSummaryDueColumns.dueDateLocalDate} = ${today})::integer`,
           dueTomorrow: sql<number>`count(*) filter (where not ${overdue} and ${cardSummaryDueColumns.dueDateLocalDate} = ${tomorrow})::integer`,
           dueLaterThisWeek: sql<number>`count(*) filter (where not ${overdue} and ${cardSummaryDueColumns.dueDateLocalDate} > ${tomorrow} and ${cardSummaryDueColumns.dueDateLocalDate} <= ${horizonEnd})::integer`,
+          // The view's open-blocker count, so home agrees with the board's Blocked filter. Overdue
+          // dates are all before the horizon, so the second count includes them.
+          blocked: sql<number>`count(*) filter (where ${cardSummaryView.blockedByCount} > 0)::integer`,
+          blockedDueWithin7Days: sql<number>`count(*) filter (where ${cardSummaryView.blockedByCount} > 0 and ${cardSummaryDueColumns.dueDateLocalDate} <= ${horizonEnd})::integer`,
         })
         .from(cardAssignees)
         .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardAssignees.cardId))
@@ -537,7 +545,7 @@ export async function homeRoutes(app: FastifyInstance) {
       item.labels = labelsByCardId.get(item.cardId) ?? [];
     }
 
-    const cardCounts = cardCountRows[0] ?? { assigned: 0, overdue: 0, dueToday: 0, dueTomorrow: 0, dueLaterThisWeek: 0 };
+    const cardCounts = cardCountRows[0] ?? { assigned: 0, overdue: 0, dueToday: 0, dueTomorrow: 0, dueLaterThisWeek: 0, blocked: 0, blockedDueWithin7Days: 0 };
     const checklistCounts = checklistCountRows[0] ?? { assigned: 0, overdue: 0, dueToday: 0, dueTomorrow: 0, dueLaterThisWeek: 0 };
     const counts: HomeCounts = {
       overdueCards: cardCounts.overdue,
@@ -552,6 +560,8 @@ export async function homeRoutes(app: FastifyInstance) {
       dueWithin7DaysChecklistItems: checklistCounts.dueToday + checklistCounts.dueTomorrow + checklistCounts.dueLaterThisWeek,
       assignedCards: cardCounts.assigned,
       assignedChecklistItems: checklistCounts.assigned,
+      blockedCards: cardCounts.blocked,
+      blockedDueWithin7DaysCards: cardCounts.blockedDueWithin7Days,
     };
 
     // Total order, no ties: bucket → date → slot → board navigation order (the canonical sidebar
@@ -625,6 +635,12 @@ export async function homeRoutes(app: FastifyInstance) {
    * whereas /home/today polls and is cached for offline use.
    */
   app.get("/home/getting-started", async (req): Promise<HomeGettingStartedResponse> => loadGettingStarted(req.auth));
+
+  /**
+   * The home "My recent activity" panel. Separate from /home/today so a slow or failed feed never
+   * holds up the agenda, and it is not cached offline: it is a recap, not something to act on.
+   */
+  app.get("/home/activity", async (req): Promise<HomeActivityResponse> => loadHomeActivity(req.auth));
 
   /** A personal UI flag, like the preferences on PATCH /auth/me: no activity row and no event. */
   app.patch("/home/getting-started", async (req): Promise<HomeGettingStartedResponse> => {

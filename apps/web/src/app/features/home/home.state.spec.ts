@@ -412,8 +412,8 @@ describe("HomeState and the Up next queue", () => {
 
     // The queue is shell-wide state owned by MyPrioritiesService, which the Home block reads
     // directly. A second fetch here would be a second copy that can disagree with the drawer.
-    // (`get` throws on any path but /home/today, so an accidental fetch also fails the load.)
-    expect(f.get.mock.calls.every(([path]) => String(path).startsWith("/home/today"))).toBe(true);
+    // (`get` throws on any unexpected path, so an accidental fetch also fails the load.)
+    expect(f.get.mock.calls.every(([path]) => String(path).startsWith("/home/today") || path === "/home/activity")).toBe(true);
 
     // And a queue invalidation is not an agenda change, so it must not refetch this page either.
     const before = agendaCalls(f.get);

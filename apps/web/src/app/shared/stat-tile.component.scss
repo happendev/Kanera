@@ -99,6 +99,17 @@
     }
   }
 
+  .stat-tile-caption {
+    grid-column: 1 / -1;
+    overflow: hidden;
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   &:hover:not(.is-static) {
     background: var(--surface-2);
     border-color: var(--border-strong);
