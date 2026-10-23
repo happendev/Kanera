@@ -252,6 +252,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   /** `?person=<userId>` on Team Cards focuses that teammate; the profile card's "View cards" sends it. */
   readonly person = input<string | undefined>();
   private handledPersonParam: string | null = null;
+  /** `?filter=blocked` on My Cards opens on the Blocked filter; Home's Blocked tile sends it. */
+  readonly filter = input<string | undefined>();
+  private handledFilterParam: string | null = null;
 
   readonly openMenu = signal<WorkMenu | null>(null);
   readonly displayMenuPlacement: AnchoredPanelPlacement = { align: "end", width: 240, gap: 4, minHeight: 90, maxHeight: 420 };
@@ -1289,6 +1292,45 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       this.handledPersonParam = person;
       untracked(() => this.focusTeamPersonFromRoute(person));
     });
+    effect(() => {
+      const filter = this.filter();
+      if (filter !== "blocked") {
+        this.handledFilterParam = null;
+        return;
+      }
+      // Same wait as `?person=`: the stored preference applied during initialisation would
+      // otherwise overwrite the filter set here.
+      if (this.lens() !== "my" || !this.state.interactionReady() || this.handledFilterParam === filter) return;
+      this.handledFilterParam = filter;
+      untracked(() => this.applyFilterFromRoute());
+    });
+  }
+
+  /**
+   * Applies a `?filter=blocked` deep link once, then drops the parameter like `?person=`. The
+   * scope widens to every board and the other quick filters clear, so the list is exactly the
+   * cards Home counted, not that count intersected with whatever the page last remembered.
+   */
+  private applyFilterFromRoute(): void {
+    this.state.setScope([], []);
+    this.state.updateFilters({
+      completion: "active",
+      archived: false,
+      overdueOnly: false,
+      unassignedOnly: false,
+      inactiveOnly: false,
+      inProgressOnly: false,
+      inProgressTooLongOnly: false,
+      blockedOnly: true,
+      atRiskOnly: false,
+      overdueChecklistOnly: false,
+      dueFrom: null,
+      dueTo: null,
+      completedFrom: null,
+      completedTo: null,
+    });
+    this.applyQuery();
+    void this.router.navigate([], { queryParams: { filter: null }, queryParamsHandling: "merge", replaceUrl: true });
   }
 
   /**

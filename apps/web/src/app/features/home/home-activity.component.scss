@@ -1,0 +1,156 @@
+@use "../../shared/list-chip" as chip;
+
+:host {
+  display: block;
+}
+
+// Same frame as the agenda panel beside it, so the two columns read as one page.
+.activity-panel {
+  display: grid;
+  padding: 6px 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.activity-row {
+  // The global button reset pins buttons to 36px with an accent fill; a two-line row needs neither.
+  height: auto;
+  min-height: 44px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: start;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  color: var(--text);
+  text-align: left;
+  white-space: normal;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--border-strong);
+    outline-offset: -2px;
+  }
+}
+
+// A small neutral tile, tinted only for completion: the one kind that is unambiguously good news.
+.activity-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  font-size: var(--text-md);
+
+  &.is-completed {
+    color: var(--success);
+    background: var(--success-soft);
+  }
+}
+
+.activity-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.activity-text {
+  color: var(--text-3);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  // Long card titles wrap to a second line, then clip: the tail usually tells two cards apart,
+  // but a third line would make one row dominate the panel.
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.activity-card {
+  color: var(--text);
+  font-weight: 550;
+}
+
+.activity-list {
+  @include chip.list-chip;
+
+  padding: 0 7px;
+  font-size: var(--text-xs);
+  vertical-align: 1px;
+}
+
+// Wraps rather than truncating everything: on a phone the board name keeps the first line (and
+// only ellipsises if it is longer than the line) and the agent marker drops below it.
+.activity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.activity-board {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.activity-board-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Card activity's marker (card-activity.component.scss .via-agent), minus its inline margins:
+// here it sits in a flex row whose gap already spaces it.
+.via-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  white-space: nowrap;
+
+  i {
+    font-size: var(--text-sm);
+  }
+}
+
+.activity-time {
+  // Level with the first line of the sentence, whatever the icon tile's height.
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.activity-empty {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}

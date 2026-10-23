@@ -34,6 +34,9 @@ export type StatTileTone = "neutral" | "danger" | "warning" | "success";
       } @else if (interactive()) {
         <i class="ti ti-{{ active() ? 'x' : 'arrow-narrow-right' }} stat-tile-go"></i>
       }
+      @if (caption() && !deltaLabel()) {
+        <span class="stat-tile-caption">{{ caption() }}</span>
+      }
     </ng-template>
 
     @if (interactive()) {
@@ -78,6 +81,12 @@ export class StatTileComponent {
    * cannot usefully show both a persistent pill and a hover affordance in the same slot.
    */
   readonly delta = input<number | null>(null);
+  /**
+   * One muted line of context under the number ("Oldest is 5 days late"). It sits where the delta
+   * pill would, so a row of tiles mixing the two keeps every second line on the same baseline; a
+   * tile with a delta shows that instead.
+   */
+  readonly caption = input<string | null>(null);
   readonly deltaSuffix = input($localize`:Stat tile comparison period, after a change such as "+3":vs last week`);
 
   readonly activated = output<void>();

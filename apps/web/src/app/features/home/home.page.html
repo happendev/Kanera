@@ -210,134 +210,155 @@
 
     <!-- Every tile always renders: a zero is information on a triage page, and a grid that changes
          column count as work appears is disorienting. Danger tone only when there is something.
-         The three due tiles filter the agenda below; a tile with nothing to filter to, and the
-         Done tile (whose detail is the progress panel), render as static readouts so nothing
-         looks clickable unless clicking it visibly does something. -->
+         The three due tiles filter the agenda below and Blocked opens My Cards; a tile with nothing
+         to show renders as a static readout so nothing looks clickable unless clicking it visibly
+         does something. Done this week lives in Your progress, directly below. -->
     <!-- Above the tiles while it has something to teach; it removes itself once closed, and never
          appears for a checklist that was already complete. -->
     <k-getting-started [boardId]="lastBoardId()" (newStandaloneBoard)="newStandaloneBoard()" />
     <section class="focus-grid" aria-label="Focus" i18n-aria-label="Label for the home page summary tiles">
-      <k-stat-tile label="Overdue" i18n-label="Stat tile: overdue cards" icon="alert-triangle" [value]="state.overdueTotal()" [tone]="state.overdueTotal() > 0 ? 'danger' : 'neutral'" [interactive]="state.overdueTotal() > 0" [pressable]="true"
+      <k-stat-tile label="Overdue" i18n-label="Stat tile: overdue cards" icon="alert-triangle" [value]="state.overdueTotal()" [tone]="state.overdueTotal() > 0 ? 'danger' : 'neutral'" [caption]="overdueCaption()" [interactive]="state.overdueTotal() > 0" [pressable]="true"
         [active]="focusFilter() === 'overdue'" (activated)="toggleFocus('overdue')" />
-      <k-stat-tile label="Due today" i18n-label="Stat tile: cards due today" icon="calendar-due" [value]="state.dueTodayTotal()" [interactive]="state.dueTodayTotal() > 0" [pressable]="true" [active]="focusFilter() === 'today'" (activated)="toggleFocus('today')" />
-      <k-stat-tile label="Next 7 days" i18n-label="Stat tile: cards due in the next 7 days" icon="calendar-week" [value]="state.dueWithin7DaysTotal()" [interactive]="state.dueWithin7DaysTotal() > 0" [pressable]="true" [active]="focusFilter() === 'upcoming'"
+      <k-stat-tile label="Due today" i18n-label="Stat tile: cards due today" icon="calendar-due" [value]="state.dueTodayTotal()" [caption]="todayCaption()" [interactive]="state.dueTodayTotal() > 0" [pressable]="true" [active]="focusFilter() === 'today'" (activated)="toggleFocus('today')" />
+      <k-stat-tile label="Next 7 days" i18n-label="Stat tile: cards due in the next 7 days" icon="calendar-week" [value]="state.dueWithin7DaysTotal()" [caption]="weekCaption()" [interactive]="state.dueWithin7DaysTotal() > 0" [pressable]="true" [active]="focusFilter() === 'upcoming'"
         (activated)="toggleFocus('upcoming')" />
-      <k-stat-tile label="Done this week" i18n-label="Stat tile: cards completed this week" icon="circle-check" [value]="state.completedThisWeek()" [tone]="state.completedThisWeek() > 0 ? 'success' : 'neutral'" [delta]="state.weekDelta()" [interactive]="false" />
+      <!-- Opens My Cards rather than filtering the agenda: blocked work is often undated, so most of
+           it would never appear in the week below. -->
+      <k-stat-tile label="Blocked" i18n-label="Stat tile: open cards waiting on another open card" icon="lock" [value]="state.blockedTotal()" [tone]="state.blockedTotal() > 0 ? 'danger' : 'neutral'" [caption]="blockedCaption()" [interactive]="state.blockedTotal() > 0"
+        (activated)="openBlocked()" />
     </section>
 
-    <!-- Directly under the focus tiles and above recent boards: "what do I do next" outranks both
-         recent boards and the week agenda, and sitting above the agenda means it cannot push the
-         "all clear" state around as the queue grows and shrinks. -->
-    @if (showPriorities()) {
-    <section class="priorities-section">
-      <h2 class="section-title">
-        <ng-container i18n="Section heading: the user's priority queue">Up next</ng-container>
-        <a class="agenda-see-all" routerLink="/my-cards"><ng-container i18n="Link to the full list">See all</ng-container> <i class="ti ti-arrow-narrow-right"></i></a>
-      </h2>
-      @if (priorityError(); as message) {
-      <p class="priorities-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
-      }
-      <!-- The same rows the shell drawer and the My Cards dock render, so the top of the queue reads
-           identically wherever it is seen — and reordering here is the same gesture there. Capped at
-           five: this is the head of the queue, and the block says how many more there are. -->
-      <div class="agenda-panel priorities-panel">
-        <k-priority-queue [priorities]="myPriorities.queue()" [canDrag]="true" [visibleLimit]="5" [compact]="true" [showAdd]="false" [showDragHint]="false" [allowQuickComplete]="true" dropListId="home-priorities-drop"
-          dragLaneId="home-priorities" (reordered)="onPriorityReordered($event)" (removed)="onPriorityRemoved($event)" (completed)="onPriorityCompleted($event)" (cardOpened)="openPriorityCard($event)" />
-      </div>
-    </section>
-    } @else if (prioritiesOffline()) {
-    <!-- Never a cached order: a stale sequence reads as an instruction, and there is no way for the
-         reader to tell it is last week's. -->
-    <p class="priorities-hint">
-      <i class="ti ti-wifi-off"></i> <ng-container i18n="Notice on the home page while offline">Up next is hidden while you’re offline, so you never follow a stale order.</ng-container>
-    </p>
-    } @else if (showPrioritiesHint()) {
-    <!-- One muted line, shown only to someone who has assigned work but no queue. No illustration
-         and no dismissal state: this is discoverability, not an empty state worth designing. -->
-    <p class="priorities-hint">
-      <ng-container i18n="Hint when the priority queue is empty">Nothing has been added to your Up next yet. <a routerLink="/my-cards">Open My Cards</a> to add and order cards.</ng-container>
-    </p>
-    }
+    <!-- Two columns once the page is wide enough: what is ahead of you on the left, what you
+         recently did on the right. Narrower, the side column simply follows the main one, so reading and tab
+         order are the same at every width. -->
+    <div class="home-columns" [class.has-side]="state.activity() !== null">
+      <div class="home-main">
+        <!-- First under the tiles: it carries the week's completed count and its trend, which the
+             tile row no longer shows, and keeps the page opening on progress before the to-do list. -->
+        <section class="progress-section" id="home-progress">
+          <h2 class="section-title" i18n="Section heading">Your progress</h2>
+          <div class="progress-panel">
+            <div class="progress-figure">
+              <strong>{{ state.completedThisWeek() }}</strong>
+              <span class="progress-caption" i18n="Caption under the number of cards completed">{ state.completedThisWeek(), plural, =1 {card completed in the last 7 days} other {cards completed in the last 7 days} }</span>
+              <span class="progress-delta" [class.is-up]="state.weekDelta() > 0" [class.is-level]="state.weekDelta() === 0">
+                <i class="ti ti-{{ state.weekDelta() > 0 ? 'trending-up' : state.weekDelta() < 0 ? 'trending-down' : 'minus' }}"></i>
+                @if (state.weekDelta() === 0) {
+                <ng-container i18n="Progress compared with last week">Level with last week</ng-container>
+                } @else {
+                <ng-container i18n="Progress compared with last week; delta is a signed number like +2 or -5">{{ (state.weekDelta() > 0 ? '+' : '') + state.weekDelta() // i18n(ph="delta") }} vs last week</ng-container>
+                }
+              </span>
+            </div>
+            <div class="progress-strip">
+              <k-activity-strip heading="Completed" i18n-heading="Activity strip heading: cards completed" [series]="trendSeries()" [windowDays]="visibleTrendDays()" />
+              @if (state.trend().byDay.length === 0) {
+              <p class="progress-empty" i18n="Progress empty state">{ visibleTrendDays(), plural, =1 {No cards completed in the last day.} other {No cards completed in the last {{ visibleTrendDays() }} days.} }</p>
+              }
+            </div>
+          </div>
+        </section>
 
-    <!-- Under Up next: both answer "what do I come back to", and reminders often sit on cards that
-         are not yours to own, which the agenda below never shows. Renders nothing when empty. -->
-    <k-upcoming-reminders />
-
-    @if (recentBoards().length > 0) {
-    <section class="recent-section">
-      <h2 class="section-title" i18n="Section heading">Recent boards</h2>
-      <!-- Sits directly under the focus tiles: both are the fastest ways off this page, and the
-           agenda below is the long read. Renders unconditionally rather than gating on the sidebar:
-           below 640px the sidebar is behind a drawer, which makes this the only always-visible
-           board surface. -->
-      <div class="recent-strip">
-        @for (board of recentBoards(); track board.id) {
-        <button type="button" class="recent-chip" (click)="openBoard(board.id)">
-          <k-board-icon [icon]="board.icon" [color]="board.iconColor" [size]="22" />
-          <span>{{ board.name }}</span>
-        </button>
-        }
-      </div>
-    </section>
-    }
-
-    <section class="agenda-section" id="home-agenda">
-      <div class="agenda-heading">
-        <h2 class="section-title" i18n="Section heading: the agenda">Your week</h2>
-        @if (focusFilterLabel(); as filterLabel) {
-        <button type="button" class="focus-clear" (click)="clearFocus()">
-          <i class="ti ti-filter"></i>
-          {{ filterLabel }}
-          <span class="focus-clear-x"><i class="ti ti-x"></i></span>
-        </button>
-        }
-      </div>
-      @if (state.isAllClear()) {
-      <div class="agenda-panel agenda-clear">
-        <i class="ti ti-confetti"></i>
-        <strong i18n="Agenda empty state title">You're all clear</strong>
-        <span i18n="Agenda empty state text">Nothing assigned to you is due this week.</span>
-      </div>
-      } @else {
-      <div class="agenda-panel">
-        @for (group of visibleGroups(); track group.bucket) {
-        <k-agenda-group [bucket]="group.bucket" [label]="group.label" [items]="group.items" [count]="group.count" (itemActivated)="openItem($event)" />
-        } @empty {
-        <!-- A filter can outlive the work it matched (a realtime refresh empties the bucket), so
-             say so and offer the way out rather than reading as "all clear". -->
-        <div class="agenda-clear">
-          <i class="ti ti-filter-off"></i>
-          <strong i18n="Agenda empty state when a filter matches nothing">Nothing left in this filter</strong>
-          <button type="button" class="secondary sm" (click)="clearFocus()" i18n="Button: clear the agenda filter">Show everything</button>
-        </div>
-        }
-      </div>
-      }
-    </section>
-
-    <section class="progress-section" id="home-progress">
-      <h2 class="section-title" i18n="Section heading">Your progress</h2>
-      <div class="progress-panel">
-        <div class="progress-figure">
-          <strong>{{ state.completedThisWeek() }}</strong>
-          <span class="progress-caption" i18n="Caption under the number of cards completed">{ state.completedThisWeek(), plural, =1 {card completed in the last 7 days} other {cards completed in the last 7 days} }</span>
-          <span class="progress-delta" [class.is-up]="state.weekDelta() > 0" [class.is-level]="state.weekDelta() === 0">
-            <i class="ti ti-{{ state.weekDelta() > 0 ? 'trending-up' : state.weekDelta() < 0 ? 'trending-down' : 'minus' }}"></i>
-            @if (state.weekDelta() === 0) {
-            <ng-container i18n="Progress compared with last week">Level with last week</ng-container>
-            } @else {
-            <ng-container i18n="Progress compared with last week; delta is a signed number like +2 or -5">{{ (state.weekDelta() > 0 ? '+' : '') + state.weekDelta() // i18n(ph="delta") }} vs last week</ng-container>
-            }
-          </span>
-        </div>
-        <div class="progress-strip">
-          <k-activity-strip heading="Completed" i18n-heading="Activity strip heading: cards completed" [series]="trendSeries()" [windowDays]="visibleTrendDays()" />
-          @if (state.trend().byDay.length === 0) {
-          <p class="progress-empty" i18n="Progress empty state">{ visibleTrendDays(), plural, =1 {No cards completed in the last day.} other {No cards completed in the last {{ visibleTrendDays() }} days.} }</p>
+        <!-- Under Your progress and above recent boards: "what do I do next" outranks both
+             recent boards and the week agenda, and sitting above the agenda means it cannot push the
+             "all clear" state around as the queue grows and shrinks. -->
+        @if (showPriorities()) {
+        <section class="priorities-section">
+          <h2 class="section-title">
+            <ng-container i18n="Section heading: the user's priority queue">Up next</ng-container>
+            <a class="agenda-see-all" routerLink="/my-cards"><ng-container i18n="Link to the full list">See all</ng-container> <i class="ti ti-arrow-narrow-right"></i></a>
+          </h2>
+          @if (priorityError(); as message) {
+          <p class="priorities-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
           }
-        </div>
+          <!-- The same rows the shell drawer and the My Cards dock render, so the top of the queue reads
+               identically wherever it is seen — and reordering here is the same gesture there. Capped at
+               five: this is the head of the queue, and the block says how many more there are. -->
+          <div class="agenda-panel priorities-panel">
+            <k-priority-queue [priorities]="myPriorities.queue()" [canDrag]="true" [visibleLimit]="5" [compact]="true" [showAdd]="false" [showDragHint]="false" [allowQuickComplete]="true" dropListId="home-priorities-drop"
+              dragLaneId="home-priorities" (reordered)="onPriorityReordered($event)" (removed)="onPriorityRemoved($event)" (completed)="onPriorityCompleted($event)" (cardOpened)="openPriorityCard($event)" />
+          </div>
+        </section>
+        } @else if (prioritiesOffline()) {
+        <!-- Never a cached order: a stale sequence reads as an instruction, and there is no way for the
+             reader to tell it is last week's. -->
+        <p class="priorities-hint">
+          <i class="ti ti-wifi-off"></i> <ng-container i18n="Notice on the home page while offline">Up next is hidden while you’re offline, so you never follow a stale order.</ng-container>
+        </p>
+        } @else if (showPrioritiesHint()) {
+        <!-- One muted line, shown only to someone who has assigned work but no queue. No illustration
+             and no dismissal state: this is discoverability, not an empty state worth designing. -->
+        <p class="priorities-hint">
+          <ng-container i18n="Hint when the priority queue is empty">Nothing has been added to your Up next yet. <a routerLink="/my-cards">Open My Cards</a> to add and order cards.</ng-container>
+        </p>
+        }
+
+        <!-- Under Up next: both answer "what do I come back to", and reminders often sit on cards that
+             are not yours to own, which the agenda below never shows. Renders nothing when empty. -->
+        <k-upcoming-reminders />
+
+        @if (recentBoards().length > 0) {
+        <section class="recent-section">
+          <h2 class="section-title" i18n="Section heading">Recent boards</h2>
+          <!-- Sits directly under the focus tiles: both are the fastest ways off this page, and the
+               agenda below is the long read. Renders unconditionally rather than gating on the sidebar:
+               below 640px the sidebar is behind a drawer, which makes this the only always-visible
+               board surface. -->
+          <div class="recent-strip">
+            @for (board of recentBoards(); track board.id) {
+            <button type="button" class="recent-chip" (click)="openBoard(board.id)">
+              <k-board-icon [icon]="board.icon" [color]="board.iconColor" [size]="22" />
+              <span>{{ board.name }}</span>
+            </button>
+            }
+          </div>
+        </section>
+        }
+
+        <section class="agenda-section" id="home-agenda">
+          <div class="agenda-heading">
+            <h2 class="section-title" i18n="Section heading: the agenda">Your week</h2>
+            @if (focusFilterLabel(); as filterLabel) {
+            <button type="button" class="focus-clear" (click)="clearFocus()">
+              <i class="ti ti-filter"></i>
+              {{ filterLabel }}
+              <span class="focus-clear-x"><i class="ti ti-x"></i></span>
+            </button>
+            }
+          </div>
+          @if (state.isAllClear()) {
+          <div class="agenda-panel agenda-clear">
+            <i class="ti ti-confetti"></i>
+            <strong i18n="Agenda empty state title">You're all clear</strong>
+            <span i18n="Agenda empty state text">Nothing assigned to you is due this week.</span>
+          </div>
+          } @else {
+          <div class="agenda-panel">
+            @for (group of visibleGroups(); track group.bucket) {
+            <k-agenda-group [bucket]="group.bucket" [label]="group.label" [items]="group.items" [count]="group.count" (itemActivated)="openItem($event)" />
+            } @empty {
+            <!-- A filter can outlive the work it matched (a realtime refresh empties the bucket), so
+                 say so and offer the way out rather than reading as "all clear". -->
+            <div class="agenda-clear">
+              <i class="ti ti-filter-off"></i>
+              <strong i18n="Agenda empty state when a filter matches nothing">Nothing left in this filter</strong>
+              <button type="button" class="secondary sm" (click)="clearFocus()" i18n="Button: clear the agenda filter">Show everything</button>
+            </div>
+            }
+          </div>
+          }
+        </section>
+
       </div>
-    </section>
+      <div class="home-side">
+        @if (state.activity(); as activity) {
+        <section class="activity-section" aria-labelledby="home-activity-heading">
+          <h2 class="section-title" id="home-activity-heading" i18n="Section heading: what the viewer did recently across their boards">My recent activity</h2>
+          <k-home-activity [items]="activity" (opened)="openActivity($event)" />
+        </section>
+        }
+      </div>
+    </div>
 
     }
   </main>
