@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection, signal } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
-import type { HomeGettingStartedResponse, HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
+import type { HomeActivityItem, HomeGettingStartedResponse, HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
 
 /** Mirrors GETTING_STARTED_STEPS in @kanera/shared/dto; the web may import only types from it. */
 const GETTING_STARTED_STEPS = [
@@ -82,6 +82,8 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
       dueWithin7DaysChecklistItems: 0,
       assignedCards: 5,
       assignedChecklistItems: 0,
+      blockedCards: 2,
+      blockedDueWithin7DaysCards: 1,
     },
     items: [
       item({ id: "card-overdue", cardId: "card-overdue", bucket: "overdue", title: "Late thing" }),
@@ -132,6 +134,8 @@ describe("HomePage", () => {
     role?: "owner" | "admin" | "member";
     /** Defaults to a closed checklist, so tests about other sections never see it. */
     gettingStarted?: HomeGettingStartedResponse;
+    /** Rows for My recent activity; unset leaves the feed unanswered, so the panel stays hidden. */
+    activity?: HomeActivityItem[];
     pendingInvitations?: Array<{
       id: string;
       orgName: string;
@@ -149,6 +153,9 @@ describe("HomePage", () => {
       }
       if (path === "/home/getting-started") {
         return options.gettingStarted ?? CLOSED_CHECKLIST;
+      }
+      if (path === "/home/activity" && options.activity) {
+        return { items: options.activity };
       }
       if (path === "/me/agent-connection-config") {
         return { mcpUrl: "https://mcp.example.test/mcp" };
@@ -257,7 +264,7 @@ describe("HomePage", () => {
     expect(host().querySelector("main")!.textContent!.trim()).not.toBe("");
   });
 
-  it("renders the four focus tiles with totals and a week-over-week delta", async () => {
+  it("renders the four focus tiles with totals and context, and the week's delta in Your progress", async () => {
     await render();
 
     const tiles = [...host().querySelectorAll(".stat-tile")].map((tile) => tile.textContent ?? "");
@@ -266,8 +273,29 @@ describe("HomePage", () => {
     expect(tiles[0]).toContain("1");
     expect(tiles[2]).toContain("Next 7 days");
     expect(tiles[2]).toContain("2");
-    // Five cards completed this week against three last week.
-    expect(tiles[3]).toContain("+2 vs last week");
+    expect(tiles[3]).toContain("Blocked");
+    expect(tiles[3]).toContain("2");
+    expect(tiles[3]).toContain("1 due this week");
+    // Five cards completed this week against three last week: no longer a tile, so it must still
+    // be on the page in the progress panel.
+    expect(host().querySelector(".progress-section")?.textContent).toContain("+2 vs last week");
+  });
+
+  it("opens My Cards on the Blocked filter, and leaves a zero Blocked tile static", async () => {
+    await render();
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, "navigate").mockResolvedValue(true);
+    const blocked = () => [...host().querySelectorAll<HTMLElement>(".stat-tile")][3]!;
+
+    expect(blocked().tagName).toBe("BUTTON");
+    expect(blocked().classList).toContain("danger");
+    blocked().click();
+    expect(navigate).toHaveBeenCalledWith(["/my-cards"], { queryParams: { filter: "blocked" } });
+
+    TestBed.resetTestingModule();
+    await render({ response: payload({ counts: { ...payload().counts, blockedCards: 0, blockedDueWithin7DaysCards: 0 } }) });
+    expect(blocked().tagName).toBe("DIV");
+    expect(blocked().textContent).toContain("Nothing blocked");
   });
 
   it("shows the overdue tile in danger tone only when there is overdue work", async () => {
@@ -281,29 +309,30 @@ describe("HomePage", () => {
         counts: { ...payload().counts, overdueCards: 0 },
       }),
     });
-    // A zero still renders a tile — it is information — just not in danger tone.
-    expect([...host().querySelectorAll(".stat-tile")]).toHaveLength(4);
-    expect(host().querySelector(".stat-tile.danger")).toBeNull();
+    // A zero still renders a tile — it is information — just not in danger tone. (Blocked keeps
+    // its own danger tone; this is about the Overdue tile.)
+    const tiles = [...host().querySelectorAll(".stat-tile")];
+    expect(tiles).toHaveLength(4);
+    expect(tiles[0]!.classList.contains("danger")).toBe(false);
   });
 
   it("only makes a tile clickable when clicking it would visibly do something", async () => {
     await render();
-    // Three due tiles filter the agenda; "Done this week" is a readout whose detail is the
-    // progress panel below, so it must not invite a click.
-    expect(host().querySelectorAll("button.stat-tile")).toHaveLength(3);
-    const done = [...host().querySelectorAll(".stat-tile")].at(-1)!;
-    expect(done.tagName).toBe("DIV");
-    expect(done.classList.contains("is-static")).toBe(true);
+    // Three due tiles filter the agenda and Blocked opens My Cards.
+    expect(host().querySelectorAll("button.stat-tile")).toHaveLength(4);
 
     TestBed.resetTestingModule();
     await render({
       response: payload({
         items: [item()],
-        counts: { ...payload().counts, overdueCards: 0, dueLaterThisWeekCards: 0, dueWithin7DaysCards: 1 },
+        counts: { ...payload().counts, overdueCards: 0, dueLaterThisWeekCards: 0, dueWithin7DaysCards: 1, blockedCards: 0, blockedDueWithin7DaysCards: 0 },
       }),
     });
-    // Nothing overdue means nothing to filter to, so that tile goes static too.
+    // Nothing overdue or blocked means nothing to show, so those tiles go static.
     expect(host().querySelectorAll("button.stat-tile")).toHaveLength(2);
+    const blocked = [...host().querySelectorAll(".stat-tile")].at(-1)!;
+    expect(blocked.tagName).toBe("DIV");
+    expect(blocked.classList.contains("is-static")).toBe(true);
   });
 
   it("filters the agenda to a bucket and toggles back off", async () => {
@@ -368,6 +397,32 @@ describe("HomePage", () => {
     const headings = [...host().querySelectorAll(".agenda-group-header h3")].map((node) => node.textContent);
     expect(headings).toEqual(["Overdue", "Today", "Later this week"]);
     expect(headings).not.toContain("Tomorrow");
+  });
+
+  it("lists what the viewer did beside the agenda and opens the card from a row", async () => {
+    await render({
+      activity: [{
+        id: "event-1",
+        kind: "moved",
+        createdAt: new Date().toISOString(),
+        viaAgent: true,
+        agentName: "Claude",
+        card: { id: "card-9", key: "WORK-9", organisationKey: "0123456789ABCDEF", title: "Ship the release" },
+        board: { id: "board-2", name: "Launch", icon: null, iconColor: null },
+        list: { name: "Done", icon: null, color: "green" },
+      }],
+    });
+    const section = host().querySelector(".activity-section")!;
+    expect(section.querySelector("h2")?.textContent).toContain("My recent activity");
+    // Every row is the viewer's own action, so it names what happened, not who did it.
+    expect(section.textContent?.replace(/\s+/g, " ")).toContain("Moved Ship the release to Done");
+    expect(section.textContent).toContain("via Claude");
+    expect(host().querySelector(".home-columns")!.classList).toContain("has-side");
+
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, "navigate").mockResolvedValue(true);
+    section.querySelector<HTMLButtonElement>(".activity-row")!.click();
+    expect(navigate).toHaveBeenCalledWith(["/b", "board-2", "c", "card-9"], { browserUrl: "/o/0123456789ABCDEF/c/WORK-9" });
   });
 
   it("navigates to the card for a card row and to the parent card for a checklist row", async () => {
@@ -546,9 +601,11 @@ describe("HomePage", () => {
     const chips = [...host().querySelectorAll(".recent-chip")].map((chip) => chip.textContent?.trim());
     expect(chips).toEqual(["Hiring Plan", "Roadmap"]);
     expect(text()).toContain("Recent boards");
-    // Sits between the focus tiles and the agenda: both are quick exits off the page.
+    // Your progress comes first under the tiles, then (with no Up next queue) recent boards, then
+    // the agenda: recent boards and the tiles are both quick exits off the page.
     const sections = [...host().querySelectorAll("section")].map((section) => section.className);
-    expect(sections.indexOf("recent-section")).toBe(sections.indexOf("focus-grid") + 1);
+    expect(sections.indexOf("progress-section")).toBe(sections.indexOf("focus-grid") + 1);
+    expect(sections.indexOf("recent-section")).toBeGreaterThan(sections.indexOf("progress-section"));
     expect(sections.indexOf("agenda-section")).toBe(sections.indexOf("recent-section") + 1);
   });
 

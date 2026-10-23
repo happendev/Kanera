@@ -89,6 +89,14 @@ export interface HomeCounts {
   /** Every active assigned item, dated or not. */
   assignedCards: number;
   assignedChecklistItems: number;
+  /**
+   * Active assigned cards waiting on at least one open blocker, dated or not. Same rule as the
+   * board's Blocked filter and the Portfolio tile (`card_summary_view.blocked_by_count`). Optional
+   * so an offline snapshot cached before the field existed still reads as a payload.
+   */
+  blockedCards?: number;
+  /** The blocked cards due by `horizonEnd`, overdue ones included. */
+  blockedDueWithin7DaysCards?: number;
 }
 
 export interface HomeTrendDay {
@@ -188,6 +196,37 @@ export const updateHomeGettingStartedBody = z.object({
   used: z.enum(GETTING_STARTED_USED_STEPS).optional(),
 }).strict();
 export type UpdateHomeGettingStartedBody = z.infer<typeof updateHomeGettingStartedBody>;
+
+/** Rows in the home "My recent activity" panel: a glance, with each board's own feed as the full story. */
+export const HOME_ACTIVITY_LIMIT = 8;
+/** How far back the panel looks. Bounds the scan on busy organisations; older work is not "recent". */
+export const HOME_ACTIVITY_DAYS = 14;
+
+/**
+ * The handful of card events the home feed shows, normalised from raw activity actions. Edits such
+ * as renames, label and field changes are left out on purpose: they are the noise of a busy day,
+ * and the panel exists to say what the viewer moved forward.
+ */
+export type HomeActivityKind = "created" | "moved" | "completed" | "reopened" | "commented" | "assigned" | "attached";
+
+/** One thing the viewer did, themselves or through an AI agent acting for them. */
+export interface HomeActivityItem {
+  /** Activity event id. */
+  id: string;
+  kind: HomeActivityKind;
+  createdAt: string;
+  /** Set when an agent acted on the viewer's behalf. */
+  viaAgent: boolean;
+  agentName: string | null;
+  card: { id: string; key: string; organisationKey: string; title: string };
+  board: { id: string; name: string; icon: string | null; iconColor: ColorToken | null };
+  /** Destination list, for "moved" only. */
+  list: { name: string; icon: string | null; color: ColorToken | null } | null;
+}
+
+export interface HomeActivityResponse {
+  items: HomeActivityItem[];
+}
 
 export interface HomeTodayResponse {
   /** The zone every calendar day in this payload was computed in. */
