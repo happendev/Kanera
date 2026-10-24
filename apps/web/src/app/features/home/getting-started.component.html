@@ -13,12 +13,12 @@
     @if (allDone()) {
     <button type="button" class="ghost icon sm gs-close" aria-label="Close getting started" i18n-aria-label="Button: close the getting started checklist for good" kTooltip="Close" i18n-kTooltip="Tooltip: close the getting started checklist"
       (click)="close()">
-      <i class="ti ti-minus"></i>
+      <i class="ti ti-minus" aria-hidden="true"></i>
     </button>
     } @else {
     <button type="button" class="ghost icon sm gs-close" aria-label="Hide getting started" i18n-aria-label="Button: move the getting started checklist off home into the account menu"
       kTooltip="Hide · reopen it from your account menu" i18n-kTooltip="Tooltip: hide the getting started checklist, which stays available in the account menu" (click)="close()">
-      <i class="ti ti-minus"></i>
+      <i class="ti ti-minus" aria-hidden="true"></i>
     </button>
     }
   </div>
@@ -30,55 +30,75 @@
   </div>
   <span class="gs-sr" aria-live="polite">{{ progressLabel() }}</span>
 
-  <div class="gs-sections">
-    @for (section of sections(); track section.key) {
-    <div class="gs-section">
-      <h3 class="gs-section-label" [id]="'gs-section-' + section.key">{{ section.label }}</h3>
-      <ul class="gs-list" [attr.aria-labelledby]="'gs-section-' + section.key">
-        @for (step of section.steps; track step.key) {
-        <li class="gs-step" [class.is-done]="step.done" [class.is-open]="openKey() === step.key" [class.just-done]="step.done && openSteps().has(step.key)">
-          @if (step.done) {
-          <div class="gs-row">
-            <span class="gs-ring" aria-hidden="true"><i class="ti ti-check"></i></span>
-            <span class="gs-label">{{ step.title }}</span>
-            <span class="gs-sr" i18n="Screen reader suffix on a completed getting started step">, done</span>
-          </div>
-          } @else {
-          <button type="button" class="gs-row" [attr.aria-expanded]="openKey() === step.key" [attr.aria-controls]="'gs-detail-' + step.key" (click)="toggle(step.key)">
-            <span class="gs-ring" aria-hidden="true"></span>
-            <span class="gs-label">{{ step.title }}</span>
-            <i class="ti ti-chevron-down gs-chevron" aria-hidden="true"></i>
-          </button>
-          @if (openKey() === step.key) {
-          <div class="gs-detail" [id]="'gs-detail-' + step.key">
-            <p class="gs-text">{{ step.text }}</p>
-            @if (step.key === 'enablePush' && push.error(); as error) {
-            <p class="gs-error" role="alert"><i class="ti ti-alert-circle"></i><span>{{ error }}</span></p>
-            }
-            @if (step.action; as action) {
-            @if (action.kind === 'link') {
-            <a class="sm gs-action" [routerLink]="action.commands" [queryParams]="action.queryParams ?? null">{{ step.actionLabel }}</a>
-            } @else if (action.kind === 'scratchpad') {
-            <button type="button" class="sm gs-action" (click)="openScratchpad()">{{ step.actionLabel }}</button>
-            } @else if (action.kind === 'push') {
-            <button type="button" class="sm gs-action" [disabled]="pushBusy()" (click)="enablePush()">
-              @if (pushBusy()) { <i class="ti ti-loader-2 kanera-spin"></i> }
-              {{ step.actionLabel }}
-            </button>
-            } @else if (action.kind === 'palette') {
-            <button type="button" class="sm gs-action" (click)="openPalette()">{{ step.actionLabel }}</button>
-            } @else {
-            <button type="button" class="sm gs-action" (click)="newStandaloneBoard.emit()">{{ step.actionLabel }}</button>
-            }
-            }
-          </div>
-          }
-          }
-        </li>
-        }
-      </ul>
+  <div class="gs-body" [class.has-spotlight]="!!openStep()">
+    <!-- Wide cards show the open step here; narrow ones show it under its row instead (see the
+         stylesheet), so a pick never opens somewhere off screen. -->
+    @if (openStep(); as step) {
+    <div class="gs-spotlight" id="gs-spotlight">
+      <span class="gs-spotlight-icon" aria-hidden="true"><i [class]="'ti ti-' + step.icon"></i></span>
+      <p class="gs-eyebrow">{{ step.section }}</p>
+      <h3 class="gs-spotlight-title">{{ step.title }}</h3>
+      <ng-container [ngTemplateOutlet]="detail" [ngTemplateOutletContext]="{ $implicit: step }" />
     </div>
     }
+
+    <div class="gs-sections">
+      @for (section of sections(); track section.key) {
+      <div class="gs-section" [class.is-done]="section.done === section.steps.length">
+        <h3 class="gs-section-label" [id]="'gs-section-' + section.key">
+          <span>{{ section.label }}</span>
+          <span class="gs-section-count" aria-hidden="true">{{ section.done }}/{{ section.steps.length }}</span>
+        </h3>
+        <ul class="gs-list" [attr.aria-labelledby]="'gs-section-' + section.key">
+          @for (step of section.steps; track step.key) {
+          <li class="gs-step" [class.is-done]="step.done" [class.is-open]="openKey() === step.key" [class.just-done]="step.done && openSteps().has(step.key)">
+            @if (step.done) {
+            <div class="gs-row">
+              <span class="gs-ring" aria-hidden="true"><i class="ti ti-check"></i></span>
+              <span class="gs-label">{{ step.title }}</span>
+              <span class="gs-sr" i18n="Screen reader suffix on a completed getting started step">, done</span>
+            </div>
+            } @else {
+            <button type="button" class="gs-row" [attr.aria-expanded]="openKey() === step.key" [attr.aria-controls]="'gs-spotlight gs-detail-' + step.key" (click)="toggle(step.key)">
+              <span class="gs-ring" aria-hidden="true"></span>
+              <span class="gs-label">{{ step.title }}</span>
+              <i class="ti ti-chevron-right gs-chevron" aria-hidden="true"></i>
+            </button>
+            @if (openKey() === step.key) {
+            <div class="gs-inline" [id]="'gs-detail-' + step.key">
+              <ng-container [ngTemplateOutlet]="detail" [ngTemplateOutletContext]="{ $implicit: step }" />
+            </div>
+            }
+            }
+          </li>
+          }
+        </ul>
+      </div>
+      }
+    </div>
   </div>
 </section>
 }
+
+<ng-template #detail let-step>
+  <p class="gs-text">{{ step.text }}</p>
+  @if (step.key === 'enablePush' && push.error(); as error) {
+  <p class="gs-error" role="alert"><i class="ti ti-alert-circle" aria-hidden="true"></i><span>{{ error }}</span></p>
+  }
+  @if (step.action; as action) {
+  @if (action.kind === 'link') {
+  <a class="button gs-action" [routerLink]="action.commands" [queryParams]="action.queryParams ?? null">{{ step.actionLabel }}<i class="ti ti-arrow-right" aria-hidden="true"></i></a>
+  } @else if (action.kind === 'scratchpad') {
+  <button type="button" class="gs-action" (click)="openScratchpad()">{{ step.actionLabel }}<i class="ti ti-arrow-right" aria-hidden="true"></i></button>
+  } @else if (action.kind === 'push') {
+  <button type="button" class="gs-action" [disabled]="pushBusy()" (click)="enablePush()">
+    @if (pushBusy()) { <i class="ti ti-loader-2 kanera-spin" aria-hidden="true"></i> }
+    {{ step.actionLabel }}
+  </button>
+  } @else if (action.kind === 'palette') {
+  <button type="button" class="gs-action" (click)="openPalette()">{{ step.actionLabel }}<i class="ti ti-arrow-right" aria-hidden="true"></i></button>
+  } @else {
+  <button type="button" class="gs-action" (click)="newStandaloneBoard.emit()">{{ step.actionLabel }}<i class="ti ti-arrow-right" aria-hidden="true"></i></button>
+  }
+  }
+</ng-template>

@@ -1,5 +1,6 @@
 import type { OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
+import { NgTemplateOutlet } from "@angular/common";
 import { RouterLink } from "@angular/router";
 import type { GettingStartedStep } from "@kanera/shared/dto";
 import { ApiClient } from "../../core/api/api.client";
@@ -25,6 +26,9 @@ type StepAction =
 interface StepView {
   key: GettingStartedStep;
   done: boolean;
+  /** The section's label, shown above the step in the spotlight. */
+  section: string;
+  icon: string;
   title: string;
   text: string;
   actionLabel: string;
@@ -36,6 +40,33 @@ const PALETTE_KEYS = (() => {
   const parts = formatShortcut("mod+k")[0] ?? [];
   return parts.join(parts[0] === "⌘" ? "" : "+");
 })();
+
+/** Tabler glyph for the spotlight, picked to read as what the step does. */
+const STEP_ICONS: Record<GettingStartedStep, string> = {
+  createCard: "square-plus",
+  assignCard: "user-plus",
+  comment: "message",
+  mention: "at",
+  completeCard: "circle-check",
+  quickEdit: "pencil-bolt",
+  useFilter: "filter",
+  commandPalette: "command",
+  viewWorkDone: "history",
+  groupTable: "layout-rows",
+  totalColumn: "sum",
+  exportExcel: "file-spreadsheet",
+  addDependency: "link",
+  setStartDate: "calendar-event",
+  viewTimeline: "timeline",
+  scratchpad: "note",
+  saveNote: "notebook",
+  inviteTeam: "users",
+  secondBoard: "layout-kanban",
+  createAutomation: "bolt",
+  enablePush: "bell-ringing",
+  connectAgent: "plug",
+  useAgent: "robot",
+};
 
 /**
  * Display groups, in the order someone meets them. The server decides which steps a viewer gets;
@@ -83,8 +114,8 @@ const SECTIONS: readonly { key: string; label: string; steps: readonly GettingSt
  * The "Getting started" checklist on home: the guidance between the one-time onboarding wizard and
  * a team that uses Kanera fully.
  *
- * A guided list rather than a wall of tips: one step at a time is open, with what it teaches and
- * the button that does it, and it is the first open step unless the user picked another. When a
+ * A guided list rather than a wall of tips: one step at a time is open, shown in a spotlight beside
+ * the list (or under its row on a narrow card) with what it teaches and the button that does it, and it is the first open step unless the user picked another. When a
  * step ticks, the next one opens, so the card walks people through the core loop of a card before
  * the team and setup steps.
  *
@@ -97,7 +128,7 @@ const SECTIONS: readonly { key: string; label: string; steps: readonly GettingSt
 @Component({
   selector: "k-getting-started",
   standalone: true,
-  imports: [RouterLink, TooltipDirective],
+  imports: [NgTemplateOutlet, RouterLink, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./getting-started.component.html",
   styleUrl: "./getting-started.component.scss",
@@ -134,12 +165,21 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
     const boardId = this.boardId();
     const notesWorkspaceId = state.notesWorkspaceId;
     const timelineBoardId = state.timelineBoardId;
-    return state.steps.map(({ key, done }) => ({ key, done, ...this.describe(key, target, boardId, notesWorkspaceId, timelineBoardId) }));
+    return state.steps.map(({ key, done }) => ({
+      key,
+      done,
+      section: SECTIONS.find((section) => section.steps.includes(key))?.label ?? "",
+      icon: STEP_ICONS[key],
+      ...this.describe(key, target, boardId, notesWorkspaceId, timelineBoardId),
+    }));
   });
   readonly sections = computed(() => {
     const byKey = new Map(this.steps().map((step) => [step.key, step]));
     return SECTIONS
-      .map((section) => ({ ...section, steps: section.steps.flatMap((key) => byKey.get(key) ?? []) }))
+      .map((section) => {
+        const steps = section.steps.flatMap((key) => byKey.get(key) ?? []);
+        return { ...section, steps, done: steps.filter((step) => step.done).length };
+      })
       .filter((section) => section.steps.length > 0);
   });
 
@@ -151,6 +191,7 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
     if (picked && !picked.done) return picked.key;
     return steps.find((step) => !step.done)?.key ?? null;
   });
+  readonly openStep = computed(() => this.steps().find((step) => step.key === this.openKey()) ?? null);
   readonly doneCount = computed(() => this.steps().filter((step) => step.done).length);
   readonly allDone = computed(() => this.steps().length > 0 && this.doneCount() === this.steps().length);
   readonly percent = computed(() => (this.steps().length ? Math.round((this.doneCount() / this.steps().length) * 100) : 0));
@@ -244,7 +285,7 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
     boardId: string | null,
     notesWorkspaceId: string | null,
     timelineBoardId: string | null,
-  ): Omit<StepView, "key" | "done"> {
+  ): Omit<StepView, "key" | "done" | "section" | "icon"> {
     const openBoard = $localize`:Getting started step button:Open a board`;
     const boardLink: StepAction | null = boardId ? { kind: "link", commands: ["/b", boardId] } : null;
     const openTable = $localize`:Getting started step button; Table is a view name:Open a table`;

@@ -6,8 +6,10 @@ import type { HomeActivityItem, HomeGettingStartedResponse, HomeItem, HomeTodayR
 
 /** Mirrors GETTING_STARTED_STEPS in @kanera/shared/dto; the web may import only types from it. */
 const GETTING_STARTED_STEPS = [
-  "createCard", "assignCard", "comment", "mention", "addDependency", "completeCard",
-  "quickEdit", "useFilter", "commandPalette", "viewWorkDone", "scratchpad", "saveNote",
+  "createCard", "assignCard", "comment", "mention", "completeCard",
+  "quickEdit", "useFilter", "commandPalette", "viewWorkDone",
+  "groupTable", "totalColumn", "exportExcel", "addDependency", "setStartDate", "viewTimeline",
+  "scratchpad", "saveNote",
   "inviteTeam", "secondBoard", "createAutomation", "enablePush", "connectAgent", "useAgent",
 ] as const;
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -845,15 +847,14 @@ describe("HomePage", () => {
       gettingStarted: checklist({ inviteTeam: true, secondBoard: true }),
       registeredBoards: [{ id: "board-1", name: "Roadmap", icon: null, iconColor: null }],
     });
-    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("2/18");
-    console.log("DBG", JSON.stringify([...host().querySelectorAll(".gs-section-label")].map((label) => label.textContent?.trim())), host().querySelector(".gs-count")?.textContent?.trim());
+    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("2/23");
     expect(host().querySelectorAll(".gs-step.is-done")).toHaveLength(2);
-    expect([...host().querySelectorAll(".gs-section-label")].map((label) => label.textContent?.trim())).toEqual(["The basics", "Work faster", "Tables", "Plan ahead", "Notes", "Your team", "Your setup"]);
+    expect([...host().querySelectorAll(".gs-section-label > span:first-child")].map((label) => label.textContent?.trim())).toEqual(["The basics", "Work faster", "Tables", "Plan ahead", "Notes", "Your team", "Your setup"]);
     // One step open at a time: the first one not done, with its action pointing at a real board.
-    expect(host().querySelectorAll(".gs-detail")).toHaveLength(1);
+    expect(host().querySelectorAll(".gs-inline")).toHaveLength(1);
     expect(row("Create your first card").classList).toContain("is-open");
     expect(row("Create your first card").querySelector("a.gs-action")?.getAttribute("href")).toBe("/b/board-1");
-    expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 18, percent: 11 });
+    expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 23, percent: 9 });
 
     row("Create an automation").querySelector<HTMLButtonElement>("button.gs-row")!.click();
     fixture.detectChanges();
@@ -866,7 +867,7 @@ describe("HomePage", () => {
     expect(host().querySelector(".getting-started")).toBeNull();
     expect(patch).toHaveBeenCalledWith("/home/getting-started", { hidden: true });
     // The account menu shows it either way; hiding only takes it off home.
-    expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 18, percent: 11 });
+    expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 23, percent: 9 });
   });
 
   it("does not show a checklist hidden on another device", async () => {
@@ -886,7 +887,7 @@ describe("HomePage", () => {
     TestBed.inject(GettingStartedService).noteUsed("commandPalette");
     TestBed.inject(GettingStartedService).noteUsed("commandPalette");
     fixture.detectChanges();
-    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("1/18");
+    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("1/23");
     expect(row("Try the command palette").classList).toContain("is-done");
     // The picked step let go once done; the guide falls back to the first open step.
     expect(row("Create your first card").classList).toContain("is-open");

@@ -15,14 +15,17 @@
 
   // Hairlines between rows and header cells: a quarter of a real border, the chart draws hundreds.
   --tl-line: color-mix(in srgb, var(--border) 45%, transparent);
-  --tl-weekend: color-mix(in srgb, var(--text-muted) 7%, transparent);
+  // Weekends are a hint, not a lane: just enough to find a week's edge without striping the chart.
+  --tl-weekend: color-mix(in srgb, var(--text-muted) 4%, transparent);
   // Group headings run as bands across the whole chart, ruled with real borders, so a heading reads
   // as a row to follow and never as another shaded day. The band mixes the same ink as the weekend
-  // wash at twice the strength over an opaque surface: whichever way a theme shades (darker on light
-  // themes, lighter on dark ones), the band always sits a clear step beyond the weekends.
-  --tl-group-bg: color-mix(in srgb, var(--text-muted) 14%, var(--surface));
+  // wash, twice as strong, over an opaque surface: whichever way a theme shades (darker on light
+  // themes, lighter on dark ones), the band always sits a step beyond the weekends.
+  --tl-group-bg: color-mix(in srgb, var(--text-muted) 8%, var(--surface));
   --tl-wire: color-mix(in srgb, var(--text-muted) 55%, transparent);
-  --tl-risk: var(--color-amber, #b45309);
+  // The theme's warning ink, not the label palette's amber: that one is tuned to fill a chip, and as
+  // text or a hairline on a light surface it glares.
+  --tl-risk: var(--warning);
   // Same hue the Dependencies view gives its critical path, so the two views agree on what it means.
   --tl-critical: var(--color-violet, #7c3aed);
 }
@@ -134,6 +137,9 @@
   overflow: auto;
   overscroll-behavior: contain;
   position: relative;
+  // The chart is a panel like the names column beside it, not a window onto the app's canvas: on
+  // light themes that canvas is a mid grey, which washed every lane, band and bar grey with it.
+  background: var(--surface);
 }
 
 .tl-sheet {
@@ -438,9 +444,11 @@
   box-sizing: border-box;
   border-radius: var(--radius);
   // The list's hue on the card's surface: a tinted bar, with its own 1px border as the ring, like a
-  // board tile. Never a stripe.
-  background: color-mix(in srgb, var(--list-color, var(--text-muted)) 24%, var(--card-bg));
-  border: 1px solid color-mix(in srgb, var(--list-color, var(--text-muted)) 50%, var(--border));
+  // board tile. Never a stripe. A list without a colour falls back to the accent rather than grey,
+  // so the work stays the most coloured thing on a chart of grey bands and hairlines.
+  --tl-bar-hue: var(--list-color, var(--accent));
+  background: color-mix(in srgb, var(--tl-bar-hue) 24%, var(--card-bg));
+  border: 1px solid color-mix(in srgb, var(--tl-bar-hue) 50%, var(--border));
   color: var(--text);
   font: inherit;
   font-size: var(--text-sm);
@@ -451,7 +459,7 @@
   transition: box-shadow var(--motion-fast), opacity var(--motion-fast);
 
   &:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--list-color, var(--text-muted)) 32%, var(--card-bg));
+    background: color-mix(in srgb, var(--tl-bar-hue) 32%, var(--card-bg));
     color: var(--text);
     box-shadow: var(--shadow-card-hover);
   }
@@ -483,7 +491,7 @@
     padding: 0;
     border-radius: 2px;
     transform: rotate(45deg);
-    background: color-mix(in srgb, var(--list-color, var(--text-muted)) 70%, var(--card-bg));
+    background: color-mix(in srgb, var(--tl-bar-hue) 70%, var(--card-bg));
   }
 }
 
