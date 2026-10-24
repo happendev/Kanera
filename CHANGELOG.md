@@ -4,6 +4,10 @@ All notable changes to Kanera are documented here.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-24
+
+Ships alongside **CLI 2.2.0** and **MCP 4.2.0**.
+
 ### Added
 
 - **Card dependencies:** link cards as **blocked by**, **blocking** or **related**, including across boards in the same workspace. Manage links from card detail or the right-click menu, see blocked status live, use the **Blocked** filter on boards, My Cards and Team Cards, and see Blocked and At risk counts in the board overview and Portfolio.
