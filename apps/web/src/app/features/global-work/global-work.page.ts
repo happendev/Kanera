@@ -1,3 +1,4 @@
+import { GettingStartedService } from "../../core/getting-started/getting-started.service";
 import { DragScrollDirective } from "../../shared/drag-scroll.directive";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { ToastService } from "../../shared/toast.service";
@@ -239,6 +240,7 @@ const MAX_UP_NEXT_ENTRIES = 50;
 })
 export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly toasts = inject(ToastService);
+  private readonly gettingStarted = inject(GettingStartedService);
   readonly state = inject(GlobalWorkState);
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
@@ -854,8 +856,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       icon: board.icon,
       iconColor: board.iconColor,
       inProgressEnabled: board.inProgressEnabled,
+      timelineEnabled: board.timelineEnabled,
     }))
   );
+  /** Some board in view has dependencies on; otherwise the Blocked filter could never match. */
+  readonly dependenciesEnabled = computed(() => this.state.catalog().boards.some((board) => board.dependenciesEnabled));
   readonly tableSourceWorkspaces = computed<SourceWorkspaceRef[]>(() =>
     this.state.catalog().workspaces.map((workspace) => ({
       id: workspace.id,
@@ -1590,6 +1595,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   selectGrouping(groupBy: WorkGroupBy): void {
     this.closeMenu("group");
     this.state.setGrouping(groupBy);
+    // Here the page owns the table's grouping, so this is where the Getting started step ticks.
+    if (this.effectiveDisplay() === "table" && this.state.groupByIsSet()) this.gettingStarted.noteUsed("groupTable");
   }
 
   selectSort(sort: WorkSort): void {

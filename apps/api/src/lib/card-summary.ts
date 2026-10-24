@@ -62,6 +62,7 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
         c.due_date_local_date,
         c.due_date_slot,
         c.due_date_timezone,
+        c.start_date_local_date,
         c.completed_at,
         c.archived_at,
         c.cover_attachment_id,
@@ -96,6 +97,17 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
       inner join card_checklist_item ci on ci.checklist_id = cl.id
       ${rootChecklistsOnly ? sql`where cl.parent_item_id is null` : sql``}
       group by cl.card_id
+    ),
+    workspace_features as (
+      -- Optional planning features a workspace switched off (lib/workspace-features.ts) are masked
+      -- here, the one query behind board, Global Work and agent card lists: the rows stay stored,
+      -- but a disabled workspace reports no blockers and no start dates.
+      select w.id,
+        (o.dependencies_enabled and w.dependencies_enabled) as dependencies,
+        (o.timeline_enabled and w.timeline_enabled) as timeline
+      from workspace w
+      inner join client o on o.id = w.client_id
+      where w.id in (select distinct fc.workspace_id from filtered_cards fc)
     ),
     blocker_counts as (
       -- Open blockers, hidden ones included (see card_summary_view.blocked_by_count). Served by
@@ -161,6 +173,7 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
       fc.due_date_local_date as "dueDateLocalDate",
       fc.due_date_slot as "dueDateSlot",
       fc.due_date_timezone as "dueDateTimezone",
+      case when coalesce(wf.timeline, true) then fc.start_date_local_date end as "startDateLocalDate",
       fc.completed_at as "completedAt",
       fc.archived_at as "archivedAt",
       fc.cover_attachment_id as "coverAttachmentId",
@@ -173,7 +186,7 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
       coalesce(attachment_counts.attachment_count, 0)::integer as "attachmentCount",
       coalesce(checklist_counts.done_count, 0)::integer as "checklistDoneCount",
       coalesce(checklist_counts.total_count, 0)::integer as "checklistTotalCount",
-      coalesce(blocker_counts.blocked_by_count, 0)::integer as "blockedByCount",
+      case when coalesce(wf.dependencies, true) then coalesce(blocker_counts.blocked_by_count, 0) else 0 end::integer as "blockedByCount",
       coalesce(label_ids.label_ids, '[]'::json) as "labelIds",
       coalesce(assignee_ids.assignee_ids, '[]'::json) as "assigneeIds",
       coalesce(custom_field_values.custom_field_values, '[]'::json) as "customFieldValues",
@@ -189,6 +202,7 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
     left join attachment_counts on attachment_counts.card_id = fc.id
     left join checklist_counts on checklist_counts.card_id = fc.id
     left join blocker_counts on blocker_counts.card_id = fc.id
+    left join workspace_features wf on wf.id = fc.workspace_id
     left join label_ids on label_ids.card_id = fc.id
     left join assignee_ids on assignee_ids.card_id = fc.id
     left join custom_field_values on custom_field_values.card_id = fc.id
@@ -280,6 +294,7 @@ export function toWireCardSummary<Value extends CompactCardCustomFieldValue>(
     dueDateLocalDate: row.dueDateLocalDate,
     dueDateSlot: row.dueDateSlot,
     dueDateTimezone: row.dueDateTimezone,
+    startDateLocalDate: row.startDateLocalDate,
     completedAt: row.completedAt,
     archivedAt: row.archivedAt,
     coverAttachmentId: row.coverAttachmentId,

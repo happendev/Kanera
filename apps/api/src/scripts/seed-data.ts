@@ -3982,6 +3982,14 @@ function formatLocalDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
+// Roughly two of three dated cards get a planned start one to seven days ahead of their due date,
+// so the Timeline has bars of varied length to draw; the rest stay points, as every card was before
+// the start date existed. The start is derived from the due date, so it can never land after it.
+function seedStartDate(dueDate: Date | null, cardIndex: number): string | null {
+  if (!dueDate || cardIndex % 3 === 2) return null;
+  return formatLocalDate(addDays(dueDate, -(1 + (cardIndex * 5) % 7)));
+}
+
 function seedCommentBody(comment: SeedComment, userIdByKey: Map<SeedUserKey, string>): string {
   if (!comment.mentions?.length) return comment.body;
   const mentions = comment.mentions.map((userKey) => {
@@ -4796,6 +4804,19 @@ async function seedCardRelationDemos(tx: Tx, input: {
     await relate("Retry orphaned attachment cleanup on startup", "Run QA pass for onboarding with no existing workspaces", "blocks", 19);
     await relate("Refresh engineering branching guide", "Write migration rollback guide for customer imports", "blocks", 48);
     await relate("Reduce board hydration time for large workspaces", "Prepare tablet layout for board overview", "relates_to", 12);
+    // A deliberate scheduling conflict on Platform Delivery for the Timeline and the schedule API:
+    // the cleanup fix is planned to finish three working days after the QA pass it blocks is meant
+    // to start, so the engine flags the QA card and names its blocker. Dates are set here, after
+    // the generic start/due seeding, so the chain reads the same on every reset.
+    const plan = async (title: string, startInDays: number, dueInDays: number) => {
+      const card = cardByTitle.get(title);
+      if (!card) return;
+      await tx.update(cards)
+        .set({ startDateLocalDate: formatLocalDate(addDays(input.now, startInDays)), dueDateLocalDate: formatLocalDate(addDays(input.now, dueInDays)), dueDateSlot: card.dueDateSlot ?? "anyTime", dueDateTimezone: card.dueDateTimezone ?? "UTC" })
+        .where(eq(cards.id, card.id));
+    };
+    await plan("Retry orphaned attachment cleanup on startup", 1, 8);
+    await plan("Run QA pass for onboarding with no existing workspaces", 5, 9);
   }
   return { relations, notifications: notificationCount };
 }
@@ -5233,6 +5254,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             dueDateLocalDate: formatLocalDate(seedDueDate(baseDate, cardSeed.dueOffsetDays)),
             dueDateSlot: cardSeed.dueDateSlot,
             dueDateTimezone: GUEST_USER_SEED.timezone,
+            startDateLocalDate: seedStartDate(seedDueDate(baseDate, cardSeed.dueOffsetDays), cardIndex),
             createdById: guestUser!.id,
             completedAt: null,
             coverAttachmentId: null,
@@ -5397,6 +5419,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               : formatLocalDate(seedDueDate(baseDate, cardSeed.dueOffsetDays)),
             dueDateSlot: cardSeed.dueDateSlot ?? null,
             dueDateTimezone: cardSeed.dueOffsetDays === undefined ? null : userTimezoneByKey.get("amelia")!,
+            startDateLocalDate: seedStartDate(cardSeed.dueOffsetDays === undefined ? null : seedDueDate(baseDate, cardSeed.dueOffsetDays), cardIndex),
             createdById: userIdByKey.get(cardSeed.createdBy)!,
             completedAt,
             coverAttachmentId: null,
@@ -5906,6 +5929,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                     : formatLocalDate(seedDueDate(baseDate, cardSeed.dueOffsetDays)),
                 dueDateSlot: cardSeed.dueDateSlot ?? null,
                 dueDateTimezone: cardSeed.dueOffsetDays === undefined ? null : (userTimezoneByKey.get(cardSeed.createdBy) ?? "UTC"),
+                startDateLocalDate: seedStartDate(cardSeed.dueOffsetDays === undefined ? null : seedDueDate(baseDate, cardSeed.dueOffsetDays), cardIndex),
                 createdById: userIdByKey.get(cardSeed.createdBy)!,
                 completedAt,
                 coverAttachmentId: null,

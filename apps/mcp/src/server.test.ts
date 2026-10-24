@@ -536,7 +536,7 @@ void test("cards.dependency_graph walks the focus card's chains and counts block
       cards: [
         card(done!, "API-1", { completedAt: "2026-10-01T00:00:00.000Z", inScope: false }),
         card(upstream!, "API-2"),
-        card(CARD_ID, "API-3", { blockedByCount: 2, assigneeIds: [WORKSPACE_ID], labelIds: [BOARD_ID] }),
+        card(CARD_ID, "API-3", { blockedByCount: 2, assigneeIds: [WORKSPACE_ID], labelIds: [BOARD_ID], startDateLocalDate: "2026-10-12", dueDateLocalDate: "2026-10-16" }),
         card(next!, "API-4", { blockedByCount: 1 }),
         card(last!, "API-5", { blockedByCount: 1 }),
         card(sibling!, "API-6", { blockedByCount: 1 }),
@@ -567,6 +567,8 @@ void test("cards.dependency_graph walks the focus card's chains and counts block
   assert.equal(focus.openBlockerCount, 2);
   assert.equal(focus.offMapBlockerCount, 1, "the private blocker is counted, not shown");
   assert.deepEqual([focus.boardName, focus.listName, focus.labels, focus.assignees], ["Platform", "Doing", ["Risk"], [{ userId: WORKSPACE_ID, displayName: "Priya" }]]);
+  assert.deepEqual([focus.startDateLocalDate, focus.dueDateLocalDate], ["2026-10-12", "2026-10-16"]);
+  assert.equal(output.cards.find((entry) => entry.id === upstream)!.startDateLocalDate, undefined, "an unset start date is left out");
   // upstream's only blocker is completed, so nothing holds it up and nothing is off the map.
   const upstreamCard = output.cards.find((entry) => entry.id === upstream)!;
   assert.equal(upstreamCard.openBlockerCount, undefined);

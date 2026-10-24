@@ -33,6 +33,8 @@ export type SortBy =
   | "title-desc"
   | "due-asc"
   | "due-desc"
+  | "start-asc"
+  | "start-desc"
   | "created-desc"
   | "created-asc"
   | "updated-desc"
@@ -78,6 +80,8 @@ export const NULL_GROUP_KEY = "__none__";
  */
 export interface SourceBoardRef {
   inProgressEnabled?: boolean;
+  /** The board's workspace has start dates and the timeline on (absent means on). */
+  timelineEnabled?: boolean;
   id: string;
   workspaceId: string;
   name: string;
@@ -129,6 +133,7 @@ export const BUILTIN_COLUMN_IDS = [
   "status",
   "board",
   "assignees",
+  "start",
   "due",
   "inProgress",
   "labels",
@@ -163,6 +168,8 @@ export const SORT_BY_OPTIONS: { value: SortBy; label: string }[] = [
   { value: "title-desc", label: $localize`:Sort option - by title reverse alphabetically:Title Z → A` },
   { value: "due-asc", label: $localize`:Sort option:Due date (soonest)` },
   { value: "due-desc", label: $localize`:Sort option:Due date (latest)` },
+  { value: "start-asc", label: $localize`:Sort option - by planned start date, earliest first:Start date (earliest)` },
+  { value: "start-desc", label: $localize`:Sort option - by planned start date, latest first:Start date (latest)` },
   { value: "created-desc", label: $localize`:Sort option - by creation date, newest first:Created (newest)` },
   { value: "created-asc", label: $localize`:Sort option - by creation date, oldest first:Created (oldest)` },
   { value: "updated-desc", label: $localize`:Sort option - by last update, newest first:Updated (newest)` },

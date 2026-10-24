@@ -280,6 +280,8 @@ export const ja: ErrorCatalog = {
     "カスタムフィールドトリガーの値がフィールドの種類と一致しません。",
   "delivery not found":
     "配信が見つかりません。",
+  "dependencies are disabled for this workspace":
+    "このワークスペースでは依存関係が無効になっています。",
   "destination credentials are required":
     "送信先の認証情報が必要です。",
   "email already registered":
@@ -586,6 +588,8 @@ export const ja: ErrorCatalog = {
     "独立ボードのインポート先が見つかりません。",
   "standalone boards cannot contain another board":
     "独立ボードに別のボードを含めることはできません。",
+  "start dates and the timeline are disabled for this workspace":
+    "このワークスペースでは開始日とタイムラインが無効になっています。",
   "storage is configured by environment variables":
     "ストレージは環境変数で設定されています。",
   "storage is configured by the hosted deployment":
@@ -652,6 +656,8 @@ export const ja: ErrorCatalog = {
     "このゲストは割り当てられたカードをウォッチする必要があります。",
   "this invitation was sent to a different email address":
     "この招待は別のメールアドレスに送信されました。",
+  "time in progress is disabled for this workspace":
+    "このワークスペースでは進行中の時間が無効になっています。",
   "too many attempts; request a new code":
     "試行回数が多すぎます。新しいコードをリクエストしてください。",
   "triggerCustomFieldId and triggerCustomFieldValue are required":

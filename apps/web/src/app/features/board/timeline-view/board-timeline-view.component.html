@@ -1,0 +1,299 @@
+<section class="timeline-view" (keydown)="onKeydown($event)" (click)="clearSelection()">
+  <div class="timeline-toolbar" kFitLabels (click)="$event.stopPropagation()">
+    <div class="timeline-toolbar-left">
+      <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label" (click)="scrollToToday()" kTooltip="Scroll to today" i18n-kTooltip="Tooltip on the Timeline view's Today button">
+        <i class="ti ti-calendar-event" aria-hidden="true"></i>
+        <span i18n="Button - scroll the timeline to today">Today</span>
+      </button>
+      <div class="tl-zoom" role="group" aria-label="Timeline zoom" i18n-aria-label="Label for the Timeline view's zoom controls">
+        <button type="button" class="k-toolbar-icon-btn" (click)="zoomOut()" [disabled]="pxPerDay() <= minPxPerDay" aria-label="Zoom out" i18n-aria-label kTooltip="Zoom out (Ctrl + scroll)" i18n-kTooltip="Tooltip on the Timeline view's zoom out button">
+          <i class="ti ti-zoom-out" aria-hidden="true"></i>
+        </button>
+        <input
+          type="range"
+          class="tl-zoom-slider"
+          [min]="minZoomLevel"
+          [max]="maxZoomLevel"
+          step="any"
+          [value]="zoomLevel()"
+          (input)="onZoomSlider($any($event.target).value)"
+          aria-label="Zoom"
+          i18n-aria-label="Accessible name of the Timeline view's zoom slider"
+        />
+        <button type="button" class="k-toolbar-icon-btn" (click)="zoomIn()" [disabled]="pxPerDay() >= maxPxPerDay" aria-label="Zoom in" i18n-aria-label kTooltip="Zoom in (Ctrl + scroll)" i18n-kTooltip="Tooltip on the Timeline view's zoom in button">
+          <i class="ti ti-zoom-in" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label" (click)="fitAll()" [disabled]="!canFit()" kTooltip="Zoom to show every scheduled card" i18n-kTooltip="Tooltip on the Timeline view's Fit button">
+          <i class="ti ti-arrows-horizontal" aria-hidden="true"></i>
+          <span i18n="Button - zoom the timeline so every scheduled card is on screen">Fit all</span>
+        </button>
+      </div>
+    </div>
+    <div class="timeline-toolbar-right">
+      @if (!loading()) {
+      <span class="tl-count">{{ scheduledLabel() }}</span>
+      @if (summary().conflicts) {
+      <span class="tl-count is-warning"><i class="ti ti-alert-triangle" aria-hidden="true"></i>{{ conflictsLabel() }}</span>
+      }
+      }
+      @if (dependenciesEnabled()) {
+      <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [class.is-set]="showDependencies()" [attr.aria-pressed]="showDependencies()" (click)="toggleDependencies()" kTooltip="Show the wires between cards that block each other" i18n-kTooltip>
+        <i class="ti ti-git-merge" aria-hidden="true"></i>
+        <span i18n="Toggle button - show dependency wires on the timeline">Dependencies</span>
+      </button>
+      <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [class.is-set]="critical()" [attr.aria-pressed]="critical()" (click)="toggleCritical()" kTooltip="Highlight the chain of cards with no slack; everything else fades" i18n-kTooltip>
+        <i class="ti ti-route" aria-hidden="true"></i>
+        <span i18n="Toggle button - highlight the critical path on the timeline">Critical path</span>
+      </button>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+  <div class="tl-skeleton" aria-hidden="true">
+    @for (_ of skeletonRows; track $index) {
+    <div class="tl-skeleton-row">
+      <div class="skeleton tl-skeleton-name"></div>
+      <div class="skeleton tl-skeleton-bar" [style.margin-left.px]="40 + ($index * 37) % 220" [style.width.px]="90 + ($index * 53) % 160"></div>
+    </div>
+    }
+  </div>
+  } @else if (!visibleCards().length) {
+  <k-empty-state icon="timeline" raised title="Nothing to plan yet" i18n-title="Empty state title on the Timeline view" text="Cards appear here once the board has some. Give them a start and a due date and they become bars." i18n-text="Empty state text on the Timeline view" />
+  } @else {
+  <div #scroller class="tl-scroller" (scroll)="onScroll()" (focusin)="onRowFocus($event)" [style.--tl-name-width.px]="namePaneWidth()" [style.--tl-row-height.px]="rowHeight()" [style.--tl-bar-height.px]="barHeight()" [style.--tl-group-height.px]="groupRowHeight">
+    <div class="tl-sheet" [style.width.px]="namePaneWidth() + chartWidth()">
+      <!-- Header: the name pane's corner stays put in both directions; the tiers scroll with the chart. -->
+      <div class="tl-header" role="presentation">
+        <div class="tl-corner">
+          @if (coarsePointer && canEdit()) {
+          <span class="tl-corner-hint" i18n="Hint in the Timeline view header on touch devices">Change dates from the card</span>
+          }
+          @if (!narrow()) {
+          <span
+            class="tl-pane-resizer"
+            role="separator"
+            tabindex="0"
+            aria-orientation="vertical"
+            [attr.aria-valuenow]="namePaneWidth()"
+            aria-label="Resize the card names column"
+            i18n-aria-label="Accessible name of the handle that resizes the Timeline view's card names column"
+            kTooltip="Drag to resize. Double-click to reset"
+            i18n-kTooltip="Tooltip on the handle that resizes the Timeline view's card names column"
+            (pointerdown)="onPaneResizeStart($event)"
+            (pointermove)="onPaneResizeMove($event)"
+            (pointerup)="onPaneResizeEnd($event)"
+            (pointercancel)="onPaneResizeEnd($event)"
+            (dblclick)="resetNamePaneWidth()"
+            (keydown)="onPaneResizeKeydown($event)"
+            (click)="$event.stopPropagation()"
+          ></span>
+          }
+        </div>
+        <div class="tl-header-lane" [style.width.px]="chartWidth()">
+          <div class="tl-tier tl-tier-major">
+            @for (cell of header().major; track cell.key) {
+            <span class="tl-cell" [style.left.px]="cell.x" [style.width.px]="cell.width"><span class="tl-cell-text">{{ cell.label }}</span></span>
+            }
+          </div>
+          <div class="tl-tier tl-tier-minor">
+            @for (cell of header().minor; track cell.key) {
+            <span class="tl-cell" [class.is-weekend]="cell.tone === 'weekend'" [class.is-today]="cell.tone === 'today'" [style.left.px]="cell.x" [style.width.px]="cell.width"><span class="tl-cell-text">{{ cell.label }}</span></span>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-body" [style.height.px]="bodyHeight()">
+        <!-- Background: weekend bands and the today line run the full height behind every lane. -->
+        <div class="tl-bands" [style.left.px]="namePaneWidth()" [style.width.px]="chartWidth()" aria-hidden="true">
+          @for (band of weekends(); track band.x) {
+          <span class="tl-weekend" [style.left.px]="band.x" [style.width.px]="band.width"></span>
+          }
+          <span class="tl-today-line" [style.left.px]="todayX()"></span>
+        </div>
+
+        @for (row of windowRows(); track row.id) {
+        @if (row.kind === 'group') {
+        <div class="tl-row tl-row-group" [attr.data-row-id]="row.id" [style.top.px]="rowTops().tops.get(row.id)" [class.is-collapsed]="row.collapsed" [class.is-unscheduled]="isUnscheduledGroup(row.key)">
+          <button type="button" class="tl-name tl-group-name" (click)="toggleGroup(row.key); $event.stopPropagation()" [attr.aria-expanded]="!row.collapsed">
+            <i class="ti tl-chevron" [class.ti-chevron-down]="!row.collapsed" [class.ti-chevron-right]="row.collapsed" aria-hidden="true"></i>
+            @if (row.icon) {
+            <i class="ti tl-group-icon" [class]="'ti ti-' + row.icon + ' tl-group-icon'" [style.color]="tokenColor(row.color)" aria-hidden="true"></i>
+            }
+            <span class="tl-group-label">{{ row.label }}</span>
+            <span class="tl-group-count">{{ groupCountLabel(row.count) }}</span>
+          </button>
+          <div class="tl-lane tl-group-lane" [style.width.px]="chartWidth()">
+            @if (row.x !== null && row.width !== null) {
+            <span class="tl-group-span" [style.left.px]="row.x" [style.width.px]="row.width" [style.--list-color]="tokenColor(row.color)" [kTooltip]="datesText(row.span)"></span>
+            }
+          </div>
+        </div>
+        } @else {
+        <div
+          class="tl-row tl-row-card" [attr.data-row-id]="row.id" [style.top.px]="rowTops().tops.get(row.id)"
+          [class.is-selected]="selectedCardId() === row.card.id"
+          [class.is-completed]="row.card.completedAt"
+          [class.is-hovered]="hoveredCardId() === row.card.id"
+          [class.is-offpath]="isOffPath(row.card.id)"
+          [attr.data-card-id]="row.card.id"
+          (pointerenter)="hoveredCardId.set(row.card.id)"
+          (pointerleave)="hoveredCardId.set(null)"
+        >
+          <button type="button" class="tl-name tl-card-name" (click)="openCard(row.card.id); $event.stopPropagation()" (auxclick)="openCardInNewTab(row.card, $event)" (contextmenu)="onCardContextMenu(row.card, $event)" [attr.aria-label]="barLabel(row)" [kTooltip]="datesText(barFor(row))">
+            @if (row.card.completedAt) {
+            <i class="ti ti-circle-check tl-done-icon" aria-hidden="true"></i>
+            } @else if (listFor(row.card); as list) {
+            <i class="ti tl-list-icon" [class]="'ti ti-' + (list.icon || 'list') + ' tl-list-icon'" [style.color]="listColor(row.card)" [kTooltip]="list.name" aria-hidden="true"></i>
+            }
+            <span class="tl-name-text">
+              <span class="tl-name-line">
+                @if (showCardKeys()) {
+                <span class="tl-key">{{ row.card.key }}</span>
+                }
+                <span class="tl-title">{{ row.card.title }}</span>
+              </span>
+              @if (showLabelChips() && labelsFor(row.card.id).length) {
+              <!-- Labels are otherwise invisible on the chart unless grouped by label, yet a "Bug" label is
+                   often why a chain is held up. Presentational: the row's button owns the click. -->
+              <k-card-labels class="tl-labels" [labels]="labelsFor(row.card.id)" [limit]="3" [showOverflow]="true" [interactive]="false" />
+              }
+            </span>
+            @if (assigneesFor(row.card.id).length && !narrow()) {
+            <span class="tl-avatars">
+              @for (member of assigneesFor(row.card.id).slice(0, 2); track member.userId) {
+              <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="18" [userId]="member.userId" [workspaceId]="workspaceIdFor(row.card)" />
+              }
+            </span>
+            }
+          </button>
+
+          <div
+            class="tl-lane tl-card-lane"
+            [class.is-placeable]="!row.bar && canEditCard(row.card)"
+            [style.width.px]="chartWidth()"
+            (pointermove)="onLanePointerMove($event, row)"
+            (pointerleave)="onLanePointerLeave(row)"
+            (click)="placeCard($event, row); $event.stopPropagation()"
+          >
+            @if (row.bar) {
+            @let geometry = geometryFor(row);
+            @let slack = slackWidth(row);
+            @if (slack > 0) {
+            <span class="tl-slack" [style.left.px]="geometry.x + geometry.width" [style.width.px]="slack" [kTooltip]="slackText(row.card.id)" aria-hidden="true"></span>
+            }
+            <button
+              type="button"
+              class="tl-bar"
+              [class.is-point]="geometry.point"
+              [class.is-completed]="row.card.completedAt"
+              [class.is-overdue]="isOverdueCard(row.card)"
+              [class.is-selected]="selectedCardId() === row.card.id"
+              [class.is-critical]="isCritical(row.card.id)"
+              [class.has-conflict]="hasConflict(row.card.id)"
+              [class.is-dragging]="drag()?.cardId === row.card.id && drag()?.moved"
+              [class.is-rescheduling]="reschedulingCardIds().has(row.card.id)"
+              [class.is-link-target]="linkDraft()?.targetCardId === row.card.id"
+              [class.is-draggable]="canDrag(row.card)"
+              [style.left.px]="geometry.x"
+              [style.width.px]="geometry.point ? null : geometry.width"
+              [style.--list-color]="listColor(row.card)"
+              [attr.aria-label]="barLabel(row)"
+              [kTooltip]="showsInlineTitle(row) ? null : barTooltip(row)"
+              (pointerdown)="onBarPointerDown($event, row, 'move')"
+              (pointermove)="onBarPointerMove($event)"
+              (pointerup)="onBarPointerUp($event, row)"
+              (pointercancel)="onBarPointerCancel()"
+              (click)="onBarClick($event, row)"
+              (auxclick)="openCardInNewTab(row.card, $event)"
+              (contextmenu)="onCardContextMenu(row.card, $event)"
+            >
+              @if (!geometry.point) {
+              @if (canDrag(row.card)) {
+              <span class="tl-handle tl-handle-start" (pointerdown)="onBarPointerDown($event, row, 'start')" aria-hidden="true"></span>
+              <span class="tl-handle tl-handle-end" (pointerdown)="onBarPointerDown($event, row, 'end')" aria-hidden="true"></span>
+              }
+              @if (hasConflict(row.card.id)) {
+              <i class="ti ti-alert-triangle tl-bar-warning" [kTooltip]="conflictText(row.card.id)" aria-hidden="true"></i>
+              }
+              @if (showsInlineTitle(row)) {
+              <span class="tl-bar-text">{{ row.card.title }}</span>
+              }
+              }
+            </button>
+            @if (canDrag(row.card) && dependenciesEnabled()) {
+            <span
+              class="tl-link-handle"
+              [style.left.px]="geometry.x + (geometry.point ? 12 : geometry.width)"
+              (pointerdown)="onLinkHandlePointerDown($event, row)"
+              kTooltip="Drag to another card to make it wait on this one"
+              i18n-kTooltip="Tooltip on the dependency drag handle at the end of a timeline bar"
+              role="presentation"
+            ><i class="ti ti-circle-filled" aria-hidden="true"></i></span>
+            }
+            @if (!geometry.point && !showsInlineTitle(row) && !narrow()) {
+            <span class="tl-bar-caption" [style.left.px]="geometry.x + geometry.width + 18" aria-hidden="true">{{ row.card.title }}</span>
+            }
+            } @else if (ghostX(row); as ghostX) {
+            <span class="tl-ghost" [style.left.px]="ghostX" [style.width.px]="pxPerDay()" aria-hidden="true"></span>
+            <span class="tl-ghost-label" [style.left.px]="ghostX + pxPerDay() + 8">{{ ghostLabel(row) }}</span>
+            } @else if (!row.bar && !canEditCard(row.card)) {
+            <span class="tl-lane-empty" i18n="Timeline lane text for an unscheduled card the viewer cannot edit">Not scheduled</span>
+            }
+          </div>
+          @if (activeActionsCardId() === row.card.id) {
+          <k-card-actions-menu
+            [cardId]="row.card.id"
+            [cardKey]="row.card.key"
+            [organisationKey]="row.card.organisationKey"
+            [boardId]="row.card.boardId"
+            [workspaceId]="workspaceIdFor(row.card)"
+            [sourceListId]="row.card.listId"
+            [sourceLists]="lists()"
+            [title]="row.card.title"
+            [dueDateLocalDate]="row.card.dueDateLocalDate"
+            [dueDateSlot]="row.card.dueDateSlot"
+            [dueDateTimezone]="row.card.dueDateTimezone"
+            [completedAt]="row.card.completedAt"
+            [archivedAt]="row.card.archivedAt"
+            [anchorPoint]="actionsMenuPoint()"
+            (close)="closeActionsMenu()"
+          />
+          }
+        </div>
+        }
+        }
+
+        <!-- Wires sit above the bars so they are never hidden behind one; only their hit paths take
+             the pointer, the rest of the overlay lets bars be dragged through it. -->
+        <svg class="tl-wires" [style.left.px]="namePaneWidth()" [attr.width]="chartWidth()" [attr.height]="bodyHeight()" aria-hidden="false" role="group">
+          <defs>
+            @for (tone of ['plain', 'critical', 'risk', 'lit', 'offpath']; track tone) {
+            <marker [id]="'tl-arrow-' + tone" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" [attr.class]="'tl-arrow is-' + tone" />
+            </marker>
+            }
+          </defs>
+          @for (wire of wires(); track wire.id) {
+          <path [attr.d]="wire.path" [attr.class]="wireClass(wire)" [attr.marker-end]="'url(#tl-arrow-' + wire.tone + ')'" />
+          <path class="tl-wire-hit" [attr.d]="wire.path" tabindex="0" role="button" [attr.aria-label]="wireLabel(wire)" [attr.aria-pressed]="selectedEdgeId() === wire.id" (click)="selectWire(wire, $event)" (keydown.enter)="selectWire(wire, $event)" />
+          }
+          @if (linkDraft()) {
+          <path class="tl-wire is-draft" [attr.d]="draftPath()" marker-end="url(#tl-arrow-lit)" />
+          }
+        </svg>
+
+        @if (selectedWire(); as wire) {
+        @if (canEdit()) {
+        <button type="button" class="tl-wire-remove" [style.left.px]="namePaneWidth() + wire.midX" [style.top.px]="wire.midY" (click)="removeSelectedWire(); $event.stopPropagation()">
+          <i class="ti ti-unlink" aria-hidden="true"></i>
+          <span i18n="Button over a selected dependency wire on the timeline">Remove dependency</span>
+        </button>
+        }
+        }
+      </div>
+    </div>
+  </div>
+  }
+</section>

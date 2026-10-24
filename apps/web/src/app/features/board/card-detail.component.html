@@ -221,18 +221,55 @@
         </div>
       </section>
 
-      <!-- Due Date -->
+      <!-- Dates: planned start → due. The start is date-only and feeds the Timeline bar; the due
+           date keeps its time slot. Both reuse the due badge styling so the row reads as one span. -->
       <section class="detail-section">
         <div class="section-label">
           <i class="ti ti-calendar-event"></i>
-          &ngsp;<ng-container i18n="Card detail section heading">Due date</ng-container>
+          &ngsp;<ng-container i18n="Card detail section heading - the card's start and due dates">Dates</ng-container>
         </div>
         <div class="due-date-row">
+          @if (timelineEnabled()) {
+          <div class="due-picker-wrap start-picker-wrap">
+            @if (hasStartDate()) {
+            @if (canEditRole()) {
+            <button type="button" class="due-badge due-badge-btn" [class.is-active]="startDatePickerOpen()" [disabled]="!canEdit()" (click)="toggleStartDatePicker($event)" aria-label="Change start date" i18n-aria-label kTooltip="Change start date" i18n-kTooltip>
+              <i class="ti ti-calendar-time"></i>
+              <span class="due-badge-kind" i18n="Prefix on the card's start date badge, e.g. Start 12 Oct">Start</span>
+              {{ startDateText() }}
+              <span type="button" class="due-clear" (click)="setStartDate(''); $event.stopPropagation()" kTooltip="Clear start date" i18n-kTooltip>
+                <i class="ti ti-x"></i>
+              </span>
+            </button>
+            } @else {
+            <span class="due-badge">
+              <i class="ti ti-calendar-time"></i>
+              <span class="due-badge-kind" i18n="Prefix on the card's start date badge, e.g. Start 12 Oct">Start</span>
+              {{ startDateText() }}
+            </span>
+            }
+            } @else if (canEditRole()) {
+            <button type="button" class="due-add-btn" [class.is-active]="startDatePickerOpen()" [disabled]="!canEdit()" (click)="toggleStartDatePicker($event)" aria-label="Set start date" i18n-aria-label kTooltip="Add start date" i18n-kTooltip>
+              <i class="ti ti-plus"></i>&ngsp;<ng-container i18n="Button">Add start date</ng-container>
+            </button>
+            }
+            @if (startDatePickerOpen() && canEditRole()) {
+            <!-- A start after the due date is a 400 from the API, so the picker never offers one. -->
+            <k-date-picker [value]="startDateInputValue()" [showSlots]="false" [max]="card().dueDateLocalDate" (applyDate)="setStartDate($event.value)" (clear)="setStartDate('')" (close)="startDatePickerOpen.set(false)" />
+            }
+          </div>
+          }
+          @if (hasStartDate() && hasDueDate()) {
+          <i class="ti ti-arrow-right due-arrow" aria-hidden="true"></i>
+          }
           <div class="due-picker-wrap">
             @if (hasDueDate()) {
             @if (canEditRole()) {
             <button type="button" class="due-badge due-badge-btn" [class.overdue]="dueDateOverdue()" [class.due-soon]="dueDateDueSoon()" [class.is-active]="dueDatePickerOpen()" [disabled]="!canEdit()" (click)="toggleDueDatePicker($event)" aria-label="Change due date" i18n-aria-label kTooltip="Change due date" i18n-kTooltip>
               <i class="ti ti-calendar-event"></i>
+              @if (hasStartDate()) {
+              <span class="due-badge-kind" i18n="Prefix on the card's due date badge when a start date is also shown, e.g. Due 16 Oct">Due</span>
+              }
               {{ dueDateText() }}
               <span type="button" class="due-clear" (click)="setDueDate(''); $event.stopPropagation()" kTooltip="Clear due date" i18n-kTooltip>
                 <i class="ti ti-x"></i>
@@ -241,6 +278,9 @@
             } @else {
             <span class="due-badge" [class.overdue]="dueDateOverdue()" [class.due-soon]="dueDateDueSoon()">
               <i class="ti ti-calendar-event"></i>
+              @if (hasStartDate()) {
+              <span class="due-badge-kind" i18n="Prefix on the card's due date badge when a start date is also shown, e.g. Due 16 Oct">Due</span>
+              }
               {{ dueDateText() }}
             </span>
             }
@@ -252,9 +292,13 @@
             <span class="readonly-empty" i18n>No due date</span>
             }
             @if (dueDatePickerOpen() && canEditRole()) {
+            <!-- Nothing is disabled here: a due date before the start clamps the start server-side. -->
             <k-date-picker [value]="dueDateInputValue()" [slot]="dueDateSlot()" (applyDate)="setDueDate($event.value, $event.slot)" (clear)="setDueDate('')" (close)="dueDatePickerOpen.set(false)" />
             }
           </div>
+          @if (durationHint(); as hint) {
+          <span class="due-duration-hint">{{ hint }}</span>
+          }
         </div>
       </section>
 

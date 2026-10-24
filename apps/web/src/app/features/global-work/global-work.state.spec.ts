@@ -75,7 +75,7 @@ const catalog: WorkCatalog = {
       icon: null,
       iconColor: null,
       viewerRole: "editor",
-      assignedItemsOnly: false, inProgressEnabled: true,
+      assignedItemsOnly: false, inProgressEnabled: true, dependenciesEnabled: true, timelineEnabled: true,
     },
     {
       id: "30000000-0000-4000-8000-000000000002",
@@ -84,7 +84,7 @@ const catalog: WorkCatalog = {
       icon: null,
       iconColor: null,
       viewerRole: "observer",
-      assignedItemsOnly: false, inProgressEnabled: true,
+      assignedItemsOnly: false, inProgressEnabled: true, dependenciesEnabled: true, timelineEnabled: true,
     },
   ],
   lists: [],

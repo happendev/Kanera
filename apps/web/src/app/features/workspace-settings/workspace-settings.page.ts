@@ -1,3 +1,4 @@
+import { ALL_WORKSPACE_FEATURES_ENABLED, type WorkspaceFeature, type WorkspaceFeatures } from "@kanera/shared/workspace-features";
 import { CARD_DUE_DATE_SLOTS } from "@kanera/shared/due-date-slots";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import type { OnDestroy } from "@angular/core";
@@ -720,7 +721,20 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly completedCardsActiveDaysDraft = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
   readonly inactiveCardsDaysDraft = signal(DEFAULT_INACTIVE_CARDS_DAYS);
   readonly organisationInProgressEnabled = signal(true);
-  readonly progressSettingsEnabled = computed(() => this.organisationInProgressEnabled() && (!this.isStandalone() || this.boardList().some((board) => board.inProgressEnabled)));
+  /**
+   * Optional planning features (`@kanera/shared/workspace-features`): the organisation's master
+   * switches, this workspace's own switches, and what is in effect where the two agree.
+   */
+  readonly organisationFeatures = signal<WorkspaceFeatures>(ALL_WORKSPACE_FEATURES_ENABLED);
+  readonly featureDrafts = signal<WorkspaceFeatures>(ALL_WORKSPACE_FEATURES_ENABLED);
+  readonly effectiveFeatures = computed<WorkspaceFeatures>(() => {
+    const organisation = this.organisationFeatures();
+    const drafts = this.featureDrafts();
+    return { dependencies: organisation.dependencies && drafts.dependencies, timeline: organisation.timeline && drafts.timeline, inProgress: organisation.inProgress && drafts.inProgress };
+  });
+  readonly featureSaving = signal<WorkspaceFeature | null>(null);
+  readonly featureError = signal<string | null>(null);
+  readonly progressSettingsEnabled = computed(() => this.organisationInProgressEnabled() && this.featureDrafts().inProgress && (!this.isStandalone() || this.boardList().some((board) => board.inProgressEnabled)));
   readonly inProgressAlertDaysDraft = signal(DEFAULT_IN_PROGRESS_ALERT_DAYS);
   /** The zone whose working hours time in progress counts (09:00-17:00, Monday to Friday). */
   readonly timeZoneDraft = signal("UTC");
@@ -1196,7 +1210,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async reload(workspaceId = this.workspaceId()) {
-    const detail = await this.api.get<{ organisationInProgressEnabled?: boolean; workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[]; automationExecutionsRemaining: number | null }>(`/workspaces/${workspaceId}`);
+    const detail = await this.api.get<{ organisationInProgressEnabled?: boolean; organisationFeatures?: WorkspaceFeatures; workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[]; automationExecutionsRemaining: number | null }>(`/workspaces/${workspaceId}`);
     const ws = { ...detail.workspace, role: detail.role } as Workspace & { role: WorkspaceRole };
     const canManageApi = detail.role === "admin" || this.auth.isOrgAdmin();
     // Both groups need the workspace role, but neither needs the other group.
@@ -1218,6 +1232,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     ]);
     if (workspaceId !== this.workspaceId()) return;
     this.organisationInProgressEnabled.set(detail.organisationInProgressEnabled !== false);
+    this.organisationFeatures.set(detail.organisationFeatures ?? { ...ALL_WORKSPACE_FEATURES_ENABLED, inProgress: detail.organisationInProgressEnabled !== false });
     this.applyWorkspace(ws, true);
     this.lists.set([...detail.lists].sort(byPosition));
     this.fields.set([...detail.customFields].sort(byPosition));
@@ -1400,9 +1415,20 @@ export class WorkspaceSettingsPage implements OnDestroy {
         this.boardList.update((bs) => bs.some((b) => b.id === board.id) ? bs : sortBoards([...bs, board as unknown as Board]));
         this.upsertGuestBoard(board as unknown as Board);
       },
-      "board:updated": ({ board, organisationInProgressEnabled }) => {
+      "board:updated": ({ board, organisationInProgressEnabled, features }) => {
         if (!matchWs(board.workspaceId)) return;
         if (organisationInProgressEnabled !== undefined) this.organisationInProgressEnabled.set(organisationInProgressEnabled);
+        // A planning feature was switched. The event carries the effective value, which equals the
+        // organisation's wherever this workspace's own switch is on; where it is off, the
+        // organisation's choice is not visible here and the last known one stands.
+        if (features) {
+          const drafts = this.featureDrafts();
+          this.organisationFeatures.update((current) => ({
+            dependencies: drafts.dependencies ? features.dependencies : current.dependencies,
+            timeline: drafts.timeline ? features.timeline : current.timeline,
+            inProgress: organisationInProgressEnabled ?? current.inProgress,
+          }));
+        }
         const updated = board as unknown as Board;
         if (updated.archivedAt) {
           this.boardList.update((bs) => bs.filter((b) => b.id !== updated.id));
@@ -1466,6 +1492,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.workspace.set(ws);
     this.boardLinkingEnabledDraft.set(ws?.boardLinkingEnabled !== false);
     this.notesEnabledDraft.set(ws?.notesEnabled !== false);
+    if (!this.featureSaving()) {
+      this.featureDrafts.set({ dependencies: ws?.dependenciesEnabled !== false, timeline: ws?.timelineEnabled !== false, inProgress: ws?.inProgressEnabled !== false });
+    }
     // Keep locally queued values visible if an unrelated workspace mutation or realtime echo lands
     // during the debounce window. The defaults save response synchronizes them after the timer clears.
     if (!this.generalSettingsSaveTimer) {
@@ -1504,7 +1533,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.nameSaveTimer = null;
   }
 
-  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; inProgressAlertDays?: number; timeZone?: string; boardLinkingEnabled?: boolean; notesEnabled?: boolean }) {
+  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; inProgressAlertDays?: number; timeZone?: string; boardLinkingEnabled?: boolean; notesEnabled?: boolean; dependenciesEnabled?: boolean; timelineEnabled?: boolean; inProgressEnabled?: boolean }) {
     const ws = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch));
     this.applyWorkspace(ws);
   }
@@ -1698,6 +1727,36 @@ export class WorkspaceSettingsPage implements OnDestroy {
       this.notesError.set($localize`Notes could not be updated.`);
     } finally {
       this.notesSaving.set(false);
+    }
+  }
+
+  /**
+   * Like notes, switching a planning feature off hides it and closes its API but keeps its data, so
+   * there is nothing destructive to confirm. In progress banks running clocks and starts fresh
+   * stints when it comes back, exactly as the organisation and board switches do.
+   */
+  async updateFeatureEnabled(feature: WorkspaceFeature, enabled: boolean, control?: HTMLInputElement) {
+    const workspace = this.workspace();
+    if (!workspace || this.featureSaving()) return;
+    const previous = this.featureDrafts()[feature];
+    const restorePrevious = () => {
+      this.featureDrafts.update((drafts) => ({ ...drafts, [feature]: previous }));
+      if (control) control.checked = previous;
+    };
+    if (previous === enabled) {
+      restorePrevious();
+      return;
+    }
+    this.featureDrafts.update((drafts) => ({ ...drafts, [feature]: enabled }));
+    this.featureSaving.set(feature);
+    this.featureError.set(null);
+    try {
+      await this.patchWorkspace({ [`${feature}Enabled`]: enabled });
+    } catch {
+      restorePrevious();
+      this.featureError.set($localize`:Error under the workspace planning feature switches:The setting could not be updated.`);
+    } finally {
+      this.featureSaving.set(null);
     }
   }
 
@@ -2182,7 +2241,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   automationTriggerTypeValue(automation: WireAutomation): AutomationTriggerTypeName {
-    return automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list";
+    return automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "start_date_arrives" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked" || automation.triggerType === "scheduling_conflict_appears" || automation.triggerType === "critical_path_slips" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list";
   }
 
   automationTriggerListValue(automation: WireAutomation): string {
@@ -2333,6 +2392,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (automation.triggerType === "card_leaves_list") return $localize`:Automation trigger, followed by a list name:Card leaves`;
     if (automation.triggerType === "due_date_arrives") return $localize`:Automation trigger:Due date arrives`;
     if (automation.triggerType === "due_date_approaching") return $localize`:Automation trigger:Due date approaches`;
+    if (automation.triggerType === "start_date_arrives") return $localize`:Automation trigger:Start date arrives`;
     if (automation.triggerType === "card_becomes_inactive") return $localize`:Automation trigger:Card becomes inactive`;
     if (automation.triggerType === "card_in_progress_too_long") return $localize`:Automation trigger:Card in progress too long`;
     if (automation.triggerType === "all_checklist_items_complete") return $localize`:Automation trigger:All checklist items complete`;
@@ -2340,6 +2400,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (automation.triggerType === "card_marked_complete") return $localize`:Automation trigger:Card marked complete`;
     if (automation.triggerType === "card_blocked") return $localize`:Automation trigger - the card gains its first open blocker:Card blocked`;
     if (automation.triggerType === "card_unblocked") return $localize`:Automation trigger - the card no longer waits on any open card:Card unblocked`;
+    if (automation.triggerType === "scheduling_conflict_appears") return $localize`:Automation trigger - an open blocker is now planned to finish on or after this card's planned start:Scheduling conflict appears`;
+    if (automation.triggerType === "critical_path_slips") return $localize`:Automation trigger - a card on the board's critical path was rescheduled later:Critical path slips`;
     if (automation.triggerType === "card_label_set") return $localize`:Automation trigger, followed by a label name:Label set to`;
     if (automation.triggerType === "custom_field_value_changed") return $localize`:Automation trigger, followed by field = value:Custom field changes to`;
     if (automation.applyOnCreate && automation.applyOnMove) return $localize`:Automation trigger, followed by a list name:Card created or moved into`;
@@ -2416,7 +2478,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private normalizeAutomation(automation: WireAutomation): WireAutomation {
     return {
       ...automation,
-      triggerType: automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list",
+      triggerType: automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "start_date_arrives" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked" || automation.triggerType === "scheduling_conflict_appears" || automation.triggerType === "critical_path_slips" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list",
       triggerListId: automation.triggerType === "card_enters_list" || automation.triggerType === "card_leaves_list" ? automation.triggerListId : null,
       triggerUserIds: automation.triggerType === "card_assigned_to_user" ? this.stringList(automation.triggerUserIds) : null,
       triggerLabelId: automation.triggerType === "card_label_set" ? automation.triggerLabelId : null,

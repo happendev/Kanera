@@ -10,6 +10,7 @@ import { ToastService } from "../../shared/toast.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CardLabelsComponent } from "./card-labels.component";
 import { isPlainPrimaryClick } from "./card-navigation.util";
+import { BoardState } from "./board-state";
 import { blockerStatus, hiddenBlockersLabel } from "./card-relations.util";
 
 const SEARCH_DEBOUNCE_MS = 200;
@@ -46,8 +47,10 @@ const SEARCH_DEBOUNCE_MS = 200;
       <div class="cr-body">
         @if (adding()) {
         <div class="cr-add">
-          <k-segmented [options]="directionOptions" [value]="direction()" [showLabels]="true" [equalWidths]="true" size="sm"
+          @if (directionOptions().length > 1) {
+          <k-segmented [options]="directionOptions()" [value]="direction()" [showLabels]="true" [equalWidths]="true" size="sm"
             ariaLabel="Relation type" i18n-ariaLabel (valueChange)="changeDirection($event)" />
+          }
           <div class="cr-search">
             <i class="ti ti-search" aria-hidden="true"></i>
             <input #searchInput class="cr-search-input" type="search" autocomplete="off"
@@ -393,8 +396,16 @@ export class CardRelationsComponent implements OnInit {
   /** A plain click on a related card; the parent routes the drawer to it. */
   readonly openCard = output<CardRelationCard>();
 
+  /**
+   * The workspace has dependencies switched off: only plain "Relates to" links can be added (the
+   * server hides `blocks` relations and refuses new ones). Outside a board there is no BoardState,
+   * and the server's refusal stays the guard.
+   */
+  private readonly boardState = inject(BoardState, { optional: true });
+  readonly dependenciesEnabled = computed(() => this.boardState?.dependenciesEnabled() ?? true);
   readonly adding = signal(false);
-  readonly direction = signal<CardRelationDirection>("blocked_by");
+  private readonly chosenDirection = signal<CardRelationDirection>("blocked_by");
+  readonly direction = computed<CardRelationDirection>(() => this.dependenciesEnabled() ? this.chosenDirection() : "relates_to");
   readonly query = signal("");
   readonly results = signal<CardSearchResult[]>([]);
   readonly searched = signal(false);
@@ -407,11 +418,14 @@ export class CardRelationsComponent implements OnInit {
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private searchSeq = 0;
 
-  readonly directionOptions: readonly SegmentedOption<CardRelationDirection>[] = [
+  private readonly allDirectionOptions: readonly SegmentedOption<CardRelationDirection>[] = [
     { id: "blocked_by", label: $localize`:Relation type choice - the chosen card blocks this card:Blocked by` },
     { id: "blocks", label: $localize`:Relation type choice - this card blocks the chosen card:Blocks` },
     { id: "relates_to", label: $localize`:Relation type choice - the cards are related without an order:Relates to` },
   ];
+  readonly directionOptions = computed(() => this.dependenciesEnabled()
+    ? this.allDirectionOptions
+    : this.allDirectionOptions.filter((option) => option.id === "relates_to"));
 
   readonly groups = computed(() => {
     const icons: Record<CardRelationDirection, string> = { blocked_by: "ti-lock", blocks: "ti-hand-stop", relates_to: "ti-arrows-left-right" };
@@ -485,7 +499,7 @@ export class CardRelationsComponent implements OnInit {
   }
 
   changeDirection(direction: CardRelationDirection) {
-    this.direction.set(direction);
+    this.chosenDirection.set(direction);
     this.onQuery(this.query());
   }
 

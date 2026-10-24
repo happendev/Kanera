@@ -280,6 +280,8 @@ export const de: ErrorCatalog = {
     "Der Wert des Feld-Auslösers passt nicht zum Feldtyp.",
   "delivery not found":
     "Zustellung nicht gefunden.",
+  "dependencies are disabled for this workspace":
+    "Abhängigkeiten sind für diesen Arbeitsbereich deaktiviert.",
   "destination credentials are required":
     "Zugangsdaten für das Ziel sind erforderlich.",
   "email already registered":
@@ -586,6 +588,8 @@ export const de: ErrorCatalog = {
     "Importziel für das eigenständige Board nicht gefunden.",
   "standalone boards cannot contain another board":
     "Eigenständige Boards können kein weiteres Board enthalten.",
+  "start dates and the timeline are disabled for this workspace":
+    "Startdaten und die Zeitachse sind für diesen Arbeitsbereich deaktiviert.",
   "storage is configured by environment variables":
     "Der Speicher wird über Umgebungsvariablen konfiguriert.",
   "storage is configured by the hosted deployment":
@@ -652,6 +656,8 @@ export const de: ErrorCatalog = {
     "Dieser Gast muss eine zugewiesene Karte beobachten.",
   "this invitation was sent to a different email address":
     "Diese Einladung wurde an eine andere E-Mail-Adresse gesendet.",
+  "time in progress is disabled for this workspace":
+    "Zeit in Arbeit ist für diesen Arbeitsbereich deaktiviert.",
   "too many attempts; request a new code":
     "Zu viele Versuche. Fordere einen neuen Code an.",
   "triggerCustomFieldId and triggerCustomFieldValue are required":

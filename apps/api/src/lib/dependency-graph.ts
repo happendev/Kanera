@@ -10,6 +10,7 @@ import { attachFieldOptions } from "./custom-fields.js";
 import { readableCardIds } from "./internal-links.js";
 import { signedAvatarUrl } from "./media-keys.js";
 import { absoluteCardUrl } from "./wire-card.js";
+import { assertBoardFeature, featureDisabledError, loadWorkspaceFeaturesMap } from "./workspace-features.js";
 
 /**
  * The most cards one map holds. A map is read by a person, and past a few hundred tiles the
@@ -17,9 +18,9 @@ import { absoluteCardUrl } from "./wire-card.js";
  */
 const DEPENDENCY_GRAPH_MAX_CARDS = 400;
 
-type CardRef = { id: string; boardId: string; completedAt: Date | null; archivedAt: Date | null };
+type CardRef = { id: string; boardId: string; workspaceId: string; completedAt: Date | null; archivedAt: Date | null };
 
-const cardRef = { id: cards.id, boardId: cards.boardId, completedAt: cards.completedAt, archivedAt: cards.archivedAt };
+const cardRef = { id: cards.id, boardId: cards.boardId, workspaceId: cards.workspaceId, completedAt: cards.completedAt, archivedAt: cards.archivedAt };
 
 /** Whether a card has at least one relation, in either direction and of either kind. */
 const hasRelation = exists(
@@ -115,6 +116,7 @@ async function seedCards(claims: AuthClaims, scope: DependencyGraphBody): Promis
   if ("boardId" in scope) {
     // A board the viewer cannot open is refused like every other board read, not an empty map.
     await assertBoardAccess(claims, scope.boardId);
+    await assertBoardFeature(scope.boardId, "dependencies");
     rows = await db.select(cardRef).from(cards).where(and(eq(cards.boardId, scope.boardId), open)).orderBy(cards.createdAt, cards.id);
   } else if ("workspaceId" in scope) {
     // No workspace check of its own: board guests read workspace boards without being workspace
@@ -125,7 +127,13 @@ async function seedCards(claims: AuthClaims, scope: DependencyGraphBody): Promis
     rows = await db.select(cardRef).from(cards).where(and(inArray(cards.id, [...new Set(scope.cardIds)]), open)).orderBy(cards.createdAt, cards.id);
   }
   const readable = await readableCardIds(claims, rows);
-  return rows.filter((row) => readable.has(row.id));
+  const visible = rows.filter((row) => readable.has(row.id));
+  // A workspace with dependencies switched off has no map. A workspace scope is refused only once
+  // the viewer has shown it can read cards there; an explicit card set (Global Work, which can span
+  // workspaces) simply leaves those workspaces' cards out.
+  const features = await loadWorkspaceFeaturesMap(visible.map((row) => row.workspaceId));
+  if ("workspaceId" in scope && features.get(scope.workspaceId)?.dependencies === false) throw featureDisabledError("dependencies");
+  return visible.filter((row) => features.get(row.workspaceId)?.dependencies !== false);
 }
 
 /** Active card-face fields of the given workspaces, with their options, in workspace order. */

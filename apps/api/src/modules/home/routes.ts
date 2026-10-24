@@ -33,6 +33,7 @@ import { and, asc, eq, gte, inArray, isNull, lte, or, sql, type SQL } from "driz
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
+import { workspaceFeatureEnabledSql } from "../../lib/workspace-features.js";
 import { loadAccessibleBoards, type AccessibleBoard } from "../../lib/accessible-boards.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
 import { DUE_DATE_SLOT_RANK, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
@@ -313,6 +314,8 @@ export async function homeRoutes(app: FastifyInstance) {
       isNull(lists.archivedAt),
     );
 
+    // A workspace with dependencies switched off has no blocked cards to count.
+    const blockedCountsSql = workspaceFeatureEnabledSql("dependencies", cardSummaryView.workspaceId);
     const [cardCountRows, horizonCardRows, checklistItems, checklistCountRows, cardTrendRows] = await Promise.all([
       // Q1: every count in one pass of `count(*) filter`.
       db
@@ -324,8 +327,8 @@ export async function homeRoutes(app: FastifyInstance) {
           dueLaterThisWeek: sql<number>`count(*) filter (where not ${overdue} and ${cardSummaryDueColumns.dueDateLocalDate} > ${tomorrow} and ${cardSummaryDueColumns.dueDateLocalDate} <= ${horizonEnd})::integer`,
           // The view's open-blocker count, so home agrees with the board's Blocked filter. Overdue
           // dates are all before the horizon, so the second count includes them.
-          blocked: sql<number>`count(*) filter (where ${cardSummaryView.blockedByCount} > 0)::integer`,
-          blockedDueWithin7Days: sql<number>`count(*) filter (where ${cardSummaryView.blockedByCount} > 0 and ${cardSummaryDueColumns.dueDateLocalDate} <= ${horizonEnd})::integer`,
+          blocked: sql<number>`count(*) filter (where ${cardSummaryView.blockedByCount} > 0 and ${blockedCountsSql})::integer`,
+          blockedDueWithin7Days: sql<number>`count(*) filter (where ${cardSummaryView.blockedByCount} > 0 and ${blockedCountsSql} and ${cardSummaryDueColumns.dueDateLocalDate} <= ${horizonEnd})::integer`,
         })
         .from(cardAssignees)
         .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardAssignees.cardId))

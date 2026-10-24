@@ -3170,3 +3170,135 @@ void test("deleting a checklist publishes the badge counts it removes", async ()
     { checklistId: checklist.id, checklistParentItemId: null, itemCount: 3, completedItemCount: 1 },
   );
 });
+
+void test("a card's planned start never sits after its due date", async () => {
+  // The Timeline draws a card as a bar from start to due, so an explicit later start is the
+  // caller's error and a due date pulled before the stored start drags the start with it.
+  const f = await seedChecklistTemplateApplyFixture("start-date-rule");
+  const patch = (payload: Record<string, unknown>) => f.app.inject({ method: "PATCH", url: `/cards/${f.card.id}`, headers: f.auth, payload });
+  const dates = (body: string) => (({ startDateLocalDate, dueDateLocalDate }) => ({ startDateLocalDate, dueDateLocalDate }))(JSON.parse(body) as { startDateLocalDate: string | null; dueDateLocalDate: string | null });
+  const activityCount = () => db.$count(activityEvents, and(eq(activityEvents.entityType, "card"), eq(activityEvents.entityId, f.card.id)));
+
+  // A start on an undated card is a point to start from, with its own history line.
+  const started = await patch({ startDateLocalDate: "2026-10-10" });
+  assert.equal(started.statusCode, 200, started.body);
+  assert.deepEqual(dates(started.body), { startDateLocalDate: "2026-10-10", dueDateLocalDate: null });
+  const startPayload = await latestCardUpdateActivityPayload(f.card.id);
+  assert.equal(startPayload.startDateLocalDate, "2026-10-10");
+  assert.equal("dueDateLocalDate" in startPayload, false);
+
+  const dated = await patch({ dueDateLocalDate: "2026-10-20" });
+  assert.equal(dated.statusCode, 200, dated.body);
+  assert.deepEqual(dates(dated.body), { startDateLocalDate: "2026-10-10", dueDateLocalDate: "2026-10-20" });
+
+  // After the stored due date: rejected, and after the due date in the same body: rejected.
+  const lateStart = await patch({ startDateLocalDate: "2026-10-25" });
+  assert.equal(lateStart.statusCode, 400, lateStart.body);
+  assert.match(lateStart.body, /startDateLocalDate must be on or before dueDateLocalDate/);
+  assert.equal((await patch({ startDateLocalDate: "2026-10-25", dueDateLocalDate: "2026-10-22" })).statusCode, 400);
+  assert.deepEqual(
+    (await db.select({ startDateLocalDate: cards.startDateLocalDate, dueDateLocalDate: cards.dueDateLocalDate }).from(cards).where(eq(cards.id, f.card.id)))[0],
+    { startDateLocalDate: "2026-10-10", dueDateLocalDate: "2026-10-20" },
+  );
+
+  // Moving the due date before the start clamps the start, and the history row records both.
+  const before = await activityCount();
+  const pulled = await patch({ dueDateLocalDate: "2026-10-05" });
+  assert.equal(pulled.statusCode, 200, pulled.body);
+  assert.deepEqual(dates(pulled.body), { startDateLocalDate: "2026-10-05", dueDateLocalDate: "2026-10-05" });
+  assert.equal(await activityCount(), before + 1);
+  const clampedPayload = await latestCardUpdateActivityPayload(f.card.id);
+  assert.equal(clampedPayload.dueDateLocalDate, "2026-10-05");
+  assert.equal(clampedPayload.startDateLocalDate, "2026-10-05");
+
+  // A Timeline drag moves both ends in one request and leaves one "rescheduled" row.
+  const beforeDrag = await activityCount();
+  const dragged = await patch({ startDateLocalDate: "2026-11-01", dueDateLocalDate: "2026-11-05" });
+  assert.equal(dragged.statusCode, 200, dragged.body);
+  assert.deepEqual(dates(dragged.body), { startDateLocalDate: "2026-11-01", dueDateLocalDate: "2026-11-05" });
+  assert.equal(await activityCount(), beforeDrag + 1);
+  const dragPayload = await latestCardUpdateActivityPayload(f.card.id);
+  assert.deepEqual([dragPayload.startDateLocalDate, dragPayload.dueDateLocalDate], ["2026-11-01", "2026-11-05"]);
+
+  // Clearing the due date keeps the start; clearing the start never touches the due date.
+  assert.deepEqual(dates((await patch({ dueDateLocalDate: null })).body), { startDateLocalDate: "2026-11-01", dueDateLocalDate: null });
+  assert.deepEqual(dates((await patch({ dueDateLocalDate: "2026-11-05" })).body), { startDateLocalDate: "2026-11-01", dueDateLocalDate: "2026-11-05" });
+  assert.deepEqual(dates((await patch({ startDateLocalDate: null })).body), { startDateLocalDate: null, dueDateLocalDate: "2026-11-05" });
+  assert.equal((await latestCardUpdateActivityPayload(f.card.id)).startDateLocalDate, null);
+
+  // Creation takes a start alongside the due date under the same rule, and the board-open summary
+  // projection carries it so the Timeline can draw the bar without a per-card read.
+  const [list] = await db.select().from(lists).where(eq(lists.id, f.card.listId)).limit(1);
+  assert.ok(list);
+  const created = await f.app.inject({
+    method: "POST",
+    url: `/boards/${f.board.id}/lists/${list.id}/cards`,
+    headers: f.auth,
+    payload: { title: "Planned", startDateLocalDate: "2026-12-01", dueDateLocalDate: "2026-12-03" },
+  });
+  assert.equal(created.statusCode, 201, created.body);
+  const planned = created.json<{ id: string; startDateLocalDate: string | null }>();
+  assert.equal(planned.startDateLocalDate, "2026-12-01");
+  const [summary] = await db.select({ startDateLocalDate: cardSummaryView.startDateLocalDate }).from(cardSummaryView).where(eq(cardSummaryView.id, planned.id));
+  assert.deepEqual(summary, { startDateLocalDate: "2026-12-01" });
+  const inverted = await f.app.inject({
+    method: "POST",
+    url: `/boards/${f.board.id}/lists/${list.id}/cards`,
+    headers: f.auth,
+    payload: { title: "Inverted", startDateLocalDate: "2026-12-05", dueDateLocalDate: "2026-12-03" },
+  });
+  assert.equal(inverted.statusCode, 400, inverted.body);
+
+  // A duplicate keeps the planned start with the due date.
+  const duplicated = await f.app.inject({ method: "POST", url: `/cards/${planned.id}/duplicate`, headers: f.auth, payload: {} });
+  assert.equal(duplicated.statusCode, 201, duplicated.body);
+  assert.equal(duplicated.json<{ startDateLocalDate: string | null }>().startDateLocalDate, "2026-12-01");
+
+  await f.app.close();
+});
+
+void test("bulk due date pulls planned starts that would land after the new due date", async () => {
+  const f = await seedChecklistTemplateApplyFixture("start-date-bulk-due");
+  const [list] = await db.select().from(lists).where(eq(lists.id, f.card.listId)).limit(1);
+  assert.ok(list);
+  const [later, earlier] = await db
+    .insert(cards)
+    .values([
+      { listId: list.id, boardId: f.board.id, title: "Starts late", position: "2000.0000000000", createdById: f.card.createdById, startDateLocalDate: "2026-10-10", dueDateLocalDate: "2026-10-20", dueDateSlot: "anyTime", dueDateTimezone: "UTC" },
+      { listId: list.id, boardId: f.board.id, title: "Starts early", position: "3000.0000000000", createdById: f.card.createdById, startDateLocalDate: "2026-10-01", dueDateLocalDate: "2026-10-20", dueDateSlot: "anyTime", dueDateTimezone: "UTC" },
+    ])
+    .returning();
+  assert.ok(later && earlier);
+
+  const response = await f.app.inject({
+    method: "PATCH",
+    url: `/boards/${f.board.id}/cards/bulk/due-date`,
+    headers: f.auth,
+    payload: { cardIds: [later.id, earlier.id], dueDateLocalDate: "2026-10-05" },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  const byId = new Map(response.json<{ cards: { id: string; startDateLocalDate: string | null; dueDateLocalDate: string | null }[] }>().cards.map((card) => [card.id, card]));
+  assert.deepEqual(
+    [byId.get(later.id)?.startDateLocalDate, byId.get(later.id)?.dueDateLocalDate, byId.get(earlier.id)?.startDateLocalDate, byId.get(earlier.id)?.dueDateLocalDate],
+    ["2026-10-05", "2026-10-05", "2026-10-01", "2026-10-05"],
+  );
+  // Only the clamped card's history mentions the start; the other card's start did not change.
+  assert.equal((await latestCardUpdateActivityPayload(later.id)).startDateLocalDate, "2026-10-05");
+  assert.equal("startDateLocalDate" in await latestCardUpdateActivityPayload(earlier.id), false);
+
+  // Clearing the due date in bulk leaves every start where it was.
+  const cleared = await f.app.inject({
+    method: "PATCH",
+    url: `/boards/${f.board.id}/cards/bulk/due-date`,
+    headers: f.auth,
+    payload: { cardIds: [later.id, earlier.id], dueDateLocalDate: null },
+  });
+  assert.equal(cleared.statusCode, 200, cleared.body);
+  const rows = await db.select({ id: cards.id, startDateLocalDate: cards.startDateLocalDate, dueDateLocalDate: cards.dueDateLocalDate }).from(cards).where(inArray(cards.id, [later.id, earlier.id]));
+  assert.deepEqual(
+    rows.sort((a, b) => a.startDateLocalDate!.localeCompare(b.startDateLocalDate!)).map((row) => [row.startDateLocalDate, row.dueDateLocalDate]),
+    [["2026-10-01", null], ["2026-10-05", null]],
+  );
+
+  await f.app.close();
+});

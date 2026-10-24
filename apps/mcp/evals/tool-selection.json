@@ -388,6 +388,28 @@
       ]
     },
     {
+      "id": "board-finish-and-critical-path",
+      "category": "indirect",
+      "prompt": "When will the Q4 launch board finish, and which cards are on the critical path?",
+      "expectedTools": [
+        "work.schedule"
+      ],
+      "expectedArguments": {
+        "work.schedule": {
+          "boardId": "<resolved board id>"
+        }
+      },
+      "forbiddenTools": [
+        "cards.dependency_graph",
+        "cards.update",
+        "cards.bulk_set_due_date"
+      ],
+      "forbiddenCapabilities": [
+        "browser",
+        "computer-use"
+      ]
+    },
+    {
       "id": "implement-card-with-tracking",
       "category": "indirect",
       "prompt": "Implement DEV-938 in this checkout and open a PR. Its board has Backlog, Agent Working, Waiting on Me, Review and Done. Leave acceptance to me.",

@@ -141,13 +141,20 @@ export const GETTING_STARTED_STEPS = [
   "assignCard",
   "comment",
   "mention",
-  "addDependency",
   "completeCard",
   // Working faster.
   "quickEdit",
   "useFilter",
   "commandPalette",
   "viewWorkDone",
+  // Tables: shaping and sharing the Table view.
+  "groupTable",
+  "totalColumn",
+  "exportExcel",
+  // Planning ahead (each only where a workspace has dependencies or the Timeline switched on).
+  "addDependency",
+  "setStartDate",
+  "viewTimeline",
   // Notes (each only where it is switched on).
   "scratchpad",
   "saveNote",
@@ -164,9 +171,11 @@ export type GettingStartedStep = (typeof GETTING_STARTED_STEPS)[number];
 
 /**
  * The steps the web stamps on first use, because nothing they do leaves a row behind: opening the
- * palette, applying a filter, viewing Work done, opening quick edit.
+ * palette, applying a filter, viewing Work done, opening quick edit, opening the Timeline, and the
+ * Table view's grouping, column totals and Excel export, which live in browser preferences or a
+ * download.
  */
-export const GETTING_STARTED_USED_STEPS = ["commandPalette", "useFilter", "viewWorkDone", "quickEdit"] as const;
+export const GETTING_STARTED_USED_STEPS = ["commandPalette", "useFilter", "viewWorkDone", "quickEdit", "viewTimeline", "groupTable", "totalColumn", "exportExcel"] as const;
 export type GettingStartedUsedStep = (typeof GETTING_STARTED_USED_STEPS)[number];
 
 export interface HomeGettingStartedResponse {
@@ -187,6 +196,11 @@ export interface HomeGettingStartedResponse {
   teamTarget: { workspaceId: string } | { boardId: string } | null;
   /** A workspace with notes switched on that the viewer can open; null leaves the notes step out. */
   notesWorkspaceId: string | null;
+  /**
+   * A board the viewer can open whose workspace has start dates and the Timeline switched on; the
+   * planning steps open it. Null leaves those steps out.
+   */
+  timelineBoardId: string | null;
 }
 
 /** `dismissed` and `used` are one-way; `hidden` toggles between home and the menu. */

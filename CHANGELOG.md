@@ -4,6 +4,22 @@ All notable changes to Kanera are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Timeline view:** a Gantt-style board view with one bar per card from its start date to its due date, grouped by list, assignee or label. Zoom smoothly from days to years with the zoom buttons, the slider, Ctrl + scroll or a trackpad pinch, **Fit all** to show every scheduled card at once, and drag the chart's background to pan. Each row shows the card's labels in full on a line under its title, so a blocking bug is visible without regrouping; drag the edge of the names column to widen it for long titles (double-click to reset). Drag a bar to reschedule it keeping its working-day length, pull an end to change its length, click an empty lane to place an unscheduled card, and drag from a bar's end onto another card to make it wait on the first. **Critical path** highlights the chain with no slack and shows how far each other card could slip; prerequisites planned to finish after their dependents start are flagged as scheduling conflicts. Keyboard shortcut `7`.
+- **Start dates:** cards can carry a planned start date next to the due date, shown in card detail with the working-day length, in a hidden-by-default **Start date** table column and sort, in exports and activity. A start can never sit after its due date: moving a due date earlier pulls the start along.
+- **Automations:** new **Start date arrives**, **Scheduling conflict appears** and **Critical path slips** triggers, and `{{card.startDate}}`, `{{schedule.blocker}}` and `{{schedule.days}}` in comment templates. The scheduling triggers fire once per boundary: a card that gains its first conflict, or a critical-path card whose slip moves the board's projected finish.
+- **Planning features on or off:** organisation and workspace admins can switch off **dependencies**, **start dates and the Timeline**, and **time in progress** (Organisation settings and workspace Settings → General, all on by default) for teams that don't need them. A feature that's off disappears everywhere at once, live on open boards, and is closed to MCP, the CLI, SDK and public API too (`DEPENDENCIES_DISABLED`, `TIMELINE_DISABLED`, `IN_PROGRESS_DISABLED`), with its automations and events paused. Nothing is deleted: turning it back on restores relations, start dates and recorded time.
+- **AI agents and integrations:** start dates through MCP (`cards.create`, `cards.update`, `cards.bulk_create`, `cards.dependency_graph`), the CLI, SDK and public API; relative dates such as "next Monday" work for starts too. A new **`work.schedule`** tool (`kanera schedule`, `POST /api/v1/cards/schedule`) returns the Timeline's schedule for a board or workspace: planned bars, slack, critical path, conflicts, projected finish and slip against the latest due date. `work.my_day` adds the user's cards with scheduling conflicts and their critical-path cards, Portfolio rollups carry schedule health per board, and agents can subscribe to `schedule.conflict_detected`, `schedule.conflict_resolved` and `schedule.critical_path_slipped` events.
+
+### Changed
+
+
+### Fixed
+
+- Toolbar and header buttons keep their text labels whenever their row has room, at any screen size, instead of turning icon-only below a fixed width. Space runs out in steps: the board's member avatars compact first, then labels drop one at a time from the end of the row. On a 320px phone every board view now fits on the view switch.
+
+
 ## [1.10.0] - 2026-10-24
 
 Ships alongside **CLI 2.2.0** and **MCP 4.2.0**.

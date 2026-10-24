@@ -280,6 +280,8 @@ export const ptBR: ErrorCatalog = {
     "O valor do gatilho do campo personalizado não corresponde ao tipo do campo.",
   "delivery not found":
     "Entrega não encontrada.",
+  "dependencies are disabled for this workspace":
+    "As dependências estão desativadas neste espaço de trabalho.",
   "destination credentials are required":
     "As credenciais do destino são obrigatórias.",
   "email already registered":
@@ -586,6 +588,8 @@ export const ptBR: ErrorCatalog = {
     "Destino de importação do quadro independente não encontrado.",
   "standalone boards cannot contain another board":
     "Quadros independentes não podem conter outro quadro.",
+  "start dates and the timeline are disabled for this workspace":
+    "As datas de início e a linha do tempo estão desativadas neste espaço de trabalho.",
   "storage is configured by environment variables":
     "O armazenamento é configurado por variáveis de ambiente.",
   "storage is configured by the hosted deployment":
@@ -652,6 +656,8 @@ export const ptBR: ErrorCatalog = {
     "Este convidado precisa acompanhar um cartão atribuído.",
   "this invitation was sent to a different email address":
     "Este convite foi enviado para outro endereço de e-mail.",
+  "time in progress is disabled for this workspace":
+    "O tempo em andamento está desativado neste espaço de trabalho.",
   "too many attempts; request a new code":
     "Tentativas demais. Solicite um novo código.",
   "triggerCustomFieldId and triggerCustomFieldValue are required":

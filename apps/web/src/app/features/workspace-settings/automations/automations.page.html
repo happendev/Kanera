@@ -343,6 +343,9 @@
               @case ('due_date_arrives') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs once per card on the day its due date arrives, on this board.} other {Runs once per card on the day its due date arrives, on every board in this workspace.} }</ng-container></p>
               }
+              @case ('start_date_arrives') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs once per card on the day its planned start date arrives, on this board.} other {Runs once per card on the day its planned start date arrives, on every board in this workspace.} }</ng-container></p>
+              }
               @case ('due_date_approaching') {
                 <label class="ac-field">
                   <span class="ac-field-label" i18n>Days before due date</span>
@@ -411,6 +414,12 @@
               }
               @case ('card_blocked') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Card blocked automation trigger">Runs when a card gains its first active blocker, including when a blocker is reopened or restored. Includes changes made by integrations and automations.</ng-container></p>
+              }
+              @case ('scheduling_conflict_appears') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Scheduling conflict appears automation trigger">Runs when a card it waits on is first planned to finish on or after this card's planned start, whichever card's dates changed. Includes changes made by integrations and automations.</ng-container></p>
+              }
+              @case ('critical_path_slips') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Critical path slips automation trigger">Runs for a card on the board's critical path when it is rescheduled later and the chain's projected finish moves with it. Includes changes made by integrations and automations.</ng-container></p>
               }
               @case ('card_unblocked') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Card unblocked automation trigger">Runs when a card's last active blocker is completed, archived, deleted or removed. Includes changes made by integrations and automations.</ng-container></p>

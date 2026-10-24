@@ -10,6 +10,9 @@ import type {
   PortfolioListCount,
   PortfolioSummary,
   SavedWorkView,
+  ScheduleAttentionCard,
+  ScheduleAttentionResponse,
+  ScheduleHealth,
   WorkCatalog,
   WorkDoneSummaryResponse,
   WorkFilters,
@@ -24,6 +27,7 @@ import {
   activityEvents,
   boardMembers,
   boards,
+  cardAssignees,
   cards,
   cardChecklistItems,
   cardChecklists,
@@ -58,6 +62,8 @@ import {
 } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
+import { workspaceFeatureEnabledSql } from "../../lib/workspace-features.js";
+import { loadViewerBoardSchedules, scheduleHealthOf, summarizeSchedule } from "../../lib/schedule-graph.js";
 import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { db } from "../../db.js";
@@ -497,6 +503,8 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
       viewerRole: board.viewerRole,
       assignedItemsOnly: board.assignedItemsOnly,
       inProgressEnabled: board.inProgressEnabled,
+      dependenciesEnabled: board.dependenciesEnabled,
+      timelineEnabled: board.timelineEnabled,
     })),
     // Native metadata follows the sidebar's workspace sequence first, then its own position inside
     // that workspace. Comparing position globally would interleave unrelated workspace vocabularies.
@@ -854,10 +862,12 @@ function hasOpenBlockerSql(cardId: SQLWrapper) {
       and work_blocker_link.kind = 'blocks'
       and work_blocker.completed_at is null
       and work_blocker.archived_at is null
+      and ${workspaceFeatureEnabledSql("dependencies", sql`work_blocker_link.workspace_id`)}
   )`;
 }
 
-async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input: unknown): Promise<PortfolioSummary> {
+async function portfolio(auth: AuthClaims, allBoards: AccessibleBoard[], input: unknown): Promise<PortfolioSummary> {
+  const authUserId = auth.sub;
   const query = dto.workPortfolioQueryBody.parse(input);
   const scopeBoards = applyWorkScope(allBoards, query.scope);
   const from = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000);
@@ -977,6 +987,13 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
     || a.boardId.localeCompare(b.boardId)
   );
 
+  // One graph read for all buckets, including their complete accessible cross-board chains.
+  const health = await portfolioScheduleHealth(auth, buckets.map((bucket) => bucket.boardId));
+  for (const bucket of buckets) {
+    const boardHealth = health.get(bucket.boardId);
+    if (boardHealth) bucket.schedule = boardHealth;
+  }
+
   const totals = buckets.reduce((sum, bucket) => ({
     cards: sum.cards + bucket.active + bucket.completed,
     overdue: sum.overdue + bucket.overdue,
@@ -989,7 +1006,9 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
     inProgressTooLong: sum.inProgressTooLong + bucket.inProgressTooLong,
     blocked: sum.blocked + bucket.blocked,
     atRisk: sum.atRisk + bucket.atRisk,
-  }), { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0, inProgress: 0, inProgressTooLong: 0, blocked: 0, atRisk: 0 });
+    scheduleConflicts: sum.scheduleConflicts + (bucket.schedule?.conflictCount ?? 0),
+    criticalCards: sum.criticalCards + (bucket.schedule?.criticalCount ?? 0),
+  }), { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0, inProgress: 0, inProgressTooLong: 0, blocked: 0, atRisk: 0, scheduleConflicts: 0, criticalCards: 0 });
 
   // Workspace order is the first board's navigation order, the same rank the buckets sort by, so
   // the bars stack in the order the table lists the workspaces.
@@ -1027,6 +1046,83 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
 
 /** Heatmap window. Matches WORK_DONE_MAX_DAYS so both history surfaces look back equally far. */
 const PORTFOLIO_ACTIVITY_DAYS = 60;
+
+/** Compute once across the accessible connected components, then summarize each board's own cards. */
+async function portfolioScheduleHealth(auth: AuthClaims, boardIds: readonly string[]): Promise<Map<string, ScheduleHealth>> {
+  const { scope, schedule } = await loadViewerBoardSchedules(auth, boardIds);
+  const idsByBoard = new Map<string, string[]>();
+  for (const card of scope.cards) {
+    const ids = idsByBoard.get(card.boardId) ?? [];
+    ids.push(card.id);
+    idsByBoard.set(card.boardId, ids);
+  }
+  // Boards whose workspace has the timeline switched off report no schedule health at all.
+  const scheduled = new Set((await loadAccessibleBoards(auth)).filter((board) => board.timelineEnabled).map((board) => board.id));
+  return new Map(boardIds.filter((id) => scheduled.has(id)).map((id) => [id, scheduleHealthOf(summarizeSchedule(schedule, idsByBoard.get(id) ?? []))]));
+}
+
+/**
+ * The connected user's own open cards the schedule engine flags, board by board. Only direct
+ * assignments count (a checklist item does not put a card on your plate for scheduling), and each
+ * board is scheduled as the Timeline view shows it, so what the briefing says matches the chart.
+ * Blockers are named only when they were loaded, which is only when the viewer can open them.
+ */
+async function scheduleAttention(auth: AuthClaims, limit: number): Promise<ScheduleAttentionResponse> {
+  const accessible = await loadAccessibleBoards(auth);
+  const boardById = new Map(accessible.map((board) => [board.id, board]));
+  if (accessible.length === 0) return { conflicts: [], critical: [], truncated: false };
+  const assigned = await db.select({ id: cards.id, boardId: cards.boardId })
+    .from(cards)
+    .innerJoin(cardAssignees, eq(cardAssignees.cardId, cards.id))
+    .innerJoin(boards, eq(boards.id, cards.boardId))
+    .where(and(
+      eq(cardAssignees.userId, auth.sub),
+      inArray(cards.boardId, accessible.map((board) => board.id)),
+      isNull(cards.completedAt),
+      isNull(cards.archivedAt),
+      isNull(boards.archivedAt),
+    ));
+  const byBoard = new Map<string, string[]>();
+  for (const row of assigned) byBoard.set(row.boardId, [...(byBoard.get(row.boardId) ?? []), row.id]);
+  // Sidebar order, so the briefing walks boards the way the person does.
+  const boardIds = [...byBoard.keys()].sort((a, b) => (boardById.get(a)?.navigationOrder ?? 0) - (boardById.get(b)?.navigationOrder ?? 0));
+  const truncated = false;
+
+  type Flagged = { id: string; boardId: string; verdict: NonNullable<ReturnType<Awaited<ReturnType<typeof loadViewerBoardSchedules>>["schedule"]["cards"]["get"]>> };
+  const flagged: Flagged[] = [];
+  const { schedule } = await loadViewerBoardSchedules(auth, boardIds);
+  for (const boardId of boardIds) {
+    for (const id of byBoard.get(boardId) ?? []) {
+      const verdict = schedule.cards.get(id);
+      if (verdict && (verdict.conflicts.length > 0 || verdict.critical)) flagged.push({ id, boardId, verdict });
+    }
+  }
+  const nameIds = [...new Set(flagged.flatMap((entry) => [entry.id, ...entry.verdict.conflicts.map((conflict) => conflict.blockerId)]))];
+  const named = new Map((nameIds.length
+    ? await db.select({ id: cards.id, key: cards.key, title: cards.title, listId: cards.listId, organisationKey: cards.organisationKey }).from(cards).where(inArray(cards.id, nameIds))
+    : []).map((row) => [row.id, row]));
+  const toCard = (entry: Flagged): ScheduleAttentionCard | null => {
+    const card = named.get(entry.id);
+    if (!card) return null;
+    return {
+      id: card.id, key: card.key, title: card.title, url: absoluteCardUrl(card.organisationKey, card.key),
+      boardId: entry.boardId, boardName: boardById.get(entry.boardId)?.name ?? "", listId: card.listId,
+      plannedStart: entry.verdict.plannedStart, plannedEnd: entry.verdict.plannedEnd, slackDays: entry.verdict.slackDays, critical: entry.verdict.critical,
+      conflicts: entry.verdict.conflicts.flatMap((conflict) => {
+        const blocker = named.get(conflict.blockerId);
+        return blocker ? [{ blockerId: blocker.id, blockerKey: blocker.key, blockerTitle: blocker.title, days: conflict.days }] : [];
+      }),
+    };
+  };
+  const byDate = (a: string | null, b: string | null) => (a ?? "9999").localeCompare(b ?? "9999");
+  const conflicts = flagged.filter((entry) => entry.verdict.conflicts.length > 0)
+    .sort((a, b) => byDate(a.verdict.plannedStart, b.verdict.plannedStart) || a.id.localeCompare(b.id))
+    .map(toCard).filter((card): card is ScheduleAttentionCard => card !== null).slice(0, limit);
+  const critical = flagged.filter((entry) => entry.verdict.conflicts.length === 0 && entry.verdict.critical)
+    .sort((a, b) => byDate(a.verdict.plannedEnd, b.verdict.plannedEnd) || a.id.localeCompare(b.id))
+    .map(toCard).filter((card): card is ScheduleAttentionCard => card !== null).slice(0, limit);
+  return { conflicts, critical, truncated };
+}
 
 /**
  * Per-day card movement and completion counts for the heatmaps, bucketed in the viewer's zone.
@@ -1494,6 +1590,12 @@ export async function agentWorkRoutes(app: FastifyInstance) {
 
   app.post("/work/history/query", async (req) => agentWorkHistory(req.auth, req.body));
 
+  // The schedule engine's briefing for the connected user; same handler on both servers.
+  app.post("/work/schedule-attention/query", async (req): Promise<ScheduleAttentionResponse> => {
+    const query = dto.scheduleAttentionBody.parse(req.body ?? {});
+    return scheduleAttention(req.auth, query.limit);
+  });
+
   app.post("/me/work-history", async (req) => {
     const body = dto.agentWorkHistoryQueryBody.parse(req.body ?? {});
     return agentWorkHistory(req.auth, { ...body, userId: req.auth.sub });
@@ -1526,7 +1628,7 @@ export async function agentWorkQueryRoutes(app: FastifyInstance) {
 
   app.post("/work/portfolio/query", async (req) => {
     const accessibleBoards = await loadAccessibleBoards(req.auth);
-    return portfolio(req.auth.sub, accessibleBoards, req.body);
+    return portfolio(req.auth, accessibleBoards, req.body);
   });
 }
 
@@ -1669,7 +1771,7 @@ export async function workRoutes(app: FastifyInstance) {
   app.post("/work/portfolio/query", async (req) => {
     const startedAt = performance.now();
     const accessibleBoards = await loadAccessibleBoards(req.auth);
-    const result = await portfolio(req.auth.sub, accessibleBoards, req.body);
+    const result = await portfolio(req.auth, accessibleBoards, req.body);
     req.log.info({
       event: "work_portfolio_queried",
       durationMs: Math.round((performance.now() - startedAt) * 10) / 10,

@@ -46,6 +46,9 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     inProgressAlertDays: 7, timeZone: "UTC",
     boardLinkingEnabled: true,
     notesEnabled: true,
+    dependenciesEnabled: true,
+    timelineEnabled: true,
+    inProgressEnabled: true,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     archivedAt: null,
@@ -2265,6 +2268,34 @@ describe("WorkspaceSettingsPage", () => {
       triggerDaysBefore: null,
     });
     expect(component.automations()[0]?.triggerType).toBe("card_marked_complete");
+  });
+
+  it.each(["scheduling_conflict_appears", "critical_path_slips"] as const)("summarizes and updates %s automations without trigger targets", async (triggerType) => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    const current = automation();
+    const updated = automation({ triggerType, triggerListId: null, triggerUserIds: null, triggerLabelId: null });
+    component.automations.set([current]);
+
+    const title = triggerType === "scheduling_conflict_appears" ? "Scheduling conflict appears" : "Critical path slips";
+    expect(component.automationTriggerTypeValue(updated)).toBe(triggerType);
+    expect(component.automationTriggerLabel(updated)).toBe(title);
+    expect(component.automationTriggerEventLabel(updated)).toBe(title);
+    expect(component.automationTriggerTargetLabel(updated)).toBeNull();
+
+    api.patch.mockResolvedValue(updated);
+    await component.updateAutomationTrigger(current.id, triggerType);
+
+    expect(api.patch).toHaveBeenCalledWith(`/automations/${current.id}`, {
+      triggerType,
+      triggerListId: null,
+      triggerUserIds: null,
+      triggerLabelId: null,
+      triggerCustomFieldId: null,
+      triggerCustomFieldValue: null,
+      triggerDaysBefore: null,
+    });
+    expect(component.automations()[0]?.triggerType).toBe(triggerType);
   });
 
   it("summarizes and updates card-becomes-inactive automations without trigger targets", async () => {

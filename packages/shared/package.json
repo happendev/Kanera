@@ -27,10 +27,12 @@
     "./due-date-slots": "./src/lib/due-date-slots.ts",
     "./card-relations": "./src/lib/card-relations.ts",
     "./time-in-progress": "./src/lib/time-in-progress.ts",
+    "./schedule": "./src/lib/schedule.ts",
     "./activity-summary": "./src/lib/activity-summary.ts",
     "./icons": "./src/tabler-icons.ts",
     "./work-vocabulary": "./src/work-vocabulary.ts",
     "./workspace-defaults": "./src/lib/workspace-defaults.ts",
+    "./workspace-features": "./src/lib/workspace-features.ts",
     "./workspace-templates": "./src/workspace-templates.ts",
     "./workspace-template-payload": "./src/workspace-template-payload.ts",
     "./workspace-template-localize": "./src/workspace-template-localize.ts"

@@ -1,3 +1,4 @@
+import { automationTriggerBlockedBy } from "@kanera/shared/workspace-features";
 import { CdkDrag, CdkDragHandle, CdkDropList } from "@angular/cdk/drag-drop";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import type { WireAutomation } from "@kanera/shared/events";
@@ -29,6 +30,9 @@ const automationEventPickerGroups = [
     options: [
       { id: "due_date_arrives", label: $localize`:Automation event (trigger) option:Due date arrives`, hint: $localize`:Help text under an automation event option:Runs on the card's due date`, icon: "calendar-event" },
       { id: "due_date_approaching", label: $localize`:Automation event (trigger) option:Due date is approaching`, hint: $localize`:Help text under an automation event option:Runs a chosen number of days before`, icon: "calendar-due" },
+      { id: "start_date_arrives", label: $localize`:Automation event (trigger) option:Start date arrives`, hint: $localize`:Help text under an automation event option:Runs on the card's planned start date`, icon: "calendar-time" },
+      { id: "scheduling_conflict_appears", label: $localize`:Automation event (trigger) option - an open blocker is now planned to finish on or after this card's planned start:Scheduling conflict appears`, hint: $localize`:Help text under an automation event option:A blocker is now planned to finish on or after this card's start`, icon: "calendar-exclamation" },
+      { id: "critical_path_slips", label: $localize`:Automation event (trigger) option - a card on the board's critical path was rescheduled later, so the chain's projected finish moved:Critical path slips`, hint: $localize`:Help text under an automation event option:A card on the critical path is rescheduled later`, icon: "route-off" },
       { id: "card_becomes_inactive", label: $localize`:Automation event (trigger) option:Card becomes inactive`, hint: $localize`:Help text under an automation event option:Runs after the workspace inactivity period`, icon: "clock-pause" },
       { id: "card_in_progress_too_long", label: $localize`:Automation event (trigger) option:Card in progress too long`, hint: $localize`:Help text under an automation event option:Runs when time in progress passes the workspace alert`, icon: "progress-alert" },
     ],
@@ -111,7 +115,10 @@ export class WorkspaceSettingsAutomationsPage {
   protected readonly settings = inject(WorkspaceSettingsPage);
   protected readonly eventPickerGroups = computed(() => automationEventPickerGroups.map((group) => ({
     ...group,
-    options: group.options.filter((option) => this.settings.progressSettingsEnabled() || option.id !== "card_in_progress_too_long"),
+    // Triggers for a planning feature this workspace has switched off could never fire.
+    options: group.options.filter((option) =>
+      (this.settings.progressSettingsEnabled() || option.id !== "card_in_progress_too_long")
+      && automationTriggerBlockedBy(option.id, this.settings.effectiveFeatures()) === null),
   })));
   protected readonly actionPickerGroups = automationActionPickerGroups;
   protected readonly listPickerGroups = computed<PickerGroup[]>(() => [{

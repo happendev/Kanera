@@ -18,6 +18,7 @@ import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { BoardState } from "./board-state";
+import { DatePickerPopover } from "./date-picker.popover";
 import { CardActivityComponent } from "./card-activity.component";
 import { UserProfileCardService } from "../../shared/user-profile/user-profile-card.service";
 import { CardDetailComponent, checklistDragScrollStep } from "./card-detail.component";
@@ -117,6 +118,7 @@ function createCard(overrides: Partial<WireCard> = {}): WireCard {
     description: null,
     position: "1000.0000000000",
     dueDateLocalDate: null,
+    startDateLocalDate: null,
     dueDateSlot: null,
     dueDateTimezone: null,
     completedAt: null,
@@ -490,6 +492,8 @@ describe("CardDetailComponent realtime regressions", () => {
           provide: BoardState,
           useValue: {
             inProgressEnabled: signal(true),
+            timelineEnabled: signal(true),
+            dependenciesEnabled: signal(true),
             detailForCard: vi.fn((_cardId: string) => boardStateDetail()),
             liveAgentRunsForCard: vi.fn(() => []),
             mergeAgentRuns: vi.fn(),
@@ -2330,6 +2334,50 @@ describe("CardDetailComponent realtime regressions", () => {
     viewerRole.set("editor");
     fixture.detectChanges();
     expect(element.querySelector(".due-add-btn")).not.toBeNull();
+  });
+
+  it("shows the planned start beside the due date with its working-day length", async () => {
+    const fixture = createComponentFixture(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ startDateLocalDate: "2026-05-11", dueDateLocalDate: "2026-05-15", dueDateSlot: "anyTime", dueDateTimezone: "UTC" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector(".start-picker-wrap .due-badge")?.textContent).toContain("Start");
+    expect(element.querySelector(".due-arrow")).not.toBeNull();
+    // Mon 11 May to Fri 15 May 2026: five working days, as the Timeline measures the bar.
+    expect(element.querySelector(".due-duration-hint")?.textContent?.trim()).toBe("5 working days");
+
+    api.patch.mockResolvedValueOnce(createCard({ startDateLocalDate: null, dueDateLocalDate: "2026-05-15" }));
+    await fixture.componentInstance.setStartDate("");
+    expect(api.patch).toHaveBeenCalledWith("/cards/card-1", { startDateLocalDate: null });
+  });
+
+  it("offers Add start date when the card has none and caps the start picker at the due date", () => {
+    const fixture = createComponentFixture(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ dueDateLocalDate: "2026-05-15", dueDateSlot: "anyTime", dueDateTimezone: "UTC" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector(".start-picker-wrap .due-add-btn")).not.toBeNull();
+    expect(element.querySelector(".due-duration-hint")).toBeNull();
+
+    fixture.componentInstance.startDatePickerOpen.set(true);
+    fixture.detectChanges();
+    const picker = fixture.debugElement.query((de) => de.componentInstance instanceof DatePickerPopover).componentInstance as DatePickerPopover;
+    expect(picker.max()).toBe("2026-05-15");
+    expect(picker.showSlots()).toBe(false);
   });
 
   it("does not submit stale removed assignee ids when assigning from card detail", async () => {

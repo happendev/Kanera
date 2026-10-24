@@ -10,6 +10,7 @@ export function builtinColumnLabel(id: string): string {
     case "status": return $localize`:Table column header - the list the card is in:List`;
     case "board": return $localize`:Table column header - the board the card is on:Board`;
     case "assignees": return $localize`:Table column header:Assignees`;
+    case "start": return $localize`:Table column header - the card's planned start date:Start date`;
     case "due": return $localize`:Table column header:Due date`;
     case "inProgress": return $localize`:Table column header - tracked working time the card has spent in In progress lists:Time in progress`;
     case "labels": return $localize`:Table column header:Labels`;
@@ -27,6 +28,7 @@ export function builtinColumnIcon(id: string): string {
     case "status": return "list-details";
     case "board": return "layout-kanban";
     case "assignees": return "users";
+    case "start": return "calendar-time";
     case "due": return "calendar-event";
     case "inProgress": return "progress";
     case "labels": return "tag";

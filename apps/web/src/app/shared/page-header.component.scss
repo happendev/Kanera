@@ -19,9 +19,9 @@
   // spilled straight through the reserved band and under the fixed buttons. Wrapping turns that into
   // a second row, which the band height below then guarantees is clear of them.
   //
-  // The component reaches for `is-tight` first (see PageHeaderComponent.measureFit), which drops the
-  // controls' labels and usually recovers the single row; a header only wraps once even its icons
-  // will not fit. That ordering matters visually: a wrapped row still pays the clearance band on the
+  // The component reaches for `is-crowded` and then `is-tight` first (see
+  // PageHeaderComponent.measureFit), which compact the avatars and then drop the controls' labels and
+  // usually recover the single row; a header only wraps once even its icons will not fit. That ordering matters visually: a wrapped row still pays the clearance band on the
   // right, so its controls sit inset from the edge while the query bar below runs full width.
   flex-wrap: wrap;
   gap: var(--space-2);
@@ -283,9 +283,8 @@
   }
 
   // The tail's two groups become the bar's own items, so the view switch can break onto a row of
-  // its own while the controls stay beside the title. measureFit then reads a box-less tail as zero
-  // wide and leaves `is-tight` off, which is harmless: the viewport breakpoint already drops the
-  // labels at this width (toolbar-styles.scss). The empty-tail rule above still outranks this.
+  // its own while the controls stay beside the title. measureFit then sizes the title's row from the
+  // controls group alone. The empty-tail rule above still outranks this.
   .ph-tail {
     display: contents;
   }

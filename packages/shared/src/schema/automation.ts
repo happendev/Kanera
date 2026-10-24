@@ -6,7 +6,7 @@ import { cards } from "./card.js";
 import { lists } from "./list.js";
 import { workspaces } from "./workspace.js";
 
-export const AUTOMATION_TRIGGER_TYPES = ["card_enters_list", "card_leaves_list", "due_date_arrives", "due_date_approaching", "card_becomes_inactive", "card_in_progress_too_long", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set", "custom_field_value_changed", "card_unblocked", "card_blocked"] as const;
+export const AUTOMATION_TRIGGER_TYPES = ["card_enters_list", "card_leaves_list", "due_date_arrives", "due_date_approaching", "start_date_arrives", "card_becomes_inactive", "card_in_progress_too_long", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set", "custom_field_value_changed", "card_unblocked", "card_blocked", "scheduling_conflict_appears", "critical_path_slips"] as const;
 export type AutomationTriggerType = (typeof AUTOMATION_TRIGGER_TYPES)[number];
 
 export type AutomationTriggerCustomFieldValue = AutomationTriggerCustomFieldValueDto;
@@ -121,6 +121,27 @@ export const automationDueDateRuns = pgTable(
     check("automation_due_date_runs_trigger_days_before_ck", sql`${t.triggerDaysBefore} between 0 and 3650`),
     // The primary key is automation-first; archived-card deletion cascades from card_id.
     index("automation_due_date_runs_card_id_idx").on(t.cardId),
+  ],
+);
+
+// Start dates have no time of day, so a card's planned start "arrives" at the start of that day in
+// the actor's zone. The latch mirrors automation_due_date_run so a sweep fires once per card per
+// planned start, and fires again only when the start date itself moves.
+export const automationStartDateRuns = pgTable(
+  "automation_start_date_run",
+  {
+    automationId: uuid("automation_id")
+      .notNull()
+      .references(() => automations.id, { onDelete: "cascade" }),
+    cardId: uuid("card_id")
+      .notNull()
+      .references(() => cards.id, { onDelete: "cascade" }),
+    startDateLocalDate: text("start_date_local_date").notNull(),
+    firedAt: timestamp("fired_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.automationId, t.cardId] }),
+    index("automation_start_date_runs_card_id_idx").on(t.cardId),
   ],
 );
 

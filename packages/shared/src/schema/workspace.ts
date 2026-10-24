@@ -46,6 +46,12 @@ export const workspaces = pgTable(
     // standalone board, the hidden workspace's. Disabling hides notes everywhere and blocks the notes
     // API, but keeps every row so re-enabling restores them untouched.
     notesEnabled: boolean("notes_enabled").notNull().default(true),
+    // Optional planning features (see `@kanera/shared/workspace-features`). Each is effective only
+    // while the organisation's switch of the same name is also on; off hides the feature and closes
+    // its API but keeps the data. In progress has a third, per-board switch beneath this one.
+    dependenciesEnabled: boolean("dependencies_enabled").notNull().default(true),
+    timelineEnabled: boolean("timeline_enabled").notNull().default(true),
+    inProgressEnabled: boolean("in_progress_enabled").notNull().default(true),
     // Set when a downgrade-to-free archives a workspace beyond the free cap (mirrors boards.archivedAt).
     // Archived workspaces are hidden from listings and excluded from plan-limit counts.
     archivedAt: timestamp("archived_at", { withTimezone: true }),

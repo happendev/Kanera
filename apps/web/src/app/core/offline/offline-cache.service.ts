@@ -1,3 +1,4 @@
+import type { WorkspaceFeatures } from "@kanera/shared/workspace-features";
 import { Injectable, signal } from "@angular/core";
 import type { DependencyGraphResponse, HomeTodayResponse, PendingBoardInvitationSummary, PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkViewDefinition } from "@kanera/shared/dto";
 import type { CardAttachmentRow, CardFeedItem, WireBoardMemberUser, WireCard, WireCardDetail, WireCardLabel, WireCardSummary, WireChecklistTemplate, WireList, WireNote, WireSeparator } from "@kanera/shared/events";
@@ -104,6 +105,7 @@ export type OfflineBoardSnapshot = {
   workspaceKind?: "standard" | "board";
   workspaceInactiveCardsDays?: number;
   organisationInProgressEnabled?: boolean;
+  features?: WorkspaceFeatures;
   workspaceInProgressAlertDays?: number;
   workspaceTimeZone?: string;
   workspaceCardKeyPrefixes?: string[];

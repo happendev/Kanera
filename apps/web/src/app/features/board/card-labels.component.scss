@@ -16,6 +16,10 @@
 // on the host element without forking the component and letting the two drift apart visually.
 .label-chip {
   position: relative;
+  // Chips shrink with the bar by default (a wrapping tile). A single-row host that clips the bar
+  // sets this to none, so the first label reads whole and later ones are cut off, rather than
+  // every chip collapsing to its first letter.
+  flex: var(--label-chip-flex, 0 1 auto);
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -5,6 +5,8 @@ import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db, type Tx } from "../../db.js";
 import { env } from "../../env.js";
+import { automationTriggerBlockedBy } from "@kanera/shared/workspace-features";
+import { featureDisabledError, loadWorkspaceFeatures } from "../../lib/workspace-features.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { loadAutomation, loadAutomations } from "../../lib/automations.js";
@@ -303,6 +305,7 @@ export async function automationRoutes(app: FastifyInstance) {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createAutomationBody.parse(req.body);
+    await assertTriggerFeatureEnabled(workspaceId, body.triggerType);
     await assertListInWorkspace(workspaceId, body.triggerType === "card_enters_list" || body.triggerType === "card_leaves_list" ? body.triggerListId : null);
     await validateTriggerUsers(workspaceId, body.triggerType === "card_assigned_to_user" ? body.triggerUserIds : null);
     await assertLabelInWorkspace(workspaceId, body.triggerType === "card_label_set" ? body.triggerLabelId : null);
@@ -372,6 +375,9 @@ export async function automationRoutes(app: FastifyInstance) {
     if (!current) throw notFound();
     const { clientId } = await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     const triggerType = body.triggerType ?? current.triggerType;
+    // A rule kept from before a feature was switched off can still be edited or turned off, but not
+    // switched onto, or back on for, a trigger that cannot fire.
+    if (body.triggerType !== undefined || body.enabled === true) await assertTriggerFeatureEnabled(current.workspaceId, triggerType);
     const triggerListId = triggerType === "card_enters_list" || triggerType === "card_leaves_list"
       ? body.triggerListId !== undefined ? body.triggerListId : current.triggerListId
       : null;
@@ -538,4 +544,9 @@ export async function automationRoutes(app: FastifyInstance) {
     await emitToWorkspaceAdmins(current.workspaceId, "automation:deleted", { workspaceId: current.workspaceId, automationId: id });
     return reply.status(204).send();
   });
+}
+
+async function assertTriggerFeatureEnabled(workspaceId: string, triggerType: string): Promise<void> {
+  const blockedBy = automationTriggerBlockedBy(triggerType, await loadWorkspaceFeatures(workspaceId));
+  if (blockedBy) throw featureDisabledError(blockedBy);
 }

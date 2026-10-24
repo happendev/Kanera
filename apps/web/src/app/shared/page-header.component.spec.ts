@@ -121,9 +121,10 @@ describe("PageHeaderComponent", () => {
     /**
      * Mounts with a stubbed ResizeObserver and a fake layout: the tail reports its labelled width
      * until the header collapses it, and its icon-only width after — which is exactly the feedback
-     * the fit decision has to survive.
+     * the fit decision has to survive. The meta slot (a page's avatar stack) reports `meta.full`
+     * until the header crowds it, and `meta.crowded` after.
      */
-    async function mountMeasured(labelled: number, collapsed: number) {
+    async function mountMeasured(labelled: number, collapsed: number, meta = { full: 0, crowded: 0 }) {
       let notify: (() => void) | null = null;
       vi.stubGlobal(
         "ResizeObserver",
@@ -149,6 +150,10 @@ describe("PageHeaderComponent", () => {
       // The view switch's one auto label: 100px of text, and 114px once revealed with its chrome.
       const autoLabel = host.querySelector(".sg-auto-label") as HTMLElement;
       Object.defineProperty(autoLabel, "scrollWidth", { get: () => 100 });
+      const metaSlot = host.querySelector(".slot-meta") as HTMLElement;
+      Object.defineProperty(metaSlot, "offsetWidth", {
+        get: () => header.classList.contains("is-crowded") ? meta.crowded : meta.full,
+      });
       Object.defineProperty(tail, "offsetWidth", {
         get: () => header.classList.contains("is-tight")
           ? collapsed
@@ -173,12 +178,15 @@ describe("PageHeaderComponent", () => {
 
     it("drops the projected controls' labels once the row runs out of room", async () => {
       // Needs the 160px title floor + the 8px bar gap + the tail: 668px in all.
-      const { header, resize } = await mountMeasured(500, 300);
+      const { header, resize, settle } = await mountMeasured(500, 300);
 
       resize(700);
       expect(header.classList.contains("is-tight")).toBe(false);
 
+      // Crowded first; with nothing to compact, the next pass finds it still does not fit.
       resize(640);
+      expect(header.classList.contains("is-crowded")).toBe(true);
+      settle();
       expect(header.classList.contains("is-tight")).toBe(true);
 
       resize(680);
@@ -204,6 +212,7 @@ describe("PageHeaderComponent", () => {
       expect(header.classList.contains("is-tight")).toBe(false);
 
       resize(640);
+      settle();
       expect(header.classList.contains("is-roomy")).toBe(false);
       expect(header.classList.contains("is-tight")).toBe(true);
     });
@@ -212,6 +221,7 @@ describe("PageHeaderComponent", () => {
       const { header, resize, settle } = await mountMeasured(500, 300);
 
       resize(640);
+      settle();
       expect(header.classList.contains("is-tight")).toBe(true);
 
       // Collapsing shrank the tail to 300, which on its own says the row fits again. Re-measuring
@@ -219,6 +229,29 @@ describe("PageHeaderComponent", () => {
       settle();
       settle();
       expect(header.classList.contains("is-tight")).toBe(true);
+    });
+
+    it("compacts decoration before any control loses its label", async () => {
+      // Full: 160px title floor + 200px avatars + 8px gap + 500px tail = 868px. Crowded, the avatars
+      // take 40px: 708px.
+      const { header, resize, settle } = await mountMeasured(500, 300, { full: 200, crowded: 40 });
+
+      resize(750);
+      settle();
+      settle();
+      expect(header.classList.contains("is-crowded")).toBe(true);
+      expect(header.classList.contains("is-tight")).toBe(false);
+
+      resize(700);
+      expect(header.classList.contains("is-tight")).toBe(true);
+
+      // Back past the crowded width the labels return; past the full width the avatars do too.
+      resize(750);
+      expect(header.classList.contains("is-tight")).toBe(false);
+      expect(header.classList.contains("is-crowded")).toBe(true);
+
+      resize(900);
+      expect(header.classList.contains("is-crowded")).toBe(false);
     });
   });
 });

@@ -74,6 +74,9 @@ export interface ActivitySummaryMessages {
   editedDescription: string;
   updatedDueDate: string;
   removedDueDate: string;
+  updatedStartDate: string;
+  removedStartDate: string;
+  rescheduled: string;
   updatedCard: string;
   clearedField: (fieldName: string) => string;
   /** Fallback field name when the payload has none. */
@@ -144,6 +147,9 @@ export const ACTIVITY_SUMMARY_SOURCE_MESSAGES: ActivitySummaryMessages = {
   editedDescription: "edited the description",
   updatedDueDate: "updated the due date",
   removedDueDate: "removed the due date",
+  updatedStartDate: "updated the start date",
+  removedStartDate: "removed the start date",
+  rescheduled: "rescheduled the card",
   updatedCard: "updated this card",
   clearedField: (fieldName) => `cleared ${fieldName}`,
   field: "field",
@@ -257,7 +263,10 @@ export function summariseActivityChange(
           const description = payload["description"];
           if (typeof title === "string") return { icon: "ti ti-pencil", text: m.renamedTo(title) };
           if (description !== undefined) return { icon: "ti ti-pencil", text: m.editedDescription };
+          // A Timeline drag moves both ends at once; one line reads better than two.
+          if (payload["dueDateLocalDate"] !== undefined && payload["startDateLocalDate"] !== undefined) return { icon: "ti ti-calendar", text: m.rescheduled };
           if (payload["dueDateLocalDate"] !== undefined) return { icon: "ti ti-calendar", text: payload["dueDateLocalDate"] ? m.updatedDueDate : m.removedDueDate };
+          if (payload["startDateLocalDate"] !== undefined) return { icon: "ti ti-calendar", text: payload["startDateLocalDate"] ? m.updatedStartDate : m.removedStartDate };
           return { icon: "ti ti-pencil", text: m.updatedCard };
         }
         case "customFieldValue:set": {

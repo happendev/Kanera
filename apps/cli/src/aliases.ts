@@ -63,8 +63,9 @@ export const COMMAND_ALIASES: CommandAlias[] = [
 
   { path: ["work"], tool: "work.query_cards", summary: "List your work across every accessible board", defaults: { lens: "my" }, group: "Work" },
   { path: ["work", "history"], tool: "work.query_history", summary: "Report one person's actions over a date range", group: "Work" },
-  { path: ["my-day"], tool: "work.my_day", summary: "Overdue, due-this-week, stale, and Up next work in one view", group: "Work" },
-  { path: ["portfolio"], tool: "work.portfolio_summary", summary: "Roll up work by organisation, workspace, and board", group: "Work" },
+  { path: ["my-day"], tool: "work.my_day", summary: "Overdue, due-this-week, stale, schedule-attention, and Up next work in one view", group: "Work" },
+  { path: ["portfolio"], tool: "work.portfolio_summary", summary: "Roll up work by organisation, workspace, and board, with schedule health", group: "Work" },
+  { path: ["schedule"], tool: "work.schedule", summary: "Project a board's schedule: critical path, slack, conflicts, and projected finish; --workspaceId for a whole workspace", positionals: ["boardId"], group: "Work" },
   { path: ["priorities"], tool: "priorities.list", summary: "Read an \"Up next\" priority queue", group: "Work" },
   { path: ["priority", "add"], tool: "priorities.add", summary: "Add a card to an \"Up next\" queue", positionals: ["cardId"], group: "Work" },
   { path: ["priority", "move"], tool: "priorities.move", summary: "Reorder an \"Up next\" queue entry", positionals: ["priorityId"], group: "Work" },

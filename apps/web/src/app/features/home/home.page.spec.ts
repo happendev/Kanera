@@ -105,7 +105,7 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
 }
 
 /** What home receives once the checklist is closed; the default so other tests never see it. */
-const CLOSED_CHECKLIST: HomeGettingStartedResponse = { dismissed: true, hidden: false, steps: [], teamTarget: null, notesWorkspaceId: null };
+const CLOSED_CHECKLIST: HomeGettingStartedResponse = { dismissed: true, hidden: false, steps: [], teamTarget: null, notesWorkspaceId: null, timelineBoardId: null };
 
 const BOARD_SUMMARIES: Record<string, { name: string; icon: string | null; iconColor: string | null }> = {
   "board-1": { name: "Roadmap", icon: null, iconColor: null },
@@ -831,6 +831,7 @@ describe("HomePage", () => {
       steps: GETTING_STARTED_STEPS.map((key) => ({ key, done: done[key] ?? false })),
       teamTarget: { workspaceId: "ws-1" },
       notesWorkspaceId: "ws-1",
+      timelineBoardId: "board-1",
     };
   }
 
@@ -845,8 +846,9 @@ describe("HomePage", () => {
       registeredBoards: [{ id: "board-1", name: "Roadmap", icon: null, iconColor: null }],
     });
     expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("2/18");
+    console.log("DBG", JSON.stringify([...host().querySelectorAll(".gs-section-label")].map((label) => label.textContent?.trim())), host().querySelector(".gs-count")?.textContent?.trim());
     expect(host().querySelectorAll(".gs-step.is-done")).toHaveLength(2);
-    expect([...host().querySelectorAll(".gs-section-label")].map((label) => label.textContent?.trim())).toEqual(["The basics", "Work faster", "Notes", "Your team", "Your setup"]);
+    expect([...host().querySelectorAll(".gs-section-label")].map((label) => label.textContent?.trim())).toEqual(["The basics", "Work faster", "Tables", "Plan ahead", "Notes", "Your team", "Your setup"]);
     // One step open at a time: the first one not done, with its action pointing at a real board.
     expect(host().querySelectorAll(".gs-detail")).toHaveLength(1);
     expect(row("Create your first card").classList).toContain("is-open");

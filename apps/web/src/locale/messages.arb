@@ -663,6 +663,27 @@
       "src/app/core/i18n/activity-summary.messages.ts"
     ]
   },
+  "6666694013305561371": "updated the start date",
+  "@6666694013305561371": {
+    "description": "Notification line after a person's name",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "4027291761735853131": "removed the start date",
+  "@4027291761735853131": {
+    "description": "Notification line after a person's name",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "6915466518409735924": "rescheduled the card",
+  "@6915466518409735924": {
+    "description": "Notification line after a person's name - both the start and due dates changed",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
   "2669191310759086076": "updated this card",
   "@2669191310759086076": {
     "description": "Notification line after a person's name",
@@ -4478,6 +4499,7 @@
       "src/app/features/board/calendar-view/board-calendar-view.component.html",
       "src/app/features/board/date-picker.popover.ts",
       "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/features/home/home.state.ts",
       "src/app/features/workspace-settings/workspace-settings.page.ts",
@@ -5795,8 +5817,9 @@
       "src/app/features/workspace-settings/general/general.page.html"
     ]
   },
-  "4269318564728384576": "Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Boards can also opt out individually.",
-  "@4269318564728384576": {
+  "5374765075818607246": "Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Workspaces and boards can also opt out individually.",
+  "@5374765075818607246": {
+    "description": "Help text for the organisation time in progress switch",
     "x-files": [
       "src/app/features/account-settings/org/org.page.html"
     ]
@@ -5806,6 +5829,37 @@
     "x-files": [
       "src/app/features/account-settings/org/org.page.html",
       "src/app/features/workspace-settings/boards/boards.page.html",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "4965282278806479345": "Planning features",
+  "@4965282278806479345": {
+    "description": "Section heading - optional planning features a workspace can switch off",
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "4248355455323912627": "Turn off what your teams do not use. A feature that is off is hidden in every workspace, including from agents and the API. Nothing is deleted, so turning it back on restores it. Workspaces can also opt out individually.",
+  "@4248355455323912627": {
+    "description": "Help text for the organisation planning feature switches",
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html"
+    ]
+  },
+  "3493951889964610902": "Enable dependencies",
+  "@3493951889964610902": {
+    "description": "Workspace setting - turns blocking relations between cards on or off",
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "7217375246435875424": "Enable start dates and timeline",
+  "@7217375246435875424": {
+    "description": "Workspace setting - turns card start dates and the Timeline view on or off",
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html",
       "src/app/features/workspace-settings/general/general.page.html"
     ]
   },
@@ -5934,7 +5988,8 @@
   "@6421460271971606186": {
     "description": "Slider label: zoom the avatar crop",
     "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
+      "src/app/features/account-settings/profile/profile.page.html",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
     ]
   },
   "139387769047398857": "Save picture",
@@ -8453,13 +8508,20 @@
       "src/app/features/workspace-settings/automations/automation-action-fields.component.ts"
     ]
   },
+  "888341446683346521": "Start date",
+  "@888341446683346521": {
+    "description": "Board export spreadsheet column, the card's planned start date",
+    "x-files": [
+      "src/app/features/board/board-export.util.ts",
+      "src/app/features/board/table-view/table-columns.util.ts"
+    ]
+  },
   "2413171611497962745": "Due date",
   "@2413171611497962745": {
     "description": "Board export spreadsheet column, card due date",
     "x-files": [
       "src/app/features/board/board-export.util.ts",
       "src/app/features/board/card-composer.dialog.html",
-      "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-quick-edit.popover.ts",
       "src/app/features/board/table-view/table-columns.util.ts",
       "src/app/features/board/table-view/table-view.types.ts",
@@ -8721,6 +8783,7 @@
     "x-files": [
       "src/app/features/board/board.page.html",
       "src/app/features/board/table-view/group-by.util.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
       "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/import/trello-import.page.html"
@@ -8876,6 +8939,13 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
+  "154637153146117281": "Group rows by",
+  "@154637153146117281": {
+    "description": "Label for the timeline grouping switch",
+    "x-files": [
+      "src/app/features/board/board.page.html"
+    ]
+  },
   "1821222939222457554": "Reset to list columns",
   "@1821222939222457554": {
     "x-files": [
@@ -9000,6 +9070,13 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
+  "3166095620723862141": "Timeline view",
+  "@3166095620723862141": {
+    "description": "View switch label; the Gantt-style view with a bar per card",
+    "x-files": [
+      "src/app/features/board/board.page.ts"
+    ]
+  },
   "7951990705316063153": "Dependencies view",
   "@7951990705316063153": {
     "description": "View switch label; the view maps which cards block which",
@@ -9024,6 +9101,14 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
+  "6814295386768519176": "Timeline",
+  "@6814295386768519176": {
+    "description": "Short view switch label for the Gantt-style view",
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/dependencies/dependency-layout.ts"
+    ]
+  },
   "4045087308145757242": "Dependencies",
   "@4045087308145757242": {
     "description": "Short view switch label for the view that maps which cards block which",
@@ -9031,6 +9116,7 @@
       "src/app/features/board/board.page.ts",
       "src/app/features/board/card-relations-popover.component.ts",
       "src/app/features/board/card-relations.component.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html",
       "src/app/features/dependencies/dependency-map.component.ts",
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -9543,6 +9629,7 @@
     "x-files": [
       "src/app/features/board/bulk-custom-fields.dialog.ts",
       "src/app/features/board/table-view/group-by.util.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
       "src/app/features/workspace-settings/guests/guests.page.html"
     ]
   },
@@ -11067,11 +11154,58 @@
       "src/app/features/workspace-settings/members/members.page.html"
     ]
   },
+  "739880801667335279": "Dates",
+  "@739880801667335279": {
+    "description": "Card detail section heading - the card's start and due dates",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "8181699201557545141": "Change start date",
+  "@8181699201557545141": {
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "5162686434580248853": "Start",
+  "@5162686434580248853": {
+    "description": "Prefix on the card's start date badge, e.g. Start 12 Oct",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "1227860913873409112": "Clear start date",
+  "@1227860913873409112": {
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "8439896775611643944": "Set start date",
+  "@8439896775611643944": {
+    "x-files": [
+      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "6094860985365525109": "Add start date",
+  "@6094860985365525109": {
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
   "4604802037090944524": "Change due date",
   "@4604802037090944524": {
     "x-files": [
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "4799153980390902924": "Due",
+  "@4799153980390902924": {
+    "description": "Prefix on the card's due date badge when a start date is also shown, e.g. Due 16 Oct",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html",
+      "src/app/features/workspace-settings/automations/automation-action-fields.component.ts"
     ]
   },
   "7059894564368583754": "Clear due date",
@@ -11993,6 +12127,20 @@
       "src/app/features/board/card-detail.component.ts"
     ]
   },
+  "8933819986044303650": "Couldn't save the start date.",
+  "@8933819986044303650": {
+    "description": "Toast when saving a card's start date fails",
+    "x-files": [
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "4837181892830591279": "{days, plural, one {# working day} other {# working days}}",
+  "@4837181892830591279": {
+    "description": "Hint beside a card's start and due dates - working-day length of the planned bar",
+    "x-files": [
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
   "7756608432318150744": "\"{$fileName}\" deleted.",
   "@7756608432318150744": {
     "description": "Toast after deleting an attachment",
@@ -12814,13 +12962,15 @@
   "944767796496567082": "Zoom out",
   "@944767796496567082": {
     "x-files": [
-      "src/app/features/board/image-lightbox.component.ts"
+      "src/app/features/board/image-lightbox.component.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
     ]
   },
   "6500061599200357251": "Zoom in",
   "@6500061599200357251": {
     "x-files": [
-      "src/app/features/board/image-lightbox.component.ts"
+      "src/app/features/board/image-lightbox.component.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
     ]
   },
   "3787205057553482493": "Reset zoom",
@@ -14327,7 +14477,8 @@
   "@9166912077349483542": {
     "description": "Group heading for cards with no label",
     "x-files": [
-      "src/app/features/board/table-view/group-by.util.ts"
+      "src/app/features/board/table-view/group-by.util.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
     ]
   },
   "430859064314356197": "Open",
@@ -14417,6 +14568,20 @@
   "7209202646285036367": "Due date (latest)",
   "@7209202646285036367": {
     "description": "Sort option",
+    "x-files": [
+      "src/app/features/board/table-view/table-view.types.ts"
+    ]
+  },
+  "4794977966909397104": "Start date (earliest)",
+  "@4794977966909397104": {
+    "description": "Sort option - by planned start date, earliest first",
+    "x-files": [
+      "src/app/features/board/table-view/table-view.types.ts"
+    ]
+  },
+  "5912324787976652982": "Start date (latest)",
+  "@5912324787976652982": {
+    "description": "Sort option - by planned start date, latest first",
     "x-files": [
       "src/app/features/board/table-view/table-view.types.ts"
     ]
@@ -14580,6 +14745,268 @@
     "description": "Tooltip on a running time-in-progress chip past the workspace alert",
     "x-files": [
       "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "1998867625770961132": "Scroll to today",
+  "@1998867625770961132": {
+    "description": "Tooltip on the Timeline view's Today button",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "3395965807309882436": "Timeline zoom",
+  "@3395965807309882436": {
+    "description": "Label for the Timeline view's zoom controls",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "4231256340112589698": "Zoom out (Ctrl + scroll)",
+  "@4231256340112589698": {
+    "description": "Tooltip on the Timeline view's zoom out button",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "6867173275876635401": "Zoom in (Ctrl + scroll)",
+  "@6867173275876635401": {
+    "description": "Tooltip on the Timeline view's zoom in button",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "5152325599963383770": "Zoom to show every scheduled card",
+  "@5152325599963383770": {
+    "description": "Tooltip on the Timeline view's Fit button",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "7721503908018861095": "Fit all",
+  "@7721503908018861095": {
+    "description": "Button - zoom the timeline so every scheduled card is on screen",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "8990188021818152568": "Show the wires between cards that block each other",
+  "@8990188021818152568": {
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "330996155370530647": "Highlight the chain of cards with no slack; everything else fades",
+  "@330996155370530647": {
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "583155944513136531": "Critical path",
+  "@583155944513136531": {
+    "description": "Toggle button - highlight the critical path on the timeline",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html",
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "6482328368049401379": "Nothing to plan yet",
+  "@6482328368049401379": {
+    "description": "Empty state title on the Timeline view",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "7213243417974761103": "Cards appear here once the board has some. Give them a start and a due date and they become bars.",
+  "@7213243417974761103": {
+    "description": "Empty state text on the Timeline view",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "8448388405562307101": "Change dates from the card",
+  "@8448388405562307101": {
+    "description": "Hint in the Timeline view header on touch devices",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "6106656066852315945": "Resize the card names column",
+  "@6106656066852315945": {
+    "description": "Accessible name of the handle that resizes the Timeline view's card names column",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "7640798897121262712": "Drag to resize. Double-click to reset",
+  "@7640798897121262712": {
+    "description": "Tooltip on the handle that resizes the Timeline view's card names column",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "2122953112791978724": "Drag to another card to make it wait on this one",
+  "@2122953112791978724": {
+    "description": "Tooltip on the dependency drag handle at the end of a timeline bar",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "8837866690023811206": "Not scheduled",
+  "@8837866690023811206": {
+    "description": "Timeline lane text for an unscheduled card the viewer cannot edit",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "4191854933787496152": "Remove dependency",
+  "@4191854933787496152": {
+    "description": "Button over a selected dependency wire on the timeline",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "1808387233895341950": "Unscheduled",
+  "@1808387233895341950": {
+    "description": "Timeline view group for cards with neither a start nor a due date",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "6023654562558895737": "{scheduled, plural, one {1 of {total} cards scheduled} other {# of {total} cards scheduled}}",
+  "@6023654562558895737": {
+    "description": "Timeline view toolbar count - how many of the board's cards have a date",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "4886872732959572480": "{count, plural, one {1 scheduling conflict} other {# scheduling conflicts}}",
+  "@4886872732959572480": {
+    "description": "Timeline view toolbar count - cards whose blocker finishes after they start",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "3620176944469296756": "No dates",
+  "@3620176944469296756": {
+    "description": "Timeline view row text for a card with no dates",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "5955763993150705419": "{count, plural, one {1 working day} other {# working days}}",
+  "@5955763993150705419": {
+    "description": "Timeline view bar length in working days",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "523437109018721769": "{count, plural, one {{key} finishes 1 working day after this card starts} other {{key} finishes # working days after this card starts}}",
+  "@523437109018721769": {
+    "description": "Timeline view warning on a bar - a card it waits on is planned to finish after this one starts",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "1784732636796957027": "On the critical path",
+  "@1784732636796957027": {
+    "description": "Timeline view tooltip text - the card is on the critical path",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "5517969301769640580": "{count, plural, =0 {No slack} one {1 working day of slack} other {# working days of slack}}",
+  "@5517969301769640580": {
+    "description": "Timeline view tooltip text - how many working days a card could slip without delaying its chain",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "8311747415206366667": "{$dependent} waits on {$blocker}",
+  "@8311747415206366667": {
+    "description": "Timeline view accessible name of a dependency wire",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "7689221231460528360": "{count, plural, one {1 card} other {# cards}}",
+  "@7689221231460528360": {
+    "description": "Timeline view group heading count",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "3263394524632796585": "Couldn't reschedule the card",
+  "@3263394524632796585": {
+    "description": "Toast when dragging a bar on the Timeline view fails",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "4501820361899678764": "Place on {$date}",
+  "@4501820361899678764": {
+    "description": "Timeline view hint while hovering an unscheduled card's lane - the day it would be placed on",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "3305063521171212078": "Couldn't schedule the card",
+  "@3305063521171212078": {
+    "description": "Toast when placing a card on the Timeline view fails",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "6475787099629584387": "{$dependent} now waits on {$blocker}",
+  "@6475787099629584387": {
+    "description": "Toast after drawing a dependency on the Timeline view",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "4553136156424490747": "Couldn't add the dependency. Try again.",
+  "@4553136156424490747": {
+    "description": "Error toast when drawing a dependency on the Timeline view fails",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "4209938104125933255": "Couldn't remove the dependency. Try again.",
+  "@4209938104125933255": {
+    "description": "Error toast when removing a dependency on the Timeline view fails",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "1352730154877048650": "By list",
+  "@1352730154877048650": {
+    "description": "Timeline view grouping - one group per list",
+    "x-files": [
+      "src/app/features/board/timeline-view/timeline-preferences.ts"
+    ]
+  },
+  "8655990400019097933": "By assignee",
+  "@8655990400019097933": {
+    "description": "Timeline view grouping - one group per assignee",
+    "x-files": [
+      "src/app/features/board/timeline-view/timeline-preferences.ts"
+    ]
+  },
+  "7131178976751781585": "By label",
+  "@7131178976751781585": {
+    "description": "Timeline view grouping - one group per label",
+    "x-files": [
+      "src/app/features/board/timeline-view/timeline-preferences.ts"
+    ]
+  },
+  "1301612780139981816": "No groups",
+  "@1301612780139981816": {
+    "description": "Timeline view grouping - a flat list of cards",
+    "x-files": [
+      "src/app/features/board/timeline-view/timeline-preferences.ts"
     ]
   },
   "1894214558916114808": "Loading watchers...",
@@ -15659,13 +16086,6 @@
       "src/app/features/dependencies/dependency-layout.ts"
     ]
   },
-  "6814295386768519176": "Timeline",
-  "@6814295386768519176": {
-    "description": "Dependencies view layout - cards placed in columns by the week they are due",
-    "x-files": [
-      "src/app/features/dependencies/dependency-layout.ts"
-    ]
-  },
   "1534367694207535197": "Steps",
   "@1534367694207535197": {
     "description": "Dependencies view layout - chains listed step by step",
@@ -15706,13 +16126,6 @@
   },
   "6842868336344024219": "Highlight the longest run of open work in each chain",
   "@6842868336344024219": {
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.html"
-    ]
-  },
-  "583155944513136531": "Critical path",
-  "@583155944513136531": {
-    "description": "Dependencies view toggle: highlight each chain's critical path",
     "x-files": [
       "src/app/features/dependencies/dependency-map.component.html"
     ]
@@ -15881,27 +16294,6 @@
       "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
-  "4553136156424490747": "Couldn't add the dependency. Try again.",
-  "@4553136156424490747": {
-    "description": "Error toast when adding a dependency on the Dependencies view fails",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "4209938104125933255": "Couldn't remove the dependency. Try again.",
-  "@4209938104125933255": {
-    "description": "Error toast when removing a dependency on the Dependencies view fails",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "6475787099629584387": "{$dependent} now waits on {$blocker}",
-  "@6475787099629584387": {
-    "description": "Toast after adding a dependency on the Dependencies view",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
   "2649813765697960708": "{$dependent} no longer waits on {$blocker}",
   "@2649813765697960708": {
     "description": "Toast after removing a dependency on the Dependencies view",
@@ -16010,13 +16402,6 @@
   "8460954236322266099": "Blocks {$keys}",
   "@8460954236322266099": {
     "description": "Screen reader text on a Dependencies view card - the cards waiting on it",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "1784732636796957027": "On the critical path",
-  "@1784732636796957027": {
-    "description": "Screen reader text on a Dependencies view card on its chain's critical path",
     "x-files": [
       "src/app/features/dependencies/dependency-map.component.ts"
     ]
@@ -17401,6 +17786,20 @@
       "src/app/features/home/getting-started.component.ts"
     ]
   },
+  "4114020677798356875": "Tables",
+  "@4114020677798356875": {
+    "description": "Getting started checklist section heading for grouping, totals and export in the Table view",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3730030262470614240": "Plan ahead",
+  "@3730030262470614240": {
+    "description": "Getting started checklist section heading for dependencies, start dates and the Timeline view",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
   "9178759481896989482": "Your team",
   "@9178759481896989482": {
     "description": "Getting started checklist section heading for the organisation admin steps",
@@ -17439,6 +17838,13 @@
   "596613040379865150": "Open a board",
   "@596613040379865150": {
     "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "578806503787502208": "Open a table",
+  "@578806503787502208": {
+    "description": "Getting started step button; Table is a view name",
     "x-files": [
       "src/app/features/home/getting-started.component.ts"
     ]
@@ -17623,6 +18029,83 @@
   "5664052109779517498": "Open notes",
   "@5664052109779517498": {
     "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4563570232212345159": "Group a table",
+  "@4563570232212345159": {
+    "description": "Getting started step title; Table is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3386800791608192880": "In Table view, choose Group to gather cards by assignee, label, due date or a custom field instead of by list.",
+  "@3386800791608192880": {
+    "description": "Getting started step text; Group is a toolbar button in the Table view",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "649227698357788754": "Total a column",
+  "@649227698357788754": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4442072638211614188": "In Table view, choose Calculate under a number column or time in progress, then Sum, to total it for every group.",
+  "@4442072638211614188": {
+    "description": "Getting started step text; Calculate is a button in the table footer and Sum a menu option",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "9149586889863006620": "Export to Excel",
+  "@9149586889863006620": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4402595107764520883": "In Table view, open More table actions and choose Excel workbook to download the cards in view, grouped, with a summary sheet.",
+  "@4402595107764520883": {
+    "description": "Getting started step text; More table actions is a menu and Excel workbook a menu item",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5406964876573420184": "Set a start date",
+  "@5406964876573420184": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3780590251130818371": "In a card's Dates, choose Add start date. The card then runs from its start to its due date on the Timeline.",
+  "@3780590251130818371": {
+    "description": "Getting started step text; Dates is a section and Add start date a button in card detail",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8961079631473585107": "Open the Timeline",
+  "@8961079631473585107": {
+    "description": "Getting started step title; Timeline is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3053553492704789347": "See each dated card as a bar across the weeks, and drag a bar to reschedule it.",
+  "@3053553492704789347": {
+    "description": "Getting started step text; Timeline is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4985910055454618016": "Open Timeline",
+  "@4985910055454618016": {
+    "description": "Getting started step button; Timeline is a view name",
     "x-files": [
       "src/app/features/home/getting-started.component.ts"
     ]
@@ -22936,13 +23419,6 @@
       "src/app/features/workspace-settings/automations/automation-action-fields.component.ts"
     ]
   },
-  "4799153980390902924": "Due",
-  "@4799153980390902924": {
-    "description": "Field label: when the due date is set to",
-    "x-files": [
-      "src/app/features/workspace-settings/automations/automation-action-fields.component.ts"
-    ]
-  },
   "6373545191201438119": "Days from trigger",
   "@6373545191201438119": {
     "description": "Field label: number of days after the automation runs",
@@ -24030,6 +24506,12 @@
       "src/app/features/workspace-settings/automations/automations.page.html"
     ]
   },
+  "8392799677771828503": "{VAR_SELECT, select, board {Runs once per card on the day its planned start date arrives, on this board.} other {Runs once per card on the day its planned start date arrives, on every board in this workspace.}}",
+  "@8392799677771828503": {
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
   "2737456699183416956": "Days before due date",
   "@2737456699183416956": {
     "x-files": [
@@ -24095,6 +24577,20 @@
   "2884304190489484523": "Runs when a card gains its first active blocker, including when a blocker is reopened or restored. Includes changes made by integrations and automations.",
   "@2884304190489484523": {
     "description": "Help for the Card blocked automation trigger",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "3039199418198875526": "Runs when a card it waits on is first planned to finish on or after this card's planned start, whichever card's dates changed. Includes changes made by integrations and automations.",
+  "@3039199418198875526": {
+    "description": "Help for the Scheduling conflict appears automation trigger",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "4658651776475513701": "Runs for a card on the board's critical path when it is rescheduled later and the chain's projected finish moves with it. Includes changes made by integrations and automations.",
+  "@4658651776475513701": {
+    "description": "Help for the Critical path slips automation trigger",
     "x-files": [
       "src/app/features/workspace-settings/automations/automations.page.html"
     ]
@@ -24247,6 +24743,51 @@
   },
   "5743124451889962598": "Runs a chosen number of days before",
   "@5743124451889962598": {
+    "description": "Help text under an automation event option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts"
+    ]
+  },
+  "1787654363982544271": "Start date arrives",
+  "@1787654363982544271": {
+    "description": "Automation event (trigger) option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5884393494498215126": "Runs on the card's planned start date",
+  "@5884393494498215126": {
+    "description": "Help text under an automation event option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts"
+    ]
+  },
+  "3646240886091375318": "Scheduling conflict appears",
+  "@3646240886091375318": {
+    "description": "Automation event (trigger) option - an open blocker is now planned to finish on or after this card's planned start",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "2128369782401641672": "A blocker is now planned to finish on or after this card's start",
+  "@2128369782401641672": {
+    "description": "Help text under an automation event option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts"
+    ]
+  },
+  "7950858148047003051": "Critical path slips",
+  "@7950858148047003051": {
+    "description": "Automation event (trigger) option - a card on the board's critical path was rescheduled later, so the chain's projected finish moved",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4855961570478924488": "A card on the critical path is rescheduled later",
+  "@4855961570478924488": {
     "description": "Help text under an automation event option",
     "x-files": [
       "src/app/features/workspace-settings/automations/automations.page.ts"
@@ -24925,6 +25466,47 @@
   "5177907248924087948": "Inactive cards",
   "@5177907248924087948": {
     "description": "Section heading",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "1369148268174468626": "Turn off what this team does not use. A feature that is off is hidden everywhere, including from agents and the API. Nothing is deleted, so turning it back on restores it.",
+  "@1369148268174468626": {
+    "description": "Help text under the Planning features heading",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "3703721809468783633": "Enable time in progress",
+  "@3703721809468783633": {
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "7895749129547738307": "Track working time cards spend in In progress lists. Turning it off pauses every clock and keeps recorded time. Boards can also opt out individually.",
+  "@7895749129547738307": {
+    "description": "Help text for the workspace time in progress switch",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "8797821425621274745": "Turned off for the whole organisation.",
+  "@8797821425621274745": {
+    "description": "Help text for a planning feature switch the organisation has turned off",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "6027476256104520668": "Cards can block other cards, with Blocked chips, the Dependencies view and blocker automations.",
+  "@6027476256104520668": {
+    "description": "Help text for the dependencies switch",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "1111461894606157636": "Cards can have a planned start, shown as bars on the Timeline view with scheduling conflicts and the critical path.",
+  "@1111461894606157636": {
+    "description": "Help text for the start dates and timeline switch",
     "x-files": [
       "src/app/features/workspace-settings/general/general.page.html"
     ]
@@ -26392,6 +26974,13 @@
   },
   "1929608585299038109": "Notes could not be updated.",
   "@1929608585299038109": {
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4160511060704436476": "The setting could not be updated.",
+  "@4160511060704436476": {
+    "description": "Error under the workspace planning feature switches",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]

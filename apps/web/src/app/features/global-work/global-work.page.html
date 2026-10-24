@@ -274,7 +274,7 @@
           [workDoneEventType]="workDoneEventType()"
           [showActivity]="effectiveDisplay() !== 'history'"
           [showPrioritySet]="showPrioritySetFilter()"
-          [showBlocked]="effectiveDisplay() !== 'history'"
+          [showBlocked]="effectiveDisplay() !== 'history' && dependenciesEnabled()"
           [showCompleted]="effectiveDisplay() !== 'history'"
           [showArchived]="effectiveDisplay() !== 'history'"
           [showHideCompleted]="effectiveDisplay() !== 'history'"

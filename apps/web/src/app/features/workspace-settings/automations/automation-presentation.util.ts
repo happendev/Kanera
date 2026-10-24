@@ -233,6 +233,7 @@ function automationMovePlacementLabel(action: AutomationActionBody): string {
  */
 export function automationTriggerTargetLabel(automation: WireAutomation, lookups: AutomationLookups): string | null {
   if (automation.triggerType === "due_date_arrives") return null;
+  if (automation.triggerType === "start_date_arrives") return null;
   if (automation.triggerType === "due_date_approaching") {
     const days = automation.triggerDaysBefore ?? 1;
     return icu($localize`:Automation trigger target:{days, plural, one {# day before} other {# days before}}`, { days });
@@ -242,6 +243,8 @@ export function automationTriggerTargetLabel(automation: WireAutomation, lookups
   if (automation.triggerType === "all_checklist_items_complete") return null;
   if (automation.triggerType === "card_marked_complete") return null;
   if (automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked") return null;
+  // Scheduling triggers are derived from the board's dependency graph; there is nothing to pick.
+  if (automation.triggerType === "scheduling_conflict_appears" || automation.triggerType === "critical_path_slips") return null;
   if (automation.triggerType === "card_label_set") {
     return automation.triggerLabelId ? automationTriggerLabelName(automation.triggerLabelId, lookups) : $localize`:Unconfigured automation trigger target:a label`;
   }

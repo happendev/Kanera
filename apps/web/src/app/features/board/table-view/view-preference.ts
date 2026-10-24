@@ -6,7 +6,7 @@ import type { AggregateConfig, AggregateMetric, ColumnVisibility, GroupBy, SortB
 
 // Global Work also has a read-only "table" display mode. It is a separate product surface and
 // deliberately keeps its own union rather than coupling board navigation to that preference.
-export type ViewMode = "board" | "table" | "notes" | "calendar" | "history" | "dependencies";
+export type ViewMode = "board" | "table" | "notes" | "calendar" | "timeline" | "history" | "dependencies";
 export type ColumnWidths = Record<string, number>;
 export type CompletedFilter = { from: string; to: string };
 

@@ -14,6 +14,7 @@ export * from "./card-labels.js";
 export * from "./card-follow.js";
 export * from "./card-priorities.js";
 export * from "./card-relations.js";
+export * from "./schedule.js";
 export * from "./cards.js";
 export * from "./checklist-templates.js";
 export * from "./clients.js";

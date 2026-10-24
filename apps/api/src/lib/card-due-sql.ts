@@ -2,6 +2,7 @@ import { DUE_DATE_SLOT_RANK, DUE_DATE_SLOT_TIMES } from "@kanera/shared/due-date
 import { cards, cardChecklistItems, cardSummaryView } from "@kanera/shared/schema";
 import { and, inArray, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { alias, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { workspaceFeatureEnabledSql } from "./workspace-features.js";
 import { assignedCardVisibility } from "./access.js";
 import type { AccessibleBoard } from "./accessible-boards.js";
 
@@ -229,6 +230,7 @@ export function dependencyAtRiskSql(authUserId: string, visibleBoards: Accessibl
     inner join card risk_blocker on ${riskBlocker.id} = risk_link.source_card_id
     where risk_link.target_card_id = ${dependent.id}
       and risk_link.kind = 'blocks'
+      and ${workspaceFeatureEnabledSql("dependencies", sql`risk_link.workspace_id`)}
       and ${riskBlocker.completedAt} is null
       and ${riskBlocker.archivedAt} is null
       and ${cardAccessCondition(authUserId, visibleBoards, riskBlockerColumns)}

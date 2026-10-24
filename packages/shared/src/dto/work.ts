@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CompactCardSummary, WireChecklistAssignment, WireCustomField, WireGlobalWorkSeparator } from "../events/index.js";
 import type { ColorToken } from "../lib/colors.js";
+import type { ScheduleHealth } from "./schedule.js";
 import { WORK_VIEW_LENSES, WORK_VIEW_VISIBILITIES } from "../schema/work-view.js";
 import { ianaTimeZone } from "./_time-zone.js";
 
@@ -238,6 +239,10 @@ export type WorkCatalogWorkspace = {
 
 export type WorkCatalogBoard = {
   inProgressEnabled: boolean;
+  /** The board's workspace has dependencies on (`@kanera/shared/workspace-features`). */
+  dependenciesEnabled: boolean;
+  /** The board's workspace has start dates and the timeline on. */
+  timelineEnabled: boolean;
   id: string;
   workspaceId: string;
   name: string;
@@ -348,6 +353,12 @@ export type PortfolioBucket = {
   atRisk: number;
   completed: number;
   overdueChecklistItems: number;
+  /**
+   * The schedule engine's verdict for this board's open cards (`POST /cards/schedule`). Computed
+   * only for boards with an open `blocks` edge or a card with both dates; every other board reports
+   * zeroes. Optional because offline snapshots predate it.
+   */
+  schedule?: ScheduleHealth;
 };
 
 /**
@@ -380,7 +391,12 @@ export type PortfolioListCount = {
 
 export type PortfolioSummary = {
   days: number;
-  totals: Omit<WorkTotals, "checklistItems"> & { unassigned: number; inactive: number; inProgress: number; inProgressTooLong: number; blocked: number; atRisk: number };
+  totals: Omit<WorkTotals, "checklistItems"> & {
+    unassigned: number; inactive: number; inProgress: number; inProgressTooLong: number; blocked: number; atRisk: number;
+    /** Sums of the buckets' `schedule` counts. Optional for offline snapshots that predate them. */
+    scheduleConflicts?: number;
+    criticalCards?: number;
+  };
   buckets: PortfolioBucket[];
   /** Optional for older offline snapshots, which predate it. */
   lists?: PortfolioListCount[];
