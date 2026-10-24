@@ -26,6 +26,7 @@ import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { SystemAvatarComponent } from "../../shared/system-avatar.component";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { hasMarkdownContent } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -99,6 +100,7 @@ const NO = () => $localize`:Checkbox field value in card activity:No`;
   imports: [CdkTrapFocus, 
     AnchoredPanelDirective,
     AvatarComponent,
+    SystemAvatarComponent,
     DraftBannerComponent,
     DescriptionEditorComponent,
     DescriptionViewerComponent,

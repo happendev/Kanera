@@ -18,6 +18,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
 

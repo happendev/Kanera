@@ -94,7 +94,9 @@
       <div class="activity-mirror-icon" aria-label="Board mirror comment" i18n-aria-label kTooltip="Synced by Board mirror" i18n-kTooltip="Tooltip; Board mirror is the feature that syncs cards between boards">
         <i class="ti ti-circles-relation"></i>
       </div>
-      } @else if (item.data.authorKind !== 'system') {
+      } @else if (item.data.authorKind === 'system') {
+      <k-system-avatar [size]="32" />
+      } @else {
       <div class="comment-avatar">
         <k-avatar [url]="item.data.authorAvatarUrl" [name]="item.data.authorName" [size]="32" [userId]="item.data.authorKind === 'user' ? item.data.authorId : null" [workspaceId]="workspaceId()" [showPresence]="showAuthorPresence(item.data.authorKind, item.data.authorId)" [profile]="true" />
       </div>
@@ -176,7 +178,9 @@
       <div class="activity-mirror-icon" aria-label="Board mirror activity" i18n-aria-label kTooltip="Synced by Board mirror" i18n-kTooltip="Tooltip; Board mirror is the feature that syncs cards between boards">
         <i class="ti ti-circles-relation"></i>
       </div>
-      } @else if (!item.isSystem) {
+      } @else if (item.isSystem) {
+      <k-system-avatar [size]="32" />
+      } @else {
       <div class="activity-avatar">
         <k-avatar [url]="item.data.actorAvatarUrl" [name]="item.data.actorName" [size]="32" [userId]="item.data.actorKind === 'user' ? item.data.actorId : null" [workspaceId]="workspaceId()" [showPresence]="showAuthorPresence(item.data.actorKind, item.data.actorId)" [profile]="true" />
       </div>
