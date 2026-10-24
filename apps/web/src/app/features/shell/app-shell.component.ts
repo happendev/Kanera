@@ -1066,8 +1066,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
         if (board.archivedAt) return;
         this.groups.update((groups) =>
           groups.map((g) => {
-            if (g.workspace.id !== workspaceId || g.boards.some((b) => b.id === board.id)) return g;
-            return { ...g, boards: sortBoards([...g.boards, board as unknown as Board]) };
+            if (g.workspace.id !== workspaceId) return g;
+            const existing = g.boards.find((b) => b.id === board.id);
+            if (existing && !this.isPlanDisabled(existing)) return g;
+            // Billing restores archived boards with a created event. Replace the directory's disabled
+            // placeholder too, otherwise the paid-for board stays non-navigable until a full refresh.
+            return { ...g, boards: sortBoards([...g.boards.filter((b) => b.id !== board.id), board as unknown as Board]) };
           }),
         );
         this.workspaceService.upsertBoard(workspaceId, {

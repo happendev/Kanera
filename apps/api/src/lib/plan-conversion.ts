@@ -68,6 +68,7 @@ export async function convertClientPlan(
   target: PlanTarget,
   tx?: Tx,
   config: PlanConversionEnv = env,
+  afterCommit?: (publish: () => Promise<void>) => void,
 ): Promise<void> {
   let changes: RealtimeChanges;
   if (tx) {
@@ -76,6 +77,13 @@ export async function convertClientPlan(
     changes = await db.transaction((t) => applyConversion(clientId, target, t, config));
   }
 
+  // Billing commits the subscription metadata and event dedupe marker with the conversion. Publish
+  // only after that outer transaction succeeds, so a rolled-back webhook never leaks realtime changes.
+  if (afterCommit) afterCommit(() => publishPlanChanges(changes));
+  else await publishPlanChanges(changes);
+}
+
+async function publishPlanChanges(changes: RealtimeChanges): Promise<void> {
   for (const { workspaceId, automationId } of changes.automationsUpdated) {
     const automation = await loadAutomation(automationId);
     if (automation) await emitToWorkspaceAdmins(workspaceId, "automation:updated", { workspaceId, automation });

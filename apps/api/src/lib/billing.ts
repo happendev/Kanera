@@ -2,7 +2,7 @@ import { clientGuestSeats, clientMembers, clients, stripeEvents, users, type Cli
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import Stripe from "stripe";
-import { db, type Tx } from "../db.js";
+import { db, type Tx, type TxOnly } from "../db.js";
 import { env, type Env } from "../env.js";
 import { impactFromPlanActions, previewDowngradeImpact, sendHostedBillingEmail, sendHostedSeatCapacityEmail } from "./billing-emails.js";
 import { AppError, badRequest } from "./errors.js";
@@ -46,6 +46,7 @@ type SubscriptionLike = Stripe.Subscription & {
 
 const STRIPE_API_VERSION = "2026-05-27.dahlia";
 const STRIPE_EVENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+type AfterCommit = Array<() => Promise<unknown> | void>;
 
 let stripeClient: Stripe | null = null;
 
@@ -266,10 +267,13 @@ export async function setSeatCapacity(
           throw paymentActionRequired();
         }
       } else {
-        // A decrease credits the next cycle (create_prorations) and never charges, so it cannot fail on payment.
+        // Stripe credits unused time even when its invoice was never paid. Read live invoice state:
+        // the local billing status can lag a failed renewal or a payment recovery webhook.
+        const subscription = await stripe(config).subscriptions.retrieve(client.stripeSubscriptionId!, { expand: ["latest_invoice"] });
+        const invoice = typeof subscription.latest_invoice === "object" ? subscription.latest_invoice : null;
         await updateSubscriptionItemForSeatQuantity(
           client.stripeSubscriptionItemId,
-          { quantity: newLimit, proration_behavior: "create_prorations" },
+          { quantity: newLimit, proration_behavior: invoice?.status === "paid" ? "create_prorations" : "none" },
           { mapPaymentErrors: false },
           config,
         );
@@ -366,44 +370,56 @@ export async function createCheckoutSession(
   config: StripeEnv = env,
 ): Promise<{ url: string }> {
   requireHostedStripe(config);
-  const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
-  if (!client) throw badRequest("client not found");
-
-  // The admin chooses how many seats to buy, but they cannot buy fewer than are already assigned (which
-  // can happen on a re-purchase after a downgrade restored members).
-  const usedSeats = await countActiveSeats(clientId);
-  const quantity = Math.max(seatLimit, usedSeats);
-
-  const api = stripe(config);
-  let customerId = client.stripeCustomerId;
-  if (!customerId) {
-    const customer = await api.customers.create({
+  const { session, quantity, created } = await db.transaction(async (tx) => {
+    // Serialize tabs/admins and webhook adoption. Stripe idempotency keys also cover an ambiguous
+    // network response or a process crash between creating the external object and committing it.
+    await tx.execute(sql`select 1 from ${clients} where ${clients.id} = ${clientId} for update`);
+    const [client] = await tx.select().from(clients).where(eq(clients.id, clientId)).limit(1);
+    if (!client || client.deletedAt || client.permanentDeletionRequestedAt) throw badRequest("organisation is unavailable for billing");
+    const quantity = Math.max(seatLimit, await countActiveSeats(clientId, tx));
+    const api = stripe(config);
+    const customerId = client.stripeCustomerId ?? (await api.customers.create({
       name: client.name,
       email: userEmail,
       metadata: { clientId },
-    });
-    customerId = customer.id;
-  }
+    }, { idempotencyKey: `billing-customer:${clientId}` })).id;
+    await tx.update(clients).set({ stripeCustomerId: customerId, updatedAt: new Date() }).where(eq(clients.id, clientId));
 
-  // Persist the chosen interval, but NOT seat_limit — the user may abandon Checkout. seat_limit is set
-  // from the live subscription quantity in applySubscription when the webhook confirms the purchase.
-  await db
-    .update(clients)
-    .set({ stripeCustomerId: customerId, billingInterval: interval, updatedAt: new Date() })
-    .where(eq(clients.id, clientId));
-
-  const session = await api.checkout.sessions.create({
-    mode: "subscription",
-    customer: customerId,
-    success_url: `${config.WEB_ORIGIN}/settings/account-plan?billing=success`,
-    cancel_url: `${config.WEB_ORIGIN}/settings/account-plan?billing=cancelled`,
-    client_reference_id: clientId,
-    line_items: [{ price: priceIdForInterval(interval, config), quantity }],
-    metadata: { clientId, interval, seatLimit: String(quantity), upgradeSource: "account_plan" },
-    subscription_data: { metadata: { clientId, interval } },
+    // Include incomplete/dunning/paused subscriptions: a delayed webhook must not turn a retry into
+    // a second recurring charge. Existing subscribers manage their subscription in the portal.
+    for await (const subscription of api.subscriptions.list({ customer: customerId, status: "all", limit: 100 })) {
+      if (subscription.status !== "canceled" && subscription.status !== "incomplete_expired") {
+        return { session: await api.billingPortal.sessions.create({ customer: customerId, return_url: `${config.WEB_ORIGIN}/settings/account-plan` }), quantity, created: false };
+      }
+    }
+    const latest = await api.checkout.sessions.list({ customer: customerId, limit: 1 });
+    let reusable: Stripe.Checkout.Session | undefined;
+    for await (const open of api.checkout.sessions.list({ customer: customerId, status: "open", limit: 100 })) {
+      if (open.mode !== "subscription") continue;
+      if (!reusable && open.metadata?.interval === interval && open.metadata?.seatLimit === String(quantity) && open.url) {
+        reusable = open;
+      } else {
+        // Expiring the old link closes the race with someone paying it in another tab. If completion
+        // wins, expiration fails and we stop; the next attempt will find the resulting subscription.
+        await api.checkout.sessions.expire(open.id);
+      }
+    }
+    if (reusable) return { session: reusable, quantity, created: false };
+    const session = await api.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      success_url: `${config.WEB_ORIGIN}/settings/account-plan?billing=success`,
+      cancel_url: `${config.WEB_ORIGIN}/settings/account-plan?billing=cancelled`,
+      client_reference_id: clientId,
+      line_items: [{ price: priceIdForInterval(interval, config), quantity }],
+      metadata: { clientId, interval, seatLimit: String(quantity), upgradeSource: "account_plan" },
+      subscription_data: { metadata: { clientId, interval } },
+    }, { idempotencyKey: `billing-checkout:${clientId}:${latest.data[0]?.id ?? "initial"}:${interval}:${quantity}` });
+    return { session, quantity, created: true };
   });
 
   if (!session.url) throw badRequest("Stripe did not return a checkout URL");
+  if (!created) return { url: session.url };
 
   // Server-authoritative funnel step preceding subscription_started. Distinct id is the org, matching the
   // other commercial events, since checkout is initiated on behalf of the billing account, not a person.
@@ -517,11 +533,12 @@ export async function cancelBillingForPermanentDeletion(clientId: string, config
 
 // Drives the Stripe subscription quantity to the org's purchased seat_limit. Capacity changes are
 // normally made through setSeatCapacity (which invoices increases); this is the idempotent repair used
-// by the reconcile sweep and after a webhook true-up. reconcileOnly uses proration_behavior:"none" so a
+// after a webhook restores previously suspended members. The sweep reads Stripe instead of using
+// this outbound helper. reconcileOnly uses proration_behavior:"none" so a
 // pure drift repair can never produce a surprise mid-cycle invoice.
-export async function syncStripeSeatQuantity(clientId: string, config: StripeEnv = env, opts: { reconcileOnly?: boolean } = {}): Promise<void> {
+export async function syncStripeSeatQuantity(clientId: string, config: StripeEnv = env, opts: { reconcileOnly?: boolean; tx?: Tx } = {}): Promise<void> {
   if (config.KANERA_DEPLOYMENT_MODE !== "hosted" || !config.STRIPE_SECRET_KEY) return;
-  const [client] = await db
+  const [client] = await (opts.tx ?? db)
     .select({
       billingStatus: clients.billingStatus,
       stripeSubscriptionItemId: clients.stripeSubscriptionItemId,
@@ -632,7 +649,9 @@ function analyticsPaymentReason(reason: Stripe.Invoice.BillingReason | null): Su
 
 async function applySubscription(
   subscription: Stripe.Subscription,
-  config: StripeEnv = env,
+  config: StripeEnv,
+  tx: TxOnly,
+  afterCommit: AfterCommit,
   notifications?: {
     mailer?: Mailer;
     eventId?: string;
@@ -642,22 +661,32 @@ async function applySubscription(
     reconciledFromHeldSubscription?: boolean;
   },
 ): Promise<string | null> {
-  const sub = subscription as SubscriptionLike;
+  let sub = subscription as SubscriptionLike;
   const clientId = typeof sub.metadata?.clientId === "string" ? sub.metadata.clientId : null;
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
-  const firstItem = sub.items.data[0] ?? null;
-  const interval = intervalForPrice(firstItem?.price?.id, config);
-  const target = statusForStripe(sub.status);
 
   const [client] = clientId
-    ? await db.select({ id: clients.id, permanentDeletionRequestedAt: clients.permanentDeletionRequestedAt }).from(clients).where(eq(clients.id, clientId)).limit(1)
+    ? await tx.select({ id: clients.id, permanentDeletionRequestedAt: clients.permanentDeletionRequestedAt }).from(clients).where(eq(clients.id, clientId)).limit(1)
     : customerId
-      ? await db.select({ id: clients.id, permanentDeletionRequestedAt: clients.permanentDeletionRequestedAt }).from(clients).where(eq(clients.stripeCustomerId, customerId)).limit(1)
+      ? await tx.select({ id: clients.id, permanentDeletionRequestedAt: clients.permanentDeletionRequestedAt }).from(clients).where(eq(clients.stripeCustomerId, customerId)).limit(1)
       : [];
   // A late Stripe webhook must not repopulate billing metadata after the purge has scrubbed it.
   if (!client || client.permanentDeletionRequestedAt) return null;
 
-  const [previous] = await db
+  // Take the same row lock as seat purchases BEFORE fetching the authoritative Stripe snapshot.
+  // A network read started before the lock could otherwise undo a payment that commits while it waits.
+  await tx.execute(sql`select 1 from ${clients} where ${clients.id} = ${client.id} for update`);
+  const [lockedClient] = await tx.select({ permanentDeletionRequestedAt: clients.permanentDeletionRequestedAt })
+    .from(clients).where(eq(clients.id, client.id)).limit(1);
+  if (!lockedClient || lockedClient.permanentDeletionRequestedAt) return null;
+  if (sub.status !== "canceled") {
+    sub = await stripe(config).subscriptions.retrieve(sub.id, { expand: ["latest_invoice"] }) as SubscriptionLike;
+  }
+  const firstItem = sub.items.data[0] ?? null;
+  const interval = intervalForPrice(firstItem?.price?.id, config);
+  const target = statusForStripe(sub.status);
+
+  const [previous] = await tx
     .select({
       billingStatus: clients.billingStatus,
       billingInterval: clients.billingInterval,
@@ -685,18 +714,18 @@ async function applySubscription(
     && notifications?.reconciledFromHeldSubscription !== true
   ) {
     const held = await stripe(config).subscriptions.retrieve(previous.stripeSubscriptionId, { expand: ["latest_invoice"] });
-    return applySubscription(held, config, { ...notifications, reconciledFromHeldSubscription: true });
+    return applySubscription(held, config, tx, afterCommit, { ...notifications, reconciledFromHeldSubscription: true });
   }
-  const downgradeImpact = !isPaidTier(target.billingStatus) ? await previewDowngradeImpact(client.id) : null;
-  const restoreImpact = isPaidTier(target.billingStatus) ? await impactFromPlanActions(client.id) : null;
+  const downgradeImpact = !isPaidTier(target.billingStatus) ? await previewDowngradeImpact(client.id, tx) : null;
+  const restoreImpact = isPaidTier(target.billingStatus) ? await impactFromPlanActions(client.id, tx) : null;
 
-  await convertClientPlan(client.id, target);
+  await convertClientPlan(client.id, target, tx, env, (publish) => afterCommit.push(publish));
   const nextPeriodEnd = isPaidTier(target.billingStatus) ? subscriptionPeriodEnd(sub) : null;
   // On a paid webhook, Stripe is authoritative for the purchased capacity only after the relevant invoice
   // is paid. A seat increase first raises the Stripe quantity to create the proration invoice; subscription
   // webhooks can arrive before invoice.paid, so existing paid orgs keep their current seat_limit until the
   // paid invoice or explicit confirmation path settles it.
-  const restoredUsedSeats = isPaidTier(target.billingStatus) ? await countActiveSeats(client.id) : 0;
+  const restoredUsedSeats = isPaidTier(target.billingStatus) ? await countActiveSeats(client.id, tx) : 0;
   const stripeQuantity = firstItem?.quantity ?? 1;
   const latestInvoice = typeof sub.latest_invoice === "object" ? sub.latest_invoice as Stripe.Invoice | null : null;
   const invoicePaid = latestInvoice?.status === "paid";
@@ -704,12 +733,17 @@ async function applySubscription(
     && stripeQuantity > previous.seatLimit
     && !invoicePaid
     && notifications?.allowUnpaidSeatIncrease !== true;
+  // Explicit confirmation can observe a succeeded PaymentIntent just before Stripe applies its
+  // pending update. Preserve that already-confirmed capacity while the live item catches up.
+  const pendingQuantity = sub.pending_update?.subscription_items?.find((item) => item.id === firstItem?.id)?.quantity;
+  const confirmedPendingSeats = previous && pendingQuantity != null && pendingQuantity >= previous.seatLimit
+    && stripeQuantity < previous.seatLimit;
   const nextSeatLimit = isPaidTier(target.billingStatus)
-    ? unpaidExistingSeatIncrease
+    ? unpaidExistingSeatIncrease || confirmedPendingSeats
       ? previous!.seatLimit
       : Math.max(stripeQuantity, restoredUsedSeats)
     : undefined;
-  await db
+  await tx
     .update(clients)
     .set({
       stripeCustomerId: customerId ?? null,
@@ -725,13 +759,13 @@ async function applySubscription(
     .where(eq(clients.id, client.id));
   if (target.billingStatus === "active" && !previous?.analyticsSubscriptionStartedAt && interval) {
     const capturedAt = new Date();
-    const claimed = await db.update(clients)
+    const claimed = await tx.update(clients)
       .set({ analyticsSubscriptionStartedAt: capturedAt })
       .where(and(eq(clients.id, client.id), isNull(clients.analyticsSubscriptionStartedAt)))
       .returning({ id: clients.id });
     if (claimed.length > 0) {
       const seats = firstItem?.quantity ?? previous?.seatLimit ?? 1;
-      void productAnalytics.capture({
+      afterCommit.push(() => productAnalytics.capture({
         event: "subscription_started",
         distinctId: `organization:${client.id}`,
         organizationId: client.id,
@@ -743,14 +777,14 @@ async function applySubscription(
           currency: firstItem?.price.currency?.toUpperCase() ?? "EUR",
           event_version: ANALYTICS_EVENT_VERSION,
         },
-      });
+      }));
       // A paid subscription that began from a trial is also a completed trial funnel. Emitting both keeps
       // subscription_started's semantics intact while making trial->paid conversion directly measurable.
       // Kanera's trial is internal (no Stripe trial), so trial->paid conversion is the one place the
       // trial funnel completes through a webhook. trial_ended (a lapsed trial) lives in the expiry sweep,
       // which is where an unconverted internal trial actually reverts to free.
       if (previous?.billingStatus === "trialing") {
-        void productAnalytics.capture({
+        afterCommit.push(() => productAnalytics.capture({
           event: "trial_converted",
           distinctId: `organization:${client.id}`,
           organizationId: client.id,
@@ -760,7 +794,7 @@ async function applySubscription(
             billing_period: interval,
             event_version: ANALYTICS_EVENT_VERSION,
           },
-        });
+        }));
       }
     }
   }
@@ -772,7 +806,7 @@ async function applySubscription(
     && !previous.analyticsSubscriptionCancelledAt
   ) {
     const cancelledAt = new Date();
-    const claimed = await db.update(clients)
+    const claimed = await tx.update(clients)
       .set({
         analyticsSubscriptionCancelledAt: cancelledAt,
         // Clear the started marker so a later resubscribe re-fires subscription_started (win-back is a
@@ -782,7 +816,7 @@ async function applySubscription(
       .where(and(eq(clients.id, client.id), isNull(clients.analyticsSubscriptionCancelledAt)))
       .returning({ id: clients.id });
     if (claimed.length > 0) {
-      void productAnalytics.capture({
+      afterCommit.push(() => productAnalytics.capture({
         event: "subscription_cancelled",
         distinctId: `organization:${client.id}`,
         organizationId: client.id,
@@ -790,16 +824,18 @@ async function applySubscription(
           workspace_id: client.id,
           plan_code: "pro",
           cancellation_category: cancellationCategory(sub),
-          tenure_band: subscriptionTenureBand(previous.analyticsSubscriptionStartedAt, cancelledAt),
+          tenure_band: subscriptionTenureBand(previous.analyticsSubscriptionStartedAt!, cancelledAt),
           event_version: ANALYTICS_EVENT_VERSION,
         },
-      });
+      }));
     }
   }
-  if (isPaidTier(target.billingStatus) && !unpaidExistingSeatIncrease) await syncStripeSeatQuantity(client.id, config, { reconcileOnly: true });
-  emitClientEntitlementsChanged(client.id);
+  if (isPaidTier(target.billingStatus) && !unpaidExistingSeatIncrease && !sub.pending_update && restoredUsedSeats > stripeQuantity) {
+    await syncStripeSeatQuantity(client.id, config, { reconcileOnly: true, tx });
+  }
+  afterCommit.push(() => { emitClientEntitlementsChanged(client.id); });
   if (notifications?.mailer && previous) {
-    await queueSubscriptionEmail({
+    afterCommit.push(() => queueSubscriptionEmail({
       clientId: client.id,
       previous,
       target,
@@ -810,11 +846,27 @@ async function applySubscription(
       resolvedSeatLimit: nextSeatLimit ?? previous.seatLimit,
       downgradeImpact,
       restoreImpact,
-      mailer: notifications.mailer,
+      mailer: notifications.mailer!,
       eventId: notifications.eventId,
-    });
+    }));
   }
   return client.id;
+}
+
+// Recovery is Stripe -> Kanera. Pushing a stale local capacity back to Stripe can undo a paid
+// pending update before its webhook arrives, or a successful purchase whose DB commit failed.
+export async function reconcileStripeSubscription(clientId: string, config: StripeEnv = env): Promise<void> {
+  if (config.KANERA_DEPLOYMENT_MODE !== "hosted" || !config.STRIPE_SECRET_KEY) return;
+  const afterCommit: AfterCommit = [];
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`select 1 from ${clients} where ${clients.id} = ${clientId} for update`);
+    const [client] = await tx.select({ subscriptionId: clients.stripeSubscriptionId })
+      .from(clients).where(eq(clients.id, clientId)).limit(1);
+    if (!client?.subscriptionId) return;
+    const subscription = await stripe(config).subscriptions.retrieve(client.subscriptionId, { expand: ["latest_invoice"] });
+    await applySubscription(subscription, config, tx, afterCommit);
+  });
+  for (const effect of afterCommit) await effect();
 }
 
 export async function handleStripeEvent(
@@ -823,24 +875,23 @@ export async function handleStripeEvent(
   mailer?: Mailer,
   internalNotifications: { sendSale?: typeof sendInternalSaleNotification; log?: FastifyBaseLogger } = {},
 ): Promise<void> {
-  const [claim] = await db
-    .insert(stripeEvents)
-    .values({ id: event.id, type: event.type })
-    .onConflictDoNothing()
-    .returning({ id: stripeEvents.id });
-  if (!claim) return;
+  const afterCommit: AfterCommit = [];
+  // An uncommitted claim is rolled back by PostgreSQL even if the process dies. Concurrent deliveries
+  // wait on its unique key and only skip once the billing changes and claim commit together.
+  await db.transaction(async (tx) => {
+    const [claim] = await tx
+      .insert(stripeEvents)
+      .values({ id: event.id, type: event.type })
+      .onConflictDoNothing()
+      .returning({ id: stripeEvents.id });
+    if (!claim) return;
 
-  try {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
-        const clientId = session.client_reference_id ?? session.metadata?.clientId;
-        if (clientId && typeof session.customer === "string") {
-          await db.update(clients).set({ stripeCustomerId: session.customer, updatedAt: new Date() }).where(eq(clients.id, clientId));
-        }
         if (subscriptionId) {
-          await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, {
+          await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, tx, afterCommit, {
             mailer,
             eventId: event.id,
             allowUnpaidSeatIncrease: true,
@@ -858,7 +909,7 @@ export async function handleStripeEvent(
             ? "monthly"
             : "not_selected";
           const parsedSeats = Number.parseInt(session.metadata?.seatLimit ?? "1", 10);
-          await productAnalytics.capture({
+          afterCommit.push(() => productAnalytics.capture({
             event: "checkout_abandoned",
             distinctId: `organization:${clientId}`,
             organizationId: clientId,
@@ -870,7 +921,7 @@ export async function handleStripeEvent(
               upgrade_source: "account_plan",
               event_version: ANALYTICS_EVENT_VERSION,
             },
-          });
+          }));
         }
         break;
       }
@@ -881,9 +932,9 @@ export async function handleStripeEvent(
         // Stripe events can arrive out of order, so subscription webhooks reconcile from the live
         // subscription where possible instead of trusting the event's frozen snapshot.
         if (subscription.status === "canceled") {
-          await applySubscription(subscription, config, { mailer, eventId: event.id });
+          await applySubscription(subscription, config, tx, afterCommit, { mailer, eventId: event.id });
         } else {
-          await applySubscription(await stripe(config).subscriptions.retrieve(subscription.id, { expand: ["latest_invoice"] }), config, { mailer, eventId: event.id });
+          await applySubscription(await stripe(config).subscriptions.retrieve(subscription.id, { expand: ["latest_invoice"] }), config, tx, afterCommit, { mailer, eventId: event.id });
         }
         break;
       }
@@ -891,7 +942,7 @@ export async function handleStripeEvent(
         const invoice = event.data.object as Stripe.Invoice;
         const subscriptionId = subscriptionIdForInvoice(invoice);
         if (subscriptionId) {
-          await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, { mailer, eventId: event.id });
+          await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, tx, afterCommit, { mailer, eventId: event.id });
         }
         break;
       }
@@ -900,7 +951,7 @@ export async function handleStripeEvent(
         const subscriptionId = subscriptionIdForInvoice(invoice);
         if (subscriptionId) {
           const subscription = await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] });
-          const clientId = await applySubscription(subscription, config, {
+          const clientId = await applySubscription(subscription, config, tx, afterCommit, {
             mailer,
             eventId: event.id,
             allowUnpaidSeatIncrease: true,
@@ -909,61 +960,59 @@ export async function handleStripeEvent(
           // payment (initial, renewal, or proration), while the stripe_event claim above prevents duplicate
           // webhook deliveries from double-counting it. No customer, invoice, or payment-method data leaves Kanera.
           if (clientId && invoice.amount_paid > 0) {
-            const firstItem = (subscription as SubscriptionLike).items.data[0] ?? null;
-            const billingReason = analyticsPaymentReason(invoice.billing_reason);
-            // Attribute revenue to the organisation creator's PostHog person so its first-touch
-            // $initial_utm_* properties apply; the organization group still carries the rollup.
-            // Later members and guests never replace that acquisition.
-            const [creator] = await db.select({ userId: clients.createdByUserId })
-              .from(clients).where(eq(clients.id, clientId)).limit(1);
-            await productAnalytics.capture({
-              event: "subscription_payment_succeeded",
-              distinctId: creator?.userId ?? `organization:${clientId}`,
-              organizationId: clientId,
-              properties: {
-                workspace_id: clientId,
-                plan_code: "pro",
-                billing_period: intervalForPrice(firstItem?.price.id, config) ?? "not_selected",
-                seat_band: seatBand(firstItem?.quantity ?? 1),
-                revenue: invoice.amount_paid,
-                currency: invoice.currency.toUpperCase(),
-                billing_reason: billingReason,
-                event_version: ANALYTICS_EVENT_VERSION,
-              },
+            afterCommit.push(async () => {
+              const firstItem = (subscription as SubscriptionLike).items.data[0] ?? null;
+              const billingReason = analyticsPaymentReason(invoice.billing_reason);
+              // Attribute revenue to the organisation creator's PostHog person so its first-touch
+              // $initial_utm_* properties apply; the organization group still carries the rollup.
+              // Later members and guests never replace that acquisition.
+              const [creator] = await db.select({ userId: clients.createdByUserId })
+                .from(clients).where(eq(clients.id, clientId)).limit(1);
+              await productAnalytics.capture({
+                event: "subscription_payment_succeeded",
+                distinctId: creator?.userId ?? `organization:${clientId}`,
+                organizationId: clientId,
+                properties: {
+                  workspace_id: clientId,
+                  plan_code: "pro",
+                  billing_period: intervalForPrice(firstItem?.price.id, config) ?? "not_selected",
+                  seat_band: seatBand(firstItem?.quantity ?? 1),
+                  revenue: invoice.amount_paid,
+                  currency: invoice.currency.toUpperCase(),
+                  billing_reason: billingReason,
+                  event_version: ANALYTICS_EVENT_VERSION,
+                },
+              });
+              const [paidClient] = await db
+                .select({ name: clients.name })
+                .from(clients)
+                .where(eq(clients.id, clientId))
+                .limit(1);
+              try {
+                // Revenue alerts are intentionally tied to invoice.paid rather than Checkout completion:
+                // this covers new sales, renewals, and paid prorations without announcing unpaid sessions.
+                await (internalNotifications.sendSale ?? sendInternalSaleNotification)({
+                  orgName: paidClient?.name ?? clientId,
+                  clientId,
+                  amountPaid: invoice.amount_paid,
+                  currency: invoice.currency,
+                  billingReason,
+                  billingInterval: intervalForPrice(firstItem?.price.id, config),
+                  seatCount: firstItem?.quantity ?? 1,
+                  stripeInvoiceId: invoice.id,
+                }, { log: internalNotifications.log });
+              } catch (err) {
+                // An internal alert must not release the Stripe event claim and repeat revenue processing.
+                internalNotifications.log?.error({ err, eventId: event.id, clientId }, "failed to send internal sale notification");
+              }
             });
-            const [paidClient] = await db
-              .select({ name: clients.name })
-              .from(clients)
-              .where(eq(clients.id, clientId))
-              .limit(1);
-            try {
-              // Revenue alerts are intentionally tied to invoice.paid rather than Checkout completion:
-              // this covers new sales, renewals, and paid prorations without announcing unpaid sessions.
-              await (internalNotifications.sendSale ?? sendInternalSaleNotification)({
-                orgName: paidClient?.name ?? clientId,
-                clientId,
-                amountPaid: invoice.amount_paid,
-                currency: invoice.currency,
-                billingReason,
-                billingInterval: intervalForPrice(firstItem?.price.id, config),
-                seatCount: firstItem?.quantity ?? 1,
-                stripeInvoiceId: invoice.id,
-              }, { log: internalNotifications.log });
-            } catch (err) {
-              // An internal alert must not release the Stripe event claim and repeat revenue processing.
-              internalNotifications.log?.error({ err, eventId: event.id, clientId }, "failed to send internal sale notification");
-            }
           }
         }
         break;
       }
     }
-  } catch (err) {
-    // The inserted row is a processing claim as well as the dedupe marker. If handling fails, release it
-    // so Stripe can retry the same event id instead of being permanently marked handled.
-    await db.delete(stripeEvents).where(eq(stripeEvents.id, event.id));
-    throw err;
-  }
+  });
+  for (const effect of afterCommit) await effect();
 
   await cleanupStripeEvents();
 }

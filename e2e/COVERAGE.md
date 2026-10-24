@@ -82,3 +82,8 @@ Global Work performance follow-up: the deep-table realtime burst test now verifi
 - `promise-toasts.spec.ts`: real bulk move/archive and Trello import, board JSON downloads and rejected exports settle one mounted toast from loading to success/error, restore archived cards through the supported per-card endpoint (the former bulk restore request returned 400), keep saved card state, preserve dismissed loading toasts after late completion, and render at desktop/phone widths. `toast.service.spec.ts` covers exact loading/expiry/undo timer boundaries, concurrent settlement and dismissal/teardown races, and original rejection/value propagation that browser scheduling cannot reliably force.
 
 Timeline planning regressions (`timeline.spec.ts`): filtered blockers retain conflicts and critical paths; off-board date changes refresh live; observer bars open with mouse, keyboard and coarse-pointer touch; 100–2,000 cards keep a bounded row DOM and remain scrollable/searchable.
+
+- `billing-realtime.spec.ts`: a rolled-back billing plan conversion emits no board removal; committed
+  downgrades disable excess boards in a live sidebar, and upgrades make them navigable without reloading,
+  across a separate publisher process, real Valkey and the event outbox. Stripe response ordering,
+  duplicate Checkout and transaction-failure races are covered in `billing/reliability.itest.ts`.
