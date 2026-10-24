@@ -5,7 +5,8 @@ import { ActivatedRoute, Router } from "@angular/router";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
 import type { AutomationActionBody } from "@kanera/shared/dto";
 import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kanera/shared/schema";
-import type { WireAutomation, WireCardLabel, WireCustomField } from "@kanera/shared/events";
+import type { WireAutomation, WireCardLabel, WireChecklistTemplate, WireCustomField } from "@kanera/shared/events";
+import { WORKSPACE_TEMPLATES, type WorkspaceTemplate } from "@kanera/shared/workspace-templates";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -219,6 +220,17 @@ function customField(overrides: Partial<WireCustomField> = {}): WireCustomField 
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     options: [],
     ...overrides,
+  };
+}
+
+/** A workspace's lists, labels, fields and checklist templates as created from a workspace template. */
+function fromTemplate(template: WorkspaceTemplate) {
+  const id = (kind: string, index: number) => `${template.id}-${kind}-${index}`;
+  return {
+    lists: template.lists.map((list, index) => workspaceList({ id: id("list", index), name: list.name, inProgress: list.inProgress ?? false, position: `${index + 1}000.0000000000` })),
+    labels: template.labels.map((label, index) => cardLabel({ id: id("label", index), name: label.name })),
+    fields: template.customFields.map((field, index) => customField({ id: id("field", index), name: field.name, type: field.type as WireCustomField["type"] })),
+    templates: (template.checklistTemplates ?? []).map((checklist, index) => ({ id: id("checklist", index), title: checklist.title }) as WireChecklistTemplate),
   };
 }
 
@@ -1617,38 +1629,111 @@ describe("WorkspaceSettingsPage", () => {
     expect(component.addAutomationHint()).toBe("Workspaces can have up to 30 automations. Contact support if you need more.");
   });
 
-  it("names the workspace's own lists and labels in example automations", async () => {
+  it("still matches multi-word and stemmed hints", async () => {
     await render();
     const component = fixture.componentInstance;
     component.lists.set([
-      workspaceList({ id: "list-1", name: "Inbox" }),
-      workspaceList({ id: "list-2", name: "In Progress", position: "2000.0000000000" }),
-      workspaceList({ id: "list-3", name: "Ready for QA", position: "3000.0000000000" }),
-      workspaceList({ id: "list-4", name: "Complete", position: "4000.0000000000" }),
+      workspaceList({ id: "list-1", name: "Backlog" }),
+      workspaceList({ id: "list-2", name: "In-progress", position: "2000.0000000000" }),
+      workspaceList({ id: "list-3", name: "Completed", position: "3000.0000000000" }),
     ]);
-    component.labels.set([cardLabel({ id: "label-1", name: "Needs Review" })]);
+    component.labels.set([cardLabel({ id: "label-1", name: "Escalated" })]);
 
     const byId = new Map(component.automationRecipes().map((recipe) => [recipe.id, recipe]));
-    expect(byId.get("finish-cleanly")?.available).toBe(true);
-    expect(byId.get("finish-cleanly")?.detail).toBe("When a card enters Complete, mark it complete, clear its due date and remove the Needs Review label.");
-    // The review list is matched by name, not by position.
-    expect(byId.get("start-review")?.detail).toBe("When a card enters Ready for QA, add the Needs Review label.");
+    expect(byId.get("reopen-on-return")?.detail).toBe("When a card moves back into In-progress, mark it incomplete.");
+    expect(byId.get("finish-cleanly")?.detail).toBe("When a card enters Completed, mark it complete.");
+    expect(byId.get("escalate-consistently")?.detail).toBe("When the Escalated label is added, move the card to the top of its list.");
   });
 
-  it("offers an example without the ingredients it cannot match instead of inventing them", async () => {
+  it("builds realistic examples from each workspace template's own lists, labels and fields", async () => {
     await render();
     const component = fixture.componentInstance;
-    component.lists.set([workspaceList({ id: "list-1", name: "Inbox" }), workspaceList({ id: "list-2", name: "Complete", position: "2000.0000000000" })]);
-    // A text field that has nothing to do with months, and a label that is not a review flag: neither
-    // should be conscripted into an example just because it is the only one of its kind.
-    component.fields.set([customField({ id: "field-1", name: "Branch", type: "text" })]);
-    component.labels.set([cardLabel({ id: "label-1", name: "Design" })]);
+    const examplesFor = (templateId: string) => {
+      const data = fromTemplate(WORKSPACE_TEMPLATES.find((template) => template.id === templateId)!);
+      component.lists.set(data.lists);
+      component.labels.set(data.labels);
+      component.fields.set(data.fields);
+      component.templates.set(data.templates);
+      return new Map(component.automationRecipes().map((recipe) => [recipe.id, recipe]));
+    };
+
+    const dev = examplesFor("development-team");
+    expect(dev.get("label-by-list")?.detail).toBe("When a card enters Bugs / Issues / Feedback, add the Issue / Bug label.");
+    // "Planning / Review" sits before the work; the review step is the QA list after In Progress.
+    expect(dev.get("checklists-to-review")?.detail).toBe("When every checklist item on a card is ticked, move it to the top of Ready for QA.");
+    // Support is a kind of ticket, not a triage flag, and Wishlist owes nobody a reply.
+    expect(dev.get("request-response-target")?.available).toBe(false);
+
+    const support = examplesFor("operations-support");
+    expect(support.get("request-response-target")?.detail).toBe("When a card is created in Intake, set its due date to 2 days from now.");
+    expect(support.get("escalate-overdue")?.detail).toBe("When a card's due date arrives, move it to the top of Escalated and tick Escalated.");
+    // Resolved and Closed both end a ticket, so a ticked card has no single place to go.
+    expect(support.get("complete-to-done")?.available).toBe(false);
+
+    const sales = examplesFor("sales-crm");
+    expect(sales.get("flag-stalled")?.detail).toBe("When a card enters Follow-up, add the At Risk label.");
+    expect(sales.get("finish-cleanly")?.detail).toBe("When a card enters Won, mark it complete and remove the At Risk label.");
+    // A lost deal ticked complete must never be filed under Won.
+    expect(sales.get("complete-to-done")?.available).toBe(false);
+
+    const delivery = examplesFor("project-delivery");
+    expect(delivery.get("start-review")?.detail).toBe("When a card enters Review, apply the Delivery review checklist.");
+    expect(delivery.get("flag-long-running")?.detail).toBe("When tracked time on a card passes its Estimate, add the Risk label and comment on the card.");
+
+    // A label that only repeats its list's name says nothing the list does not.
+    expect(examplesFor("client-onboarding").get("label-by-list")?.available).toBe(false);
+  });
+
+  it("matches example ingredients at word starts, not inside unrelated words", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    // Each name contains a hint as a substring but means something else: Delivery is not a "live"
+    // list, Incomplete is not "complete", and Check-in is not a review step.
+    component.lists.set([
+      workspaceList({ id: "list-1", name: "Inbox" }),
+      workspaceList({ id: "list-2", name: "Check-in", position: "2000.0000000000" }),
+      workspaceList({ id: "list-3", name: "Delivery", position: "3000.0000000000" }),
+      workspaceList({ id: "list-4", name: "Incomplete", position: "4000.0000000000" }),
+      workspaceList({ id: "list-5", name: "Archive", position: "5000.0000000000" }),
+    ]);
+    component.labels.set([cardLabel({ id: "label-1", name: "Issue" })]);
 
     const byId = new Map(component.automationRecipes().map((recipe) => [recipe.id, recipe]));
-    expect(byId.get("stamp-completion-month")?.available).toBe(false);
-    expect(byId.get("stamp-completion-month")?.requirement).toBe("Needs a text field named for a month or period.");
-    // The label drops out of the sentence and out of the rule, rather than being used at random.
-    expect(byId.get("finish-cleanly")?.detail).toBe("When a card enters Complete, mark it complete and clear its due date.");
+    // No done list by name, and no positional guess: the last list is as often Archive as Done.
+    expect(byId.get("finish-cleanly")?.available).toBe(false);
+    expect(byId.get("finish-cleanly")?.requirement).toBe("Needs a list named Done, Complete or similar.");
+    expect(byId.get("checklists-to-review")?.available).toBe(false);
+    expect(byId.get("escalate-consistently")?.available).toBe(false);
+  });
+
+  it("only moves ticked work to a done list when there is one way for work to end", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList({ id: "list-1", name: "To Do" }), workspaceList({ id: "list-2", name: "Done", position: "2000.0000000000" })]);
+    api.post.mockClear();
+    api.post.mockResolvedValueOnce(automation({ id: "automation-new", enabled: false, triggerType: "card_marked_complete", triggerListId: null }));
+
+    await component.applyAutomationRecipe("complete-to-done");
+
+    expect(api.post).toHaveBeenCalledWith("/workspaces/workspace-1/automations", {
+      triggerType: "card_marked_complete",
+      actions: [{ type: "move_to_list", config: { listId: "list-2", placement: "top" } }],
+    });
+
+    component.lists.update((lists) => [...lists, workspaceList({ id: "list-3", name: "Cancelled", position: "3000.0000000000" })]);
+    expect(component.automationRecipes().find((recipe) => recipe.id === "complete-to-done")?.available).toBe(false);
+  });
+
+  it("sets a response target only when a request is created, never when it moves back", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList({ id: "list-1", name: "Support requests" })]);
+    api.post.mockClear();
+    api.post.mockResolvedValueOnce(automation({ id: "automation-new", enabled: false, triggerListId: "list-1" }));
+
+    await component.applyAutomationRecipe("request-response-target");
+
+    expect(api.post).toHaveBeenCalledWith("/workspaces/workspace-1/automations", expect.objectContaining({ triggerListId: "list-1", applyOnCreate: true, applyOnMove: false }));
   });
 
   it("opens the examples menu from the automations toolbar", async () => {
@@ -1672,7 +1757,7 @@ describe("WorkspaceSettingsPage", () => {
     // out of the empty state.
     const panel = fixture.nativeElement.querySelector("k-automation-examples") as HTMLElement | null;
     expect(panel).not.toBeNull();
-    expect(panel?.textContent).toContain("When a card enters Done, mark it complete and clear its due date.");
+    expect(panel?.textContent).toContain("When a card enters Done, mark it complete.");
   });
 
   it("creates the example automation the menu describes", async () => {
@@ -1692,11 +1777,105 @@ describe("WorkspaceSettingsPage", () => {
       triggerListId: "list-2",
       applyOnCreate: true,
       applyOnMove: true,
+      // No clear_due_date: a finished card's dates are its record on the Timeline.
+      actions: [{ type: "set_completion", config: { completed: true } }],
+    });
+  });
+
+  it("hides examples whose trigger needs a planning feature the workspace has switched off", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList({ id: "list-1", name: "Inbox", inProgress: true }), workspaceList({ id: "list-2", name: "Done", position: "2000.0000000000" })]);
+    const offered = () => component.automationRecipes().map((recipe) => recipe.id);
+
+    expect(offered()).toEqual(expect.arrayContaining(["flag-long-running", "surface-on-start-date", "pick-up-unblocked", "catch-scheduling-conflicts"]));
+
+    // Conflicts need both: without dependencies nothing chains, so nothing can conflict.
+    component.featureDrafts.set({ dependencies: false, timeline: true, inProgress: true });
+    expect(offered()).not.toContain("pick-up-unblocked");
+    expect(offered()).not.toContain("catch-scheduling-conflicts");
+    expect(offered()).toContain("surface-on-start-date");
+
+    // The organisation's master switch wins over the workspace's own.
+    component.featureDrafts.set({ dependencies: true, timeline: true, inProgress: true });
+    component.organisationFeatures.set({ dependencies: true, timeline: false, inProgress: false });
+    expect(offered()).not.toContain("surface-on-start-date");
+    expect(offered()).not.toContain("catch-scheduling-conflicts");
+    expect(offered()).not.toContain("flag-long-running");
+    expect(offered()).toContain("pick-up-unblocked");
+  });
+
+  it("does not create a hidden example even when asked for it by id", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList({ id: "list-1", name: "Inbox" })]);
+    component.featureDrafts.set({ dependencies: false, timeline: true, inProgress: true });
+    api.post.mockClear();
+
+    await component.applyAutomationRecipe("pick-up-unblocked");
+
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("finds the in-progress list by name once time in progress is switched off", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    // "Inbox" still carries the In progress marking from before the feature was switched off; the
+    // admin can no longer see that marking, so the example must not act on it.
+    component.lists.set([
+      workspaceList({ id: "list-1", name: "Inbox", inProgress: true }),
+      workspaceList({ id: "list-2", name: "Doing", position: "2000.0000000000" }),
+    ]);
+    component.featureDrafts.set({ dependencies: true, timeline: true, inProgress: false });
+
+    const reopen = () => component.automationRecipes().find((recipe) => recipe.id === "reopen-on-return");
+    expect(reopen()?.detail).toBe("When a card moves back into Doing, mark it incomplete.");
+
+    component.lists.set([workspaceList({ id: "list-1", name: "Inbox", inProgress: true })]);
+    expect(reopen()?.available).toBe(false);
+    expect(reopen()?.requirement).toBe("Needs a list named In progress, Doing or similar.");
+  });
+
+  it("flags long-running work against the workspace's own in-progress limit", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList({ id: "list-1", name: "Inbox" })]);
+    component.labels.set([cardLabel({ id: "label-1", name: "At risk" })]);
+
+    // Time is only tracked in lists marked In progress; without one the rule could never fire.
+    expect(component.automationRecipes().find((recipe) => recipe.id === "flag-long-running")?.available).toBe(false);
+
+    component.lists.set([workspaceList({ id: "list-1", name: "Inbox" }), workspaceList({ id: "list-2", name: "Building", inProgress: true, position: "2000.0000000000" })]);
+    expect(component.automationRecipes().find((recipe) => recipe.id === "flag-long-running")?.detail).toBe(
+      "When a card has been in progress longer than this workspace's limit, add the At risk label and comment on the card.",
+    );
+
+    api.post.mockClear();
+    api.post.mockResolvedValueOnce(automation({ id: "automation-new", enabled: false, triggerType: "card_in_progress_too_long", triggerListId: null }));
+    await component.applyAutomationRecipe("flag-long-running");
+
+    expect(api.post).toHaveBeenCalledWith("/workspaces/workspace-1/automations", {
+      triggerType: "card_in_progress_too_long",
+      triggerThresholdSource: "workspace",
       actions: [
-        { type: "set_completion", config: { completed: true } },
-        { type: "clear_due_date", config: {} },
+        { type: "add_labels", config: { labelIds: ["label-1"] } },
+        { type: "post_comment", config: { template: "This card has been in progress longer than this workspace's limit. Check whether it is stuck or needs splitting up." } },
       ],
     });
+  });
+
+  it("builds the planning examples from the workspace's labels", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList({ id: "list-1", name: "Inbox" })]);
+    component.labels.set([cardLabel({ id: "label-1", name: "Up next" }), cardLabel({ id: "label-2", name: "Waiting" }), cardLabel({ id: "label-3", name: "Schedule conflict" })]);
+
+    const byId = new Map(component.automationRecipes().map((recipe) => [recipe.id, recipe]));
+    expect(byId.get("surface-on-start-date")?.detail).toBe("When a card's start date arrives, move it to the top of its list and add the Up next label.");
+    expect(byId.get("pick-up-unblocked")?.detail).toBe("When a card's last blocker is finished, move it to the top of its list, remove the Waiting label and comment that it is ready.");
+    expect(byId.get("catch-scheduling-conflicts")?.detail).toBe("When a card is planned to start before one of its blockers finishes, add the Schedule conflict label and comment on the card.");
+    // Planning sits between in-progress work and wrap-up, in catalogue order.
+    expect(component.automationRecipes().filter((recipe) => recipe.group === "planning").map((recipe) => recipe.id)).toEqual(["surface-on-start-date", "pick-up-unblocked", "catch-scheduling-conflicts"]);
   });
 
   it("does not create an example automation whose ingredients have gone", async () => {

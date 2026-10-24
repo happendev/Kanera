@@ -26663,6 +26663,13 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
+  "6668584344316209309": "Planning",
+  "@6668584344316209309": {
+    "description": "Group heading in the example automations menu - start dates and dependencies",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
   "1685220686749149766": "Wrap-up",
   "@1685220686749149766": {
     "description": "Group heading in the example automations menu",
@@ -26670,71 +26677,57 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "7903443276095383180": "Triage new cards",
-  "@7903443276095383180": {
+  "782740425923533219": "Label work by where it lands",
+  "@782740425923533219": {
     "description": "Example automation title",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "4627403810266740844": "When a card is created in your first list, label it for triage and apply your intake checklist.",
-  "@4627403810266740844": {
+  "6550845332925669553": "When a card enters a list for one kind of work, such as bugs, add the matching label.",
+  "@6550845332925669553": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "1503311611374544365": "Needs a triage or support label, or an intake checklist template.",
-  "@1503311611374544365": {
+  "7940482114947643388": "Needs a list and a label for the same kind of work, such as a Bugs list and a Bug label.",
+  "@7940482114947643388": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "8306348902105578940": "When a card is created in {$list}, add the {$label} label and apply the {$checklist} checklist.",
-  "@8306348902105578940": {
+  "3957122228900518139": "When a card enters {$list}, add the {$label} label.",
+  "@3957122228900518139": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "5806682729104364661": "When a card is created in {$list}, add the {$label} label.",
-  "@5806682729104364661": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "2198839467159093886": "When a card is created in {$list}, apply the {$checklist} checklist.",
-  "@2198839467159093886": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "5018129656607064644": "Give new work a deadline",
-  "@5018129656607064644": {
+  "2944323796357229789": "Set a response target for requests",
+  "@2944323796357229789": {
     "description": "Example automation title",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "686976434451799336": "When a card lands in your first list, set its due date to tomorrow.",
-  "@686976434451799336": {
+  "6522330758537349686": "When a request is created in your intake or support list, set its due date to 2 days from now.",
+  "@6522330758537349686": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "5559406614057102459": "Add a list first.",
-  "@5559406614057102459": {
+  "5446031394314064456": "Needs an intake, support or requests list.",
+  "@5446031394314064456": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "5070447630181802625": "When a card lands in {$list}, set its due date to tomorrow.",
-  "@5070447630181802625": {
+  "3969979837600904424": "When a card is created in {$list}, set its due date to 2 days from now.",
+  "@3969979837600904424": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -26747,23 +26740,16 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "1023928883542796000": "When a card enters your review list, apply the review checklist and flag it as needing review.",
-  "@1023928883542796000": {
+  "3058465398456436451": "When a card enters your review list, apply your review checklist.",
+  "@3058465398456436451": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "8084501379855887786": "Needs a review or QA list, plus a matching checklist template or label.",
-  "@8084501379855887786": {
+  "7065283537409870400": "Needs a review or QA list and a review checklist template.",
+  "@7065283537409870400": {
     "description": "What an example automation needs before it can be used",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "2605003512253421180": "When a card enters {$list}, apply the {$checklist} checklist and add the {$label} label.",
-  "@2605003512253421180": {
-    "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
@@ -26775,37 +26761,23 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "3957122228900518139": "When a card enters {$list}, add the {$label} label.",
-  "@3957122228900518139": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "1506792591871466814": "Advance checklist-driven work",
-  "@1506792591871466814": {
+  "3241287137709749967": "Send finished work to review",
+  "@3241287137709749967": {
     "description": "Example automation title",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "1921215936748001249": "When every checklist item on a card is ticked, move it on and drop the review label.",
-  "@1921215936748001249": {
+  "1641882507236246046": "When every checklist item on a card is ticked, move it to your review list.",
+  "@1641882507236246046": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "2990281855939565136": "Add a second list to move finished work into.",
-  "@2990281855939565136": {
+  "8788338231230153500": "Needs a review or QA list after your in-progress list.",
+  "@8788338231230153500": {
     "description": "What an example automation needs before it can be used",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "1696315824837890058": "When every checklist item on a card is ticked, move it to the top of {$list} and remove the {$label} label.",
-  "@1696315824837890058": {
-    "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
@@ -26817,15 +26789,36 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "4348971933595685644": "Surface overdue work",
-  "@4348971933595685644": {
+  "1605461074923568695": "Escalate overdue work",
+  "@1605461074923568695": {
     "description": "Example automation title",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "796478531746525027": "When a card's due date arrives, float it to the top of its list so nobody has to go looking.",
-  "@796478531746525027": {
+  "7535617314887983397": "When a card's due date arrives, move it to your escalation list, or to the top of its own list.",
+  "@7535617314887983397": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5559406614057102459": "Add a list first.",
+  "@5559406614057102459": {
+    "description": "What an example automation needs before it can be used",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6260126437541810065": "When a card's due date arrives, move it to the top of {$list} and tick {$field}.",
+  "@6260126437541810065": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1224208110483972601": "When a card's due date arrives, move it to the top of {$list}.",
+  "@1224208110483972601": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -26845,6 +26838,90 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
+  "2806125924536139712": "Flag stalled work as at risk",
+  "@2806125924536139712": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1110286247729342076": "When a card moves into your blocked or follow-up list, add your at-risk label.",
+  "@1110286247729342076": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5120893601864912137": "Needs a blocked or follow-up list and a label like At risk.",
+  "@5120893601864912137": {
+    "description": "What an example automation needs before it can be used",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5571422608566823494": "Flag work that is dragging on",
+  "@5571422608566823494": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6186437914378228415": "When a card has been in progress longer than this workspace's limit, flag it and comment on the card.",
+  "@6186437914378228415": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5124525400203183158": "Needs a list marked In progress.",
+  "@5124525400203183158": {
+    "description": "What an example automation needs before it can be used",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "3540630765342999174": "Tracked time on this card has passed its estimate. Check whether the estimate or the scope needs to change.",
+  "@3540630765342999174": {
+    "description": "Comment an example automation posts on a card - written in the admin's language when they create the rule",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "2447777883507932318": "When tracked time on a card passes its {$field}, add the {$label} label and comment on the card.",
+  "@2447777883507932318": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "8805327126986992539": "When tracked time on a card passes its {$field}, comment on the card.",
+  "@8805327126986992539": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "3067725287680684521": "This card has been in progress longer than this workspace's limit. Check whether it is stuck or needs splitting up.",
+  "@3067725287680684521": {
+    "description": "Comment an example automation posts on a card - written in the admin's language when they create the rule",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6290339178944462636": "When a card has been in progress longer than this workspace's limit, add the {$label} label and comment on the card.",
+  "@6290339178944462636": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6694235965112282107": "When a card has been in progress longer than this workspace's limit, comment on the card.",
+  "@6694235965112282107": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
   "2059651021711399305": "Escalate consistently",
   "@2059651021711399305": {
     "description": "Example automation title",
@@ -26859,8 +26936,8 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "3349514949878128641": "Needs a label like Escalated, Blocked or Urgent.",
-  "@3349514949878128641": {
+  "571120888780872513": "Needs a label like Escalated, Urgent or Critical.",
+  "@571120888780872513": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -26880,6 +26957,97 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
+  "660827724568877544": "Surface work on its start date",
+  "@660827724568877544": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1325759832895615986": "When a card's start date arrives, move it to the top of its list so it is picked up on time.",
+  "@1325759832895615986": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6671733656155471105": "When a card's start date arrives, move it to the top of its list and add the {$label} label.",
+  "@6671733656155471105": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1286102029037556822": "When a card's start date arrives, move it to the top of its list.",
+  "@1286102029037556822": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1572530698562774169": "Pick up unblocked work",
+  "@1572530698562774169": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "8924315437461178579": "When a card's last blocker is finished, move it to the top of its list and comment that it is ready.",
+  "@8924315437461178579": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4654628592405453633": "Everything this card was waiting on is finished, so it is ready to pick up.",
+  "@4654628592405453633": {
+    "description": "Comment an example automation posts on a card - written in the admin's language when they create the rule",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "7955438045665193994": "When a card's last blocker is finished, move it to the top of its list, remove the {$label} label and comment that it is ready.",
+  "@7955438045665193994": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6079889226925531250": "Catch scheduling conflicts",
+  "@6079889226925531250": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6259866597922208364": "When a card is planned to start before one of its blockers finishes, flag it and comment on the card.",
+  "@6259866597922208364": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "8685164768543542268": "This card is planned to start before one of its blockers finishes. Adjust the dates on the Timeline.",
+  "@8685164768543542268": {
+    "description": "Comment an example automation posts on a card - written in the admin's language when they create the rule",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4699240975076228971": "When a card is planned to start before one of its blockers finishes, add the {$label} label and comment on the card.",
+  "@4699240975076228971": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "177964634738903396": "When a card is planned to start before one of its blockers finishes, comment on the card.",
+  "@177964634738903396": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
   "7545659921374567308": "Finish work cleanly",
   "@7545659921374567308": {
     "description": "Example automation title",
@@ -26887,29 +27055,57 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "3006892802359903266": "When a card reaches your done list, mark it complete and clear the deadline it no longer needs.",
-  "@3006892802359903266": {
+  "5561173051693700446": "When a card reaches your done list, mark it complete and take off any at-risk label.",
+  "@5561173051693700446": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "8519643610154922941": "Add a second list to act as the done list.",
-  "@8519643610154922941": {
+  "7476318065245510993": "Needs a list named Done, Complete or similar.",
+  "@7476318065245510993": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "6153750226436589943": "When a card enters {$list}, mark it complete, clear its due date and remove the {$label} label.",
-  "@6153750226436589943": {
+  "7459141560951318061": "When a card enters {$list}, mark it complete and remove the {$label} label.",
+  "@7459141560951318061": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "8769540617003066484": "When a card enters {$list}, mark it complete and clear its due date.",
-  "@8769540617003066484": {
+  "2085111536126167427": "When a card enters {$list}, mark it complete.",
+  "@2085111536126167427": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5899753239714343044": "Move completed work to the done list",
+  "@5899753239714343044": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "265703085531634779": "When someone ticks a card complete, move it to your done list.",
+  "@265703085531634779": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "7768186650423274011": "Needs exactly one list where work ends, such as Done.",
+  "@7768186650423274011": {
+    "description": "What an example automation needs before it can be used",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4229723348065177271": "When someone ticks a card complete, move it to the top of {$list}.",
+  "@4229723348065177271": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -26929,8 +27125,8 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "5124525400203183158": "Needs a list marked In progress.",
-  "@5124525400203183158": {
+  "2640724493883475949": "Needs a list named In progress, Doing or similar.",
+  "@2640724493883475949": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -26950,62 +27146,6 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "1890742285632026533": "Clean up completed work",
-  "@1890742285632026533": {
-    "description": "Example automation title",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "6995230851302275964": "When a card is marked complete, clear its due date so it stops showing as due.",
-  "@6995230851302275964": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "6565193085827538305": "When a card is marked complete, clear its due date and remove the {$label} label.",
-  "@6565193085827538305": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "3722309172806786356": "When a card is marked complete, clear its due date.",
-  "@3722309172806786356": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "498905658137988718": "Carry an estimate into actuals",
-  "@498905658137988718": {
-    "description": "Example automation title",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "6403921968094925508": "When a card is finished, copy its estimate into the actuals field so the two can be compared.",
-  "@6403921968094925508": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "6295435918003569545": "Needs two number fields, one for the estimate and one for actuals.",
-  "@6295435918003569545": {
-    "description": "What an example automation needs before it can be used",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "242636415056168381": "When a card enters {$list}, copy {$sourceField} into {$targetField} if it is still empty.",
-  "@242636415056168381": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
   "1729719499939257215": "Stamp the month work finished",
   "@1729719499939257215": {
     "description": "Example automation title",
@@ -27013,22 +27153,22 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "3073178789108828279": "When a card is marked complete, record the month in your reporting field.",
-  "@3073178789108828279": {
+  "5870809208901989933": "When a card reaches your done list, record the month in your billing or reporting field.",
+  "@5870809208901989933": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "7313300469009893129": "Needs a text field named for a month or period.",
-  "@7313300469009893129": {
+  "2872439053006106877": "Needs a done list and a text field named for a month or period.",
+  "@2872439053006106877": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "4088957989178157285": "When a card is marked complete, fill {$field} with the current month.",
-  "@4088957989178157285": {
+  "3134033758963991664": "When a card enters {$list}, fill {$field} with the current month.",
+  "@3134033758963991664": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
