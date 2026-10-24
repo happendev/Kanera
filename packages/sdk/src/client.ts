@@ -42,7 +42,7 @@ export interface KaneraClientOptions {
 }
 
 const DEFAULT_BASE_URL = "https://api.kanera.app";
-const SDK_VERSION = "1.9.0";
+const SDK_VERSION = "1.10.0";
 const RETRYABLE_METHODS = new Set(["GET", "HEAD", "DELETE", "PUT"]);
 
 function encodeQuery(query: Query | undefined): string {
