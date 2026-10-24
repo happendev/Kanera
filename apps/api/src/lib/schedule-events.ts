@@ -1,8 +1,8 @@
 import type { ScheduleTransition } from "@kanera/shared/dto";
 import { compactWireCard, SERVER_EVENTS } from "@kanera/shared/events";
 import { dayNumber, workingDaysBetween } from "@kanera/shared/schedule";
-import { boards, boardScheduleState, cards, cardScheduleState, eventOutbox, scheduleRecheckQueue, workspaces, type Card } from "@kanera/shared/schema";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { activityEvents, boards, boardScheduleState, cards, cardScheduleState, eventOutbox, scheduleRecheckQueue, workspaces, type Card } from "@kanera/shared/schema";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { Tx, TxOnly } from "../db.js";
 import { loadBoardScheduleScope, scheduleOf, summarizeSchedule } from "./schedule-graph.js";
 import { toWireCard } from "./wire-card.js";
@@ -106,6 +106,8 @@ export interface ScheduleBoundary {
 
 export interface BoardScheduleEvaluation {
   boundaries: ScheduleBoundary[];
+  /** When the board was last evaluated: every edit behind these boundaries happened after it. */
+  previousEvaluatedAt: Date | null;
   /** Persists the new verdict as the latch. Call after the boundaries have been acted on, in the same transaction. */
   commit: () => Promise<void>;
 }
@@ -126,7 +128,7 @@ export async function evaluateBoardSchedule(tx: TxOnly, boardId: string): Promis
   const [owner] = await tx.select({ workspaceId: boards.workspaceId }).from(boards).where(eq(boards.id, boardId)).limit(1);
   if (owner && !(await loadWorkspaceFeatures(owner.workspaceId, tx)).timeline) {
     await clearScheduleLatches(tx, [boardId]);
-    return { boundaries: [], commit: async () => {} };
+    return { boundaries: [], previousEvaluatedAt: null, commit: async () => {} };
   }
   const scope = await loadBoardScheduleScope(tx, boardId);
   const schedule = scheduleOf(scope);
@@ -196,12 +198,26 @@ export async function evaluateBoardSchedule(tx: TxOnly, boardId: string): Promis
       set: { projectedFinish: summary.projectedFinish, latestDue: summary.latestDue, updatedAt: now },
     });
   };
-  return { boundaries, commit };
+  return { boundaries, previousEvaluatedAt: previousBoard?.updatedAt ?? null, commit };
 }
 
 async function blockerSummary(tx: TxOnly, cardId: string): Promise<Pick<Card, "id" | "key" | "title" | "boardId"> | undefined> {
   const [row] = await tx.select({ id: cards.id, key: cards.key, title: cards.title, boardId: cards.boardId }).from(cards).where(eq(cards.id, cardId)).limit(1);
   return row;
+}
+
+/**
+ * The person to leave out of a conflict notification: the only human who edited the card or its
+ * blocker since the board was last evaluated. The recheck queue merges bursts of writes and keeps no
+ * actor, so this reads the two cards' activity instead. Several editors, or any API key, agent or
+ * automation among them, means nobody is left out: the change was not one person's own doing.
+ */
+export async function scheduleConflictAuthor(tx: TxOnly, cardIds: readonly string[], since: Date | null): Promise<string | null> {
+  if (!since || cardIds.length === 0) return null;
+  const rows = await tx.selectDistinct({ actorId: activityEvents.actorId, actorKind: activityEvents.actorKind }).from(activityEvents)
+    .where(and(eq(activityEvents.entityType, "card"), inArray(activityEvents.entityId, [...cardIds]), gte(activityEvents.createdAt, since)));
+  if (rows.length !== 1 || rows[0]!.actorKind !== "user") return null;
+  return rows[0]!.actorId;
 }
 
 /**

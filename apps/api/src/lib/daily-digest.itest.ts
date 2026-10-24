@@ -167,6 +167,33 @@ function deps() {
   };
 }
 
+// Late starts ride along like the queue: only cards that never went in progress, only where an
+// in-progress list makes "started" knowable, never one already listed as overdue.
+void test("the digest lists the recipient's cards that missed their planned start", async () => {
+  const f = await seed();
+  const [working] = await db.insert(lists).values({ workspaceId: f.workspace.id, name: "Working", position: "2000.0000000000", inProgress: true }).returning();
+  const list = (await db.select().from(lists).where(eq(lists.name, "Doing")))[0]!;
+  const late = await insertCard(list.id, f.board.id, f.member.id, "Late", "2026-06-10");
+  const started = await insertCard(list.id, f.board.id, f.member.id, "Started earlier", "2026-06-10");
+  const startsToday = await insertCard(list.id, f.board.id, f.member.id, "Starts today", "2026-06-10");
+  await db.update(cards).set({ startDateLocalDate: "2026-05-20" }).where(eq(cards.id, late.id));
+  await db.update(cards).set({ startDateLocalDate: "2026-05-20", inProgressSeconds: 3600 }).where(eq(cards.id, started.id));
+  await db.update(cards).set({ startDateLocalDate: "2026-05-26" }).where(eq(cards.id, startsToday.id));
+  await db.update(cards).set({ startDateLocalDate: "2026-05-20" }).where(eq(cards.id, f.overdue.id));
+
+  assert.equal(await runDailyDigestSweep(deps(), new Date("2026-05-26T07:15:00Z")), 1);
+  const [row] = await db.select().from(emailQueue).where(eq(emailQueue.type, "daily_digest"));
+  const data = row!.data as DailyDigestEmailQueueData;
+  assert.deepEqual(data.lateStarts?.map((item) => [item.title, item.dueLabel]), [["Late", "Planned start 20 May"]]);
+
+  // Without an in-progress list nothing can be known to have started, so the section stays empty.
+  await db.update(lists).set({ inProgress: false }).where(eq(lists.id, working!.id));
+  await db.delete(emailQueue);
+  assert.equal(await runDailyDigestSweep(deps(), new Date("2026-05-26T07:16:00Z")), 1);
+  const [again] = await db.select().from(emailQueue).where(eq(emailQueue.type, "daily_digest"));
+  assert.deepEqual((again!.data as DailyDigestEmailQueueData).lateStarts, []);
+});
+
 async function seed() {
   const [client] = await db.insert(clients).values({ name: "Acme" }).returning();
   const [workspace] = await db.insert(workspaces).values({ clientId: client!.id, name: "Delivery" }).returning();

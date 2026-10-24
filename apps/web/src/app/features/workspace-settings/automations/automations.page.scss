@@ -965,6 +965,11 @@
     width: 100%;
     min-height: 44px;
     justify-content: flex-start;
+    // Longer toggles ("Include cards already past the limit") wrap instead of running off the card.
+    height: auto;
+    padding-block: 6px;
+    white-space: normal;
+    text-align: start;
   }
 
   .aa-fields,

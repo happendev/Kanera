@@ -1,5 +1,6 @@
 import type { ColorToken } from "@kanera/shared/colors";
 import { workingMs } from "@kanera/shared/time-in-progress";
+import { addWorkingDays, dateKeyOf, dayNumber, nextWorkingDayOnOrAfter, lastWorkingDayOnOrBefore } from "@kanera/shared/schedule";
 import { cardPath } from "@kanera/shared/card-links";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS, DEFAULT_WORKSPACE_LABELS, WORKSPACE_TEMPLATES } from "@kanera/shared/workspace-templates";
 import {
@@ -173,6 +174,8 @@ type SeedChecklistItem = {
 
 type SeedChecklist = {
   title: string;
+  /** Narrative sign-offs must stay on their authored items instead of being distributed for variety. */
+  preserveCompletions?: boolean;
   items: SeedChecklistItem[];
 };
 
@@ -186,6 +189,8 @@ type SeedCard = {
   assignees: SeedUserKey[];
   labels: string[];
   dueOffsetDays?: number;
+  /** Actual calendar days from seed day; null explicitly keeps a due-only milestone. */
+  startOffsetDays?: number | null;
   dueDateSlot?: CardDueDateSlot;
   fieldValues?: Record<string, SeedFieldValue>;
   attachments?: SeedAttachment[];
@@ -1144,8 +1149,8 @@ API reference: https://docs.kanera.app/api`,
             createdBy: "marcus",
             assignees: ["ben", "marcus"],
             labels: ["Feature / Enhancement"],
-            dueOffsetDays: 9,
-            dueDateSlot: "afternoon",
+            // A booked discovery start, with the delivery estimate still to be agreed.
+            startOffsetDays: 7,
             fieldValues: { Branch: "feature/tablet-board-overview", "Billing Hours": 9, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
             attachments: [{ asset: "tabletBoardOverview", uploadedBy: "zoe", useAsCover: true }],
           },
@@ -1160,6 +1165,7 @@ API reference: https://docs.kanera.app/api`,
             assignees: ["priya"],
             labels: ["Reporting", "Feature / Enhancement"],
             dueOffsetDays: 18,
+            startOffsetDays: null,
             fieldValues: { Branch: "spike/mobile-auth-telemetry", "Billing Hours": 2.5, "Billing Month": seedMonthLabel(1), Client: "Sprintforge" },
           },
           {
@@ -1190,7 +1196,7 @@ API reference: https://docs.kanera.app/api`,
             createdBy: "ben",
             assignees: ["ben"],
             labels: ["Feature / Enhancement"],
-            dueOffsetDays: 16,
+            // An uncommitted idea belongs in the Timeline's Unscheduled group.
             fieldValues: { Branch: "spike/mobile-card-swipes", "Billing Hours": 4, "Billing Month": seedMonthLabel(1), Client: "Sprintforge" },
           },
           {
@@ -1345,7 +1351,8 @@ function buildMarketingWorkspace(): SeedWorkspace {
     groups: readonly MarketingCardGroup[],
   ): SeedCard[] => groups.flatMap((group) => group.cards.map((card, index) => {
     const { title, assignee } = card;
-    const isDone = group.list === "Done";
+    const isMessagingSignedOff = title === "Confirm final product messaging";
+    const isDone = group.list === "Done" || isMessagingSignedOff;
     const isHero = title === "Prepare autumn campaign launch";
     const inferredFields = fieldValuesForMarketingCard(title, group.list);
     const fieldValues = inferredFields || card.fieldValues
@@ -1355,7 +1362,8 @@ function buildMarketingWorkspace(): SeedWorkspace {
     return {
       title,
       description: note(...card.description),
-      list: group.list,
+      // Keep the authored order (and existing card numbers), while reflecting the signed-off input.
+      list: isMessagingSignedOff ? "Done" : group.list,
       createdBy: card.createdBy ?? (group.list === "Ideas & Requests" ? "grace" : assignee),
       assignees: [assignee, ...(card.additionalAssignees ?? [])],
       labels: card.labels ?? labelsForMarketingCard(title),
@@ -1368,21 +1376,22 @@ function buildMarketingWorkspace(): SeedWorkspace {
       watchers: card.watchers,
       notificationActivities: card.notificationActivities,
       createdDaysAgo: card.createdDaysAgo ?? (isDone ? 18 + index * 3 : 4 + index),
-      ...(isDone ? { completedBy: assignee, completedDaysAgo: 3 + index * 2 } : {}),
+      ...(isDone ? { completedBy: assignee, completedDaysAgo: isMessagingSignedOff ? 0 : 3 + index * 2 } : {}),
       ...(isHero ? {
         description: note(
           "Coordinate the final preparation for the autumn campaign launch across creative, content, web, email, social, and partner activity.",
-          "The launch is waiting on final product messaging. Once it lands, Ben will run the final approval pass with Amelia and publish Grace's hour-by-hour launch schedule.",
+          "Product messaging is signed off. Ben will coordinate the final approval pass with Amelia; launch readiness remains blocked by {{campaignApprovalKey}}. Grace maintains the hour-by-hour launch schedule.",
           "Use this as the single readiness view; channel-specific production stays on the linked web, content, creative, and events boards.",
         ),
         watchers: ["amelia", "zoe", "leo", "omar", "grace"] as SeedUserKey[],
-        attachments: [{ asset: "campaignLaunchReadiness" as const, uploadedBy: "ben" as const, useAsCover: true }],
+        attachments: [{ asset: "campaignLaunchReadiness" as const, uploadedBy: "ben" as const, useAsCover: false }],
         checklists: [{
           title: "Launch readiness",
+          preserveCompletions: true,
           items: [
             { text: "Confirm final product messaging" },
             { text: "Approve campaign graphics", completedBy: "amelia" as const, completedOffsetHours: 8 },
-            { text: "Verify landing-page tracking", completedBy: "leo" as const, completedOffsetHours: 12 },
+            { text: "Verify landing-page tracking" },
             { text: "Publish the launch-day schedule" },
           ],
         }],
@@ -2983,7 +2992,7 @@ Shared plan for the autumn launch across creative, content, web, email, social, 
 | Web & measurement | Leo Santos | Tracking verified on the live page |
 | Partners & events | Omar Ibrahim | Partner copy agreed in writing |
 
-> **Blocked:** the launch waits on product confirming the headline promise. Channels can keep producing, but nothing is scheduled or sent with placeholder wording.
+> **Blocked:** product messaging is signed off. The launch now waits on Amelia's final package approval. Grace maintains the hour-by-hour launch schedule, and channel owners keep their go-live checks on the launch card.
 
 ## Launch-day rules
 
@@ -3928,7 +3937,7 @@ function realisticChecklistItems(
   }
 
   return checklist.items.map((item, index) => {
-    const completion = completedIndexes.get(index);
+    const completion = checklist.preserveCompletions ? item : completedIndexes.get(index);
     return {
       ...item,
       assignee: assignedIndexes.has(index) ? item.assignee : undefined,
@@ -3982,12 +3991,40 @@ function formatLocalDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-// Roughly two of three dated cards get a planned start one to seven days ahead of their due date,
-// so the Timeline has bars of varied length to draw; the rest stay points, as every card was before
-// the start date existed. The start is derived from the due date, so it can never land after it.
-function seedStartDate(dueDate: Date | null, cardIndex: number): string | null {
-  if (!dueDate || cardIndex % 3 === 2) return null;
-  return formatLocalDate(addDays(dueDate, -(1 + (cardIndex * 5) % 7)));
+function seedCardSchedule(input: {
+  baseDate: Date;
+  seed: Pick<SeedCard, "list" | "dueOffsetDays" | "startOffsetDays" | "dueDateSlot">;
+  cardIndex: number;
+  createdAt: Date;
+  completedAt: Date | null;
+  timezone: string;
+}) {
+  const { baseDate, seed, cardIndex, createdAt, completedAt, timezone } = input;
+  // Completed outcomes belong beside their historical activity, rather than carrying a deadline
+  // relative to today's reset that can be months after they actually shipped.
+  const dueDate = completedAt ?? (seed.dueOffsetDays === undefined ? null : seedDueDate(baseDate, seed.dueOffsetDays));
+  const dueDateLocalDate = dueDate ? formatLocalDate(dueDate) : null;
+  let startDateLocalDate: string | null = null;
+  if (seed.startOffsetDays !== undefined) {
+    startDateLocalDate = seed.startOffsetDays === null ? null
+      : dateKeyOf(nextWorkingDayOnOrAfter(dayNumber(formatLocalDate(addDays(baseDate, seed.startOffsetDays)))));
+  } else if (dueDate && (completedAt || cardIndex % 3 !== 2)) {
+    let start = addWorkingDays(dayNumber(dueDateLocalDate!), -(1 + cardIndex % 5));
+    // A card already being implemented or reviewed must not be planned to start in the future.
+    if (["In Progress", "Doing", "Implementing", "Ready for QA", "Awaiting Feedback", "Review & Approval", "Monitoring", "Follow-up"].includes(seed.list)) {
+      start = Math.min(start, lastWorkingDayOnOrBefore(dayNumber(formatLocalDate(baseDate))));
+    }
+    startDateLocalDate = dateKeyOf(Math.max(start, dayNumber(formatLocalDate(createdAt))));
+  }
+  if (startDateLocalDate && dueDateLocalDate && startDateLocalDate > dueDateLocalDate) {
+    startDateLocalDate = dueDateLocalDate;
+  }
+  return {
+    startDateLocalDate,
+    dueDateLocalDate,
+    dueDateSlot: dueDate ? seed.dueDateSlot ?? "anyTime" : null,
+    dueDateTimezone: dueDate ? timezone : null,
+  };
 }
 
 function seedCommentBody(comment: SeedComment, userIdByKey: Map<SeedUserKey, string>): string {
@@ -4458,7 +4495,18 @@ async function seedAgentRunDemos(
 
   // Graphics: completed today by the agent, so Work Done shows the sparkles mark beside Amelia.
   const completedAt = addMinutes(now, -95);
-  await tx.update(cards).set({ completedAt, updatedAt: completedAt }).where(eq(cards.id, graphicsCard.id));
+  await tx.update(cards).set({
+    ...seedCardSchedule({
+      baseDate: now,
+      seed: { list: "Complete", dueDateSlot: graphicsCard.dueDateSlot ?? "anyTime" },
+      cardIndex: 0,
+      createdAt: graphicsCard.createdAt,
+      completedAt,
+      timezone: graphicsCard.dueDateTimezone ?? "UTC",
+    }),
+    completedAt,
+    updatedAt: completedAt,
+  }).where(eq(cards.id, graphicsCard.id));
   const [completion] = await tx.insert(activityEvents).values({
     ...agentActor,
     entityType: "card",
@@ -4722,14 +4770,18 @@ async function seedCardRelationDemos(tx: Tx, input: {
 }): Promise<{ relations: number; notifications: number }> {
   const cardRows = await tx.select().from(cards).where(eq(cards.workspaceId, input.workspaceId));
   const cardByTitle = new Map(cardRows.map((row) => [row.title, row]));
+  const requireCard = (title: string) => {
+    const card = cardByTitle.get(title);
+    if (!card) throw new Error(`Missing schedule/dependency demo card '${title}'.`);
+    return card;
+  };
   let relations = 0;
   let notificationCount = 0;
   const opposite = { blocks: "blocked_by", blocked_by: "blocks", relates_to: "relates_to" } as const;
 
   async function relate(sourceTitle: string, targetTitle: string, kind: "blocks" | "relates_to", hoursAgo: number, notifyWatcher = false) {
-    const source = cardByTitle.get(sourceTitle);
-    const target = cardByTitle.get(targetTitle);
-    if (!source || !target) return;
+    const source = requireCard(sourceTitle);
+    const target = requireCard(targetTitle);
     // relates_to is stored once with the smaller id as source, as the API stores it.
     const [first, second] = kind === "relates_to" && target.id < source.id ? [target, source] : [source, target];
     const [relation] = await tx.insert(cardRelations).values({
@@ -4778,13 +4830,46 @@ async function seedCardRelationDemos(tx: Tx, input: {
     }
   }
 
+  // Anchor the authored handoffs to working days, so a Friday or weekend reset demonstrates the
+  // same finish-to-start rule as a Monday reset. These offsets are deliberately not stretched by
+  // seedDueDate: stretching only deadlines used to manufacture accidental scheduling conflicts.
+  const planningDay = nextWorkingDayOnOrAfter(dayNumber(formatLocalDate(input.now)));
+  const plan = async (title: string, startInWorkingDays: number, dueInWorkingDays: number) => {
+    const card = requireCard(title);
+    // A signed-off prerequisite keeps its historical dates and remains visible as released work.
+    if (card.completedAt) return;
+    const createdDay = nextWorkingDayOnOrAfter(dayNumber(formatLocalDate(card.createdAt)));
+    await tx.update(cards).set({
+      startDateLocalDate: dateKeyOf(Math.max(createdDay, addWorkingDays(planningDay, startInWorkingDays))),
+      dueDateLocalDate: dateKeyOf(Math.max(createdDay, addWorkingDays(planningDay, dueInWorkingDays))),
+      dueDateSlot: card.dueDateSlot ?? "anyTime",
+      dueDateTimezone: card.dueDateTimezone ?? "UTC",
+    }).where(eq(cards.id, card.id));
+  };
+
   if (input.workspaceKey === "marketing") {
+    // Video -> approval -> launch is a clean critical chain. Signed-off messaging keeps its
+    // historical bar and relation, demonstrating a prerequisite that no longer blocks the launch.
+    await plan("Confirm final product messaging", -3, -1);
+    await plan("Lock the autumn campaign brief", 0, 1);
+    await plan("Produce the launch-day explainer video", -2, 2);
+    await plan("Approve the campaign launch package", 3, 4);
+    await plan("Prepare autumn campaign launch", 5, 7);
+    await plan("Write the campaign landing-page copy", -3, -2);
+    await plan("Build the autumn campaign landing page", -1, 4);
+    await plan("Confirm guest speaker availability", -3, -1);
+    await plan("Organise the autumn customer webinar", 0, 5);
+    await plan("Receive partner biography and headshot", -2, -1);
+    await plan("Build the webinar registration page", 0, 3);
+    await plan("HR confirmation of recruitment wording", -2, 1);
+    await plan("Approve the recruitment campaign assets", 2, 4);
     // The launch waits on both messaging and approval. Channel work stays on its own board,
     // making cross-board blockers visible without moving cards out of the team's workflow.
     await relate("Confirm final product messaging", "Prepare autumn campaign launch", "blocks", 30, true);
     await relate("Approve the campaign launch package", "Prepare autumn campaign launch", "blocks", 26);
     await relate("Confirm final product messaging", "Lock the autumn campaign brief", "blocks", 29);
     await relate("Design the autumn campaign graphics", "Approve the campaign launch package", "blocks", 28);
+    await relate("Produce the launch-day explainer video", "Approve the campaign launch package", "blocks", 27);
     await relate("Write the campaign landing-page copy", "Build the autumn campaign landing page", "blocks", 24);
     // These reviews explicitly allow follow-ups or a no-screenshot fallback, so they are
     // useful context for each other without holding up approval or publication.
@@ -4798,27 +4883,141 @@ async function seedCardRelationDemos(tx: Tx, input: {
     await relate("Brand type scale finalised", "Update the sales presentation template", "blocks", 48);
     await relate("Edit the campaign announcement article", "Build the autumn campaign landing page", "relates_to", 12);
   } else {
+    await plan("Investigate flaky due-date reminders on iOS", -3, 1);
+    await plan("Add push preference controls to mobile settings", 2, 6);
+    await plan("Tighten upload progress copy for slow connections", -2, 0);
+    await plan("QA regression pass on card attachments in mobile web", 1, 3);
+    await plan("Fix reconnect gaps from dogfooding", -2, -1);
+    // The one intentional conflict: QA must shift three working days to start after cleanup.
+    // Reconnect is the other prerequisite and is already scheduled to finish in time.
+    await plan("Retry orphaned attachment cleanup on startup", -2, 5);
+    await plan("Run QA pass for onboarding with no existing workspaces", 3, 5);
     await relate("Investigate flaky due-date reminders on iOS", "Add push preference controls to mobile settings", "blocks", 30, true);
     await relate("Tighten upload progress copy for slow connections", "QA regression pass on card attachments in mobile web", "blocks", 26);
     await relate("Fix reconnect gaps from dogfooding", "Run QA pass for onboarding with no existing workspaces", "blocks", 20);
     await relate("Retry orphaned attachment cleanup on startup", "Run QA pass for onboarding with no existing workspaces", "blocks", 19);
     await relate("Refresh engineering branching guide", "Write migration rollback guide for customer imports", "blocks", 48);
     await relate("Reduce board hydration time for large workspaces", "Prepare tablet layout for board overview", "relates_to", 12);
-    // A deliberate scheduling conflict on Platform Delivery for the Timeline and the schedule API:
-    // the cleanup fix is planned to finish three working days after the QA pass it blocks is meant
-    // to start, so the engine flags the QA card and names its blocker. Dates are set here, after
-    // the generic start/due seeding, so the chain reads the same on every reset.
-    const plan = async (title: string, startInDays: number, dueInDays: number) => {
-      const card = cardByTitle.get(title);
-      if (!card) return;
-      await tx.update(cards)
-        .set({ startDateLocalDate: formatLocalDate(addDays(input.now, startInDays)), dueDateLocalDate: formatLocalDate(addDays(input.now, dueInDays)), dueDateSlot: card.dueDateSlot ?? "anyTime", dueDateTimezone: card.dueDateTimezone ?? "UTC" })
-        .where(eq(cards.id, card.id));
-    };
-    await plan("Retry orphaned attachment cleanup on startup", 1, 8);
-    await plan("Run QA pass for onboarding with no existing workspaces", 5, 9);
   }
   return { relations, notifications: notificationCount };
+}
+
+/** Core Marketing handoff, expressed against seed identities rather than the audited live UUIDs. */
+async function seedMarketingHandoff(tx: Tx, input: {
+  clientId: string;
+  userIdByKey: Map<SeedUserKey, string>;
+  baseDate: Date;
+  now: Date;
+}): Promise<void> {
+  const board = await findSeedBoard(tx, input.clientId, "Autumn Campaign Launch");
+  const cardRows = await tx.select().from(cards).where(eq(cards.workspaceId, board.workspaceId));
+  const byTitle = new Map(cardRows.map((card) => [card.title, card]));
+  const requireCard = (title: string) => {
+    const card = byTitle.get(title);
+    if (!card) throw new Error(`Missing Marketing handoff card '${title}'.`);
+    return card;
+  };
+  const listRows = await tx.select().from(lists).where(eq(lists.workspaceId, board.workspaceId));
+  const done = listRows.find((list) => list.name === "Done")!;
+  const waiting = listRows.find((list) => list.name === "Waiting on Others")!;
+  const ameliaId = input.userIdByKey.get("amelia")!;
+  const benId = input.userIdByKey.get("ben")!;
+  const graceId = input.userIdByKey.get("grace")!;
+  const launch = requireCard("Prepare autumn campaign launch");
+  const approval = requireCard("Approve the campaign launch package");
+  await tx.update(cards).set({
+    description: launch.description!.replaceAll("{{campaignApprovalKey}}", approval.key),
+    coverAttachmentId: null,
+    updatedAt: input.now,
+  }).where(eq(cards.id, launch.id));
+
+  const checklistRows = await tx.select({ item: cardChecklistItems }).from(cardChecklistItems)
+    .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+    .where(and(eq(cardChecklists.cardId, launch.id), eq(cardChecklists.title, "Launch readiness")));
+  // These two sign-offs are recorded at seed execution, rather than inventing a past approval date.
+  // Tracking stays open, as requested; the existing graphics tick and all comments are retained.
+  for (const [text, actorId] of [["Confirm final product messaging", benId], ["Publish the launch-day schedule", graceId]] as const) {
+    const item = checklistRows.find((row) => row.item.text === text)?.item;
+    if (!item) throw new Error(`Missing Marketing handoff checklist item '${text}'.`);
+    await tx.update(cardChecklistItems).set({ completedAt: input.now, completedById: actorId, updatedAt: input.now })
+      .where(eq(cardChecklistItems.id, item.id));
+    await insertSeedActivity(tx, {
+      boardId: board.id, workspaceId: board.workspaceId, actorId, entityType: "card", entityId: launch.id,
+      action: "checklistItem:completion", payload: { checklistId: item.checklistId, itemId: item.id, text, completedAt: input.now, fromValue: false, toValue: true },
+      createdAt: input.now,
+    });
+  }
+
+  const graphics = requireCard("Design the autumn campaign graphics");
+  // The agent demo already completed this card. A list move must preserve that timestamp and run.
+  await tx.update(cards).set({ listId: done.id, updatedAt: input.now }).where(eq(cards.id, graphics.id));
+  await insertSeedActivity(tx, {
+    boardId: board.id, workspaceId: board.workspaceId, actorId: ameliaId, entityType: "card", entityId: graphics.id,
+    action: "moved", payload: { fromListId: graphics.listId, fromListName: "In Progress", toListId: done.id, toListName: done.name },
+    createdAt: input.now,
+  });
+
+  // The source audits 24 October: keep its actual day gaps, without seedDueDate's 45-day stretch.
+  // Null slots are intentional date-only deadlines in the workspace's London time zone.
+  const dueDates = [
+    ["Prepare the launch-week social schedule", -1],
+    ["Draft the autumn product-update changelog post", 4],
+    ["Assemble the webinar follow-up sequence", 6],
+    ["Finalise the campaign tracking and UTM plan", 4],
+    ["Approve the customer announcement email", 5],
+    ["Refresh the customer onboarding email sequence", 2],
+  ] as const;
+  for (const [title, offset] of dueDates) {
+    const card = requireCard(title);
+    const due = formatLocalDate(addDays(input.baseDate, offset));
+    await tx.update(cards).set({
+      dueDateLocalDate: due, dueDateSlot: null, dueDateTimezone: "Europe/London",
+      startDateLocalDate: card.startDateLocalDate && card.startDateLocalDate > due ? due : card.startDateLocalDate,
+    }).where(eq(cards.id, card.id));
+  }
+  const intake = requireCard("Refresh the customer onboarding email sequence");
+  await tx.delete(cardAssignees).where(and(eq(cardAssignees.cardId, intake.id), eq(cardAssignees.userId, input.userIdByKey.get("zoe")!)));
+
+  // The audited 120th card was added after the original 119. Allocate it last so the existing
+  // board/card references keep their numbers; no live UUID or fabricated key enters the fixture.
+  const [identity] = await allocateCardKeys(tx, board.workspaceId, 1);
+  const [email] = await tx.insert(cards).values({
+    ...identity!, boardId: board.id, listId: waiting.id,
+    title: "Schedule the launch-day customer email",
+    description: "Schedule the customer announcement after Amelia approves the email. Confirm the audience, send window and final tracking before scheduling.",
+    position: positionForIndex(cardRows.filter((card) => card.boardId === board.id && card.listId === waiting.id).length),
+    dueDateLocalDate: formatLocalDate(addDays(input.baseDate, 6)), dueDateSlot: null, dueDateTimezone: "Europe/London",
+    createdById: ameliaId, createdAt: input.now, updatedAt: input.now,
+  }).returning();
+  await tx.insert(cardAssignees).values({ cardId: email!.id, userId: ameliaId, assignedAt: input.now });
+  const labels = await tx.select().from(cardLabels).where(and(
+    eq(cardLabels.workspaceId, board.workspaceId), inArray(cardLabels.name, ["Campaign", "Email"]),
+  ));
+  await tx.insert(cardLabelAssignments).values(labels.map((label) => ({ cardId: email!.id, labelId: label.id, assignedAt: input.now })));
+  const fields = await tx.select().from(customFields).where(and(
+    eq(customFields.workspaceId, board.workspaceId), inArray(customFields.name, ["Campaign", "Approved"]),
+  ));
+  await tx.insert(cardCustomFieldValues).values(fields.map((field) => ({
+    cardId: email!.id, fieldId: field.id,
+    ...fieldValueUpdate(field.name, field.type, field.name === "Campaign" ? "Autumn launch" : false, new Map()),
+    updatedAt: input.now,
+  })));
+  const emailApproval = requireCard("Approve the customer announcement email");
+  const [relation] = await tx.insert(cardRelations).values({
+    workspaceId: board.workspaceId, sourceCardId: emailApproval.id, targetCardId: email!.id,
+    kind: "blocks", createdById: ameliaId, createdAt: input.now,
+  }).returning();
+  await insertSeedActivity(tx, {
+    boardId: board.id, workspaceId: board.workspaceId, actorId: ameliaId, entityType: "card", entityId: email!.id,
+    action: "created", payload: { title: email!.title, listId: waiting.id }, createdAt: input.now,
+  });
+  for (const [card, other, direction] of [[emailApproval, email!, "blocks"], [email!, emailApproval, "blocked_by"]] as const) {
+    await insertSeedActivity(tx, {
+      boardId: board.id, workspaceId: board.workspaceId, actorId: ameliaId, entityType: "card", entityId: card.id,
+      action: "relation:added", payload: { relationId: relation!.id, direction, otherCardId: other.id, otherCardKey: other.key },
+      createdAt: input.now,
+    });
+  }
 }
 
 function fieldValueUpdate(fieldName: string, fieldType: string, value: SeedFieldValue, optionIdByFieldAndLabel: Map<string, Map<string, string>>) {
@@ -5251,10 +5450,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             title: cardSeed.title,
             description: cardSeed.description,
             position: positionForIndex(nextListCount),
-            dueDateLocalDate: formatLocalDate(seedDueDate(baseDate, cardSeed.dueOffsetDays)),
-            dueDateSlot: cardSeed.dueDateSlot,
-            dueDateTimezone: GUEST_USER_SEED.timezone,
-            startDateLocalDate: seedStartDate(seedDueDate(baseDate, cardSeed.dueOffsetDays), cardIndex),
+            ...seedCardSchedule({ baseDate, seed: cardSeed, cardIndex, createdAt: cardCreatedAt, completedAt: null, timezone: GUEST_USER_SEED.timezone }),
             createdById: guestUser!.id,
             completedAt: null,
             coverAttachmentId: null,
@@ -5414,12 +5610,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             title: cardSeed.title,
             description: cardSeed.description,
             position: positionForIndex(listPosition),
-            dueDateLocalDate: cardSeed.dueOffsetDays === undefined
-              ? null
-              : formatLocalDate(seedDueDate(baseDate, cardSeed.dueOffsetDays)),
-            dueDateSlot: cardSeed.dueDateSlot ?? null,
-            dueDateTimezone: cardSeed.dueOffsetDays === undefined ? null : userTimezoneByKey.get("amelia")!,
-            startDateLocalDate: seedStartDate(cardSeed.dueOffsetDays === undefined ? null : seedDueDate(baseDate, cardSeed.dueOffsetDays), cardIndex),
+            ...seedCardSchedule({ baseDate, seed: cardSeed, cardIndex, createdAt: cardCreatedAt, completedAt, timezone: userTimezoneByKey.get("amelia")! }),
             createdById: userIdByKey.get(cardSeed.createdBy)!,
             completedAt,
             coverAttachmentId: null,
@@ -5899,11 +6090,13 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               && workspaceSeed.listFlow && seedMovementPath(
                 cardSeed.list, workspaceSeed.listFlow, workspaceSeed.listSideEntries ?? {},
               ).length > 1 ? [2, 4][showcaseMovedIndex++] : undefined;
-            const showcaseDay = !isWorkDoneShowcase ? undefined : addDays(demoMonday,
+            // A current sign-off must not shift or backdate the fixed historical recording week.
+            const showcaseDay = !isWorkDoneShowcase || completedDaysAgo === 0 ? undefined : addDays(demoMonday,
               completedDaysAgo !== undefined ? showcaseCompletedIndex++ % 5 : moveDay ?? -7);
             let showcaseTickUsed = false;
             const completedAt = completedDaysAgo === undefined
               ? null
+              : completedDaysAgo === 0 ? new Date()
               : showcaseDay ? addHours(showcaseDay, 6) : addHours(addDays(baseDate, -completedDaysAgo), 16);
             // Three weeks keeps the replayed progress stage across a weekday, even
             // when the evenly spaced moves would otherwise land entirely on a weekend.
@@ -5923,13 +6116,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                 title: cardSeed.title,
                 description: cardSeed.description,
                 position: positionForIndex(nextListCount),
-                dueDateLocalDate:
-                  cardSeed.dueOffsetDays === undefined
-                    ? null
-                    : formatLocalDate(seedDueDate(baseDate, cardSeed.dueOffsetDays)),
-                dueDateSlot: cardSeed.dueDateSlot ?? null,
-                dueDateTimezone: cardSeed.dueOffsetDays === undefined ? null : (userTimezoneByKey.get(cardSeed.createdBy) ?? "UTC"),
-                startDateLocalDate: seedStartDate(cardSeed.dueOffsetDays === undefined ? null : seedDueDate(baseDate, cardSeed.dueOffsetDays), cardIndex),
+                ...seedCardSchedule({ baseDate, seed: cardSeed, cardIndex, createdAt: cardCreatedAt, completedAt, timezone: userTimezoneByKey.get(cardSeed.createdBy) ?? "UTC" }),
                 createdById: userIdByKey.get(cardSeed.createdBy)!,
                 completedAt,
                 coverAttachmentId: null,
@@ -6461,6 +6648,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         userIdByKey,
         now: new Date(),
       });
+      await seedMarketingHandoff(tx, { clientId: client!.id, userIdByKey, baseDate, now: new Date() });
+      summary.cards += 1;
+      summary.cardRelations += 1;
       await seedAgentWorkflowRunDemos(tx, { clientId: client!.id, ameliaId: userIdByKey.get("amelia")!, now: new Date() });
       await seedBoardMirrorDemo(tx, {
         clientId: client!.id,

@@ -67,7 +67,8 @@ export interface TimelineBar {
 }
 
 export interface TimelineGroupBy {
-  kind: "list" | "assignee" | "label" | "none";
+  /** `board` only means something where the chart spans boards (My Cards, Team Cards). */
+  kind: "board" | "list" | "assignee" | "label" | "none";
 }
 export type TimelineGroupByKind = TimelineGroupBy["kind"];
 
@@ -250,8 +251,18 @@ export function weekendBands(range: TimelineRange, pxPerDay: number): { x: numbe
   return bands;
 }
 
+/** What a group heading shows for a board when the chart spans several. */
+export interface TimelineBoardSummary {
+  id: string;
+  name: string;
+  icon: string | null;
+  iconColor: string | null;
+}
+
 export interface GroupingContext {
   lists: readonly AnyList[];
+  /** Boards the cards sit on; only read for the `board` grouping, so a single-board host omits it. */
+  boards?: ReadonlyMap<string, TimelineBoardSummary>;
   labelsByCard: ReadonlyMap<string, CardLabelPresentation[]>;
   assigneesByCard: ReadonlyMap<string, CardAssigneePresentation[]>;
   collapsedGroupKeys: ReadonlySet<string>;
@@ -297,6 +308,18 @@ export function buildTimelineRows(
       continue;
     }
     switch (groupBy) {
+      case "board": {
+        const board = context.boards?.get(card.boardId);
+        // Boards sort by name: a cross-board chart has no board order of its own to follow.
+        bucketFor(`board:${card.boardId}`, () => ({
+          label: board?.name ?? "",
+          color: board?.iconColor ?? null,
+          icon: board?.icon ?? "layout-kanban",
+          listId: null,
+          order: 0,
+        })).cards.push(card);
+        break;
+      }
       case "list": {
         const list = context.lists.find((candidate) => candidate.id === card.listId);
         bucketFor(`list:${card.listId}`, () => ({

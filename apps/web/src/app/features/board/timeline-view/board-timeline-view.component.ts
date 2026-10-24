@@ -1,6 +1,6 @@
 import { GettingStartedService } from "../../../core/getting-started/getting-started.service";
 import type { OnInit } from "@angular/core";
-import { ApplicationRef, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, afterRenderEffect, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
+import { ApplicationRef, ChangeDetectionStrategy, Component, DestroyRef, Injector, ElementRef, afterNextRender, afterRenderEffect, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
 import type { CardRelationSummary, DependencyGraphEdge, ScheduleResponse } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { barDurationDays, computeSchedule, dateKeyOf, dayNumber, endForMovedStart, plannedBar, type Schedule, type ScheduledCard } from "@kanera/shared/schedule";
@@ -52,6 +52,7 @@ import {
   weekendBands,
   xOf,
   type TimelineBar,
+  type TimelineBoardSummary,
   type TimelineCardRow,
   type TimelineGroupByKind,
   type TimelineRow,
@@ -122,6 +123,17 @@ interface Wire {
  */
 const EMPTY_LABELS: CardLabelPresentation[] = [];
 
+/**
+ * Where the chart's off-host schedule comes from. A board reads its own schedule; a chart over many
+ * boards (My Cards, Team Cards) reads each workspace its cards sit in, since dependencies never
+ * cross a workspace, so one read per workspace is the complete graph for every card on the chart.
+ */
+export type TimelineScheduleScope = { boardId: string } | { workspaceIds: readonly string[] };
+
+function scopeKey(scope: TimelineScheduleScope): string {
+  return "boardId" in scope ? `board:${scope.boardId}` : `workspaces:${[...scope.workspaceIds].sort().join(",")}`;
+}
+
 @Component({
   selector: "k-board-timeline-view",
   standalone: true,
@@ -145,14 +157,21 @@ export class BoardTimelineViewComponent implements OnInit {
   private readonly cardStore: TableCardStore | null = inject(TABLE_CARD_STORE, { optional: true })
     ?? (() => { const state = inject(BoardState, { optional: true }); return state ? boardStateCardStore(state, this.api) : null; })();
 
-  readonly boardId = input.required<string>();
+  readonly scope = input.required<TimelineScheduleScope>();
   readonly cards = input.required<AnyCard[]>();
   readonly lists = input<AnyList[]>([]);
+  /** Board names for the `board` grouping's headings; a single-board host leaves it unset. */
+  readonly boardSummariesById = input<ReadonlyMap<string, TimelineBoardSummary> | null>(null);
   readonly labelsByCard = input<Map<string, CardLabelPresentation[]>>(new Map());
   readonly assigneesByCard = input<Map<string, CardAssigneePresentation[]>>(new Map());
   readonly filteredCardIds = input<Set<string> | null>(null);
   readonly selectedCardId = input<string | null>(null);
   readonly canEdit = input(true);
+  /**
+   * Over many boards the viewer's role differs per board, so the host names the cards they may
+   * reschedule and link; null (a board) means `canEdit` decides for every card.
+   */
+  readonly editableCardIds = input<ReadonlySet<string> | null>(null);
   /**
    * Off when the workspace has dependencies switched off: the server then sends no edges, so the
    * chart has no wires or critical path to toggle and nothing new can be linked.
@@ -200,8 +219,9 @@ export class BoardTimelineViewComponent implements OnInit {
   readonly edgesLoading = signal(false);
   private loadSeq = 0;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private loadedScopeKey: string | null = null;
   private preferenceLoaded = false;
-  private scrolledBoardId: string | null = null;
+  private scrolledScopeKey: string | null = null;
 
   readonly today = todayKey();
   readonly rowHeight = computed(() => {
@@ -243,8 +263,13 @@ export class BoardTimelineViewComponent implements OnInit {
    */
   private zoomTarget: { px: number; anchorX: number; focusDay?: number } | null = null;
   private zoomFrames = 0;
+  /**
+   * Whether the viewer picked this zoom (buttons, slider, wheel, pinch). Until they do, and again
+   * after Fit all, the chart has no remembered zoom: each visit opens fitted to the plan as it is then.
+   */
+  private zoomChosen = false;
+  private readonly injector = inject(Injector);
   private zoomFrame: number | null = null;
-  private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private pan: { pointerId: number; startX: number; startY: number; scrollLeft: number; scrollTop: number; moved: boolean } | null = null;
   private suppressPanClick = false;
 
@@ -269,9 +294,10 @@ export class BoardTimelineViewComponent implements OnInit {
   });
 
   readonly schedule = computed<Schedule>(() => {
-    // The host owns current board rows (including optimistic writes). Off-board inputs come from
-    // the same complete, access-filtered graph the API uses. Search and folding change no dates.
-    const external = (this.scheduleResponse()?.cards ?? []).filter((card) => card.boardId !== this.boardId());
+    // The host owns current rows (including optimistic writes). Off-host inputs come from the same
+    // complete, access-filtered graph the API uses. Search and folding change no dates.
+    const hosted = this.cardsById();
+    const external = (this.scheduleResponse()?.cards ?? []).filter((card) => !hosted.has(card.id));
     return computeSchedule([
       ...external.map((card) => ({ id: card.id, startDateLocalDate: card.plannedStart, dueDateLocalDate: card.plannedEnd, done: false })),
       ...this.cards().filter((card) => !card.archivedAt).map((card) => ({ id: card.id, startDateLocalDate: card.startDateLocalDate, dueDateLocalDate: card.dueDateLocalDate, done: Boolean(card.completedAt) })),
@@ -293,6 +319,7 @@ export class BoardTimelineViewComponent implements OnInit {
 
   readonly rows = computed<TimelineRow[]>(() => buildTimelineRows(this.visibleCards(), this.groupBy(), this.range(), this.pxPerDay(), {
     lists: this.lists(),
+    boards: this.boardSummariesById() ?? undefined,
     labelsByCard: this.labelsByCard(),
     assigneesByCard: this.assigneesByCard(),
     collapsedGroupKeys: this.collapsedGroupKeys(),
@@ -466,17 +493,19 @@ export class BoardTimelineViewComponent implements OnInit {
     });
     effect(() => {
       const scroller = this.scroller();
-      const boardId = this.boardId();
-      if (!scroller || this.scrolledBoardId === boardId) return;
-      this.scrolledBoardId = boardId;
-      untracked(() => this.scrollToToday());
+      const key = scopeKey(this.scope());
+      if (!scroller || this.scrolledScopeKey === key) return;
+      this.scrolledScopeKey = key;
+      untracked(() => this.openAtStart());
     });
     // Preferences follow the scope: a different board, a different memory.
     effect(() => {
       const scope = this.preferenceScope();
       untracked(() => {
         const stored = readTimelinePreference(scope);
-        this.pxPerDay.set(stored.pxPerDay);
+        // No remembered zoom means fit: the first view of the board sets the scale (openAtStart).
+        this.zoomChosen = stored.pxPerDay !== null;
+        if (stored.pxPerDay !== null) this.pxPerDay.set(stored.pxPerDay);
         this.zoomTarget = null;
         this.critical.set(stored.critical);
         this.showDependencies.set(stored.dependencies);
@@ -486,13 +515,17 @@ export class BoardTimelineViewComponent implements OnInit {
       });
     });
     effect(() => {
-      const boardId = this.boardId();
+      // Keyed on the scope's identity, not the object: a host that rebuilds the same scope must not
+      // throw the schedule away and re-read it.
+      const key = scopeKey(this.scope());
       untracked(() => {
+        if (this.loadedScopeKey === key) return;
+        this.loadedScopeKey = key;
         for (const leave of this.graphRooms.values()) leave();
         this.graphRooms.clear();
         this.scheduleResponse.set(null);
         this.edgesResponse.set([]);
-        void this.loadEdges(boardId);
+        void this.loadEdges(this.scope());
       });
     });
   }
@@ -502,11 +535,11 @@ export class BoardTimelineViewComponent implements OnInit {
     // Relations live on the card, so a change on this board says which card; the whole edge set is
     // re-read because an edge can join or leave the chart from either end.
     const linksChanged = ({ boardId }: { boardId: string }) => {
-      if (boardId === this.boardId() || this.graphRooms.has(boardId)) this.scheduleRefresh();
+      if (this.chartsBoard(boardId)) this.scheduleRefresh();
     };
     const reconnected = () => this.scheduleRefresh();
     const accessChanged = ({ boardId }: { boardId: string }) => {
-      if (boardId !== this.boardId() && !this.graphRooms.has(boardId)) return;
+      if (!this.chartsBoard(boardId)) return;
       // Discard off-board identities immediately; reauthorization may now exclude this branch.
       this.scheduleResponse.set(null);
       this.edgesResponse.set([]);
@@ -526,35 +559,47 @@ export class BoardTimelineViewComponent implements OnInit {
       if (this.refreshTimer) clearTimeout(this.refreshTimer);
       if (this.zoomFrame !== null) cancelAnimationFrame(this.zoomFrame);
       // Leaving mid-zoom still remembers where it was heading.
-      if (this.persistTimer || this.zoomTarget) {
-        if (this.persistTimer) clearTimeout(this.persistTimer);
-        if (this.zoomTarget) this.pxPerDay.set(this.zoomTarget.px);
+      if (this.zoomTarget) {
+        this.pxPerDay.set(this.zoomTarget.px);
         this.persist();
       }
       this.loadSeq++;
     });
   }
 
+  /**
+   * Whether a board's card events concern this chart: the host's own board, any board a hosted card
+   * sits on (a cross-board host already listens in those rooms) or a board the schedule pulled an
+   * off-host blocker from.
+   */
+  private chartsBoard(boardId: string): boolean {
+    const scope = this.scope();
+    if ("boardId" in scope && scope.boardId === boardId) return true;
+    return this.graphRooms.has(boardId) || this.cards().some((card) => card.boardId === boardId);
+  }
+
   private scheduleRefresh(): void {
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
-      void this.loadEdges(this.boardId());
+      void this.loadEdges(this.scope());
     }, 300);
   }
 
-  private async loadEdges(boardId: string): Promise<void> {
+  private async loadEdges(scope: TimelineScheduleScope): Promise<void> {
     const seq = ++this.loadSeq;
     this.edgesLoading.set(true);
     try {
-      const response = await this.api.post<ScheduleResponse>("/cards/schedule", { boardId });
+      const response = await this.readSchedule(scope);
       if (seq !== this.loadSeq) return;
       this.scheduleResponse.set(response);
       this.edgesResponse.set(response.edges.map((edge) => ({ ...edge, kind: "blocks" })));
       // Room leases are ref-counted by SocketService. Retain known boards until leaving this chart:
       // a completed external blocker can reopen and must rejoin the schedule without a page reload.
+      const hostedBoardIds = new Set(this.cards().map((card) => card.boardId));
+      if ("boardId" in scope) hostedBoardIds.add(scope.boardId);
       for (const board of response.boards) {
-        if (board.id !== boardId && !this.graphRooms.has(board.id)) this.graphRooms.set(board.id, this.sockets.joinBoard(board.id));
+        if (!hostedBoardIds.has(board.id) && !this.graphRooms.has(board.id)) this.graphRooms.set(board.id, this.sockets.joinBoard(board.id));
       }
     } catch {
       // Offline or refused: the chart still shows its bars; wires come with the next successful read.
@@ -563,10 +608,40 @@ export class BoardTimelineViewComponent implements OnInit {
     }
   }
 
+  /** One schedule per workspace, merged: a card or edge reached from two workspaces is the same row. */
+  private async readSchedule(scope: TimelineScheduleScope): Promise<ScheduleResponse> {
+    if ("boardId" in scope) return this.api.post<ScheduleResponse>("/cards/schedule", { boardId: scope.boardId });
+    const responses = await Promise.all(scope.workspaceIds.map((workspaceId) => this.api.post<ScheduleResponse>("/cards/schedule", { workspaceId })));
+    const cards = new Map<string, ScheduleResponse["cards"][number]>();
+    const edges = new Map<string, ScheduleResponse["edges"][number]>();
+    const boards = new Map<string, ScheduleResponse["boards"][number]>();
+    const criticalEdgeIds = new Set<string>();
+    for (const response of responses) {
+      for (const card of response.cards) cards.set(card.id, card);
+      for (const edge of response.edges) edges.set(edge.id, edge);
+      for (const board of response.boards) boards.set(board.id, board);
+      for (const id of response.criticalEdgeIds) criticalEdgeIds.add(id);
+    }
+    // The chart recomputes slack and the critical path itself over the merged graph, so the
+    // per-workspace summaries are not combined; the first stands in for the response shape.
+    const emptySummary: ScheduleResponse["summary"] = { scheduledCount: 0, unscheduledCount: 0, conflictCount: 0, criticalCount: 0, range: null, projectedFinish: null, latestDue: null, slipDays: 0 };
+    return {
+      cards: [...cards.values()],
+      edges: [...edges.values()],
+      criticalEdgeIds: [...criticalEdgeIds],
+      summary: responses[0]?.summary ?? emptySummary,
+      boards: [...boards.values()],
+      lists: responses.flatMap((response) => response.lists),
+      labels: responses.flatMap((response) => response.labels),
+      people: responses.flatMap((response) => response.people),
+      truncated: responses.some((response) => response.truncated),
+    };
+  }
+
   private persist(): void {
     if (!this.preferenceLoaded) return;
     const value: TimelinePreference = {
-      pxPerDay: this.pxPerDay(),
+      pxPerDay: this.zoomChosen ? this.pxPerDay() : null,
       groupBy: this.groupBy(),
       critical: this.critical(),
       dependencies: this.showDependencies(),
@@ -599,9 +674,19 @@ export class BoardTimelineViewComponent implements OnInit {
    * either side. A plan longer than the furthest zoom allows is centred at that zoom instead.
    */
   fitAll(): void {
+    const fit = this.fitTarget();
+    if (!fit) return;
+    this.zoomChosen = false;
+    this.zoomTarget = fit;
+    this.zoomFrames = 0;
+    if (this.zoomFrame === null) this.zoomFrame = requestAnimationFrame(() => this.zoomStep());
+  }
+
+  /** The scale and centre that show every visible dated card; null when there is nothing to fit. */
+  private fitTarget(): { px: number; anchorX: number; focusDay: number } | null {
     const scroller = this.scroller()?.nativeElement;
     const bars = plannedBars(this.visibleCards());
-    if (!scroller || !bars.length) return;
+    if (!scroller || !bars.length) return null;
     let first = Number.POSITIVE_INFINITY;
     let last = Number.NEGATIVE_INFINITY;
     for (const bar of bars) {
@@ -612,9 +697,23 @@ export class BoardTimelineViewComponent implements OnInit {
     const chart = scroller.clientWidth - pane;
     // Room for the first bar's edge and the last bar's caption, which sits to its right.
     const available = Math.max(80, chart - FIT_MARGIN_PX * 2);
-    this.zoomTarget = { px: clampPxPerDay(available / (last - first + 1)), anchorX: pane + chart / 2, focusDay: (first + last + 1) / 2 };
-    this.zoomFrames = 0;
-    if (this.zoomFrame === null) this.zoomFrame = requestAnimationFrame(() => this.zoomStep());
+    return { px: clampPxPerDay(available / (last - first + 1)), anchorX: pane + chart / 2, focusDay: (first + last + 1) / 2 };
+  }
+
+  /**
+   * The first view of a board: fitted to the plan unless the viewer has a zoom of their own, in which
+   * case it keeps that zoom and opens on today. No animation; this is where the chart starts.
+   */
+  private openAtStart(): void {
+    const fit = this.zoomChosen ? null : this.fitTarget();
+    if (fit) this.pxPerDay.set(fit.px);
+    // The scale just changed, so place the scroll once the sheet has been drawn at it.
+    afterNextRender(() => {
+      const scroller = this.scroller()?.nativeElement;
+      if (!scroller) return;
+      if (fit) scroller.scrollLeft = (fit.focusDay - this.range().startDay) * fit.px + this.namePaneWidth() - fit.anchorX;
+      else this.scrollToToday();
+    }, { injector: this.injector });
   }
 
   onZoomSlider(value: string): void {
@@ -639,9 +738,10 @@ export class BoardTimelineViewComponent implements OnInit {
   private zoomTowards(px: number, anchorX?: number): void {
     const scroller = this.scroller()?.nativeElement;
     const target = clampPxPerDay(px);
+    this.zoomChosen = true;
     if (!scroller) {
       this.pxPerDay.set(target);
-      this.schedulePersist();
+      this.persist();
       return;
     }
     const pane = this.namePaneWidth();
@@ -676,20 +776,13 @@ export class BoardTimelineViewComponent implements OnInit {
     scroller.scrollLeft = (placeDay - this.range().startDay) * next + pane - target.anchorX;
     if (done) {
       this.zoomTarget = null;
-      this.schedulePersist();
+      // Once per settled zoom, never per frame; saved at once so a reload right after keeps it.
+      this.persist();
     } else {
       this.zoomFrame = requestAnimationFrame(() => this.zoomStep());
     }
   }
 
-  /** Zooming fires every frame; the remembered zoom only needs the value it settles on. */
-  private schedulePersist(): void {
-    if (this.persistTimer) clearTimeout(this.persistTimer);
-    this.persistTimer = setTimeout(() => {
-      this.persistTimer = null;
-      this.persist();
-    }, 300);
-  }
 
   // ---- Panning ----
   //
@@ -972,7 +1065,7 @@ export class BoardTimelineViewComponent implements OnInit {
   }
 
   canEditCard(card: AnyCard): boolean {
-    return this.canEdit() && !this.reschedulingCardIds().has(card.id);
+    return this.canEdit() && (this.editableCardIds()?.has(card.id) ?? true) && !this.reschedulingCardIds().has(card.id);
   }
 
   canDrag(card: AnyCard): boolean {

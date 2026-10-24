@@ -55,6 +55,7 @@ export const ACTIVITY_SUMMARY_MESSAGES: ActivitySummaryMessages = {
   setCover: $localize`:Notification line after a person's name:set the cover image`,
   removedCover: $localize`:Notification line after a person's name:removed the cover image`,
   flaggedInProgressTooLong: (days) => icu($localize`:Notification line after the system name Kanera - the card has been in progress past the workspace alert:{days, plural, one {flagged this card as in progress for more than # day} other {flagged this card as in progress for more than # days}}`, { days }),
+  flaggedSchedulingConflict: $localize`:Notification line after the system name Kanera - the card's planned start is before the planned finish of a card blocking it; that card's key follows:flagged that this card is planned to start before its blocker finishes`,
   correctedTimeInProgress: $localize`:Activity line after a person's name - a workspace admin changed a card's tracked time in progress:corrected the time in progress`,
   addedChecklist: $localize`:Notification line after a person's name; the checklist name follows:added checklist`,
   deletedChecklist: $localize`:Notification line after a person's name; the checklist name follows:deleted checklist`,

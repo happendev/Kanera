@@ -735,6 +735,13 @@
       "src/app/core/i18n/activity-summary.messages.ts"
     ]
   },
+  "7785463360806583353": "flagged that this card is planned to start before its blocker finishes",
+  "@7785463360806583353": {
+    "description": "Notification line after the system name Kanera - the card's planned start is before the planned finish of a card blocking it; that card's key follows",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
   "3039500514488322938": "corrected the time in progress",
   "@3039500514488322938": {
     "description": "Activity line after a person's name - a workspace admin changed a card's tracked time in progress",
@@ -8943,7 +8950,8 @@
   "@154637153146117281": {
     "description": "Label for the timeline grouping switch",
     "x-files": [
-      "src/app/features/board/board.page.html"
+      "src/app/features/board/board.page.html",
+      "src/app/features/global-work/global-work.page.html"
     ]
   },
   "1821222939222457554": "Reset to list columns",
@@ -9074,7 +9082,8 @@
   "@3166095620723862141": {
     "description": "View switch label; the Gantt-style view with a bar per card",
     "x-files": [
-      "src/app/features/board/board.page.ts"
+      "src/app/features/board/board.page.ts",
+      "src/app/features/global-work/global-work.page.ts"
     ]
   },
   "7951990705316063153": "Dependencies view",
@@ -9106,7 +9115,8 @@
     "description": "Short view switch label for the Gantt-style view",
     "x-files": [
       "src/app/features/board/board.page.ts",
-      "src/app/features/dependencies/dependency-layout.ts"
+      "src/app/features/dependencies/dependency-layout.ts",
+      "src/app/features/global-work/global-work.page.ts"
     ]
   },
   "4045087308145757242": "Dependencies",
@@ -10283,6 +10293,13 @@
       "src/app/features/board/card-activity.component.ts"
     ]
   },
+  "5374494272971328150": "Scheduling conflict: this card is planned to start before {$card} finishes",
+  "@5374494272971328150": {
+    "description": "Card activity shown without a person - the card's planned start is before the planned finish of the named card that blocks it",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
   "1647605248194260052": "{count, plural, =1 {added label {labels}} other {added labels {labels}}}",
   "@1647605248194260052": {
     "description": "Card activity after a person's name; labels is a list of label names",
@@ -11285,7 +11302,8 @@
   "@8070396816726827304": {
     "description": "Accessible name of the hours input when correcting time in progress",
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail.component.html",
+      "src/app/features/workspace-settings/automations/automations.page.html"
     ]
   },
   "8398233202919865612": "h",
@@ -14981,6 +14999,13 @@
       "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
+  "7424882868774338594": "By board",
+  "@7424882868774338594": {
+    "description": "Timeline view grouping - one group per board",
+    "x-files": [
+      "src/app/features/board/timeline-view/timeline-preferences.ts"
+    ]
+  },
   "1352730154877048650": "By list",
   "@1352730154877048650": {
     "description": "Timeline view grouping - one group per list",
@@ -16751,6 +16776,18 @@
   },
   "6310913490299838608": "The calendar only shows dated cards. Switch to the table or board view to see the rest.",
   "@6310913490299838608": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "5467495180002234399": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} The plan settles when the full set is ready.",
+  "@5467495180002234399": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "7522117111651454094": "{$START_TAG_STRONG}Showing {$LOADED} of {$TOTAL} matching cards.{$CLOSE_TAG_STRONG} Narrow the scope or filters to plan every card.",
+  "@7522117111651454094": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -23817,6 +23854,34 @@
       "src/app/features/workspace-settings/automations/automation-presentation.util.ts"
     ]
   },
+  "463310761766141446": "{count, plural, one {over # hour} other {over # hours}}",
+  "@463310761766141446": {
+    "description": "Automation trigger target - a card in progress longer than this",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automation-presentation.util.ts"
+    ]
+  },
+  "4452224896547684328": "{count, plural, one {over # day} other {over # days}}",
+  "@4452224896547684328": {
+    "description": "Automation trigger target - a card in progress longer than this",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automation-presentation.util.ts"
+    ]
+  },
+  "3715210272161270337": "over {$field}",
+  "@3715210272161270337": {
+    "description": "Automation trigger target - tracked time passed the value of the named number field, e.g. over Estimate",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automation-presentation.util.ts"
+    ]
+  },
+  "7789441713903177584": "a number field",
+  "@7789441713903177584": {
+    "description": "Unconfigured automation trigger target",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automation-presentation.util.ts"
+    ]
+  },
   "7400057484769414886": "a label",
   "@7400057484769414886": {
     "description": "Unconfigured automation trigger target",
@@ -24548,8 +24613,105 @@
       "src/app/features/workspace-settings/automations/automations.page.html"
     ]
   },
-  "2780699746797274359": "{VAR_PLURAL, plural, =1 {Runs once each time an open card has been in progress for more than 1 day. Leaving and re-entering In progress starts a new clock.} other {Runs once each time an open card has been in progress for more than {INTERPOLATION} days. Leaving and re-entering In progress starts a new clock.}}",
-  "@2780699746797274359": {
+  "2485969382829178841": "Limit",
+  "@2485969382829178841": {
+    "description": "Field label - where an in-progress automation takes its time limit from",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "1711981860698055961": "Workspace alert",
+  "@1711981860698055961": {
+    "description": "In-progress automation limit option - the workspace's time in progress alert",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "5209341198317295172": "Set time",
+  "@5209341198317295172": {
+    "description": "In-progress automation limit option - an amount of time set on this automation",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "7713863630957208435": "Number field, such as an estimate",
+  "@7713863630957208435": {
+    "description": "In-progress automation limit option - a number custom field on each card, such as an estimate",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "6533918067030990396": "Amount",
+  "@6533918067030990396": {
+    "description": "Field label - how many hours or days",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "8932917860978648376": "Unit",
+  "@8932917860978648376": {
+    "description": "Field label - unit of time",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "840951359074313455": "Days",
+  "@840951359074313455": {
+    "description": "Unit of time for an automation limit",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "1992731550293192431": "Counted in",
+  "@1992731550293192431": {
+    "description": "Field label - the unit a number custom field is counted in",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "7467738544803078423": "Working hours",
+  "@7467738544803078423": {
+    "description": "Unit for an estimate - hours of tracked work",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "3638174653909453813": "Working days",
+  "@3638174653909453813": {
+    "description": "Unit for an estimate - days of tracked work, 8 hours each",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "7500756737756695280": "When off, cards already past the limit when this automation is turned on, or when its limit changes, are skipped.",
+  "@7500756737756695280": {
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "337615579685735914": "Include cards already past the limit",
+  "@337615579685735914": {
+    "description": "Toggle on an in-progress automation - also run it for cards that already passed the limit",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "8873808496706447329": "Runs once per card when its current time in progress passes this limit. Moving between lists doesn't run it again.",
+  "@8873808496706447329": {
+    "description": "Help for the Card in progress too long automation trigger with its own time limit",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "4129400741123597353": "Runs once per card when its tracked time passes the field's value. Raising the value runs it again only if the card passes that too. A working day is 8 tracked hours.",
+  "@4129400741123597353": {
+    "description": "Help for the Card in progress too long automation trigger with a number field limit",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "2789183728196090226": "{VAR_PLURAL, plural, =1 {Runs once per card when its current time in progress passes the workspace alert of 1 day. Moving between lists doesn't run it again.} other {Runs once per card when its current time in progress passes the workspace alert of {INTERPOLATION} days. Moving between lists doesn't run it again.}}",
+  "@2789183728196090226": {
     "description": "Help for the Card in progress too long automation trigger",
     "x-files": [
       "src/app/features/workspace-settings/automations/automations.page.html"
@@ -25534,6 +25696,20 @@
   "7345613250820835450": "Working hours time zone",
   "@7345613250820835450": {
     "description": "Label for the time zone whose working hours count toward time in progress",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "3791703275736582053": "Search by city, region or UTC offset…",
+  "@3791703275736582053": {
+    "description": "Search box in the time zone picker",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "2055599442280935575": "No time zone matches",
+  "@2055599442280935575": {
+    "description": "Empty state of the time zone picker search",
     "x-files": [
       "src/app/features/workspace-settings/general/general.page.html"
     ]
@@ -27051,6 +27227,13 @@
   "8537083668379142549": "Custom field changes to {$condition}",
   "@8537083668379142549": {
     "description": "Automation title; \"field = value\" follows",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "37981020602391110": "Card in progress {$limit}",
+  "@37981020602391110": {
+    "description": "Automation title - the limit follows, e.g. over 3 days or over Estimate",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]

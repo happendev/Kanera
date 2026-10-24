@@ -1,6 +1,6 @@
 import "../../test/setup.integration.js";
 import type { CommitImportBody } from "@kanera/shared/dto";
-import { activityEvents, automationInProgressRuns, boardMembers, boards, cardWatchers, notifications, cardAssignees, cardLabelAssignments, cardLabels, cards, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { activityEvents, automationInProgressRuns, boardMembers, boards, cardCustomFieldValues, cardWatchers, customFields, notifications, cardAssignees, cardLabelAssignments, cardLabels, cards, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { workingMs } from "@kanera/shared/time-in-progress";
 import assert from "node:assert/strict";
@@ -57,6 +57,12 @@ import { parseKaneraBoardExport } from "../imports/kanera-parser.js";
  *     leaves no activity entry, or moves a running stint's start (and so its alert) when it need not.
  * 22. Card watchers are not told when a card passes the in-progress alert, are told more than once per
  *     card, including microsecond starts and concurrent sweeps, or fail to rearm after admin correction.
+ * 23. A card_in_progress_too_long rule with its own limit fires for the whole backlog when it is
+ *     created or turned on (unless it includes existing cards), ignores a fixed limit's unit, or
+ *     accepts a limit field that is not a number. With a number-field limit it compares the wrong clock
+ *     (tracked working time is the estimate's unit), repeats when the estimate is lowered or re-saved,
+ *     fails to repeat once a raised estimate is passed too, or fires the moment someone types an
+ *     estimate the card has already outgrown.
  */
 
 type CardSummary = { id: string; listId: string; inProgressSince?: string | null };
@@ -430,6 +436,84 @@ void test("card_in_progress_too_long stays latched until an admin lowers tracked
   assert.equal(off.json<{ inProgressAlertDays: number }>().inProgressAlertDays, 0);
   await insertCard(doing.id, { inProgressSince: tenDaysAgo });
   assert.equal(await runInProgressAlertAutomationSweep(undefined, new Date()), 0);
+
+  await app.close();
+});
+
+void test("card_in_progress_too_long limits: fixed, number field, and cards already past them", async () => {
+  const { app, auth, workspaceId, list, insertCard } = await setupWorkspace("owner-in-progress-limits@example.com");
+  const doing = list("Doing");
+  // Working time is counted 09:00-17:00 on weekdays in the workspace zone; pin it so the clock is exact.
+  await db.update(workspaces).set({ timeZone: "UTC" }).where(eq(workspaces.id, workspaceId));
+  const label = async (name: string) => (await db.insert(cardLabels).values({ workspaceId, name, position: "1000.0000000000" }).returning())[0]!;
+  const labelled = async (labelId: string) => (await db.select({ cardId: cardLabelAssignments.cardId }).from(cardLabelAssignments)
+    .where(eq(cardLabelAssignments.labelId, labelId))).map((row) => row.cardId).sort();
+  const create = (payload: Record<string, unknown>) => app.inject({ method: "POST", url: `/workspaces/${workspaceId}/automations`, headers: auth, payload: { triggerType: "card_in_progress_too_long", ...payload } });
+
+  // 23a. Created on: a card already past the fixed limit is recorded as handled and never runs it.
+  const fixedLabel = await label("Past two days");
+  const old = await insertCard(doing.id, { inProgressSince: new Date(Date.now() - 10 * DAY_MS) });
+  const fixed = await create({ enabled: true, triggerThresholdSource: "fixed", triggerThresholdAmount: 2, triggerThresholdUnit: "days", actions: [{ type: "add_labels", config: { labelIds: [fixedLabel.id] } }] });
+  assert.equal(fixed.statusCode, 201, fixed.body);
+  assert.equal(await runInProgressAlertAutomationSweep(undefined, new Date()), 0);
+  assert.deepEqual(await labelled(fixedLabel.id), []);
+  const young = await insertCard(doing.id, { inProgressSince: new Date(Date.now() - DAY_MS) });
+  assert.equal(await runInProgressAlertAutomationSweep(undefined, new Date()), 0, "one day in is under two");
+  assert.equal(await runInProgressAlertAutomationSweep(undefined, new Date(Date.now() + 2 * DAY_MS)), 1);
+  assert.deepEqual(await labelled(fixedLabel.id), [young.id]);
+
+  // Hours are hours, not days.
+  const hoursLabel = await label("Past three hours");
+  const hours = await create({ enabled: false, triggerThresholdSource: "fixed", triggerThresholdAmount: 3, triggerThresholdUnit: "hours", triggerIncludeExisting: true, actions: [{ type: "add_labels", config: { labelIds: [hoursLabel.id] } }] });
+  assert.equal(hours.statusCode, 201, hours.body);
+  // 23a. Including existing cards: turning it on later runs it for both cards already past three hours.
+  const on = await app.inject({ method: "PATCH", url: `/automations/${hours.json<{ id: string }>().id}`, headers: auth, payload: { enabled: true } });
+  assert.equal(on.statusCode, 200, on.body);
+  assert.equal(await runInProgressAlertAutomationSweep(undefined, new Date()), 2);
+  assert.deepEqual(await labelled(hoursLabel.id), [old.id, young.id].sort());
+
+  // 23a. The limit field must be a number.
+  const [notes] = await db.insert(customFields).values({ workspaceId, name: "Notes", type: "text", position: "1000.0000000000" }).returning();
+  const [estimate] = await db.insert(customFields).values({ workspaceId, name: "Estimate", type: "number", position: "2000.0000000000" }).returning();
+  const textField = await create({ triggerThresholdSource: "custom_field", triggerCustomFieldId: notes!.id, triggerThresholdUnit: "hours" });
+  assert.equal(textField.statusCode, 400, textField.body);
+  const noAmount = await create({ triggerThresholdSource: "fixed", triggerThresholdUnit: "days" });
+  assert.equal(noAmount.statusCode, 400, noAmount.body);
+
+  // 23b. Over the estimate, in tracked working hours. Monday 2026-10-19, stint from 09:00 UTC.
+  // The rule exists before the card, so turning it on records nothing for it.
+  const overLabel = await label("Over estimate");
+  const over = await create({ enabled: true, triggerThresholdSource: "custom_field", triggerCustomFieldId: estimate!.id, triggerThresholdUnit: "hours", actions: [{ type: "add_labels", config: { labelIds: [overLabel.id] } }] });
+  assert.equal(over.statusCode, 201, over.body);
+  const overId = over.json<{ id: string }>().id;
+  const at = (time: string) => new Date(`2026-10-19T${time}:00Z`);
+  const card = await insertCard(doing.id, { inProgressSince: at("09:00") });
+  const setEstimate = (hoursValue: number, writtenAt: string) => db.insert(cardCustomFieldValues)
+    .values({ cardId: card.id, fieldId: estimate!.id, valueNumber: String(hoursValue), updatedAt: at(writtenAt) })
+    .onConflictDoUpdate({ target: [cardCustomFieldValues.cardId, cardCustomFieldValues.fieldId], set: { valueNumber: String(hoursValue), updatedAt: at(writtenAt) } });
+  await setEstimate(2, "08:00");
+  const sweepOver = async (time: string) => {
+    await db.delete(cardLabelAssignments).where(eq(cardLabelAssignments.labelId, overLabel.id));
+    await runInProgressAlertAutomationSweep(undefined, at(time));
+    return (await labelled(overLabel.id)).includes(card.id);
+  };
+  const latch = async () => (await db.select().from(automationInProgressRuns)
+    .where(and(eq(automationInProgressRuns.automationId, overId), eq(automationInProgressRuns.cardId, card.id))))[0]?.thresholdSeconds ?? null;
+  assert.equal(await sweepOver("10:00"), false, "one tracked hour of two");
+  assert.equal(await sweepOver("12:00"), true, "three tracked hours passes two");
+  assert.equal(await latch(), 7200);
+  assert.equal(await sweepOver("13:00"), false, "once per estimate");
+  await setEstimate(5, "12:30");
+  assert.equal(await sweepOver("13:00"), false, "four tracked hours is under the raised five");
+  assert.equal(await sweepOver("15:00"), true, "a raised estimate that is passed too runs it again");
+  assert.equal(await latch(), 18000);
+  await setEstimate(1, "15:30");
+  assert.equal(await sweepOver("16:00"), false, "lowering the estimate never repeats it");
+  await setEstimate(6, "16:30");
+  assert.equal(await sweepOver("16:45"), false, "an estimate typed when the card had already outgrown it is recorded, not run");
+  assert.equal(await latch(), 21600);
+  await setEstimate(0, "16:50");
+  assert.equal(await sweepOver("16:55"), false, "a zero estimate is no limit");
 
   await app.close();
 });

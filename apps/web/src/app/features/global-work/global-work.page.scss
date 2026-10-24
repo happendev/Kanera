@@ -341,9 +341,17 @@
 
   // Keeps the 420px floor from the base rule: on a short window the sheet overflows the frame and the
   // shell scrolls to it, which is better than collapsing to a couple of rows.
-  .work-table-view {
+  .work-table-view,
+  .work-timeline-view {
     flex: 1 1 auto;
   }
+}
+
+// The Timeline shares the table's frame: its scroller owns the chart's scrollport, so it needs the
+// space that is actually left, and the same floor keeps a short window from flattening the chart.
+.work-timeline-view {
+  min-height: 420px;
+  margin-inline: calc(var(--work-gutter) * -1);
 }
 
 // Below the split point the sidebar becomes a bottom sheet: full width, its own layer, thumb-sized

@@ -18,7 +18,7 @@ void test("schedule reads send the board or workspace scope and the attention li
         path: url.pathname,
         ...(typeof init?.body === "string" ? { body: JSON.parse(init.body) } : {}),
       });
-      return new Response(JSON.stringify({ conflicts: [], critical: [], truncated: false }), { status: 200 });
+      return new Response(JSON.stringify({ conflicts: [], critical: [], lateToStart: [], truncated: false }), { status: 200 });
     }) as typeof fetch,
   });
 
@@ -34,5 +34,5 @@ void test("schedule reads send the board or workspace scope and the attention li
     { method: "POST", path: "/api/v1/work/schedule-attention/query", body: {} },
     { method: "POST", path: "/api/v1/work/schedule-attention/query", body: { limit: 5 } },
   ]);
-  assert.deepEqual(attention, { conflicts: [], critical: [], truncated: false });
+  assert.deepEqual(attention, { conflicts: [], critical: [], lateToStart: [], truncated: false });
 });

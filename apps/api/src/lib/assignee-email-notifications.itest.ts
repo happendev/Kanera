@@ -342,6 +342,36 @@ void test("due date set, change, and clear emails assignees with old and new lab
   assert.ok(pushes.every((row) => row.payload.notification.data.kind === "card_due_date_changed"));
 });
 
+// A start-only edit gets start-date wording; a due date that drags the start along names both; a
+// write that moves neither (or only the start of a card whose start is unchanged) sends nothing.
+void test("start date changes tell assignees, in one notification per write", async () => {
+  const f = await seed();
+  await db.update(clients).set({ pushEnabled: true }).where(eq(clients.id, f.owner.clientId));
+  await db.insert(notificationSettings).values({ userId: f.member.id, pushEnabled: true });
+  await db.insert(cardAssignees).values({ cardId: f.card.id, userId: f.member.id });
+  await db.update(cards).set({ dueDateLocalDate: "2026-05-29", dueDateSlot: "anyTime" }).where(eq(cards.id, f.card.id));
+  const patch = async (payload: object) => {
+    const response = await f.app.inject({ method: "PATCH", url: `/cards/${f.card.id}`, headers: { authorization: `Bearer ${f.ownerToken}` }, payload });
+    assert.equal(response.statusCode, 200, response.body);
+  };
+
+  await patch({ startDateLocalDate: "2026-05-25" });
+  await patch({ startDateLocalDate: "2026-05-25" });
+  // Pulling the due date before the start drags the start with it: one due-date email naming both.
+  await patch({ dueDateLocalDate: "2026-05-22", dueDateSlot: "anyTime" });
+
+  const rows = await db.select().from(emailQueue).where(eq(emailQueue.type, "card_due_date_changed")).orderBy(emailQueue.createdAt);
+  assert.equal(rows.length, 2);
+  const data = rows.map((row) => row.data as { dueChanged?: boolean; previousStartLabel?: string | null; nextStartLabel?: string | null });
+  assert.deepEqual(data.map((row) => [row.dueChanged, row.previousStartLabel, row.nextStartLabel]), [
+    [false, null, "25 May 2026"],
+    [true, "25 May 2026", "22 May 2026"],
+  ]);
+  assert.deepEqual(rows.map((row) => row.subject.replace(/^\[DEV\] /, "")), ["Start date changed on your Kanera card", "Due date changed on your Kanera card"]);
+  const pushes = await db.select().from(pushQueue).where(eq(pushQueue.userId, f.member.id)).orderBy(pushQueue.createdAt);
+  assert.deepEqual(pushes.map((row) => row.payload.notification.title), ["Start date changed", "Due date changed"]);
+});
+
 void test("overdue emails are queued once for assignees only", async () => {
   const f = await seed();
   await db

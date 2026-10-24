@@ -118,11 +118,12 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
 
 /**
  * Displays that are wrong on a partial card set: the board's lane order and "Next" card, the
- * overview's per-teammate counts, which would silently under-report from page one, and the
- * dependency map, which is seeded with the loaded cards and would drop every chain past page one.
+ * overview's per-teammate counts, which would silently under-report from page one, the
+ * dependency map, which is seeded with the loaded cards and would drop every chain past page one,
+ * and the timeline, whose critical path and group spans are only true over every bar.
  */
 function displayNeedsEveryCard(display: WorkDisplayMode): boolean {
-  return display === "board" || display === "overview" || display === "dependencies";
+  return display === "board" || display === "overview" || display === "dependencies" || display === "timeline";
 }
 
 /** The card fields the query projection keeps in sync, whether from a realtime echo or a local edit. */
@@ -687,7 +688,7 @@ export class GlobalWorkState {
       void Promise.all([this.refreshTeamPriorities(this.requestVersion), this.loadRemainingCards(this.requestVersion)])
         .then(() => this.persistCache())
         .catch(() => this.error.set($localize`We couldn’t load every card. Try refreshing the page.`));
-    } else if (display === "board" || display === "dependencies") {
+    } else if (display === "board" || display === "dependencies" || display === "timeline") {
       this.teamPriorityCandidates.set([]);
       void this.loadRemainingCards(this.requestVersion)
         .then(() => this.persistCache())

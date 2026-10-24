@@ -1347,6 +1347,8 @@ export async function cardRoutes(
           dueDateSlot: card.dueDateSlot,
           dueDateTimezone: card.dueDateTimezone,
         },
+        previousStart: previous.startDateLocalDate,
+        nextStart: card.startDateLocalDate,
       });
       await emitCardActivityFeedItem(boardId, card.id, activity);
       await emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: toWireCard(card, req.auth.cid) });
@@ -1816,7 +1818,7 @@ export async function cardRoutes(
         : await recordActivity(tx, activityInput);
       return { card: card!, previous: current, activity, linkFanout };
     });
-    if (hasDueDateUpdate) {
+    if (hasDueDateUpdate || card.startDateLocalDate !== current.startDateLocalDate) {
       await enqueueDueDateChangedEmails({
         tx: db,
         mailer: app.mailer,
@@ -1833,6 +1835,8 @@ export async function cardRoutes(
           dueDateSlot: card.dueDateSlot,
           dueDateTimezone: card.dueDateTimezone,
         },
+        previousStart: current.startDateLocalDate,
+        nextStart: card.startDateLocalDate,
       });
     }
     const wireCard = toWireCard(card, req.auth.cid);

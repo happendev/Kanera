@@ -132,7 +132,7 @@ type _WorkSortBackward = AssertAssignable<SharedWorkSort, WorkSort>;
 // Schedules. The responses are hand-copied interfaces, so both directions are asserted: a field the
 // engine adds or renames in packages/shared shows up here before an integrator reads undefined.
 type _ScheduleScope = AssertAssignable<ScheduleScope, z.input<typeof scheduleBody>>;
-type _ScheduleAttentionInput = AssertAssignable<{ limit?: number }, z.input<typeof scheduleAttentionBody>>;
+type _ScheduleAttentionInput = AssertAssignable<{ limit?: number; timeZone?: string }, z.input<typeof scheduleAttentionBody>>;
 type _ScheduleForward = AssertAssignable<Schedule, SharedSchedule>;
 type _ScheduleBackward = AssertAssignable<SharedSchedule, Schedule>;
 type _ScheduleAttentionForward = AssertAssignable<ScheduleAttention, SharedScheduleAttention>;

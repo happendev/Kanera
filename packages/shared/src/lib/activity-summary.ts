@@ -87,6 +87,8 @@ export interface ActivitySummaryMessages {
   correctedTimeInProgress: string;
   /** After the system's name ("Kanera"): the card's current stint passed its workspace alert. */
   flaggedInProgressTooLong: (days: number) => string;
+  /** After the system name: the card would start before a blocker finishes; that blocker's key follows as the chip. */
+  flaggedSchedulingConflict: string;
   addedChecklist: string;
   deletedChecklist: string;
   completedSubChecklist: string;
@@ -158,6 +160,7 @@ export const ACTIVITY_SUMMARY_SOURCE_MESSAGES: ActivitySummaryMessages = {
   removedCover: "removed the cover image",
   correctedTimeInProgress: "corrected the time in progress",
   flaggedInProgressTooLong: (days) => `flagged this card as in progress for more than ${days} ${days === 1 ? "day" : "days"}`,
+  flaggedSchedulingConflict: "flagged that this card is planned to start before its blocker finishes",
   addedChecklist: "added checklist",
   deletedChecklist: "deleted checklist",
   completedSubChecklist: "completed sub-checklist",
@@ -299,6 +302,9 @@ export function summariseActivityChange(
           return { icon: "ti ti-progress", text: m.correctedTimeInProgress };
         case "inProgress:tooLong":
           return { icon: "ti ti-progress-alert", text: m.flaggedInProgressTooLong(Number(payload["alertDays"]) || 0) };
+        case "schedule:conflict":
+          // Key only, like relations: the recipient may not be able to open the blocker.
+          return { icon: "ti ti-calendar-exclamation", text: m.flaggedSchedulingConflict, value: shortName(payload["otherCardKey"]) ?? undefined };
         case "checklist:created":
           return { icon: "ti ti-list-check", text: m.addedChecklist, value: shortName(payload["title"]) ?? undefined };
         case "checklist:deleted":

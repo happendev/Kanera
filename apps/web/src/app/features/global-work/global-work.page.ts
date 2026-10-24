@@ -81,6 +81,8 @@ import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
 import { SaveViewPopover } from "./save-view.popover";
 import { TeamOverviewComponent } from "./team-overview.component";
 import { DependencyMapComponent } from "../dependencies/dependency-map.component";
+import { BoardTimelineViewComponent, type TimelineScheduleScope } from "../board/timeline-view/board-timeline-view.component";
+import { timelineGroupByState } from "../board/timeline-view/timeline-preferences";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
@@ -176,7 +178,7 @@ const MAX_UP_NEXT_ENTRIES = 50;
 @Component({
   selector: "k-global-work",
   standalone: true,
-  imports: [EmptyStateComponent, 
+  imports: [BoardTimelineViewComponent, EmptyStateComponent, 
     ActivityStripComponent,
     AnchoredPanelDirective,
     AnchoredPickerPopover,
@@ -288,13 +290,28 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
   /** Map/Timeline/Steps, remembered per lens like the rest of the Dependencies view's choices. */
   readonly dependencyLayoutState = dependencyLayoutState(() => `globalWork:${this.lens()}`);
+  /** The Timeline's row grouping, per lens; the chart spans boards, so it opens grouped by board. */
+  readonly timelineGroupByState = timelineGroupByState(() => `globalWork:${this.lens()}`, "multiBoard");
+  /**
+   * The Timeline reads one schedule per workspace in view. Dependencies never cross a workspace, so
+   * the workspaces of the loaded cards hold every chain those cards sit in.
+   */
+  readonly timelineScope = computed<TimelineScheduleScope>(() => {
+    const boards = this.boardsById();
+    const workspaceIds = new Set<string>();
+    for (const card of this.state.cards()) {
+      const workspaceId = boards.get(card.boardId)?.workspaceId;
+      if (workspaceId) workspaceIds.add(workspaceId);
+    }
+    return { workspaceIds: [...workspaceIds].sort() };
+  });
   /**
    * Every display that renders `k-board-table-view` full-height, which is what `.is-table-frame`
    * sizes with flexbox. The sheet owns a scrollport and raises its incremental row cap from that
    * element's scroll position, so a display that lands here without the frame would leave the sheet at
    * auto height and strand every row past the first page.
    */
-  readonly usesTableFrame = computed(() => this.effectiveDisplay() === "table");
+  readonly usesTableFrame = computed(() => this.effectiveDisplay() === "table" || this.effectiveDisplay() === "timeline");
   readonly collapsedOrganisationIds = computed(() =>
     new Set(this.state.definition().collapsedOrganisationIds)
   );
@@ -363,6 +380,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
         : []),
       option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),
       option("calendar", "calendar", $localize`:Display option:Calendar view`, $localize`:Short display option:Calendar`),
+      // Only while some board in reach has start dates and the Timeline on; the preference
+      // normaliser drops a remembered timeline display on the same condition.
+      ...(this.timelineEnabled()
+        ? [option("timeline", "chart-arrows", $localize`:Display option; the Gantt-style view with a bar per card:Timeline view`, $localize`:Short display option for the Gantt-style view:Timeline`)]
+        : []),
       option("dependencies", "git-merge", $localize`:Display option; the view maps which cards block which:Dependencies view`, $localize`:Short display option for the view that maps which cards block which:Dependencies`),
       option("history", "history", $localize`:Display option:Work done`),
     ];
@@ -861,6 +883,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   );
   /** Some board in view has dependencies on; otherwise the Blocked filter could never match. */
   readonly dependenciesEnabled = computed(() => this.state.catalog().boards.some((board) => board.dependenciesEnabled));
+  /** Some board in view has start dates and the Timeline on; otherwise there is no Timeline display. */
+  readonly timelineEnabled = computed(() => this.state.catalog().boards.some((board) => board.timelineEnabled));
   readonly tableSourceWorkspaces = computed<SourceWorkspaceRef[]>(() =>
     this.state.catalog().workspaces.map((workspace) => ({
       id: workspace.id,

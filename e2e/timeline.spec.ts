@@ -10,8 +10,6 @@ import { boardIdOf, openBoard } from "./support/ui";
 
 type CreatedCard = { id: string; key: string; title: string };
 
-/** Pixels per calendar day at the Timeline's default (week) zoom; see timeline-layout.ts. */
-const PX_PER_DAY = 16;
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -93,6 +91,9 @@ test("the timeline draws bars, reschedules by drag, flags conflicts and draws de
     await openTimeline(viewer);
     await expect(bar(viewer, first)).toBeVisible();
     const viewerBefore = (await bar(viewer, first).boundingBox())!;
+    // The chart opens fitted to the plan, so the scale depends on the board; read it off the
+    // three-day bar rather than assuming one.
+    const viewerPxPerDay = viewerBefore.width / 3;
     // The seed board has blocking links of its own, so wire counts are relative to what is there.
     const wires = viewer.locator("k-board-timeline-view .tl-wire-hit");
     await expect(wireBetween(viewer, first, second)).toHaveCount(1);
@@ -100,7 +101,7 @@ test("the timeline draws bars, reschedules by drag, flags conflicts and draws de
     await expect(bar(viewer, second)).not.toHaveClass(/has-conflict/);
 
     await openTimeline(page);
-    // A three-day bar is too short for inline text at week zoom; its name lives in the accessible label.
+    // The bar's name always lives in its accessible label, whether or not it fits as inline text.
     await expect(bar(page, first)).toHaveAttribute("aria-label", new RegExp(`^${first.title}\\. .*3 working days`));
     // Labels are otherwise invisible on the chart: the row shows a chip and the bar names it for screen readers.
     const firstName = page.locator(`k-board-timeline-view .tl-row-card[data-card-id="${first.id}"] .tl-card-name`);
@@ -111,17 +112,18 @@ test("the timeline draws bars, reschedules by drag, flags conflicts and draws de
     // Drag the first bar two days later. It keeps its working-day length, so Mon–Wed becomes
     // Wed–Fri, and its dependent (Thu–Fri) now starts before it finishes: a conflict.
     const box = (await bar(page, first).boundingBox())!;
+    const pxPerDay = box.width / 3;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + PX_PER_DAY, box.y + box.height / 2, { steps: 3 });
-    await page.mouse.move(box.x + box.width / 2 + PX_PER_DAY * 2, box.y + box.height / 2, { steps: 3 });
+    await page.mouse.move(box.x + box.width / 2 + pxPerDay, box.y + box.height / 2, { steps: 3 });
+    await page.mouse.move(box.x + box.width / 2 + pxPerDay * 2, box.y + box.height / 2, { steps: 3 });
     await page.mouse.up();
     await expect.poll(() => datesOf(api, boardId, first.id)).toEqual({ start: isoDate(plusDays(monday, 2)), due: isoDate(plusDays(monday, 4)) });
     await expect(page.locator("k-board-timeline-view .tl-count.is-warning")).toContainText(/scheduling conflict/);
     await expect(bar(page, second)).toHaveClass(/has-conflict/);
 
     // The other member's bar moved by the same two days, and their chart flags the conflict too.
-    await expect.poll(async () => (await bar(viewer, first).boundingBox())!.x - viewerBefore.x).toBe(PX_PER_DAY * 2);
+    await expect.poll(async () => (await bar(viewer, first).boundingBox())!.x - viewerBefore.x).toBeCloseTo(viewerPxPerDay * 2, 0);
     await expect(bar(viewer, second)).toHaveClass(/has-conflict/);
 
     // Critical path: the chained cards light up, the unchained third stays plain.
@@ -307,6 +309,19 @@ test("the chart zooms around the pointer with ctrl+wheel and the buttons, and pa
   const card = await createScheduledCard(page, api, uniqueName("E2E timeline zoom"), monday, plusDays(monday, 4));
   try {
     await openTimeline(page);
+    const scroller = page.locator("k-board-timeline-view .tl-scroller");
+    // Every mounted bar sits inside the chart, between the names column and the scroller's edge.
+    const allBarsInChart = async () => {
+      const pane = (await page.locator("k-board-timeline-view .tl-corner").boundingBox())!;
+      const view = (await scroller.boundingBox())!;
+      const bars = await page.locator("k-board-timeline-view .tl-bar").evaluateAll((elements) => elements.map((element) => {
+        const box = element.getBoundingClientRect();
+        return { left: box.left, right: box.right };
+      }));
+      return bars.length > 0 && bars.every((box) => box.left >= pane.x + pane.width - 1 && box.right <= view.x + view.width + 1);
+    };
+    // With no zoom of the viewer's own, the chart opens fitted to the whole plan.
+    await expect.poll(allBarsInChart, { timeout: 5000 }).toBe(true);
     const target = bar(page, card);
     await target.scrollIntoViewIfNeeded();
     const before = (await target.boundingBox())!;
@@ -334,8 +349,14 @@ test("the chart zooms around the pointer with ctrl+wheel and the buttons, and pa
       return element.getBoundingClientRect().width === width;
     })).toBe(true);
 
+    // A zoom the viewer picked is theirs: the next visit keeps it instead of fitting again.
+    const chosenWidth = (await target.boundingBox())!.width;
+    await page.reload();
+    await expect(target).toBeAttached();
+    await expect.poll(async () => Math.round((await target.boundingBox())!.width)).toBe(Math.round(chosenWidth));
+
     // Grabbing the empty chart and dragging left scrolls it right by the same distance.
-    const scroller = page.locator("k-board-timeline-view .tl-scroller");
+    await target.scrollIntoViewIfNeeded();
     const scrollBefore = await scroller.evaluate((element) => element.scrollLeft);
     const lane = (await page.locator(`k-board-timeline-view .tl-row-card[data-card-id="${card.id}"] .tl-card-lane`).boundingBox())!;
     const now = (await target.boundingBox())!;
@@ -358,16 +379,58 @@ test("the chart zooms around the pointer with ctrl+wheel and the buttons, and pa
     });
     await expect(page.getByRole("button", { name: "Zoom in", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Fit all", exact: true }).click();
-    const chartBounds = async () => {
-      const pane = (await page.locator("k-board-timeline-view .tl-corner").boundingBox())!;
-      const view = (await scroller.boundingBox())!;
-      const bars = await page.locator("k-board-timeline-view .tl-bar").evaluateAll((elements) => elements.map((element) => {
-        const box = element.getBoundingClientRect();
-        return { left: box.left, right: box.right };
-      }));
-      return bars.every((box) => box.left >= pane.x + pane.width - 1 && box.right <= view.x + view.width + 1);
-    };
-    await expect.poll(chartBounds, { timeout: 5000 }).toBe(true);
+    await expect.poll(allBarsInChart, { timeout: 5000 }).toBe(true);
+  } finally {
+    expect((await api.patch(`/api/cards/${card.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
+  }
+});
+
+test("Team Cards offers the Timeline over every board, grouped by board, live for a second member", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
+  await signIn(page, "amelia");
+  await openBoard(page, "Platform Delivery");
+  const api = await apiAs("amelia");
+  const monday = nextPlanningMonday();
+  const card = await createScheduledCard(page, api, uniqueName("E2E team timeline"), monday, plusDays(monday, 2));
+  // Team Cards is the team's assigned work minus the viewer's own, so the card belongs to a third
+  // teammate before either member's chart shows it.
+  const priya = (await (await (await apiAs("priya")).get("/api/me")).json()) as { id?: string; user?: { id: string } };
+  expect((await api.put(`/api/cards/${card.id}/assignees`, { data: { userIds: [priya.user?.id ?? priya.id!] } })).ok()).toBe(true);
+
+  try {
+    // A second member keeps the Team Cards Timeline open; the date change below reaches it live.
+    const viewer = await pageAs("marcus");
+    await viewer.goto("/team-cards");
+    await viewer.getByRole("button", { name: "Timeline view", exact: true }).click();
+    // The chart windows its rows, so narrow both charts to the card rather than scrolling for it.
+    await viewer.getByRole("searchbox", { name: "Search cards", exact: true }).fill(card.title);
+    await expect(bar(viewer, card)).toBeVisible();
+    const viewerBefore = (await bar(viewer, card).boundingBox())!;
+    const viewerPxPerDay = viewerBefore.width / 3;
+
+    await page.goto("/team-cards");
+    await page.getByRole("button", { name: "Timeline view", exact: true }).click();
+    await page.getByRole("searchbox", { name: "Search cards", exact: true }).fill(card.title);
+    // Across boards the chart opens grouped by board, and the card sits under its board's heading.
+    const groups = page.locator("k-board-timeline-view .tl-group-name");
+    await expect(groups.filter({ hasText: "Platform Delivery" })).toHaveCount(1);
+    await expect(bar(page, card)).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath("team-cards-timeline-desktop.png") });
+
+    // The grouping switch in the query bar regroups the same rows; "By board" exists only here.
+    await page.getByRole("button", { name: "By list", exact: true }).click();
+    await expect(groups.filter({ hasText: "Backlog" })).toHaveCount(1);
+    await page.getByRole("button", { name: "By board", exact: true }).click();
+    await expect(groups.filter({ hasText: "Platform Delivery" })).toHaveCount(1);
+
+    // Rescheduling from the API moves the other member's bar without a reload.
+    const moved = await api.patch(`/api/cards/${card.id}`, { data: { startDateLocalDate: isoDate(plusDays(monday, 2)), dueDateLocalDate: isoDate(plusDays(monday, 4)) } });
+    expect(moved.ok(), await moved.text()).toBe(true);
+    await expect.poll(async () => (await bar(viewer, card).boundingBox())!.x - viewerBefore.x).toBeCloseTo(viewerPxPerDay * 2, 0);
+
+    // A phone keeps the chart; the grouping switch folds to icons with the rest of the query bar.
+    await viewer.setViewportSize({ width: 390, height: 900 });
+    await expect(bar(viewer, card)).toBeVisible();
+    await viewer.screenshot({ path: test.info().outputPath("team-cards-timeline-phone.png") });
   } finally {
     expect((await api.patch(`/api/cards/${card.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
   }

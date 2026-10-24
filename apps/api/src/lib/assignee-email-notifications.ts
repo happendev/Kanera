@@ -345,6 +345,37 @@ export async function enqueueDependencyHandoffNotifications(params: {
   });
 }
 
+/**
+ * Push and personal channels for a scheduling conflict (see notifyScheduleConflicts). No email: a
+ * conflict is a planning signal the Timeline already shows, and it can come and go with every drag,
+ * so it rides the lighter channels under the recipient's "Card dependencies" settings.
+ */
+export async function enqueueScheduleConflictPush(params: {
+  tx: Tx;
+  webOrigin: string;
+  cardId: string;
+  recipientUserIds: string[];
+  blockerKey: string;
+}): Promise<void> {
+  const recipients = await loadRecipients(params.tx, params.recipientUserIds, null);
+  if (recipients.length === 0) return;
+  const ctx = await loadCardEmailContext(params.tx, params.cardId);
+  if (!ctx) return;
+  const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
+  const cardUrlValue = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardDependency", "dependency", (locale) => {
+    const m = serverMessages(locale).push.scheduleConflict;
+    return {
+      kind: "card_schedule_conflict",
+      title: m.title,
+      body: m.body({ card: ctx.cardTitle, other: params.blockerKey }),
+      url: cardUrlValue,
+      tag: `card:${ctx.cardId}:schedule-conflict`,
+    };
+  });
+}
+
 export async function enqueueDueDateChangedEmails(params: {
   tx: Tx;
   mailer: Mailer;
@@ -353,7 +384,16 @@ export async function enqueueDueDateChangedEmails(params: {
   actorId: string;
   previousDue: DueLabelInput;
   nextDue: DueLabelInput;
+  /** Planned starts (YYYY-MM-DD) before and after, when the write could move it. */
+  previousStart?: string | null;
+  nextStart?: string | null;
 }): Promise<number> {
+  // One notification per write, named after what moved: a Timeline drag that shifts both dates is a
+  // due-date change that also mentions the start, and a start-only edit gets the start-date wording.
+  const dueChanged = params.previousDue.dueDateLocalDate !== params.nextDue.dueDateLocalDate
+    || params.previousDue.dueDateSlot !== params.nextDue.dueDateSlot;
+  const startChanged = (params.previousStart ?? null) !== (params.nextStart ?? null);
+  if (!dueChanged && !startChanged) return 0;
   const assignees = await params.tx
     .select({ userId: cardAssignees.userId })
     .from(cardAssignees)
@@ -381,15 +421,19 @@ export async function enqueueDueDateChangedEmails(params: {
       cardUrl: cardUrlValue,
       previousDueLabel: dueLabel(params.previousDue, locale),
       nextDueLabel: dueLabel(params.nextDue, locale),
+      dueChanged,
+      previousStartLabel: startChanged ? startLabel(params.previousStart ?? null, locale) : null,
+      nextStartLabel: startChanged ? startLabel(params.nextStart ?? null, locale) : null,
     });
   }));
   await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardDueDateChanged", "dueDateChanged", (locale) => {
-    const m = serverMessages(locale).push.dueDateChanged;
+    const m = dueChanged ? serverMessages(locale).push.dueDateChanged : serverMessages(locale).push.startDateChanged;
     return {
       kind: "card_due_date_changed",
       title: m.title,
       body: m.body({ actor: actorName(locale), card: ctx.cardTitle }),
       url: cardUrlValue,
+      // Same tag either way: a newer date change replaces an older one on the device.
       tag: `card:${ctx.cardId}:due-date`,
     };
   });
@@ -786,6 +830,10 @@ function dueLabel(input: DueLabelInput, locale: Locale): string | null {
   const date = formatLocalDate(locale, input.dueDateLocalDate, { month: "short", day: "numeric", year: "numeric" });
   const slot = slotLabel(input.dueDateSlot, common.dueSlots);
   return slot ? common.dueDateWithSlot({ date, slot }) : date;
+}
+
+function startLabel(localDate: string | null, locale: Locale): string | null {
+  return localDate ? formatLocalDate(locale, localDate, { month: "short", day: "numeric", year: "numeric" }) : null;
 }
 
 function slotLabel(slot: CardDueDateSlot | null, labels: { morning: string; afternoon: string; endOfWorkDay: string }): string | null {

@@ -12,6 +12,7 @@ import type {
   SavedWorkView,
   ScheduleAttentionCard,
   ScheduleAttentionResponse,
+  LateStartCard,
   ScheduleHealth,
   WorkCatalog,
   WorkDoneSummaryResponse,
@@ -62,6 +63,7 @@ import {
 } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
+import { loadLateStarts, localToday } from "../../lib/late-starts.js";
 import { workspaceFeatureEnabledSql } from "../../lib/workspace-features.js";
 import { loadViewerBoardSchedules, scheduleHealthOf, summarizeSchedule } from "../../lib/schedule-graph.js";
 import { createHash } from "node:crypto";
@@ -1067,10 +1069,10 @@ async function portfolioScheduleHealth(auth: AuthClaims, boardIds: readonly stri
  * board is scheduled as the Timeline view shows it, so what the briefing says matches the chart.
  * Blockers are named only when they were loaded, which is only when the viewer can open them.
  */
-async function scheduleAttention(auth: AuthClaims, limit: number): Promise<ScheduleAttentionResponse> {
+async function scheduleAttention(auth: AuthClaims, limit: number, timeZone?: string): Promise<ScheduleAttentionResponse> {
   const accessible = await loadAccessibleBoards(auth);
   const boardById = new Map(accessible.map((board) => [board.id, board]));
-  if (accessible.length === 0) return { conflicts: [], critical: [], truncated: false };
+  if (accessible.length === 0) return { conflicts: [], critical: [], lateToStart: [], truncated: false };
   const assigned = await db.select({ id: cards.id, boardId: cards.boardId })
     .from(cards)
     .innerJoin(cardAssignees, eq(cardAssignees.cardId, cards.id))
@@ -1121,7 +1123,17 @@ async function scheduleAttention(auth: AuthClaims, limit: number): Promise<Sched
   const critical = flagged.filter((entry) => entry.verdict.conflicts.length === 0 && entry.verdict.critical)
     .sort((a, b) => byDate(a.verdict.plannedEnd, b.verdict.plannedEnd) || a.id.localeCompare(b.id))
     .map(toCard).filter((card): card is ScheduleAttentionCard => card !== null).slice(0, limit);
-  return { conflicts, critical, truncated };
+  const [viewer] = timeZone ? [{ timezone: timeZone }] : await db.select({ timezone: users.timezone }).from(users).where(eq(users.id, auth.sub)).limit(1);
+  const now = new Date();
+  const lateToStart = (await loadLateStarts(db, { userIds: [auth.sub], todayFor: () => localToday(now, viewer?.timezone), now }))
+    .filter((row) => boardById.has(row.boardId))
+    .slice(0, limit)
+    .map((row): LateStartCard => ({
+      id: row.id, key: row.key, title: row.title, url: absoluteCardUrl(row.organisationKey, row.key),
+      boardId: row.boardId, boardName: boardById.get(row.boardId)?.name ?? row.boardName, listId: row.listId,
+      startDate: row.startDateLocalDate!, dueDate: row.dueDateLocalDate,
+    }));
+  return { conflicts, critical, lateToStart, truncated };
 }
 
 /**
@@ -1593,7 +1605,7 @@ export async function agentWorkRoutes(app: FastifyInstance) {
   // The schedule engine's briefing for the connected user; same handler on both servers.
   app.post("/work/schedule-attention/query", async (req): Promise<ScheduleAttentionResponse> => {
     const query = dto.scheduleAttentionBody.parse(req.body ?? {});
-    return scheduleAttention(req.auth, query.limit);
+    return scheduleAttention(req.auth, query.limit, query.timeZone);
   });
 
   app.post("/me/work-history", async (req) => {

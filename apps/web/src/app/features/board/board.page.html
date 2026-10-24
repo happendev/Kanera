@@ -365,7 +365,7 @@
   (cardOpened)="openCardDetail($event)" />
 } @else if (effectiveView() === 'timeline') {
 <!-- Bars come from this page's cards; only the blocks edges are read by the view itself. -->
-<k-board-timeline-view [boardId]="boardId()" [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"
+<k-board-timeline-view [scope]="timelineScope()" [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"
   [dependenciesEnabled]="state.dependenciesEnabled()"
   [preferenceScope]="'board:' + boardId()" [groupBy]="timelineGroupByState.groupBy()" (cardOpened)="openCardDetail($event)" />
 } @else if (effectiveView() === 'dependencies') {

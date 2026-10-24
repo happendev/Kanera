@@ -45,7 +45,7 @@ import { isCardInactive } from "@kanera/shared/card-timing";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 import { BulkCustomFieldsDialogComponent } from "./bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.component";
-import { BoardTimelineViewComponent } from "./timeline-view/board-timeline-view.component";
+import { BoardTimelineViewComponent, type TimelineScheduleScope } from "./timeline-view/board-timeline-view.component";
 import { timelineGroupByState } from "./timeline-view/timeline-preferences";
 import { DependencyMapComponent } from "../dependencies/dependency-map.component";
 import { WorkDoneViewComponent } from "./work-done-view/work-done-view.component";
@@ -303,6 +303,7 @@ export class BoardPage implements OnDestroy {
   readonly dependencyLayoutState = dependencyLayoutState(() => `board:${this.boardId()}`);
   /** The Timeline's row grouping, in the query bar ahead of Filter like the Dependencies layout switch. */
   readonly timelineGroupByState = timelineGroupByState(() => `board:${this.boardId()}`);
+  readonly timelineScope = computed<TimelineScheduleScope>(() => ({ boardId: this.boardId() }));
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
   readonly showInactiveOnly = signal(false);

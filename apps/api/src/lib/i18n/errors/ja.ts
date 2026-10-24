@@ -664,6 +664,14 @@ export const ja: ErrorCatalog = {
     "triggerCustomFieldIdとtriggerCustomFieldValueは必須です。",
   "triggerDaysBefore is required":
     "triggerDaysBeforeは必須です。",
+  "in-progress limit field must be a number field":
+    "進行中の時間の上限フィールドは数値フィールドである必要があります。",
+  "triggerCustomFieldId is required":
+    "triggerCustomFieldIdは必須です。",
+  "triggerThresholdAmount is required":
+    "triggerThresholdAmountは必須です。",
+  "triggerThresholdUnit is required":
+    "triggerThresholdUnitは必須です。",
   "triggerLabelId is required":
     "triggerLabelIdは必須です。",
   "triggerListId is required":

@@ -239,7 +239,22 @@ export function automationTriggerTargetLabel(automation: WireAutomation, lookups
     return icu($localize`:Automation trigger target:{days, plural, one {# day before} other {# days before}}`, { days });
   }
   if (automation.triggerType === "card_becomes_inactive") return null;
-  if (automation.triggerType === "card_in_progress_too_long") return null;
+  if (automation.triggerType === "card_in_progress_too_long") {
+    if (automation.triggerThresholdSource === "fixed" && automation.triggerThresholdAmount) {
+      const count = automation.triggerThresholdAmount;
+      return automation.triggerThresholdUnit === "hours"
+        ? icu($localize`:Automation trigger target - a card in progress longer than this:{count, plural, one {over # hour} other {over # hours}}`, { count })
+        : icu($localize`:Automation trigger target - a card in progress longer than this:{count, plural, one {over # day} other {over # days}}`, { count });
+    }
+    if (automation.triggerThresholdSource === "custom_field") {
+      const field = lookups.fields.find((item) => item.id === automation.triggerCustomFieldId);
+      return field
+        ? $localize`:Automation trigger target - tracked time passed the value of the named number field, e.g. over Estimate:over ${field.name}:field:`
+        : $localize`:Unconfigured automation trigger target:a number field`;
+    }
+    // The workspace alert is shown in the trigger's own help text.
+    return null;
+  }
   if (automation.triggerType === "all_checklist_items_complete") return null;
   if (automation.triggerType === "card_marked_complete") return null;
   if (automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked") return null;

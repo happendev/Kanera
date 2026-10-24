@@ -664,6 +664,14 @@ export const ptBR: ErrorCatalog = {
     "triggerCustomFieldId e triggerCustomFieldValue são obrigatórios.",
   "triggerDaysBefore is required":
     "triggerDaysBefore é obrigatório.",
+  "in-progress limit field must be a number field":
+    "O campo de limite do tempo em andamento deve ser um campo numérico.",
+  "triggerCustomFieldId is required":
+    "triggerCustomFieldId é obrigatório.",
+  "triggerThresholdAmount is required":
+    "triggerThresholdAmount é obrigatório.",
+  "triggerThresholdUnit is required":
+    "triggerThresholdUnit é obrigatório.",
   "triggerLabelId is required":
     "triggerLabelId é obrigatório.",
   "triggerListId is required":

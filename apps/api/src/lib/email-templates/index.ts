@@ -34,7 +34,7 @@ export type { CardDependencyAddedEmailParams } from "./card-dependency-added.js"
 export { cardUnblockedEmail } from "./card-unblocked.js";
 export type { CardUnblockedEmailParams } from "./card-unblocked.js";
 export type { ReactionAddedEmailParams } from "./reaction-added.js";
-export { cardDueDateChangedEmail } from "./card-due-date-changed.js";
+export { cardDueDateChangedEmail, cardDueDateChangedSubject } from "./card-due-date-changed.js";
 export type { CardDueDateChangedEmailParams } from "./card-due-date-changed.js";
 export { cardOverdueEmail } from "./card-overdue.js";
 export { cardReminderEmail } from "./card-reminder.js";

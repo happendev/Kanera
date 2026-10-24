@@ -101,6 +101,7 @@ export interface ScheduleHealth {
  */
 export const scheduleAttentionBody = z.object({
   limit: z.number().int().min(1).max(50).default(20).describe("Maximum cards per section."),
+  timeZone: z.string().trim().min(1).max(100).optional().describe("IANA zone defining today for lateToStart; omit for the user's own zone."),
 }).strict();
 export type ScheduleAttentionBody = z.infer<typeof scheduleAttentionBody>;
 
@@ -119,11 +120,29 @@ export interface ScheduleAttentionCard {
   conflicts: { blockerId: string; blockerKey: string; blockerTitle: string; days: number }[];
 }
 
+/** An open card whose planned start has passed but that has never been in progress. */
+export interface LateStartCard {
+  id: string;
+  key: string;
+  title: string;
+  url: string;
+  boardId: string;
+  boardName: string;
+  listId: string;
+  startDate: string;
+  dueDate: string | null;
+}
+
 export interface ScheduleAttentionResponse {
   /** Cards with at least one conflict, soonest planned start first. */
   conflicts: ScheduleAttentionCard[];
   /** Critical-path cards without a conflict, soonest planned end first. */
   critical: ScheduleAttentionCard[];
+  /**
+   * Cards past their planned start that never went in progress, earliest start first. Only where the
+   * workspace tracks time in progress and has an in-progress list; overdue cards are left out.
+   */
+  lateToStart: LateStartCard[];
   /** Reserved for incomplete evaluations; section limits do not truncate the underlying schedule. */
   truncated: boolean;
 }

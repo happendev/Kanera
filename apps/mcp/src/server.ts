@@ -157,6 +157,7 @@ const myDayOutputSchema = z.looseObject({
   schedule: z.looseObject({
     conflicts: z.array(scheduleAttentionCardSchema),
     critical: z.array(scheduleAttentionCardSchema),
+    lateToStart: z.array(z.looseObject({ id: uuid, key: z.string(), title: z.string(), url: z.url(), boardId: uuid, boardName: z.string(), startDate: scheduleDate, dueDate: scheduleDate.nullable() })),
     truncated: z.boolean(),
   }),
 });
@@ -557,7 +558,7 @@ function describeInputParameters<T extends z.ZodRawShape>(inputSchema: T): T {
     ];
   })) as unknown as T;
 }
-const { AUTOMATION_ACTION_LIMIT, BULK_CREATE_CARDS_MAX, automationTriggerCustomFieldValue, automationTriggerType } = await import("@kanera/shared/dto");
+const { AUTOMATION_ACTION_LIMIT, BULK_CREATE_CARDS_MAX, automationInProgressThresholdSource, automationInProgressThresholdUnit, automationTriggerCustomFieldValue, automationTriggerType } = await import("@kanera/shared/dto");
 const { AUTOMATION_ACTION_TYPES, COMMENT_REACTION_TYPES, MAX_CARD_PRIORITIES_PER_USER } = await import("@kanera/shared/schema");
 const reactionType = z.enum(COMMENT_REACTION_TYPES);
 const colorToken = colorTokenSchema;
@@ -731,9 +732,13 @@ const automationCreateFields = {
   triggerListId: uuid.optional().describe("Required when triggerType is card_enters_list or card_leaves_list."),
   triggerUserIds: z.array(uuid).min(1).max(100).optional().describe("Required when triggerType is card_assigned_to_user."),
   triggerLabelId: uuid.optional().describe("Required when triggerType is card_label_set."),
-  triggerCustomFieldId: uuid.optional().describe("Required when triggerType is custom_field_value_changed."),
+  triggerCustomFieldId: uuid.optional().describe("Required when triggerType is custom_field_value_changed, or for card_in_progress_too_long with triggerThresholdSource custom_field (a number field)."),
   triggerCustomFieldValue: automationTriggerCustomFieldValue.optional().describe("Typed selected value required when triggerType is custom_field_value_changed."),
   triggerDaysBefore: z.number().int().min(1).max(3650).optional().describe("Lead time required when triggerType is due_date_approaching; due_date_arrives and start_date_arrives take none."),
+  triggerThresholdSource: automationInProgressThresholdSource.optional().describe("card_in_progress_too_long limit: workspace (default), fixed, or custom_field (a number field, e.g. an estimate, against tracked working time)."),
+  triggerThresholdAmount: z.number().int().min(1).max(87600).optional().describe("Required for a fixed limit."),
+  triggerThresholdUnit: automationInProgressThresholdUnit.optional().describe("hours or days (8 working hours for custom_field)."),
+  triggerIncludeExisting: z.boolean().default(false).describe("Also run for cards already past the limit when turned on."),
   applyOnCreate: z.boolean().default(true).describe("For card_enters_list, also run when a card is created in the trigger list."),
   applyOnMove: z.boolean().default(true).describe("For card_enters_list, run when a card moves into the trigger list."),
   actions: z.array(automationActionInput).max(AUTOMATION_ACTION_LIMIT).default([]).describe("Ordered action definitions; enabled rules require at least one."),
@@ -743,9 +748,13 @@ const automationChanges = z.strictObject({
   triggerListId: uuid.nullable().optional().describe("Required when the resulting triggerType is card_enters_list or card_leaves_list."),
   triggerUserIds: z.array(uuid).min(1).max(100).nullable().optional().describe("Required when the resulting triggerType is card_assigned_to_user."),
   triggerLabelId: uuid.nullable().optional().describe("Required when the resulting triggerType is card_label_set."),
-  triggerCustomFieldId: uuid.nullable().optional().describe("Required when the resulting triggerType is custom_field_value_changed."),
+  triggerCustomFieldId: uuid.nullable().optional().describe("Required when the resulting triggerType is custom_field_value_changed, or for card_in_progress_too_long with triggerThresholdSource custom_field (a number field)."),
   triggerCustomFieldValue: automationTriggerCustomFieldValue.nullable().optional().describe("Typed selected value required when the resulting triggerType is custom_field_value_changed."),
   triggerDaysBefore: z.number().int().min(1).max(3650).nullable().optional().describe("Lead time required when the resulting triggerType is due_date_approaching; due_date_arrives and start_date_arrives take none."),
+  triggerThresholdSource: automationInProgressThresholdSource.nullable().optional().describe("card_in_progress_too_long limit: workspace, fixed, or custom_field. Changing it forgets handled cards."),
+  triggerThresholdAmount: z.number().int().min(1).max(87600).nullable().optional().describe("Required for a fixed limit."),
+  triggerThresholdUnit: automationInProgressThresholdUnit.nullable().optional().describe("hours or days (8 working hours for custom_field)."),
+  triggerIncludeExisting: z.boolean().optional().describe("Also run for cards already past the limit when turned on."),
   applyOnCreate: z.boolean().optional().describe("For card_enters_list, whether card creation can trigger the rule."),
   applyOnMove: z.boolean().optional().describe("For card_enters_list, whether moving a card can trigger the rule."),
   actions: z.array(automationActionInput).max(AUTOMATION_ACTION_LIMIT).optional().describe("Replace the full ordered action list atomically with the trigger changes. An empty list disables the rule."),
@@ -2469,7 +2478,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     days: z.number().int().min(1).max(60).default(30),
     timeZone: z.string().trim().min(1).max(100).optional(),
   }, async (a, api) => api.post("/api/v1/work/portfolio/query", { ...a, timeZone: a.timeZone ?? (await userDateContext(api)).timeZone }), ctx);
-  registerKaneraTool(server, "work.my_day", "Start here for what to work on: the connected user's overdue, due-in-7-days, overdue-checklist, and stale (idle past the workspace's inactive-card threshold, default 14 days) assigned cards across boards, plus the top of their \"Up next\" queue, plus the user's cards with scheduling conflicts and their critical-path cards (schedule.conflicts, schedule.critical, from the same engine as work.schedule), in one call. Work sections are bounded work.query_cards pages, soonest due first.", {
+  registerKaneraTool(server, "work.my_day", "Start here for what to work on: the connected user's overdue, due-in-7-days, overdue-checklist, and stale (idle past the workspace's inactive-card threshold, default 14 days) assigned cards across boards, plus the top of their \"Up next\" queue, plus the user's cards with scheduling conflicts and their critical-path cards (schedule.conflicts, schedule.critical, from the same engine as work.schedule) and cards past their planned start that never went in progress (schedule.lateToStart), in one call. Work sections are bounded work.query_cards pages, soonest due first.", {
     timeZone: z.string().trim().min(1).max(100).optional().describe("IANA zone defining today; omit for the user's own zone."),
     limit: z.number().int().min(1).max(50).default(20).describe("Maximum cards per section."),
     upNextLimit: z.number().int().min(0).max(MAX_CARD_PRIORITIES_PER_USER).default(10).describe("Up next entries; 0 skips."),
@@ -2486,7 +2495,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
       query({ overdueChecklistOnly: true }),
       query({ inactiveOnly: true }),
       // The user's own cards the schedule engine flags, each board scheduled as the Timeline shows it.
-      api.post<{ conflicts: unknown[]; critical: unknown[]; truncated: boolean }>("/api/v1/work/schedule-attention/query", { limit: a.limit }),
+      api.post<{ conflicts: unknown[]; critical: unknown[]; lateToStart: unknown[]; truncated: boolean }>("/api/v1/work/schedule-attention/query", { limit: a.limit, timeZone }),
       a.upNextLimit === 0
         ? Promise.resolve(null)
         : priorityTargetUserId(api, undefined).then((userId) => api.get(`/api/v1/work/priorities/${userId}`, { limit: a.upNextLimit })),
@@ -2502,7 +2511,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
       overdueChecklists,
       stale,
       upNext,
-      schedule: { conflicts: schedule.conflicts, critical: schedule.critical, truncated: schedule.truncated },
+      schedule: { conflicts: schedule.conflicts, critical: schedule.critical, lateToStart: schedule.lateToStart, truncated: schedule.truncated },
     };
   }, ctx, myDayOutputSchema);
   registerKaneraTool(server, "work.schedule", "Project when a board's or workspace's open work will finish: the same schedule the Timeline view draws, computed by Kanera's critical-path engine over open cards and their blocks relations, so you and the person looking at the chart never disagree. Pass exactly one of boardId, workspaceId. Every date is a working day (Mon–Fri); durations and slack count working days. Per card: plannedStart/plannedEnd (the bar the card holds), durationDays, earliestStart/earliestFinish (as soon as its blockers allow) and latestStart/latestFinish (as late as it can run without delaying the end of its chain), slackDays (working days it can slip before it delays anything; 0 is none, null when the card has no dates or no chain), critical (on the critical path: chained and without slack, so a day lost here is a day lost on the finish), conflicts (open blockers planned to finish on or after this card's start, with the working days the card would have to move right), blockerIds and dependentIds. summary: projectedFinish (when the critical chain is expected to end), latestDue (the latest due date in the plan, what it promised), slipDays (working days projectedFinish lands after latestDue; 0 means the plan holds), conflictCount, criticalCount, scheduledCount, unscheduledCount (open cards with no dates take no part), range. criticalEdgeIds marks the chain. Use cards.dependency_graph to see who blocks whom; use work.schedule to answer when something finishes, how much room a card has, what is at risk and what slips if a card moves. Completed cards are left out; cards you cannot open are skipped and their dependents simply have one blocker fewer. Returns complete accessible connected chains; display filters do not change the calculation.", {

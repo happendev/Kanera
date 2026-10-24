@@ -13,7 +13,7 @@ import {
   type SmtpConfig,
 } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
-import type { DailyDigestPriorityItem } from "./email-templates/daily-digest.js";
+import type { DailyDigestCardItem, DailyDigestPriorityItem } from "./email-templates/daily-digest.js";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
 import { isDueDateOverdue } from "./due-date.js";
@@ -25,6 +25,7 @@ import { localParts } from "./due-date.js";
 import { formatDate, formatLocalDate } from "./i18n/format.js";
 import { serverMessages } from "./i18n/messages/index.js";
 import { recipientLocale } from "./i18n/request-locale.js";
+import { loadLateStarts, localToday } from "./late-starts.js";
 import { enqueueMyDayMcpEvents } from "./mcp-events.js";
 import type { Locale } from "@kanera/shared/locales";
 const DIGEST_HOUR = 8;
@@ -196,6 +197,8 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
   // Locale is per recipient, never per batch: each digest is labelled in its reader's language.
   const localeByUser = new Map(emailEnabledRows.map((row) => [row.userId, recipientLocale(row.locale)]));
   const prioritiesByUser = await loadDigestPriorities(deps.db, localeByUser, deps.webOrigin, now);
+  const timezoneByUser = new Map(emailEnabledRows.map((row) => [row.userId, row.timezone]));
+  const lateStartsByUser = await loadDigestLateStarts(deps.db, localeByUser, timezoneByUser, deps.webOrigin, now);
 
   let enqueued = 0;
   for (const digest of buildDigests(emailEnabledRows, deps.webOrigin, now)) {
@@ -208,6 +211,7 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       dueToday: digest.dueToday,
       overdue: digest.overdue,
       priorities: prioritiesByUser.get(digest.userId) ?? [],
+      lateStarts: lateStartsByUser.get(digest.userId) ?? [],
     });
     if (row) enqueued += 1;
   }
@@ -317,6 +321,32 @@ async function loadDigestPriorities(
         : itemDueLabel(locale, row.dueDateLocalDate, dueLocal.date),
     });
     byUser.set(row.targetUserId, items);
+  }
+  return byUser;
+}
+
+/** Late starts per recipient (see loadLateStarts), earliest planned start first, capped like the queue. */
+async function loadDigestLateStarts(
+  db: Db,
+  localeByUser: Map<string, Locale>,
+  timezoneByUser: Map<string, string>,
+  webOrigin: string,
+  now: Date,
+): Promise<Map<string, DailyDigestCardItem[]>> {
+  const rows = await loadLateStarts(db, { userIds: [...localeByUser.keys()], todayFor: (userId) => localToday(now, timezoneByUser.get(userId)), now });
+  const byUser = new Map<string, DailyDigestCardItem[]>();
+  for (const row of rows) {
+    const items = byUser.get(row.userId) ?? [];
+    if (items.length >= MAX_DIGEST_PRIORITIES) continue;
+    const m = serverMessages(localeByUser.get(row.userId)!).email.dailyDigest;
+    items.push({
+      title: row.title,
+      boardName: row.boardName,
+      context: null,
+      cardUrl: cardUrl(webOrigin, row.organisationKey, row.key),
+      dueLabel: m.itemPlannedStart({ date: formatLocalDate(localeByUser.get(row.userId)!, row.startDateLocalDate!, { month: "short", day: "numeric" }) }),
+    });
+    byUser.set(row.userId, items);
   }
   return byUser;
 }

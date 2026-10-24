@@ -106,6 +106,10 @@ export const ACTIVITY_ACTIONS = [
   // is blocked again (payload otherCardId, otherCardKey). Recorded on the dependent card; it carries
   // the "blocked again" notification to its assignees and watchers.
   "blockers:reopened",
+  // System: the card's plan first fell behind one of its blockers, which is planned to finish on or
+  // after this card's start (payload otherCardId, otherCardKey, days). Recorded by the schedule
+  // recheck worker once per conflict, not per edit; it notifies the card's assignees and watchers.
+  "schedule:conflict",
   // Thumbs-up on a comment (entity `comment`) or an attachment (entity `card`, payload.attachmentId).
   // Recorded hidden from feeds: it exists to carry the author's "reacted" notification.
   "reaction:added",
@@ -163,6 +167,7 @@ export const ACTIVITY_ACTION = {
   RELATION_REMOVED: "relation:removed",
   BLOCKERS_CLEARED: "blockers:cleared",
   BLOCKERS_REOPENED: "blockers:reopened",
+  SCHEDULE_CONFLICT: "schedule:conflict",
 } as const satisfies Record<string, ActivityAction>;
 
 export const ACTIVITY_COALESCE_KEYS = [

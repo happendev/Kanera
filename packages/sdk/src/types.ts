@@ -849,11 +849,29 @@ export interface ScheduleAttentionCard {
 }
 
 /** The credential owner's own open cards that the schedule engine flags, for a morning briefing. */
+/** An open card whose planned start has passed but that has never been in progress. */
+export interface LateStartCard {
+  id: Uuid;
+  key: string;
+  title: string;
+  url: string;
+  boardId: Uuid;
+  boardName: string;
+  listId: Uuid;
+  startDate: string;
+  dueDate: string | null;
+}
+
 export interface ScheduleAttention {
   /** Cards with at least one conflict, soonest planned start first. */
   conflicts: ScheduleAttentionCard[];
   /** Critical-path cards without a conflict, soonest planned end first. */
   critical: ScheduleAttentionCard[];
+  /**
+   * Cards past their planned start that never went in progress, earliest start first. Only where the
+   * workspace tracks time in progress and has an in-progress list; overdue cards are left out.
+   */
+  lateToStart: LateStartCard[];
   /** Reserved for incomplete evaluations; section limits do not truncate the underlying schedule. */
   truncated: boolean;
 }

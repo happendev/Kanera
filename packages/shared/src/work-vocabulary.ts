@@ -37,8 +37,11 @@ export const WORK_SORT_VALUES = [
  *
  * `dependencies` maps the blocking chains the lens's loaded cards sit in, across boards: the same
  * view a board offers, seeded with the loaded cards instead of one board's.
+ *
+ * `timeline` is the board Timeline (Gantt) over the loaded cards, grouped by board by default, with
+ * one schedule read per workspace in view.
  */
-export const WORK_DISPLAY_MODES = ["board", "table", "calendar", "priorities", "overview", "history", "summary", "dependencies"] as const;
+export const WORK_DISPLAY_MODES = ["board", "table", "calendar", "timeline", "priorities", "overview", "history", "summary", "dependencies"] as const;
 /**
  * Completion filters for work queries.
  *

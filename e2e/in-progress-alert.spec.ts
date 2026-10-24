@@ -142,3 +142,53 @@ test("a board flags work in progress too long and filters to work in progress", 
   await expect(agedChip).toHaveAttribute("aria-label", /^In progress since .* \(2 weeks\) · 80 hours tracked$/);
   await settings.screenshot({ path: test.info().outputPath("settings-alert.png") });
 });
+
+test("the working hours time zone picker orders zones by UTC offset, searches and saves", async ({ page, signIn, apiAs, uniqueName }) => {
+  const api = await apiAs("amelia");
+  const ws = await createWorkspace(api, uniqueName("E2E Zone Workspace"));
+  await signIn(page, "amelia");
+  await page.goto(`/w/${ws.workspaceId}/settings/general`);
+  const trigger = page.getByRole("button", { name: /^Working hours time zone: / });
+  await expect(trigger).toHaveAccessibleName("Working hours time zone: (UTC+00:00) UTC");
+
+  // West to east, every row carrying its offset, opened on the current zone.
+  await trigger.click();
+  const options = page.locator("k-anchored-picker [role=option]");
+  const labels = await options.allTextContents();
+  const offsets = labels.map((label) => {
+    const match = /^\s*\(UTC([+-])(\d{2}):(\d{2})\)/.exec(label);
+    expect(match, label).not.toBeNull();
+    return (match![1] === "-" ? -1 : 1) * (Number(match![2]) * 60 + Number(match![3]));
+  });
+  expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
+  expect(offsets[0]).toBeLessThan(0);
+  await expect(page.locator("k-anchored-picker .pl-row.is-selected")).toBeInViewport();
+
+  // Search by city (renamed zones read under their current name) and by offset.
+  const search = page.getByRole("combobox", { name: "Search by city, region or UTC offset…" });
+  await search.fill("+05:45");
+  await expect(options).toHaveText(["(UTC+05:45) Asia/Kathmandu"]);
+  await search.fill("kolkata");
+  await expect(options).toHaveText(["(UTC+05:30) Asia/Kolkata"]);
+  await page.screenshot({ path: test.info().outputPath("time-zone-search.png") });
+  await options.first().click();
+
+  await expect(trigger).toHaveAccessibleName("Working hours time zone: (UTC+05:30) Asia/Kolkata");
+  await expect.poll(async () => {
+    const body = (await (await api.get(`/api/workspaces/${ws.workspaceId}`)).json()) as { workspace?: { timeZone: string }; timeZone?: string };
+    return body.workspace?.timeZone ?? body.timeZone;
+  }).toMatch(/^Asia\/(Kolkata|Calcutta)$/);
+  await page.reload();
+  await expect(trigger).toHaveAccessibleName("Working hours time zone: (UTC+05:30) Asia/Kolkata");
+
+  // Phone width: the picker stays inside the viewport.
+  await page.setViewportSize({ width: 375, height: 812 });
+  await trigger.scrollIntoViewIfNeeded();
+  await trigger.click();
+  const panel = page.locator("k-anchored-picker");
+  await expect(panel).toBeVisible();
+  const box = (await panel.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(375);
+  await page.screenshot({ path: test.info().outputPath("time-zone-phone.png") });
+});

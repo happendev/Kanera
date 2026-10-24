@@ -9,6 +9,8 @@ import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automa
 import type { ColorToken } from "@kanera/shared/colors";
 import type { AutomationActionBody, AutomationTriggerCustomFieldValueDto, AutomationTriggerTypeDto, BoardTileSummary, CustomFieldTypeName, DeletionImpactResponse, DueDateSlot } from "@kanera/shared/dto";
 import { API_KEY_NAME_MAX_LENGTH, CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
+import { timeZonePickerGroups } from "./general/time-zone-options";
+import type { AutomationInProgressThresholdSource, AutomationInProgressThresholdUnit } from "@kanera/shared/schema";
 import type { ServerToClientEvents, WireAutomation, WireAutomationAction, WireCardLabel, WireChecklistTemplate, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kanera/shared/schema";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_IN_PROGRESS_ALERT_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
@@ -738,12 +740,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly inProgressAlertDaysDraft = signal(DEFAULT_IN_PROGRESS_ALERT_DAYS);
   /** The zone whose working hours time in progress counts (09:00-17:00, Monday to Friday). */
   readonly timeZoneDraft = signal("UTC");
-  /** Every zone the browser knows, always including the saved one so it never renders blank. */
-  readonly timeZoneOptions = computed(() => {
-    const zones = supportedTimeZones();
-    const current = this.timeZoneDraft();
-    return zones.includes(current) ? zones : [current, ...zones];
-  });
+  /** Every zone the browser knows, ordered by UTC offset and always including the saved one. */
+  readonly timeZoneGroups = computed(() => timeZonePickerGroups(this.timeZoneDraft()));
   readonly isStandalone = computed(() => this.workspace()?.kind === "board");
   /** "board" for a standalone board, else "workspace". An ICU select key in templates, never shown as text. */
   readonly entityKind = computed(() => this.isStandalone() ? "board" : "workspace");
@@ -833,6 +831,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (field.type === "user") return this.automationMembers().length > 0;
     return true;
   }));
+  /** The fields an "over the estimate" limit can read: only numbers carry an amount. */
+  readonly automationNumberFields = computed(() => this.fields().filter((field) => field.type === "number"));
   readonly enabledAutomationCount = computed(() => this.automations().filter((automation) => automation.enabled).length);
   readonly automationRecipeGroups = automationRecipeGroups;
   readonly automationRecipeGroupLabels = automationRecipeGroupLabels;
@@ -1602,7 +1602,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   updateTimeZone(value: string) {
-    if (!value) return;
+    if (!value || this.generalSettingsSaving()) return;
     this.timeZoneDraft.set(value);
     // A select is one deliberate choice, not typing: save it without the debounce.
     this.queueGeneralSettingsSave();
@@ -2256,6 +2256,55 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   automationTriggerDaysBefore(automation: WireAutomation): number { return automation.triggerDaysBefore ?? 3; }
 
+  automationThresholdSource(automation: WireAutomation): AutomationInProgressThresholdSource { return automation.triggerThresholdSource ?? "workspace"; }
+
+  automationThresholdUnit(automation: WireAutomation): AutomationInProgressThresholdUnit { return automation.triggerThresholdUnit ?? "days"; }
+
+  automationThresholdFieldMissing(automation: WireAutomation): boolean {
+    return Boolean(automation.triggerCustomFieldId) && !this.automationNumberFields().some((field) => field.id === automation.triggerCustomFieldId);
+  }
+
+  async updateAutomationThresholdSource(id: string, source: AutomationInProgressThresholdSource) {
+    const current = this.automations().find((automation) => automation.id === id);
+    if (!current) return;
+    let body: Record<string, unknown> = { triggerThresholdSource: source };
+    if (source === "fixed") {
+      // Start from the workspace alert so switching over keeps the rule's meaning until edited.
+      body = { ...body, triggerThresholdAmount: current.triggerThresholdAmount ?? Math.max(1, this.inProgressAlertDaysDraft() || 3), triggerThresholdUnit: current.triggerThresholdUnit ?? "days" };
+    } else if (source === "custom_field") {
+      const field = this.automationNumberFields().find((item) => item.id === current.triggerCustomFieldId) ?? this.automationNumberFields()[0];
+      if (!field) return;
+      body = { ...body, triggerCustomFieldId: field.id, triggerThresholdUnit: current.triggerThresholdUnit ?? "days" };
+    }
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, body);
+    this.replaceAutomation(updated);
+  }
+
+  async updateAutomationThresholdAmount(id: string, value: number) {
+    if (!Number.isFinite(value)) return;
+    const triggerThresholdAmount = Math.min(87600, Math.max(1, Math.trunc(value)));
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerThresholdAmount });
+    this.replaceAutomation(updated);
+  }
+
+  async updateAutomationThresholdUnit(id: string, triggerThresholdUnit: AutomationInProgressThresholdUnit) {
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerThresholdUnit });
+    this.replaceAutomation(updated);
+  }
+
+  async updateAutomationThresholdField(id: string, triggerCustomFieldId: string) {
+    if (!this.automationNumberFields().some((field) => field.id === triggerCustomFieldId)) return;
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerCustomFieldId });
+    this.replaceAutomation(updated);
+  }
+
+  async toggleAutomationIncludeExisting(id: string) {
+    const current = this.automations().find((automation) => automation.id === id);
+    if (!current) return;
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerIncludeExisting: !current.triggerIncludeExisting });
+    this.replaceAutomation(updated);
+  }
+
   automationTriggerCustomField(automation: WireAutomation): WireCustomField | null {
     return this.fields().find((field) => field.id === automation.triggerCustomFieldId) ?? null;
   }
@@ -2380,6 +2429,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       case "card_assigned_to_user": return $localize`:Automation title; member names follow:Card assigned to ${target}:members:`;
       case "card_label_set": return $localize`:Automation title; a label name follows:Label set to ${target}:label:`;
       case "custom_field_value_changed": return $localize`:Automation title; "field = value" follows:Custom field changes to ${target}:condition:`;
+      case "card_in_progress_too_long": return $localize`:Automation title - the limit follows, e.g. over 3 days or over Estimate:Card in progress ${target}:limit:`;
       default: break;
     }
     if (automation.applyOnCreate && automation.applyOnMove) return $localize`:Automation title; a list name follows:Card created or moved into ${target}:list:`;
@@ -2482,9 +2532,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
       triggerListId: automation.triggerType === "card_enters_list" || automation.triggerType === "card_leaves_list" ? automation.triggerListId : null,
       triggerUserIds: automation.triggerType === "card_assigned_to_user" ? this.stringList(automation.triggerUserIds) : null,
       triggerLabelId: automation.triggerType === "card_label_set" ? automation.triggerLabelId : null,
-      triggerCustomFieldId: automation.triggerType === "custom_field_value_changed" ? automation.triggerCustomFieldId : null,
+      triggerCustomFieldId: automation.triggerType === "custom_field_value_changed" || (automation.triggerType === "card_in_progress_too_long" && automation.triggerThresholdSource === "custom_field") ? automation.triggerCustomFieldId : null,
       triggerCustomFieldValue: automation.triggerType === "custom_field_value_changed" ? automation.triggerCustomFieldValue : null,
       triggerDaysBefore: automation.triggerType === "due_date_approaching" ? automation.triggerDaysBefore : null,
+      triggerThresholdSource: automation.triggerType === "card_in_progress_too_long" ? automation.triggerThresholdSource ?? null : null,
+      triggerThresholdAmount: automation.triggerType === "card_in_progress_too_long" ? automation.triggerThresholdAmount ?? null : null,
+      triggerThresholdUnit: automation.triggerType === "card_in_progress_too_long" ? automation.triggerThresholdUnit ?? null : null,
+      triggerIncludeExisting: automation.triggerType === "card_in_progress_too_long" && automation.triggerIncludeExisting === true,
       actions: automation.actions.map((action) => {
         const body = this.automationActionBody(action);
         return { ...action, ...body };
@@ -2652,6 +2706,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
       triggerCustomFieldId: source.triggerCustomFieldId,
       triggerCustomFieldValue: source.triggerCustomFieldValue,
       triggerDaysBefore: source.triggerDaysBefore,
+      triggerThresholdSource: source.triggerThresholdSource,
+      triggerThresholdAmount: source.triggerThresholdAmount,
+      triggerThresholdUnit: source.triggerThresholdUnit,
+      triggerIncludeExisting: source.triggerIncludeExisting,
       applyOnCreate: source.applyOnCreate,
       applyOnMove: source.applyOnMove,
       actions,
@@ -3963,16 +4021,4 @@ export class WorkspaceSettingsPage implements OnDestroy {
     }
   }
 
-}
-
-let timeZoneList: string[] | null = null;
-
-/** IANA zones for the workspace time zone picker, computed once per session. */
-function supportedTimeZones(): string[] {
-  if (!timeZoneList) {
-    const intl = Intl as typeof Intl & { supportedValuesOf?: (key: "timeZone") => string[] };
-    const zones = intl.supportedValuesOf?.("timeZone") ?? [];
-    timeZoneList = zones.includes("UTC") ? zones : ["UTC", ...zones];
-  }
-  return timeZoneList;
 }

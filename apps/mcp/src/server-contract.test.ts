@@ -298,7 +298,7 @@ const EMPTY_SCHEDULE = {
   summary: { scheduledCount: 0, unscheduledCount: 0, conflictCount: 0, criticalCount: 0, range: null, projectedFinish: null, latestDue: null, slipDays: 0 },
   boards: [], lists: [], labels: [], people: [], truncated: false,
 };
-const EMPTY_SCHEDULE_ATTENTION = { conflicts: [], critical: [], truncated: false };
+const EMPTY_SCHEDULE_ATTENTION = { conflicts: [], critical: [], lateToStart: [], truncated: false };
 
 const nonDefaultToolNames = new Set([
   "kanera_set_standalone_board_retention",
@@ -437,7 +437,7 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
         path: "/api/v1/work/cards/query",
         body: { lens: "my", filters: { completion: "active", ...filters }, sort: "dueAsc", limit: 5 },
       })),
-      { method: "POST", path: "/api/v1/work/schedule-attention/query", body: { limit: 5 } },
+      { method: "POST", path: "/api/v1/work/schedule-attention/query", body: { limit: 5, timeZone: "UTC" } },
       { method: "GET", path: "/api/v1/session" },
       { method: "GET", path: `/api/v1/work/priorities/${U}?limit=3` },
     ],
@@ -858,14 +858,16 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // The schedule engine (work.schedule with its typed per-card output, the schedule section and
     // output schema on work.my_day, schedule health on work.portfolio_summary and the two schedule
     // triggers described on automations.create/update) adds ~8.9k; both ceilings move by 9k.
+    // In-progress limits on automations.create/update (fixed or number-field thresholds and the
+    // include-existing switch) plus schedule.lateToStart on work.my_day add ~2.4k; both move by 2.5k.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
     // OAuth declarations add a fixed per-tool cost. Preserve the original routing/schema
     // budget independently, and bound the extra auth metadata rather than granting schema growth.
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
     // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
-    assert.ok(schemaCatalogLength <= 198_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 207_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    assert.ok(schemaCatalogLength <= 200_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 209_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8.5k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.
@@ -1200,8 +1202,8 @@ void test("date phrases resolve in the user's zone before reaching the public AP
     const myDay = await tools["work.my_day"]!.handler({ limit: 5, upNextLimit: 0 });
     const structured = myDay.structuredContent as { timeZone: string; today: string; dueThisWeekThrough: string; schedule: unknown };
     assert.deepEqual([structured.timeZone, structured.today, structured.dueThisWeekThrough], ["Pacific/Auckland", "2026-10-09", "2026-10-15"]);
-    // The schedule section is the attention endpoint's three fields and nothing else.
-    assert.deepEqual(structured.schedule, { conflicts: [], critical: [], truncated: true });
+    // The schedule section is the attention endpoint's four fields and nothing else.
+    assert.deepEqual(structured.schedule, { conflicts: [], critical: [], lateToStart: [], truncated: true });
   } finally {
     globalThis.fetch = originalFetch;
   }

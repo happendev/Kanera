@@ -1,12 +1,12 @@
 import { z } from "zod";
 export { AUTOMATION_ACTION_LIMIT } from "../automation-limits.js";
 import { AUTOMATION_ACTION_LIMIT } from "../automation-limits.js";
-import { AUTOMATION_TRIGGER_TYPES } from "../schema/automation.js";
+import { AUTOMATION_IN_PROGRESS_THRESHOLD_SOURCES, AUTOMATION_IN_PROGRESS_THRESHOLD_UNITS, AUTOMATION_TRIGGER_TYPES } from "../schema/automation.js";
 import { offsetPagedQuery } from "./_pagination.js";
 import { dueDateSlot } from "./cards.js";
 
 export const automationTriggerType = z.enum(AUTOMATION_TRIGGER_TYPES).describe(
-  "Automation trigger event. card_leaves_list matches the source list of a move. custom_field_value_changed fires only on a transition into the selected typed value. due_date_approaching is scheduled and fires once per due date and lead-time setting before the due day. card_becomes_inactive is scheduled and fires once per inactivity boundary. card_in_progress_too_long is scheduled and fires once per in-progress stint when its time in progress passes the workspace's inProgressAlertDays (never while that setting is 0). card_blocked fires when an active card goes from zero to one or more open blockers, through cards.set_relations or reopening/restoring a blocker. card_unblocked fires when its last open blocker is completed, archived or unlinked, or removed with its board or list. Both include changes by people, integrations, automations and mirrors; each trigger runs at most once per card per transaction to bound chains. scheduling_conflict_appears and critical_path_slips come from the schedule engine behind cards.schedule, evaluated shortly after any write that can move a bar: the first fires when an open card gains its first scheduling conflict (an open blocker planned to finish on or after its planned start), the second when a critical-path card's planned end moves later and the board's projected finish moves with it. Neither repeats until the condition clears and recurs.",
+  "Automation trigger event. card_leaves_list matches the source list of a move. custom_field_value_changed fires only on a transition into the selected typed value. due_date_approaching is scheduled and fires once per due date and lead-time setting before the due day. card_becomes_inactive is scheduled and fires once per inactivity boundary. card_in_progress_too_long is scheduled (hourly) and fires once per card past its limit (triggerThresholdSource: the workspace alert by default, a fixed amount, or a number field compared with tracked working time); a raised number repeats it once passed. Cards already past the limit when it is turned on are skipped unless triggerIncludeExisting. card_blocked fires when an active card goes from zero to one or more open blockers, through cards.set_relations or reopening/restoring a blocker. card_unblocked fires when its last open blocker is completed, archived or unlinked, or removed with its board or list. Both include changes by people, integrations, automations and mirrors; each trigger runs at most once per card per transaction to bound chains. scheduling_conflict_appears and critical_path_slips come from the schedule engine behind cards.schedule, evaluated shortly after any write that can move a bar: the first fires when an open card gains its first scheduling conflict (an open blocker planned to finish on or after its planned start), the second when a critical-path card's planned end moves later and the board's projected finish moves with it. Neither repeats until the condition clears and recurs.",
 );
 export type AutomationTriggerTypeDto = z.infer<typeof automationTriggerType>;
 
@@ -81,6 +81,14 @@ export const automationActionBody = z.discriminatedUnion("type", [
 ]);
 export type AutomationActionBody = z.infer<typeof automationActionBody>;
 
+export const automationInProgressThresholdSource = z.enum(AUTOMATION_IN_PROGRESS_THRESHOLD_SOURCES).describe(
+  "Where card_in_progress_too_long reads its limit: workspace (the workspace's inProgressAlertDays, default), fixed (triggerThresholdAmount and triggerThresholdUnit), or custom_field (a number field, triggerCustomFieldId, read as triggerThresholdUnit and compared with total tracked working time).",
+);
+export const automationInProgressThresholdUnit = z.enum(AUTOMATION_IN_PROGRESS_THRESHOLD_UNITS).describe(
+  "Unit of a card_in_progress_too_long limit. For fixed, calendar hours or days of the current stint; for custom_field, tracked working hours or working days (8 hours each).",
+);
+const triggerThresholdAmount = z.number().int().min(1).max(87600);
+
 const triggerFields = {
   triggerType: automationTriggerType,
   triggerListId: z.uuid().nullable().optional(),
@@ -89,11 +97,41 @@ const triggerFields = {
   triggerCustomFieldId: z.uuid().nullable().optional(),
   triggerCustomFieldValue: automationTriggerCustomFieldValue.nullable().optional(),
   triggerDaysBefore: z.number().int().min(1).max(3650).nullable().optional(),
+  triggerThresholdSource: automationInProgressThresholdSource.nullable().optional(),
+  triggerThresholdAmount: triggerThresholdAmount.nullable().optional(),
+  triggerThresholdUnit: automationInProgressThresholdUnit.nullable().optional(),
+  triggerIncludeExisting: z.boolean().default(false),
   applyOnCreate: z.boolean().default(true),
   applyOnMove: z.boolean().default(true),
 };
 
-function requireTriggerConfig(value: { triggerType?: AutomationTriggerTypeDto; triggerListId?: string | null; triggerUserIds?: string[] | null; triggerLabelId?: string | null; triggerCustomFieldId?: string | null; triggerCustomFieldValue?: AutomationTriggerCustomFieldValueDto | null; triggerDaysBefore?: number | null }, ctx: z.RefinementCtx) {
+type TriggerConfigShape = {
+  triggerType?: AutomationTriggerTypeDto;
+  triggerListId?: string | null;
+  triggerUserIds?: string[] | null;
+  triggerLabelId?: string | null;
+  triggerCustomFieldId?: string | null;
+  triggerCustomFieldValue?: AutomationTriggerCustomFieldValueDto | null;
+  triggerDaysBefore?: number | null;
+  triggerThresholdSource?: z.infer<typeof automationInProgressThresholdSource> | null;
+  triggerThresholdAmount?: number | null;
+  triggerThresholdUnit?: z.infer<typeof automationInProgressThresholdUnit> | null;
+};
+
+/** The fields a card_in_progress_too_long limit needs, by source. Shared with the update route, which merges the stored row first. */
+export function inProgressThresholdIssue(value: TriggerConfigShape): { path: string; message: string } | null {
+  if (value.triggerThresholdSource === "fixed") {
+    if (!value.triggerThresholdAmount) return { path: "triggerThresholdAmount", message: "triggerThresholdAmount is required" };
+    if (!value.triggerThresholdUnit) return { path: "triggerThresholdUnit", message: "triggerThresholdUnit is required" };
+  }
+  if (value.triggerThresholdSource === "custom_field") {
+    if (!value.triggerCustomFieldId) return { path: "triggerCustomFieldId", message: "triggerCustomFieldId is required" };
+    if (!value.triggerThresholdUnit) return { path: "triggerThresholdUnit", message: "triggerThresholdUnit is required" };
+  }
+  return null;
+}
+
+function requireTriggerConfig(value: TriggerConfigShape, ctx: z.RefinementCtx) {
   if ((value.triggerType === "card_enters_list" || value.triggerType === "card_leaves_list") && !value.triggerListId) {
     ctx.addIssue({ code: "custom", path: ["triggerListId"], message: "triggerListId is required" });
   }
@@ -109,6 +147,10 @@ function requireTriggerConfig(value: { triggerType?: AutomationTriggerTypeDto; t
   if (value.triggerType === "custom_field_value_changed") {
     if (!value.triggerCustomFieldId) ctx.addIssue({ code: "custom", path: ["triggerCustomFieldId"], message: "triggerCustomFieldId is required" });
     if (!value.triggerCustomFieldValue) ctx.addIssue({ code: "custom", path: ["triggerCustomFieldValue"], message: "triggerCustomFieldValue is required" });
+  }
+  if (value.triggerType === "card_in_progress_too_long") {
+    const issue = inProgressThresholdIssue(value);
+    if (issue) ctx.addIssue({ code: "custom", path: [issue.path], message: issue.message });
   }
 }
 
@@ -130,6 +172,10 @@ export const updateAutomationBody = z
     triggerCustomFieldId: z.uuid().nullable().optional(),
     triggerCustomFieldValue: automationTriggerCustomFieldValue.nullable().optional(),
     triggerDaysBefore: z.number().int().min(1).max(3650).nullable().optional(),
+    triggerThresholdSource: automationInProgressThresholdSource.nullable().optional(),
+    triggerThresholdAmount: triggerThresholdAmount.nullable().optional(),
+    triggerThresholdUnit: automationInProgressThresholdUnit.nullable().optional(),
+    triggerIncludeExisting: z.boolean().optional(),
     applyOnCreate: z.boolean().optional(),
     applyOnMove: z.boolean().optional(),
   })
@@ -144,6 +190,10 @@ export const updateAutomationBody = z
       v.triggerCustomFieldId !== undefined ||
       v.triggerCustomFieldValue !== undefined ||
       v.triggerDaysBefore !== undefined ||
+      v.triggerThresholdSource !== undefined ||
+      v.triggerThresholdAmount !== undefined ||
+      v.triggerThresholdUnit !== undefined ||
+      v.triggerIncludeExisting !== undefined ||
       v.applyOnCreate !== undefined ||
       v.applyOnMove !== undefined,
     "provide a field to update",

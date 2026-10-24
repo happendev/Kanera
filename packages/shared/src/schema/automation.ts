@@ -11,6 +11,14 @@ export type AutomationTriggerType = (typeof AUTOMATION_TRIGGER_TYPES)[number];
 
 export type AutomationTriggerCustomFieldValue = AutomationTriggerCustomFieldValueDto;
 
+// Where card_in_progress_too_long reads its limit. `workspace` follows the workspace's
+// inProgressAlertDays (the amber chip), `fixed` is the rule's own amount, and `custom_field` reads a
+// number field on each card, which turns the rule into "tracked time exceeds the estimate".
+export const AUTOMATION_IN_PROGRESS_THRESHOLD_SOURCES = ["workspace", "fixed", "custom_field"] as const;
+export type AutomationInProgressThresholdSource = (typeof AUTOMATION_IN_PROGRESS_THRESHOLD_SOURCES)[number];
+export const AUTOMATION_IN_PROGRESS_THRESHOLD_UNITS = ["hours", "days"] as const;
+export type AutomationInProgressThresholdUnit = (typeof AUTOMATION_IN_PROGRESS_THRESHOLD_UNITS)[number];
+
 export const AUTOMATION_ACTION_TYPES = [
   "add_labels",
   "remove_labels",
@@ -60,6 +68,15 @@ export const automations = pgTable(
     triggerCustomFieldId: uuid("trigger_custom_field_id"),
     triggerCustomFieldValue: jsonb("trigger_custom_field_value").$type<AutomationTriggerCustomFieldValue>(),
     triggerDaysBefore: integer("trigger_days_before"),
+    // card_in_progress_too_long only. Null source on rows from before these columns means
+    // `workspace`. A `custom_field` limit reuses triggerCustomFieldId (a number field).
+    triggerThresholdSource: text("trigger_threshold_source", { enum: AUTOMATION_IN_PROGRESS_THRESHOLD_SOURCES }),
+    triggerThresholdAmount: integer("trigger_threshold_amount"),
+    triggerThresholdUnit: text("trigger_threshold_unit", { enum: AUTOMATION_IN_PROGRESS_THRESHOLD_UNITS }),
+    // Scheduled triggers otherwise fire for every card already past the limit the first time the
+    // rule is on. Off by default: those cards are recorded as already handled when the rule is
+    // turned on or its limit changes, so only cards that cross the limit afterwards run it.
+    triggerIncludeExisting: boolean("trigger_include_existing").notNull().default(false),
     applyOnCreate: boolean("apply_on_create").notNull().default(true),
     applyOnMove: boolean("apply_on_move").notNull().default(true),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -69,6 +86,9 @@ export const automations = pgTable(
   (t) => [
     check("automations_trigger_type_ck", valueIn(t.triggerType, AUTOMATION_TRIGGER_TYPES)),
     check("automations_trigger_days_before_ck", sql`${t.triggerDaysBefore} is null or (${t.triggerDaysBefore} between 1 and 3650)`),
+    check("automations_trigger_threshold_source_ck", sql`${t.triggerThresholdSource} is null or ${valueIn(t.triggerThresholdSource, AUTOMATION_IN_PROGRESS_THRESHOLD_SOURCES)}`),
+    check("automations_trigger_threshold_unit_ck", sql`${t.triggerThresholdUnit} is null or ${valueIn(t.triggerThresholdUnit, AUTOMATION_IN_PROGRESS_THRESHOLD_UNITS)}`),
+    check("automations_trigger_threshold_amount_ck", sql`${t.triggerThresholdAmount} is null or (${t.triggerThresholdAmount} between 1 and 87600)`),
     index("automations_workspace_id_position_idx").on(t.workspaceId, t.position),
     index("automations_active_workspace_position_idx")
       .on(t.workspaceId, t.position)
@@ -177,6 +197,10 @@ export const automationInProgressRuns = pgTable(
     // Records the first crossing until an admin corrects the card's time below the alert.
     // List moves and workspace setting changes do not rearm an existing run.
     alertAt: timestamp("alert_at", { withTimezone: true }).notNull(),
+    // The limit, in seconds, this card was last handled at. Only a `custom_field` rule reads it: the
+    // card runs again only when its estimate is raised past this and the new limit is crossed too,
+    // so editing an estimate back and forth never repeats the rule. Null on rows from before it.
+    thresholdSeconds: integer("threshold_seconds"),
     firedAt: timestamp("fired_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

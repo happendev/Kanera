@@ -1056,10 +1056,19 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       ScheduleAttention: {
         type: "object",
-        required: ["conflicts", "critical", "truncated"],
+        required: ["conflicts", "critical", "lateToStart", "truncated"],
         properties: {
           conflicts: { ...arrayOf(ref("ScheduleAttentionCard")), description: "Your open cards with at least one scheduling conflict, soonest planned start first." },
           critical: { ...arrayOf(ref("ScheduleAttentionCard")), description: "Your open critical-path cards without a conflict, soonest planned end first." },
+          lateToStart: {
+            ...arrayOf({
+              type: "object",
+              required: ["id", "key", "title", "url", "boardId", "boardName", "listId", "startDate", "dueDate"],
+              properties: { id: uuid, key: { type: "string" }, title: { type: "string" }, url: { type: "string", format: "uri" }, boardId: uuid, boardName: { type: "string" }, listId: uuid, startDate: { type: "string", format: "date" }, dueDate: nullable({ type: "string", format: "date" }) },
+              additionalProperties: false,
+            }),
+            description: "Your open cards whose planned start is before today but that have never been in progress, earliest start first. Only for workspaces that track time in progress and have an in-progress list; overdue cards are left out.",
+          },
           truncated: { type: "boolean", description: "Reserved for incomplete evaluations; section limits do not truncate the underlying schedule." },
         },
         additionalProperties: false,
@@ -1773,7 +1782,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           position,
           triggerType: {
             ...zodSchema(dto.automationTriggerType),
-            description: "Automation trigger event. due_date_arrives is scheduled and fires once per due date when the card's due time passes. start_date_arrives is scheduled and fires once per planned start on the morning of `startDateLocalDate` (in the card's due-date zone, else the workspace zone); it takes no triggerDaysBefore and fires again only when the start date moves. due_date_approaching fires once per due date and lead-time setting (triggerDaysBefore) before the due day. card_becomes_inactive and card_in_progress_too_long are scheduled per workspace setting. See the request body schemas for the event-driven triggers.",
+            description: "Automation trigger event. due_date_arrives is scheduled and fires once per due date when the card's due time passes. start_date_arrives is scheduled and fires once per planned start on the morning of `startDateLocalDate` (in the card's due-date zone, else the workspace zone); it takes no triggerDaysBefore and fires again only when the start date moves. due_date_approaching fires once per due date and lead-time setting (triggerDaysBefore) before the due day. card_becomes_inactive is scheduled per workspace setting. card_in_progress_too_long is scheduled hourly against the limit chosen by triggerThresholdSource (the workspace alert, a fixed amount, or a number custom field compared with tracked working time); cards already past the limit when the rule is turned on are skipped unless triggerIncludeExisting is true. See the request body schemas for the event-driven triggers.",
           },
           triggerListId: nullable(uuid),
           triggerUserIds: nullable(arrayOf(uuid)),
@@ -1781,6 +1790,10 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           triggerCustomFieldId: nullable(uuid),
           triggerCustomFieldValue: nullable(zodSchema(dto.automationTriggerCustomFieldValue)),
           triggerDaysBefore: nullable({ type: "integer", minimum: 1, maximum: 3650 }),
+          triggerThresholdSource: { ...nullable(zodSchema(dto.automationInProgressThresholdSource)), description: "card_in_progress_too_long only. Null means workspace." },
+          triggerThresholdAmount: { ...nullable({ type: "integer", minimum: 1, maximum: 87600 }), description: "card_in_progress_too_long with a fixed limit: how many triggerThresholdUnit." },
+          triggerThresholdUnit: nullable(zodSchema(dto.automationInProgressThresholdUnit)),
+          triggerIncludeExisting: { type: "boolean", description: "card_in_progress_too_long only. When false, cards already past the limit when the rule is turned on or its limit changes do not run it." },
           applyOnCreate: { type: "boolean" },
           applyOnMove: { type: "boolean" },
           actions: arrayOf({ type: "object", additionalProperties: true }),

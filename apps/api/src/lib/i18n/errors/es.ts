@@ -664,6 +664,14 @@ export const es: ErrorCatalog = {
     "Se requieren triggerCustomFieldId y triggerCustomFieldValue.",
   "triggerDaysBefore is required":
     "Se requiere triggerDaysBefore.",
+  "in-progress limit field must be a number field":
+    "El campo del límite de tiempo en curso debe ser un campo numérico.",
+  "triggerCustomFieldId is required":
+    "Se requiere triggerCustomFieldId.",
+  "triggerThresholdAmount is required":
+    "Se requiere triggerThresholdAmount.",
+  "triggerThresholdUnit is required":
+    "Se requiere triggerThresholdUnit.",
   "triggerLabelId is required":
     "Se requiere triggerLabelId.",
   "triggerListId is required":

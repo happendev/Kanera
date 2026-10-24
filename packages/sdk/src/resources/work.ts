@@ -83,7 +83,7 @@ export class Work {
    * each board scheduled on its own as the Timeline shows it. `limit` caps each section (1–50,
    * default 20).
    */
-  scheduleAttention(input: { limit?: number } = {}, options: CallOptions = {}): Promise<ScheduleAttention> {
+  scheduleAttention(input: { limit?: number; timeZone?: string } = {}, options: CallOptions = {}): Promise<ScheduleAttention> {
     return this.ctx.http.post<ScheduleAttention>("/api/v1/work/schedule-attention/query", input, options);
   }
 

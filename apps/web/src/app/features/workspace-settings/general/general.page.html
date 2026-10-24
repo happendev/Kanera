@@ -173,14 +173,27 @@
   </div>
   <p class="board-linking-help field-help" i18n="Help text under the time in progress alert setting">Their time in progress turns amber on boards, and "Card in progress too long" automations run. 0 turns this off.</p>
   <div class="board-form single-line-capture">
-    <label class="compact-number-field time-zone-field">
+    <div class="compact-number-field time-zone-field">
       <span i18n="Label for the time zone whose working hours count toward time in progress">Working hours time zone</span>
-      <select aria-label="Working hours time zone" i18n-aria-label [value]="settings.timeZoneDraft()" (input)="settings.updateTimeZone($any($event.target).value)" [disabled]="settings.generalSettingsSaving()">
-        @for (zone of settings.timeZoneOptions(); track zone) {
-        <option [value]="zone" [selected]="zone === settings.timeZoneDraft()">{{ zone }}</option>
-        }
-      </select>
-    </label>
+      <!-- Searchable, because ~400 zones in a native select can only be scrolled; ordered west to east
+           with the offset in each label (see time-zone-options.ts). -->
+      <k-automation-select-dropdown
+        class="time-zone-picker"
+        title="Working hours time zone"
+        i18n-title="Picker heading for the time zone whose working hours count toward time in progress"
+        ariaLabel="Working hours time zone"
+        i18n-ariaLabel
+        placeholderIcon="world"
+        searchPlaceholder="Search by city, region or UTC offset…"
+        i18n-searchPlaceholder="Search box in the time zone picker"
+        emptyLabel="No time zone matches"
+        i18n-emptyLabel="Empty state of the time zone picker search"
+        [panelWidth]="360"
+        [groups]="settings.timeZoneGroups()"
+        [value]="settings.timeZoneDraft()"
+        (valueChange)="settings.updateTimeZone($event)"
+      />
+    </div>
   </div>
   <p class="board-linking-help field-help" i18n="Help text under the working hours time zone setting">Tracked time counts working hours only: 09:00–17:00, Monday to Friday, in this time zone. Nights and weekends in progress add nothing.</p>
   }

@@ -141,6 +141,7 @@ describe("GlobalWorkPage card routing", () => {
         iconColor: null,
         viewerRole: "observer" as "editor" | "observer",
         assignedItemsOnly: false,
+        timelineEnabled: true,
       }],
       lists: [],
       labels: [],
@@ -1242,6 +1243,7 @@ describe("GlobalWorkPage toolbar state", () => {
           iconColor: null,
           viewerRole: "editor" as const,
           assignedItemsOnly: false,
+          timelineEnabled: true,
         }],
         lists: [],
         labels: [],
@@ -1420,7 +1422,7 @@ describe("GlobalWorkPage toolbar state", () => {
       TestBed.tick();
 
       expect(fixture.componentInstance.displayOptions().map((option) => option.id))
-        .toEqual(["board", "overview", "table", "calendar", "dependencies", "history"]);
+        .toEqual(["board", "overview", "table", "calendar", "timeline", "dependencies", "history"]);
       expect(fixture.componentInstance.showTeammateFilter()).toBe(true);
       expect(fixture.componentInstance.showUpNextControl()).toBe(true);
 
