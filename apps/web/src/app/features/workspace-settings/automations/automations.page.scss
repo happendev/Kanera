@@ -369,7 +369,7 @@
 
   // Off-state hover only. `:not(.is-on)` is load-bearing, not defensive: this selector carries more
   // class-level weight than `.is-on .ac-power-track`, so without it hovering an *on* switch would
-  // repaint its green track grey.
+  // repaint its accent track grey.
   &:hover:not(.is-on):not([aria-disabled="true"]) {
     color: var(--text);
 
@@ -384,24 +384,25 @@
   }
 
   &.is-on {
-    color: var(--success);
+    color: var(--accent);
 
     .ac-power-track {
-      border-color: var(--success);
-      background: var(--success);
+      border-color: var(--accent);
+      background: var(--accent);
     }
 
     .ac-power-knob {
       // 30px inner track − 2px inset − 12px knob = the knob's travel.
       transform: translateX(16px);
-      background: #fff;
+      // --accent-fg, not white: dark themes fill accents with page-coloured ink for contrast.
+      background: var(--accent-fg);
     }
 
-    // Deepen the green rather than lightening toward the off state — hover should read as "more of
-    // this", not as a preview of switching it off.
+    // Deepen rather than lighten toward the off state — hover should read as "more of this", not as
+    // a preview of switching it off.
     &:hover .ac-power-track {
-      border-color: color-mix(in srgb, var(--success) 80%, var(--text));
-      background: color-mix(in srgb, var(--success) 80%, var(--text));
+      border-color: var(--accent-hover);
+      background: var(--accent-hover);
     }
   }
 }
