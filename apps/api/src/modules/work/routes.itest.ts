@@ -1,6 +1,6 @@
 import "../../test/setup.integration.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
-import type { PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse } from "@kanera/shared/dto";
+import type { PortfolioSummary, SavedWorkView, ScheduleAttentionResponse, WorkCatalog, WorkQueryResponse } from "@kanera/shared/dto";
 import {
   activityEvents,
   boardGroups,
@@ -31,6 +31,8 @@ import { agentWorkQueryRoutes } from "./routes.js";
 
 async function seed() {
   const app = await buildIntegrationServer();
+  // The portfolio rollup is an agent-only route: the web app has no Portfolio page.
+  await app.register(agentWorkQueryRoutes, { prefix: "/agent-public" });
   const [homeClient, externalClient] = await db.insert(clients).values([
     { name: "Home org" },
     { name: "Partner org" },
@@ -563,7 +565,6 @@ void test("agent work routes return the connected user's cross-board history and
 
 void test("agent work queries review one visible person across a workspace without leaking other actors", async () => {
   const f = await seed();
-  await f.app.register(agentWorkQueryRoutes, { prefix: "/agent-public" });
   const now = new Date();
   await db.insert(activityEvents).values([
     {
@@ -877,7 +878,7 @@ void test("portfolio summaries match access-filtered card drill-downs", async ()
     .where(eq(cards.id, f.restrictedMine.id));
   const summaryResponse = await f.app.inject({
     method: "POST",
-    url: "/work/portfolio/query",
+    url: "/agent-public/work/portfolio/query",
     headers: auth(f.viewerToken),
     payload: { days: 30 },
   });
@@ -967,7 +968,7 @@ void test("portfolio activity heatmaps split movement from delivery inside the f
 
   const response = await f.app.inject({
     method: "POST",
-    url: "/work/portfolio/query",
+    url: "/agent-public/work/portfolio/query",
     headers: auth(f.viewerToken),
     payload: { days: 30, timeZone: "UTC" },
   });
@@ -985,7 +986,7 @@ void test("portfolio activity heatmaps split movement from delivery inside the f
   // them too — here down to the single matching card's own activity.
   const filtered = await f.app.inject({
     method: "POST",
-    url: "/work/portfolio/query",
+    url: "/agent-public/work/portfolio/query",
     headers: auth(f.viewerToken),
     payload: { days: 30, timeZone: "UTC", filters: { q: "My shared card" } },
   });
@@ -1106,7 +1107,7 @@ void test("atRiskOnly and the portfolio At risk count follow the Dependencies vi
   const atRisk = async () => {
     const [query, summary] = await Promise.all([
       f.app.inject({ method: "POST", url: "/work/cards/query", headers: auth(f.viewerToken), payload: { lens: "my", filters: { atRiskOnly: true }, limit: 100 } }),
-      f.app.inject({ method: "POST", url: "/work/portfolio/query", headers: auth(f.viewerToken), payload: { days: 30 } }),
+      f.app.inject({ method: "POST", url: "/agent-public/work/portfolio/query", headers: auth(f.viewerToken), payload: { days: 30 } }),
     ]);
     assert.equal(query.statusCode, 200, query.body);
     assert.equal(summary.statusCode, 200, summary.body);
@@ -1159,7 +1160,7 @@ void test("blockedOnly returns open cards with an open blocker, hidden blockers 
   const portfolioBlocked = async () => {
     const response = await f.app.inject({
       method: "POST",
-      url: "/work/portfolio/query",
+      url: "/agent-public/work/portfolio/query",
       headers: auth(f.viewerToken),
       payload: { days: 30 },
     });
@@ -1174,4 +1175,59 @@ void test("blockedOnly returns open cards with an open blocker, hidden blockers 
   await db.update(cards).set({ completedAt: new Date() }).where(eq(cards.id, f.mine.id));
   assert.deepEqual(await titles(), []);
   assert.deepEqual(await portfolioBlocked(), { total: 0, boards: [] });
+});
+
+/**
+ * Failure modes: a conflict or critical card assigned to someone else reaches my briefing; a board I
+ * am not assigned on is scheduled; the portfolio runs the engine for boards with nothing to schedule
+ * or reports counts that disagree with /cards/schedule; the blocker a conflict names is one I cannot
+ * open. Dates sit in June 2030 (3 June is a Monday).
+ */
+void test("schedule attention and portfolio health report the engine's verdict for my boards only", async () => {
+  const f = await seed();
+  try {
+    const [blocker, conflicted, critical, teammatesConflict] = await db.insert(cards).values([
+      { boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Blocker", position: "3000.0000000000", createdById: f.viewer.id, startDateLocalDate: "2030-06-03", dueDateLocalDate: "2030-06-05", dueDateSlot: "anyTime", dueDateTimezone: "UTC" },
+      { boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Starts too early", position: "4000.0000000000", createdById: f.viewer.id, startDateLocalDate: "2030-06-04", dueDateLocalDate: "2030-06-05", dueDateSlot: "anyTime", dueDateTimezone: "UTC" },
+      { boardId: f.sharedBoard.id, listId: f.homeList.id, title: "On the path", position: "5000.0000000000", createdById: f.viewer.id, startDateLocalDate: "2030-06-06", dueDateLocalDate: "2030-06-07", dueDateSlot: "anyTime", dueDateTimezone: "UTC" },
+      { boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Teammate's conflict", position: "6000.0000000000", createdById: f.viewer.id, startDateLocalDate: "2030-06-05", dueDateLocalDate: "2030-06-05", dueDateSlot: "anyTime", dueDateTimezone: "UTC" },
+    ]).returning();
+    assert.ok(blocker && conflicted && critical && teammatesConflict);
+    await db.insert(cardRelations).values([
+      { workspaceId: f.homeWorkspace.id, sourceCardId: blocker.id, targetCardId: conflicted.id, kind: "blocks" },
+      { workspaceId: f.homeWorkspace.id, sourceCardId: blocker.id, targetCardId: critical.id, kind: "blocks" },
+      { workspaceId: f.homeWorkspace.id, sourceCardId: blocker.id, targetCardId: teammatesConflict.id, kind: "blocks" },
+    ]);
+    await db.insert(cardAssignees).values([
+      { cardId: conflicted.id, userId: f.viewer.id },
+      { cardId: critical.id, userId: f.viewer.id },
+      { cardId: teammatesConflict.id, userId: f.teammate.id },
+    ]);
+
+    const attention = await f.app.inject({ method: "POST", url: "/work/schedule-attention/query", headers: auth(f.viewerToken), payload: {} });
+    assert.equal(attention.statusCode, 200, attention.body);
+    const briefing = attention.json<ScheduleAttentionResponse>();
+    assert.deepEqual(briefing.conflicts.map((card) => card.title), ["Starts too early"], "only my own conflicted card");
+    assert.deepEqual(briefing.conflicts[0]!.conflicts, [{ blockerId: blocker.id, blockerKey: blocker.key, blockerTitle: "Blocker", days: 2 }]);
+    assert.equal(briefing.conflicts[0]!.boardName, "Shared");
+    assert.deepEqual(briefing.critical.map((card) => card.title), ["On the path"], "critical cards without a conflict, mine only");
+    assert.equal(briefing.critical[0]!.slackDays, 0);
+    assert.equal(briefing.truncated, false);
+    const teammateView = (await f.app.inject({ method: "POST", url: "/work/schedule-attention/query", headers: auth(f.teammateToken), payload: { limit: 5 } })).json<ScheduleAttentionResponse>();
+    assert.deepEqual(teammateView.conflicts.map((card) => card.title), ["Teammate's conflict"]);
+    assert.deepEqual(teammateView.critical, []);
+
+    const portfolio = await f.app.inject({ method: "POST", url: "/agent-public/work/portfolio/query", headers: auth(f.viewerToken), payload: { days: 30 } });
+    assert.equal(portfolio.statusCode, 200, portfolio.body);
+    const summary = portfolio.json<PortfolioSummary>();
+    const shared = summary.buckets.find((bucket) => bucket.boardName === "Shared");
+    assert.deepEqual(shared?.schedule, { conflictCount: 2, criticalCount: 3, projectedFinish: "2030-06-07", latestDue: "2030-06-07", slipDays: 0 }, "the chain's verdict on the board bucket");
+    for (const bucket of summary.buckets.filter((entry) => entry.boardName !== "Shared")) {
+      assert.deepEqual(bucket.schedule, { conflictCount: 0, criticalCount: 0, projectedFinish: null, latestDue: null, slipDays: 0 }, `${bucket.boardName} has nothing to schedule`);
+    }
+    assert.equal(summary.totals.scheduleConflicts, 2);
+    assert.equal(summary.totals.criticalCards, 3);
+  } finally {
+    await f.app.close();
+  }
 });

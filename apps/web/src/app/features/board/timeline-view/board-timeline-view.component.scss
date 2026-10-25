@@ -1,0 +1,702 @@
+@use "../../../shared/toolbar-styles" as toolbar;
+@use "../../../shared/card-key" as key;
+
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  // A chart is a lattice of dates; proportional digits would put the same day number at a different
+  // offset in every header cell and read as a crooked grid.
+  font-variant-numeric: tabular-nums;
+
+  // Hairlines between rows and header cells: a quarter of a real border, the chart draws hundreds.
+  --tl-line: color-mix(in srgb, var(--border) 45%, transparent);
+  // Weekends are a hint, not a lane: just enough to find a week's edge without striping the chart.
+  --tl-weekend: color-mix(in srgb, var(--text-muted) 4%, transparent);
+  // Group headings run as bands across the whole chart, ruled with real borders, so a heading reads
+  // as a row to follow and never as another shaded day. The band mixes the same ink as the weekend
+  // wash, twice as strong, over an opaque surface: whichever way a theme shades (darker on light
+  // themes, lighter on dark ones), the band always sits a step beyond the weekends.
+  --tl-group-bg: color-mix(in srgb, var(--text-muted) 8%, var(--surface));
+  --tl-wire: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  // The theme's warning ink, not the label palette's amber: that one is tuned to fill a chip, and as
+  // text or a hairline on a light surface it glares.
+  --tl-risk: var(--warning);
+  // Same hue the Dependencies view gives its critical path, so the two views agree on what it means.
+  --tl-critical: var(--color-violet, #7c3aed);
+}
+
+// While something is being dragged every bar reports the gesture, not its own hover.
+:host(.is-dragging) {
+  cursor: grabbing;
+  user-select: none;
+
+  .tl-bar,
+  .tl-link-handle,
+  .tl-card-lane { cursor: grabbing; }
+}
+
+.timeline-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.timeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--app-tint);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  position: relative;
+  // Above the sheet (1) and below --z-sticky (20), same reasoning as the calendar's toolbar.
+  z-index: 10;
+}
+
+.timeline-toolbar-left,
+.timeline-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.timeline-toolbar-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tl-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+// The slider is the fine control; on a phone the buttons and a pinch are enough.
+// Compound selector: the global input reset (padding, border, height) otherwise wins, and its
+// padding insets the track so the thumb never reaches either end.
+.tl-zoom input.tl-zoom-slider {
+  width: 112px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.timeline-toolbar-right { margin-left: auto; }
+
+.tl-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+
+  &.is-warning { color: var(--tl-risk); }
+}
+
+// ---- Skeleton ----
+
+.tl-skeleton {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tl-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 26px;
+}
+
+.tl-skeleton-name { width: 220px; height: 14px; flex: none; }
+.tl-skeleton-bar { height: 18px; border-radius: var(--radius); }
+
+// ---- Sheet ----
+
+// The one scroller, both axes. The name pane and header stick inside it so the chart never needs a
+// second synchronised scroller.
+.tl-scroller {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  position: relative;
+  // The chart is a panel like the names column beside it, not a window onto the app's canvas: on
+  // light themes that canvas is a mid grey, which washed every lane, band and bar grey with it.
+  background: var(--surface);
+}
+
+.tl-sheet {
+  position: relative;
+  min-width: 100%;
+}
+
+.tl-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  height: 48px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.tl-corner {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: none;
+  width: var(--tl-name-width);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 12px 6px;
+  box-sizing: border-box;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+// Straddles the pane's right border so the edge itself is what the viewer grabs, like a sheet's
+// column header. It lives in the sticky corner, so it stays reachable at any scroll position.
+.tl-pane-resizer {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  z-index: 1;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    left: 3px;
+    width: 3px;
+    border-radius: 2px;
+    background: transparent;
+    transition: background var(--motion-fast);
+  }
+
+  &:hover::after,
+  &:focus-visible::after,
+  &:active::after { background: var(--accent); }
+  &:focus-visible { outline: none; }
+}
+
+.tl-corner-hint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.tl-header-lane {
+  position: relative;
+  flex: none;
+}
+
+.tl-tier {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24px;
+
+  &.tl-tier-major { top: 0; }
+  &.tl-tier-minor { top: 24px; border-top: 1px solid var(--tl-line); }
+}
+
+.tl-cell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  border-right: 1px solid var(--tl-line);
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.tl-tier-major .tl-cell {
+  font-weight: 600;
+  color: var(--text-3);
+  // Month names stick to the left edge of the viewport while their month is partly scrolled out.
+  .tl-cell-text { position: sticky; left: calc(var(--tl-name-width) + 8px); padding: 0 8px; }
+}
+
+.tl-tier-minor .tl-cell {
+  justify-content: center;
+
+  &.is-weekend { background: var(--tl-weekend); }
+  &.is-today { color: var(--accent); font-weight: 650; }
+  .tl-cell-text { padding: 0 4px; overflow: hidden; text-overflow: ellipsis; }
+}
+
+// ---- Body ----
+
+.tl-body {
+  position: relative;
+  min-width: 100%;
+}
+
+.tl-bands {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.tl-weekend {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--tl-weekend);
+}
+
+.tl-today-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.tl-row {
+  position: relative;
+  display: flex;
+  height: var(--tl-row-height);
+  border-bottom: 1px solid var(--tl-line);
+  // Rows above the bands; names above lanes (see .tl-name).
+  z-index: 1;
+
+  &.is-hovered .tl-card-lane { background: color-mix(in srgb, var(--text-muted) 5%, transparent); }
+  &.is-hovered .tl-card-name { background: var(--card-bg-hover); }
+  &.is-selected .tl-card-name { background: var(--accent-soft); }
+  // Faded while the critical path is on and this chained card is not on it.
+  &.is-offpath .tl-bar,
+  &.is-offpath .tl-name-text { opacity: .42; }
+}
+
+.tl-row-group {
+  height: var(--tl-group-height);
+  background: var(--tl-group-bg);
+  border-top: 1px solid var(--border);
+  border-bottom-color: var(--border);
+}
+
+.tl-name {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex: none;
+  width: var(--tl-name-width);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  box-sizing: border-box;
+  background: var(--surface);
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  // Restated for :hover too: the global button reset floods a plain class with accent on hover.
+  &:hover:not(:disabled) { background: var(--card-bg-hover); color: var(--text); }
+  &:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+}
+
+// Opaque, in the row's own tint: the name pane is sticky, and a scrolled chart's summary spans
+// would otherwise show through it.
+.tl-row-group .tl-name { background: var(--tl-group-bg); }
+.tl-row-group .tl-name:hover:not(:disabled) { background: color-mix(in srgb, var(--text-muted) 6%, var(--tl-group-bg)); }
+
+.tl-chevron { flex: none; font-size: var(--text-base); color: var(--text-muted); }
+.tl-group-icon { flex: none; font-size: var(--text-md); color: var(--text-muted); }
+.tl-group-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.tl-group-count { margin-left: auto; flex: none; color: var(--text-muted); font-size: var(--text-xs); }
+
+.tl-list-icon,
+.tl-done-icon { flex: none; font-size: var(--text-base); color: var(--text-muted); }
+.tl-done-icon { color: var(--success); }
+
+.tl-name-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+
+.tl-name-line {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.tl-key { @include key.card-key; }
+
+// Label chips on their own line under the title, scaled to the key's size so they read as metadata
+// and never as controls. Names are never truncated: the bar keeps its natural width (measured by the
+// component, which widens the pane to fit the widest row), and a fourth label onwards folds into +N.
+.tl-labels {
+  align-self: flex-start;
+  width: max-content;
+  --label-bar-gap: 0;
+  --label-bar-wrap: nowrap;
+  --label-chip-flex: none;
+  --label-bar-column-gap: 3px;
+  --label-chip-height: 16px;
+  --label-chip-font-size: 10px; // matches the tile key's 10px; --text-xs is a step too tall here
+  --label-chip-padding-x: 5px;
+  --label-chip-max-width: none;
+  --label-chip-text-max-width: none;
+}
+
+.tl-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.is-completed .tl-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+}
+
+.tl-avatars {
+  flex: none;
+  display: inline-flex;
+  margin-left: -2px;
+
+  k-avatar + k-avatar { margin-left: -6px; }
+}
+
+.tl-lane {
+  position: relative;
+  flex: none;
+  height: 100%;
+}
+
+// The chart's background can be grabbed and dragged to pan (see the component's Panning section).
+.tl-card-lane,
+.tl-group-lane,
+.tl-header-lane { cursor: grab; }
+.tl-card-lane.is-placeable { cursor: copy; }
+
+:host(.is-panning) {
+  cursor: grabbing;
+  user-select: none;
+
+  .tl-lane,
+  .tl-header-lane,
+  .tl-bar { cursor: grabbing; }
+}
+
+.tl-group-span {
+  position: absolute;
+  top: calc(50% - 3px);
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--list-color, var(--text-muted)) 45%, transparent);
+}
+
+// ---- Bars ----
+
+// Bars keep the single-line height when labelled rows grow, so the chart doesn't turn chunky.
+.tl-bar {
+  position: absolute;
+  top: calc((var(--tl-row-height) - var(--tl-bar-height)) / 2);
+  height: var(--tl-bar-height);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-radius: var(--radius);
+  // The list's hue on the card's surface: a tinted bar, with its own 1px border as the ring, like a
+  // board tile. Never a stripe. A list without a colour falls back to the accent rather than grey,
+  // so the work stays the most coloured thing on a chart of grey bands and hairlines.
+  --tl-bar-hue: var(--list-color, var(--accent));
+  background: color-mix(in srgb, var(--tl-bar-hue) 24%, var(--card-bg));
+  border: 1px solid color-mix(in srgb, var(--tl-bar-hue) 50%, var(--border));
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: pan-x pan-y;
+  transition: box-shadow var(--motion-fast), opacity var(--motion-fast);
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--tl-bar-hue) 32%, var(--card-bg));
+    color: var(--text);
+    box-shadow: var(--shadow-card-hover);
+  }
+  &:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+
+  &.is-draggable { cursor: grab; }
+  &.is-dragging { opacity: .85; box-shadow: var(--shadow-drag); z-index: 2; }
+  &.is-rescheduling { opacity: .6; pointer-events: none; }
+  &.is-selected { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+  &.is-overdue { border-color: color-mix(in srgb, var(--danger) 60%, var(--border)); }
+  &.is-completed {
+    background: var(--success-soft);
+    border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+    .tl-bar-text { color: var(--text-muted); text-decoration: line-through; }
+  }
+  &.is-critical {
+    border-color: var(--tl-critical);
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--tl-critical) 70%, transparent);
+  }
+  &.has-conflict { border-style: dashed; border-color: var(--tl-risk); }
+  &.is-link-target { box-shadow: 0 0 0 2px var(--accent); }
+
+  // A one-day card at a zoom where a day is a few pixels: a diamond centred on the day.
+  &.is-point {
+    width: 12px;
+    height: 12px;
+    top: calc(50% - 6px);
+    margin-left: -3px;
+    padding: 0;
+    border-radius: 2px;
+    transform: rotate(45deg);
+    background: color-mix(in srgb, var(--tl-bar-hue) 70%, var(--card-bg));
+  }
+}
+
+.tl-bar-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-bar-warning { flex: none; color: var(--tl-risk); font-size: var(--text-base); }
+
+.tl-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  &.tl-handle-start { left: 0; }
+  &.tl-handle-end { right: 0; }
+  // A faint grip appears when the bar is hovered, so the ends read as draggable.
+  &::after {
+    content: "";
+    position: absolute;
+    top: 25%;
+    bottom: 25%;
+    left: 3px;
+    width: 2px;
+    border-radius: 1px;
+    background: color-mix(in srgb, var(--text) 35%, transparent);
+    opacity: 0;
+    transition: opacity var(--motion-fast);
+  }
+}
+.tl-bar:hover .tl-handle::after { opacity: 1; }
+
+.tl-bar-caption {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  max-width: 260px;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+// Dashed tail from a bar's end to the latest it could finish without delaying its chain.
+.tl-slack {
+  position: absolute;
+  top: calc(50% - 1px);
+  height: 0;
+  border-top: 2px dashed color-mix(in srgb, var(--text-muted) 45%, transparent);
+  pointer-events: auto;
+}
+
+.tl-link-handle {
+  position: absolute;
+  top: calc(50% - 8px);
+  width: 16px;
+  height: 16px;
+  margin-left: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 14px; // The glyph is the handle; sized to the dot, not the type scale.
+  opacity: 0;
+  cursor: crosshair;
+  transition: opacity var(--motion-fast);
+  z-index: 2;
+}
+.tl-row.is-hovered .tl-link-handle,
+:host(.is-dragging) .tl-link-handle { opacity: 1; }
+
+.tl-ghost {
+  position: absolute;
+  top: calc((var(--tl-row-height) - var(--tl-bar-height)) / 2);
+  height: var(--tl-bar-height);
+  min-width: 12px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--accent);
+  background: var(--accent-soft);
+  pointer-events: none;
+}
+
+.tl-ghost-label,
+.tl-lane-empty {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tl-lane-empty {
+  // Stays at the left edge of what is visible, not of the lane.
+  position: sticky;
+  left: calc(var(--tl-name-width) + 12px);
+  width: max-content;
+}
+
+// ---- Wires ----
+
+.tl-wires {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tl-wire {
+  fill: none;
+  stroke: var(--tl-wire);
+  stroke-width: 1.6;
+  transition: opacity var(--motion-fast), stroke var(--motion-fast);
+
+  &.is-risk { stroke: var(--tl-risk); stroke-width: 2; }
+  &.is-lit { stroke: var(--accent); stroke-width: 2.2; }
+  &.is-critical { stroke: var(--tl-critical); stroke-width: 2.4; }
+  &.is-offpath { opacity: .3; }
+  &.is-draft { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
+}
+
+.tl-arrow {
+  fill: var(--tl-wire);
+  &.is-risk { fill: var(--tl-risk); }
+  &.is-lit { fill: var(--accent); }
+  &.is-critical { fill: var(--tl-critical); }
+  &.is-offpath { fill: var(--tl-wire); opacity: .3; }
+}
+
+.tl-wire-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+  cursor: pointer;
+  outline: none;
+  &:focus-visible { stroke: color-mix(in srgb, var(--ring) 35%, transparent); }
+}
+
+.tl-wire-remove {
+  position: absolute;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-sm);
+  box-shadow: var(--shadow-pop);
+  white-space: nowrap;
+
+  &:hover:not(:disabled) { background: var(--card-bg-hover); color: var(--text); }
+}
+
+// ---- Narrow hosts and touch ----
+
+:host(.is-narrow) {
+  .tl-zoom-slider { display: none; }
+  .tl-name { padding-left: 8px; gap: 6px; }
+  // A 164px pane has room for the icon and a legible title, nothing more. The labels are left out
+  // by the component (see showLabelChips) and stay in the row's accessible name and the bar tooltip.
+  .tl-key { display: none; }
+  .tl-corner { padding: 0 8px 6px; }
+  // The counts are the first thing to go on a phone: the conflict is still flagged on its bar.
+  .tl-count { display: none; }
+  .timeline-toolbar { padding: 6px 10px; gap: 6px; }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .tl-name { min-height: 44px; }
+  .tl-wire-hit { stroke-width: 24; }
+  .tl-wire-remove { min-height: 44px; }
+  .tl-link-handle { display: none; }
+}
+
+// Virtual rows retain their full-sheet position, so sticky names and wire geometry share one axis.
+.tl-body > .tl-row {
+  position: absolute;
+  width: 100%;
+}
+
+.offline-banner {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--divider);
+}

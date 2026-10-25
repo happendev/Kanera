@@ -143,6 +143,10 @@ for local verification or updating an unrelated card.
 ## Making changes
 
 - Prefer the smallest change that preserves the existing architecture.
+- Before adding complexity for speculative race conditions, security edge cases, or unlikely
+  failures, explain the concrete failure mode, its likelihood, and the implementation and
+  maintenance cost. Get user approval before materially expanding scope for theoretical
+  robustness. Address demonstrated problems within the agreed scope directly.
 - When adding or changing an API env var, update every path that forwards it: `apps/api/src/env.ts`,
   `docker-compose.yml`, `.env.full.example`, `.env.example` (if required), and `DEPLOY.md` /
   `DOKPLOY_DEPLOY.md`. Compose does not forward variables it doesn't list.

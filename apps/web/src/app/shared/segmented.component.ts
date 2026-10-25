@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
+import type { AfterViewInit, OnDestroy } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, inject, input, output, signal } from "@angular/core";
 import { TooltipDirective } from "./tooltip.directive";
 
 /**
@@ -7,6 +8,16 @@ import { TooltipDirective } from "./tooltip.directive";
  * treatment is identical, which is the part that had to stop varying.
  */
 export type SegmentedSize = "sm" | "md";
+
+/** The labelled segment's inline padding and icon-to-label gap, mirrored from the `.sg-fits` rules. */
+const LABELLED_PADDING = 10;
+const LABEL_GAP = 6;
+
+/** A computed length in pixels. Unresolved properties read as an empty string, which is zero here. */
+function px(value: string): number {
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 export type SegmentedOption<T extends string = string> = {
   id: T;
@@ -43,6 +54,10 @@ export type SegmentedOption<T extends string = string> = {
   standalone: true,
   imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    "[class.sg-fill]": "filling()",
+    "[class.sg-fits]": "fits()",
+  },
   template: `
     <div class="sg-track" [class.is-sm]="size() === 'sm'" [class.is-equal]="equalWidths()" role="group" [attr.aria-label]="ariaLabel()">
       @for (option of options(); track option.id) {
@@ -160,19 +175,29 @@ export type SegmentedOption<T extends string = string> = {
         padding-inline: 10px;
       }
 
-      /* The same reveal for a switch sharing a page toolbar's search slot: the slot is the
-         \`sg-room\` container, and labels show once it has room for them beside a usable search field.
-         CSS rather than a viewport query, because what fits depends on the sidebar and on how many
-         other controls share the row. */
-      @container sg-room (min-width: 440px) {
-        .sg-auto-label {
-          max-width: none;
-          margin-left: 6px;
-        }
+      /* The same reveal for a switch sharing a page toolbar's search slot. The toolbar sets
+         .is-roomy once the fixed-width search field, the switch's labels and every control fit
+         (PageToolbarComponent.measureRoom), so the labels give way before search ever does. */
+      :host-context(k-page-toolbar.is-roomy) .sg-auto-label {
+        max-width: none;
+        margin-left: 6px;
+      }
 
-        .sg-btn:has(.sg-auto-label) {
-          padding-inline: 10px;
-        }
+      :host-context(k-page-toolbar.is-roomy) .sg-btn:has(.sg-auto-label) {
+        padding-inline: 10px;
+      }
+
+      /* A switch filling a row of its own (the compact header's view row, the collapsed toolbar's
+         layout row) measures that row itself and names its segments whenever they all fit
+         (measureFit, below). This replaced a fixed 440px container threshold, which was right for a
+         four-way switch and left a seven-way one overflowing or a two-way one bare. */
+      :host(.sg-fits) .sg-auto-label {
+        max-width: none;
+        margin-left: 6px;
+      }
+
+      :host(.sg-fits) .sg-btn:has(.sg-auto-label) {
+        padding-inline: 10px;
       }
 
       /* Hover lifts the label and nothing else. The background has to be restated here, because the
@@ -252,17 +277,35 @@ export type SegmentedOption<T extends string = string> = {
           min-width: var(--sg-touch-target-size, 36px);
         }
       }
+
+      /* A switch stretched across a row shares that row exactly, so no segment can be pushed past
+         its end. Seven 44px touch segments need 328px, and a 320px phone leaves the compact header's
+         view row 236px: the floor clipped Notes off the screen, unreachable. Segments are wider than
+         the floor whenever the row allows, and keep their full touch height when it does not. */
+      :host(.sg-fill) .sg-btn {
+        min-width: 0;
+      }
     `,
   ],
 })
-export class SegmentedComponent<T extends string = string> {
+export class SegmentedComponent<T extends string = string> implements AfterViewInit, OnDestroy {
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private resizeObserver: ResizeObserver | null = null;
+  private mutationObserver: MutationObserver | null = null;
+
+  /** Stretched across a row by its container (`--sg-fill-width`); see `.sg-fill`. */
+  protected readonly filling = signal(false);
+  /** Fill mode only: every auto label fits on this switch's own row (see `.sg-fits`). */
+  protected readonly fits = signal(false);
+
   readonly options = input.required<readonly SegmentedOption<T>[]>();
   readonly value = input<T | null>(null);
   /** False renders icon + tooltip only, which is what a 4–5 way switch needs to fit a phone. */
   readonly showLabels = input(false);
   /**
-   * Icon-only, with a short label a containing header reveals when its row has room for it (see
-   * PageHeaderComponent's `is-roomy`). Ignored when `showLabels` is set.
+   * Icon-only, with a short label revealed whenever its row has room for it: decided by the header or
+   * toolbar laying out that row (`is-roomy`), or by the switch itself when it fills a row of its own.
+   * Ignored when `showLabels` is set.
    */
   readonly autoLabels = input(false);
   /**
@@ -275,4 +318,59 @@ export class SegmentedComponent<T extends string = string> {
   readonly ariaLabel = input.required<string>();
 
   readonly valueChange = output<T>();
+
+  ngAfterViewInit(): void {
+    // Absent under the unit-test DOM, where layout is not real anyway; the switch stays icon-only.
+    if (typeof ResizeObserver === "undefined") return;
+    const host = this.host.nativeElement;
+    this.resizeObserver = new ResizeObserver(() => this.measureFit());
+    this.resizeObserver.observe(host);
+    // New options, or a label changing language, need not resize the stretched host.
+    if (typeof MutationObserver !== "undefined") {
+      this.mutationObserver = new MutationObserver(() => this.measureFit());
+      this.mutationObserver.observe(host, { childList: true, subtree: true, characterData: true });
+    }
+    this.measureFit();
+  }
+
+  ngOnDestroy(): void {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.mutationObserver?.disconnect();
+    this.mutationObserver = null;
+  }
+
+  /**
+   * Only a switch stretched across a row (`--sg-fill-width`) knows its own room: its width is the
+   * row's. An intrinsically sized switch is as wide as its content, so whoever lays out its row
+   * decides instead (k-page-header / k-page-toolbar `is-roomy`).
+   *
+   * The labelled width is computed rather than tried, from each label's scrollWidth (its natural
+   * width even while collapsed) plus the segment's labelled padding, so the decision is the same
+   * whether the labels currently show or not and cannot oscillate.
+   */
+  private measureFit(): void {
+    const host = this.host.nativeElement;
+    if (host.clientWidth === 0) return;
+    const fill = getComputedStyle(host).getPropertyValue("--sg-fill-width").trim() !== "";
+    this.filling.set(fill);
+    const track = host.querySelector<HTMLElement>(".sg-track");
+    if (!this.autoLabels() || this.showLabels() || !fill || !track) {
+      this.fits.set(false);
+      return;
+    }
+
+    const trackStyle = getComputedStyle(track);
+    const buttons = [...track.querySelectorAll<HTMLElement>(".sg-btn")];
+    let need = px(trackStyle.paddingLeft) + px(trackStyle.paddingRight)
+      + px(trackStyle.borderLeftWidth) + px(trackStyle.borderRightWidth)
+      + px(trackStyle.columnGap) * Math.max(0, buttons.length - 1);
+    for (const button of buttons) {
+      const label = button.querySelector<HTMLElement>(".sg-auto-label");
+      const icon = button.querySelector<HTMLElement>("i");
+      const labelled = 2 * LABELLED_PADDING + (icon?.offsetWidth ?? 0) + (label ? LABEL_GAP + label.scrollWidth : 0);
+      need += Math.max(px(getComputedStyle(button).minWidth), labelled);
+    }
+    this.fits.set(need <= host.clientWidth);
+  }
 }

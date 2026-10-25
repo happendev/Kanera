@@ -30,6 +30,8 @@ import { boardRealtimeAudience, emitToBoardAudience, emitToClient, emitToClientD
 import { issueUserSession, REFRESH_COOKIE, refreshCookieOptions } from "../../auth/session.js";
 import { resolveActiveOrganisationContext } from "../../lib/client-membership.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
+import { emitWorkspaceFeaturesChanged } from "../../lib/workspace-features.js";
+import { resetScheduleLatches } from "../../lib/schedule-events.js";
 
 type ClientRow = typeof clients.$inferSelect;
 type S3StorageConfig = Extract<StorageConfig, { kind: "s3" }>;
@@ -50,8 +52,9 @@ function toPublicClient(row: ClientRow): PublicClientResponse {
       deploymentMode: "hosted",
       pushEnabled: true,
       requireMfa: row.requireMfa,
-      portfolioEnabled: row.portfolioEnabled,
       inProgressEnabled: row.inProgressEnabled,
+      dependenciesEnabled: row.dependenciesEnabled,
+      timelineEnabled: row.timelineEnabled,
       mcpPolicy: row.mcpPolicy,
       defaultCompletedCardsActiveDays: row.defaultCompletedCardsActiveDays,
       defaultInactiveCardsDays: row.defaultInactiveCardsDays,
@@ -80,8 +83,9 @@ function toPublicClient(row: ClientRow): PublicClientResponse {
     deploymentMode: "self_hosted",
     pushEnabled: row.pushEnabled,
     requireMfa: row.requireMfa,
-    portfolioEnabled: row.portfolioEnabled,
     inProgressEnabled: row.inProgressEnabled,
+    dependenciesEnabled: row.dependenciesEnabled,
+    timelineEnabled: row.timelineEnabled,
     // Not enforced self-hosted (lib/mcp-policy.ts), so report the effective value.
     mcpPolicy: "write",
     defaultCompletedCardsActiveDays: row.defaultCompletedCardsActiveDays,
@@ -334,34 +338,40 @@ export async function clientRoutes(app: FastifyInstance) {
     if (body.pushEnabled !== undefined) updates.pushEnabled = body.pushEnabled;
     if (body.requireMfa !== undefined) updates.requireMfa = body.requireMfa;
     if (body.inProgressEnabled !== undefined) updates.inProgressEnabled = body.inProgressEnabled;
-    if (body.portfolioEnabled !== undefined) updates.portfolioEnabled = body.portfolioEnabled;
+    if (body.dependenciesEnabled !== undefined) updates.dependenciesEnabled = body.dependenciesEnabled;
+    if (body.timelineEnabled !== undefined) updates.timelineEnabled = body.timelineEnabled;
     if (body.mcpPolicy !== undefined) updates.mcpPolicy = body.mcpPolicy;
     if (body.defaultCompletedCardsActiveDays !== undefined) updates.defaultCompletedCardsActiveDays = body.defaultCompletedCardsActiveDays;
     if (body.defaultInactiveCardsDays !== undefined) updates.defaultInactiveCardsDays = body.defaultInactiveCardsDays;
     if (nextStorage !== undefined) updates.storageConfig = encryptStorageConfig(nextStorage);
     if (nextSmtp !== undefined) updates.smtpConfig = encryptSmtpConfig(nextSmtp);
 
+    // The optional planning features are master switches over every workspace in the organisation.
+    const featureChanges = {
+      ...(body.inProgressEnabled !== undefined && body.inProgressEnabled !== current.inProgressEnabled && { inProgressEnabled: body.inProgressEnabled }),
+      ...(body.dependenciesEnabled !== undefined && body.dependenciesEnabled !== current.dependenciesEnabled && { dependenciesEnabled: body.dependenciesEnabled }),
+      ...(body.timelineEnabled !== undefined && body.timelineEnabled !== current.timelineEnabled && { timelineEnabled: body.timelineEnabled }),
+    };
+    const featuresChanged = Object.keys(featureChanges).length > 0;
     const [updated] = await db.transaction(async (tx) => {
       const result = await tx.update(clients).set(updates).where(eq(clients.id, req.auth.cid)).returning();
-      if (body.inProgressEnabled !== undefined && body.inProgressEnabled !== current.inProgressEnabled) {
+      if (featureChanges.dependenciesEnabled !== undefined || featureChanges.timelineEnabled !== undefined) {
+        await resetScheduleLatches(tx, { clientId: req.auth.cid });
+      }
+      if (featuresChanged) {
         await recordActivity(tx, {
           boardId: null, workspaceId: null, clientId: req.auth.cid, actorId: req.auth.sub,
           entityType: "client", entityId: req.auth.cid, action: "updated",
-          payload: { inProgressEnabled: body.inProgressEnabled },
+          payload: featureChanges,
         });
       }
       return result;
     });
-    if (body.inProgressEnabled !== undefined && body.inProgressEnabled !== current.inProgressEnabled) {
-      const affected = await db.select({ board: boards }).from(boards)
-        .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-        .where(eq(workspaces.clientId, req.auth.cid));
-      for (const { board } of affected) {
-        await emitToBoardAudience(board.id, SERVER_EVENTS.BOARD_UPDATED,
-          { board, organisationInProgressEnabled: updated!.inProgressEnabled }, { workspaceId: board.workspaceId });
-      }
-    }
-    emitToClient(req.auth.cid, "client:updated", withSignedMedia(req.auth.cid, { clientId: updated!.id, name: updated!.name, logoUrl: updated!.logoUrl, inProgressEnabled: updated!.inProgressEnabled }));
+    if (featuresChanged) await emitWorkspaceFeaturesChanged({ clientId: req.auth.cid });
+    emitToClient(req.auth.cid, "client:updated", withSignedMedia(req.auth.cid, {
+      clientId: updated!.id, name: updated!.name, logoUrl: updated!.logoUrl,
+      inProgressEnabled: updated!.inProgressEnabled, dependenciesEnabled: updated!.dependenciesEnabled, timelineEnabled: updated!.timelineEnabled,
+    }));
     return toPublicClient(updated!);
   });
 

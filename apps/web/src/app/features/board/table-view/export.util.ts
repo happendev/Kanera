@@ -669,6 +669,8 @@ function valueForColumn(
       return ctx.boardSummariesById?.get(card.boardId)?.name ?? ctx.board.name;
     case "assignees":
       return joinNames(ctx.assigneesByCard.get(card.id)?.map((member) => member.displayName));
+    case "start":
+      return card.startDateLocalDate ?? null;
     case "due":
       return card.dueDateLocalDate ?? null;
     case "labels":

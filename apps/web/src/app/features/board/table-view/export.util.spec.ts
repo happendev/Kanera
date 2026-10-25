@@ -16,6 +16,7 @@ function card(overrides: Partial<AnyCard>): AnyCard {
     title: overrides.title ?? "Untitled",
     position: overrides.position ?? "1000.0000000000",
     dueDateLocalDate: overrides.dueDateLocalDate ?? null,
+    startDateLocalDate: overrides.startDateLocalDate ?? null,
     dueDateSlot: overrides.dueDateSlot ?? null,
     dueDateTimezone: overrides.dueDateTimezone ?? null,
     completedAt: overrides.completedAt ?? null,
@@ -108,7 +109,7 @@ describe("board list export", () => {
     const lists = [list("todo", "Todo"), list("done", "Done", "2000")];
     const cards = [
       card({ id: "b", title: "Beta", listId: "todo", position: "2000", dueDateLocalDate: "2026-06-02" }),
-      card({ id: "a", title: "Alpha", listId: "todo", position: "1000", dueDateLocalDate: "2026-06-01" }),
+      card({ id: "a", title: "Alpha", listId: "todo", position: "1000", startDateLocalDate: "2026-05-28", dueDateLocalDate: "2026-06-01" }),
       card({ id: "hidden", title: "Hidden", listId: "done", position: "1000" }),
     ];
     const hours = customField("hours", "Hours", "number");
@@ -136,7 +137,7 @@ describe("board list export", () => {
       exportedAt: "2026-05-27T12:00:00.000Z",
       groupBy: "List",
       sortBy: "Title A to Z",
-      columns: [{ id: "due", label: "Due date" }, { id: "cf:priority", label: "Priority" }],
+      columns: [{ id: "start", label: "Start date" }, { id: "due", label: "Due date" }, { id: "cf:priority", label: "Priority" }],
       aggregateConfig: { hours: ["sum", "avg"] },
       groups,
       lists,
@@ -155,13 +156,14 @@ describe("board list export", () => {
       cardLinkBaseUrl: "https://kanera.example",
     });
 
-    expect(payload.metadata.columns.map((column) => column.label)).toEqual(["Due date", "Priority"]);
+    expect(payload.metadata.columns.map((column) => column.label)).toEqual(["Start date", "Due date", "Priority"]);
     expect(payload.groups.map((group) => group.label)).toEqual(["Todo", "Done"]);
     expect(payload.groups[0]!.cards.map((row) => row["Title"])).toEqual(["Alpha", "Beta"]);
     expect(payload.groups[0]!.cards[0]).toMatchObject({
       Group: "Todo",
       Key: "WORK-a",
       Title: "Alpha",
+      "Start date": "2026-05-28",
       "Due date": "2026-06-01",
       Priority: "High",
       "Card detail link": "https://kanera.example/o/0123456789ABCDEF/c/WORK-a",

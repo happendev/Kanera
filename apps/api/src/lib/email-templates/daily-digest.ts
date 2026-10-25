@@ -35,15 +35,20 @@ export interface DailyDigestEmailParams {
    * blob when the worker picks them up.
    */
   priorities?: DailyDigestPriorityItem[];
+  /** Optional for the same reason as `priorities`; `dueLabel` carries the planned start. */
+  lateStarts?: DailyDigestCardItem[];
 }
 
-export function dailyDigestEmail({ locale, displayName, localDateLabel, dueToday, overdue, priorities = [] }: DailyDigestEmailParams): string {
+export function dailyDigestEmail({ locale, displayName, localDateLabel, dueToday, overdue, priorities = [], lateStarts = [] }: DailyDigestEmailParams): string {
   const m = serverMessages(locale).email.dailyDigest;
   const firstName = displayName.split(" ")[0] ?? displayName;
   const itemCount = dueToday.length + overdue.length;
   const sections = [
     renderSection(m.dueToday, dueToday),
     renderSection(m.overdue, overdue),
+    // Like the queue, this rides along with due work and never sends the email on its own: a card
+    // that missed its start stays missed every morning until someone moves it.
+    renderSection(m.lateToStart, lateStarts),
     // Last, and skipped when empty: dates are the reason this email is sent at all, and the queue is
     // the answer to "and of those, what first" — which only reads once the dates are on the page.
     renderPriorities(m.priorities, priorities),

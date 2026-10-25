@@ -1,3 +1,5 @@
+import { formatRelativeTime } from "../../shared/date-format";
+import { OfflineCacheService } from "../offline/offline-cache.service";
 import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { computed, effect, inject, Injectable, signal } from "@angular/core";
 import { isOverdue } from "../../features/board/due-date.util";
@@ -54,9 +56,8 @@ function personalQueue(response: WorkPrioritiesResponse): WorkPrioritiesResponse
  * curates it. A single service is what makes those three impossible to disagree — there is no second
  * copy to keep in sync.
  *
- * Deliberately *not* cached offline. A stale sequence reads as an instruction, and someone following
- * "do this first" from last week's order has no way to tell; every surface withholds the queue when
- * offline rather than showing ranks it cannot vouch for.
+ * Cache confirmed updates for offline reading on every personal surface. The saved timestamp
+ * identifies the snapshot; offline queues never grant permission to change it.
  *
  * Only ever the viewer's own queue. Somebody else's — the Team Cards lanes, a focused teammate on
  * Team Cards — stays with `GlobalWorkState`, which holds the credentials-scoped, redaction-aware
@@ -65,6 +66,7 @@ function personalQueue(response: WorkPrioritiesResponse): WorkPrioritiesResponse
 @Injectable({ providedIn: "root" })
 export class MyPrioritiesService {
   private readonly api = inject(ApiClient);
+  private readonly cache = inject(OfflineCacheService);
   private readonly completionWarning = inject(CompletionWarningService);
   private readonly auth = inject(AuthService);
   private readonly sockets = inject(SocketService);
@@ -74,11 +76,18 @@ export class MyPrioritiesService {
   readonly loading = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly initialised = signal(false);
-  readonly online = this.sockets.displayedOnline;
+  readonly online = this.sockets.online;
+  readonly cachedAt = signal<string | null>(null);
+  readonly canEdit = computed(() => this.online() && !this.loading() && this.loadError() === null);
+  readonly offlineMessage = computed(() => {
+    if (this.online()) return "";
+    const cachedAt = this.cachedAt();
+    return cachedAt ? $localize`:Toast; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(cachedAt)}:time:` : OFFLINE_LOAD_ERROR;
+  });
 
   readonly items = computed<WorkPriorityItem[]>(() => this.queue()?.items ?? []);
   readonly totalCount = computed(() => this.queue()?.totalCount ?? 0);
-  readonly canReorder = computed(() => this.queue()?.canReorder ?? false);
+  readonly canReorder = computed(() => this.canEdit() && (this.queue()?.canReorder ?? false));
   readonly atCapacity = computed(() => this.totalCount() >= MAX_UP_NEXT_ENTRIES);
 
   /**
@@ -202,6 +211,7 @@ export class MyPrioritiesService {
     this.candidateRequestVersion += 1;
     this.initialised.set(false);
     this.queue.set(null);
+    this.cachedAt.set(null);
     this.loading.set(false);
     this.loadError.set(null);
     this.addCandidates.set([]);
@@ -215,21 +225,23 @@ export class MyPrioritiesService {
   async refresh(): Promise<void> {
     const userId = this.auth.user()?.id;
     if (!userId) return;
-    if (!this.online()) {
-      this.loading.set(false);
-      this.loadError.set(OFFLINE_LOAD_ERROR);
-      return;
-    }
     const version = ++this.requestVersion;
     this.loading.set(true);
     try {
+      if (!this.online()) {
+        await this.restoreQueue(version);
+        if (version === this.requestVersion) this.loadError.set(this.queue() ? null : OFFLINE_LOAD_ERROR);
+        return;
+      }
       const response = await this.api.get<WorkPrioritiesResponse>(`/work/priorities/${userId}`);
       if (version !== this.requestVersion) return;
       this.applyQueue(response);
       this.loadError.set(null);
     } catch {
       if (version !== this.requestVersion) return;
-      this.loadError.set(this.online() ? GENERIC_LOAD_ERROR : OFFLINE_LOAD_ERROR);
+      await this.restoreQueue(version);
+      if (version !== this.requestVersion) return;
+      this.loadError.set(this.online() ? GENERIC_LOAD_ERROR : this.queue() ? null : OFFLINE_LOAD_ERROR);
     } finally {
       if (version === this.requestVersion) this.loading.set(false);
     }
@@ -242,6 +254,7 @@ export class MyPrioritiesService {
    * and the error is the caller's to surface, next to the row that failed.
    */
   async addPriority(cardId: string, anchor: PriorityAnchor): Promise<void> {
+    if (!this.canEdit()) return;
     const userId = this.auth.user()?.id;
     if (!userId) return;
     const session = this.sessionVersion;
@@ -267,6 +280,7 @@ export class MyPrioritiesService {
   }
 
   async movePriority(priorityId: string, anchor: PriorityAnchor): Promise<void> {
+    if (!this.canEdit()) return;
     const session = this.sessionVersion;
     const snapshot = this.queue();
     this.applyOptimistic(priorityId, null, anchor);
@@ -285,6 +299,7 @@ export class MyPrioritiesService {
   }
 
   async removePriority(priorityId: string): Promise<void> {
+    if (!this.canEdit()) return;
     const session = this.sessionVersion;
     const snapshot = this.queue();
     this.queue.update((queue) => queue && {
@@ -309,7 +324,8 @@ export class MyPrioritiesService {
    * card's own completion state, which keeps the row from flashing "incomplete" until it does.
    */
   async setCardCompleted(cardId: string, completed: boolean): Promise<void> {
-    if (!await this.completionWarning.allow(completed, { cardIds: [cardId] })) return;
+    if (!this.canEdit()) return;
+    if (!await this.completionWarning.allow(completed, { cardIds: [cardId] }) || !this.canEdit()) return;
     const session = this.sessionVersion;
     const snapshot = this.queue();
     this.patchCard(cardId, (card) => ({ ...card, completedAt: completed ? new Date() : null }));
@@ -476,8 +492,39 @@ export class MyPrioritiesService {
     }
   }
 
+  private cacheKey(): string | null {
+    const user = this.auth.user();
+    return user ? `${user.activeClientId ?? user.clientId}:${user.id}` : null;
+  }
+
+  private async restoreQueue(version: number): Promise<void> {
+    const key = this.cacheKey();
+    if (!key || this.queue()) return;
+    try {
+      const saved = await this.cache.loadPriorityQueue(key);
+      // A socket update or another session may have arrived while IndexedDB was reading.
+      if (!saved || version !== this.requestVersion || this.queue()) return;
+      this.queue.set(personalQueue(saved.response));
+      this.cachedAt.set(saved.cachedAt);
+      this.updateRooms();
+    } catch {
+      // Storage may be unavailable; keep the ordinary offline/error state.
+    }
+  }
+
+  private saveQueue(): void {
+    const key = this.cacheKey();
+    const queue = this.queue();
+    if (!key || !queue) return;
+    const cachedAt = new Date().toISOString();
+    this.cachedAt.set(cachedAt);
+    // Only confirmed REST/socket updates call this; optimistic gestures must not become snapshots.
+    void this.cache.savePriorityQueue(key, queue, cachedAt).catch(() => undefined);
+  }
+
   private applyQueue(response: WorkPrioritiesResponse): void {
     this.queue.set(personalQueue(response));
+    this.saveQueue();
     // A REST read is newer than anything already applied, so it also resets the snapshot watermark;
     // otherwise a settled mutation would be undone by a snapshot that predates it.
     this.appliedSnapshotAt = null;
@@ -558,6 +605,7 @@ export class MyPrioritiesService {
           // Never redacted for the target — the snapshot is only ever sent to them.
           hiddenCount: 0,
         }));
+        this.saveQueue();
         this.updateRooms();
       },
       /**
@@ -584,6 +632,7 @@ export class MyPrioritiesService {
       // no `labelIds` at all (that is `WireCardSummary`), and a row renders *resolved* names and
       // colours from `context`, which only a queue read produces. See CARD_LABELS_SET below.
       [SERVER_EVENTS.CARD_UPDATED]: ({ card, blockedByCount }) => {
+        const queued = this.rankedCardIds().has(card.id);
         this.patchCard(card.id, (current) => ({
           ...current,
           // Present only when a blocker opened or closed; otherwise the row's count still holds.
@@ -599,6 +648,7 @@ export class MyPrioritiesService {
           completedAt: card.completedAt ?? null,
           archivedAt: card.archivedAt ?? null,
         }));
+        if (queued) this.saveQueue();
         // The candidate pool loads once per session, so a card completed or archived after it loaded
         // would still be offered — and the add route rejects both with a 400. Evicting here keeps the
         // picker honest for every board we hold a room for; boards with nothing queued are not in a
@@ -637,11 +687,13 @@ export class MyPrioritiesService {
         this.scheduleRefresh();
       },
       [SERVER_EVENTS.CARD_DELETED]: ({ cardId }) => {
+        const queued = this.rankedCardIds().has(cardId);
         this.queue.update((queue) => queue && {
           ...queue,
           items: queue.items.filter((item) => item.card?.id !== cardId).map((item, index) => ({ ...item, rank: index + 1 })),
           totalCount: Math.max(0, queue.totalCount - (queue.items.some((item) => item.card?.id === cardId) ? 1 : 0)),
         });
+        if (queued) this.saveQueue();
         this.dropCandidate(cardId);
       },
     };

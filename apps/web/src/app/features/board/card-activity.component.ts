@@ -26,6 +26,7 @@ import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { SystemAvatarComponent } from "../../shared/system-avatar.component";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { hasMarkdownContent } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -99,6 +100,7 @@ const NO = () => $localize`:Checkbox field value in card activity:No`;
   imports: [CdkTrapFocus, 
     AnchoredPanelDirective,
     AvatarComponent,
+    SystemAvatarComponent,
     DraftBannerComponent,
     DescriptionEditorComponent,
     DescriptionViewerComponent,
@@ -942,6 +944,11 @@ export class CardActivityComponent {
         return $localize`:Card activity shown without a person; overdue is a highlighted status word:This card is marked as ${this.v($localize`:Card status:overdue`, "overdue")}:overdue:`;
       case "inProgress:tooLong":
         return icu($localize`:Card activity shown without a person - the card passed the workspace's time in progress alert:{days, plural, one {This card has been in progress for more than # day} other {This card has been in progress for more than # days}}`, { days: Math.max(0, Number(p["alertDays"]) || 0) });
+      case "schedule:conflict": {
+        // Key only, like relations: this feed's readers may not be able to open the blocker.
+        const other = this.v(this.activityPayloadText(p, "otherCardKey") ?? "?");
+        return $localize`:Card activity shown without a person - the card's planned start is before the planned finish of the named card that blocks it:Scheduling conflict: this card is planned to start before ${other}:card: finishes`;
+      }
       case "deleted":
         return ` ${$localize`:Card activity after a person's name:deleted this card`}`;
       case "labels:set": {
@@ -1245,7 +1252,7 @@ export class CardActivityComponent {
   }
 
   activityActorText(event: ActivityFeedEvent): string | null {
-    if ((event.action === "overdue" || event.action === "inProgress:tooLong") && event.actorKind === "system") return null;
+    if ((event.action === "overdue" || event.action === "inProgress:tooLong" || event.action === "schedule:conflict") && event.actorKind === "system") return null;
     const copiedName = this.activityPayloadText(event.payload as Record<string, unknown>, "copiedActorName");
     return copiedName && event.actorKind === "system" ? `${event.actorName} (${copiedName})` : event.actorName;
   }

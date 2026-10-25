@@ -24,7 +24,9 @@ test("the getting started checklist guides step by step, ticks itself off, hides
 
   // A basics step done on the board itself ticks when the user comes back home, and the guide
   // moves on to the next step.
-  await step("Create your first card").getByRole("link", { name: "Open a board" }).click();
+  // The open step's button sits in the spotlight on a wide card and under its row on a narrow one;
+  // only the visible one has a role, so look it up on the card.
+  await card.getByRole("link", { name: "Open a board" }).click();
   await expectBoardLoaded(page, boardName);
   const firstCard = uniqueName("E2E first card");
   await createCard(page, firstCard);
@@ -41,7 +43,7 @@ test("the getting started checklist guides step by step, ticks itself off, hides
   // The palette step ticks while home is still on screen: the overlay that stamps it lives in the
   // shell, and the tick must not wait for a reload.
   await step("Try the command palette").getByRole("button", { name: "Try the command palette" }).click();
-  await step("Try the command palette").getByRole("button", { name: "Try it" }).click();
+  await card.getByRole("button", { name: "Try it" }).click();
   await expect(page.getByRole("dialog", { name: "Search" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(step("Try the command palette")).toHaveClass(/is-done/);
@@ -64,7 +66,7 @@ test("the getting started checklist guides step by step, ticks itself off, hides
   // A standalone-only organisation has no workspace settings to send people to, so its board step
   // opens the same dialog as the sidebar.
   await step("Create a second board").getByRole("button", { name: "Create a second board" }).click();
-  await step("Create a second board").getByRole("button", { name: "New board" }).click();
+  await card.getByRole("button", { name: "New board" }).click();
   await expect(page.getByRole("dialog", { name: "Create standalone board" })).toBeVisible();
   await page.keyboard.press("Escape");
 

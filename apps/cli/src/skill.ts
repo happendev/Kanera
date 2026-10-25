@@ -135,10 +135,29 @@ kanera search "landing page" --json
 
 Card arguments accept a UUID, a human key such as \`MKT-42\`, or a canonical card URL.
 
+## Planning and schedules
+
+\`\`\`bash
+kanera my-day --json                       # overdue, due this week, stale, schedule attention, Up next
+kanera deps MKT-42 --json                  # who blocks a card and what it holds up
+kanera schedule <boardId> --json           # critical path, slack, conflicts, projected finish
+kanera portfolio --json                    # rollups per board, with schedule health
+\`\`\`
+
+Before answering "when will this finish", "what is at risk", "what is on the critical path" or "what
+slips if X moves", read \`kanera schedule\` for the board (or \`--workspaceId\` for every board of a
+workspace). It is the Timeline view's own engine: \`slackDays\` is the working days (Mon–Fri) a card
+can slip before it delays its chain, \`critical\` cards have none, \`conflicts\` are open blockers
+planned to finish on or after the card starts, and \`summary.slipDays\` is how far the projected
+finish lands after the latest due date. \`kanera deps\` only says who blocks whom. Apply a
+reschedule with \`kanera card update MKT-42 --changes.startDateLocalDate 2026-11-02
+--changes.dueDateLocalDate 2026-11-06\` (keep the start on or before the due date), or
+\`kanera call cards.bulk_set_due_date\` for several cards on one board.
+
 ## Changing things
 
 \`\`\`bash
-kanera card create "Draft the brief" --boardId <id> --listId <id>
+kanera card create "Draft the brief" --boardId <id> --listId <id> --startDateLocalDate "next monday" --dueDateLocalDate friday
 kanera card update MKT-42 --changes.title "Revised title"
 kanera card done MKT-42
 kanera comment MKT-42 "Shipped in 1.4.0."
@@ -202,6 +221,10 @@ https://www.kanera.app/docs/ai-agent-runs.md.
 - Deletion and post-creation administration (renaming lists, fields, labels, members) live in the Kanera UI, not here.
 - Personal notes are private to their owner. A \`NOTES_DISABLED\` error means a workspace admin has
   switched notes off for that workspace; say so rather than retrying.
+- Workspaces and organisations can switch off dependencies, start dates with the timeline, and time
+  in progress. \`DEPENDENCIES_DISABLED\`, \`TIMELINE_DISABLED\` or \`IN_PROGRESS_DISABLED\` means that
+  feature is off there: say so and carry on without it rather than retrying or working around it.
+  \`kanera call workspaces.get\` shows the workspace's own switches.
 - To link cards or notes, put the target's canonical Kanera URL in a card description or note.
   Kanera turns it into a live link with a backlink. Only items in the same workspace are tracked.
   See https://www.kanera.app/docs/cards.md#link-cards-and-notes.

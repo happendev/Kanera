@@ -1,4 +1,4 @@
-import { DragScrollDirective } from "../../shared/drag-scroll.directive";
+import { GettingStartedService } from "../../core/getting-started/getting-started.service";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy, OnInit } from "@angular/core";
@@ -6,7 +6,6 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, injec
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
-  PortfolioBucket,
   WorkCard,
   WorkCatalogBoard,
   WorkCatalogList,
@@ -36,9 +35,6 @@ import { navBoardOrder } from "../../shared/priority-queue/priority-add-cards";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { ActivityStripComponent, type ActivityStripSeries } from "../../shared/activity-strip.component";
-import { StatTileComponent } from "../../shared/stat-tile.component";
-import { StatusBarComponent, type StatusBarSegment } from "../../shared/status-bar.component";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { BoardBackgroundPopover } from "../board/board-background.popover";
 import { BoardCanvasComponent } from "../board/board-canvas.component";
@@ -80,10 +76,12 @@ import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
 import { SaveViewPopover } from "./save-view.popover";
 import { TeamOverviewComponent } from "./team-overview.component";
 import { DependencyMapComponent } from "../dependencies/dependency-map.component";
+import { BoardTimelineViewComponent, type TimelineScheduleScope } from "../board/timeline-view/board-timeline-view.component";
+import { timelineGroupByState } from "../board/timeline-view/timeline-preferences";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
-import { formatDate, formatDateTime, formatTime } from "../../shared/date-format";
+import { formatDate, formatDateTime, formatTime, formatRelativeTime } from "../../shared/date-format";
 import { icu } from "../../core/i18n/icu";
 import { appLocale } from "../../core/i18n/locale";
 import { localDateKey } from "../../shared/day-key.util";
@@ -99,67 +97,15 @@ type ChecklistGroup = {
   items: WireChecklistAssignment[];
 };
 /** Which toolbar/header popover is open. Only one at a time, so opening one dismisses the rest. */
-type WorkMenu = "save" | "display" | "source" | "team" | "view" | "group" | "sort" | "period";
-type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong" | "blocked" | "atRisk" | "completed" | "overdueChecklistItems";
-type PortfolioRow = {
-  id: string;
-  level: "organisation" | "workspace" | "board";
-  label: string;
-  context: string;
-  /** Collapse key for the row's own subtree; null on rows with no children. */
-  collapseId: string | null;
-  /** A `kind: "board"` workspace rendered as one row instead of a wrapper plus its only board. */
-  standalone: boolean;
-  /** Set on workspace/board rows so a collapsed ancestor can hide them without re-walking the tree. */
-  organisationId: string;
-  workspaceId: string | null;
-  workspaceIds: string[];
-  boardIds: string[];
-  active: number;
-  overdue: number;
-  dueSoon: number;
-  unassigned: number;
-  inactive: number;
-  inProgress: number;
-  inProgressTooLong: number;
-  blocked: number;
-  atRisk: number;
-  completed: number;
-  overdueChecklistItems: number;
-};
-/** Number columns of the portfolio table, in render order, with the tone their heat tint uses. */
-const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" | "warning" | "success" | "neutral" }[] = [
-  { key: "active", label: $localize`:Portfolio table column, cards not completed:Active`, tone: "neutral" },
-  { key: "overdue", label: $localize`:Portfolio table column, overdue cards:Overdue`, tone: "danger" },
-  { key: "blocked", label: $localize`:Portfolio table column, open cards waiting on another open card:Blocked`, tone: "danger" },
-  { key: "atRisk", label: $localize`:Portfolio table column, cards whose blocker is overdue or due after them:At risk`, tone: "warning" },
-  { key: "dueSoon", label: $localize`:Portfolio table column, cards due in the next 7 days:Next 7 days`, tone: "neutral" },
-  { key: "unassigned", label: $localize`:Portfolio table column, cards with no assignee:Unassigned`, tone: "neutral" },
-  { key: "inactive", label: $localize`:Portfolio table column, cards untouched for 14 days (keep it short):Inactive 14d`, tone: "neutral" },
-  { key: "inProgress", label: $localize`:Portfolio table column, open cards whose time-in-progress clock is running:In progress`, tone: "neutral" },
-  { key: "inProgressTooLong", label: $localize`:Portfolio table column, cards in progress past the workspace alert (keep it short):Too long`, tone: "neutral" },
-  { key: "completed", label: $localize`:Portfolio table column, completed cards:Completed`, tone: "success" },
-  { key: "overdueChecklistItems", label: $localize`:Portfolio table column, overdue checklist items:Checklist`, tone: "danger" },
-];
-
+type WorkMenu = "save" | "display" | "source" | "team" | "view" | "group" | "sort";
 /** "Acme · Guest" for an organisation the viewer only visits as a guest. */
 function organisationDisplayName(name: string, external: boolean): string {
   return external ? $localize`:Organisation name when the viewer is a guest there:${name}:organisation: · Guest` : name;
 }
 
-/** "Last 30 days": the portfolio's reporting period. */
-function lastDaysLabel(days: number): string {
-  return icu($localize`:Portfolio reporting period:Last {days, plural, one {# day} other {# days}}`, { days });
-}
-/** Fallback window length until the first portfolio response lands; the server owns the real value. */
-const PORTFOLIO_ACTIVITY_DAYS = 60;
-
 /** Where the docked Up next sidebar becomes a bottom sheet; mirrors global-work.page.scss. */
 const UP_NEXT_SHEET_QUERY = "(max-width: 900px)";
 
-/** Smallest tint a non-zero count gets, and the curve that keeps mid-range counts distinguishable. */
-const HEAT_FLOOR = 0.16;
-const HEAT_GAMMA = 0.6;
 /**
  * Collapse key for the checklist section as a whole. Shares the persisted checklist-group set, so it
  * must stay outside the `checklist:<bucket>` ids that `checklistGroups()` assigns.
@@ -175,8 +121,7 @@ const MAX_UP_NEXT_ENTRIES = 50;
 @Component({
   selector: "k-global-work",
   standalone: true,
-  imports: [EmptyStateComponent, 
-    ActivityStripComponent,
+  imports: [BoardTimelineViewComponent, EmptyStateComponent, 
     AnchoredPanelDirective,
     AnchoredPickerPopover,
     BoardBackgroundPopover,
@@ -201,9 +146,6 @@ const MAX_UP_NEXT_ENTRIES = 50;
     CardComposerDialogComponent,
     GlobalCardDetailHostComponent,
     SaveViewPopover,
-    StatTileComponent,
-    StatusBarComponent,
-    DragScrollDirective,
   ],
   providers: [
     GlobalWorkState,
@@ -239,6 +181,7 @@ const MAX_UP_NEXT_ENTRIES = 50;
 })
 export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly toasts = inject(ToastService);
+  private readonly gettingStarted = inject(GettingStartedService);
   readonly state = inject(GlobalWorkState);
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
@@ -266,13 +209,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    */
   readonly compactCards = signal(false);
   readonly background = signal<GradientToken | null>(null);
-  readonly displayMenuAvailable = computed(() => this.lens() !== "portfolio");
   readonly selectedCard = signal<WorkCard | null>(null);
   readonly selectedCardHost = computed(() => {
     const card = this.selectedCard();
     return card ? [card] : [];
   });
-  readonly drilldownLabel = this.state.drilldownLabel;
   readonly moveError = signal<string | null>(null);
   readonly workDoneRefreshVersion = signal(0);
   /** History-only event dimension, surfaced through the page's shared Filter panel. */
@@ -286,16 +227,28 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
   /** Map/Timeline/Steps, remembered per lens like the rest of the Dependencies view's choices. */
   readonly dependencyLayoutState = dependencyLayoutState(() => `globalWork:${this.lens()}`);
+  /** The Timeline's row grouping, per lens; the chart spans boards, so it opens grouped by board. */
+  readonly timelineGroupByState = timelineGroupByState(() => `globalWork:${this.lens()}`, "multiBoard");
+  /**
+   * The Timeline reads one schedule per workspace in view. Dependencies never cross a workspace, so
+   * the workspaces of the loaded cards hold every chain those cards sit in.
+   */
+  readonly timelineScope = computed<TimelineScheduleScope>(() => {
+    const boards = this.boardsById();
+    const workspaceIds = new Set<string>();
+    for (const card of this.state.cards()) {
+      const workspaceId = boards.get(card.boardId)?.workspaceId;
+      if (workspaceId) workspaceIds.add(workspaceId);
+    }
+    return { workspaceIds: [...workspaceIds].sort() };
+  });
   /**
    * Every display that renders `k-board-table-view` full-height, which is what `.is-table-frame`
    * sizes with flexbox. The sheet owns a scrollport and raises its incremental row cap from that
    * element's scroll position, so a display that lands here without the frame would leave the sheet at
    * auto height and strand every row past the first page.
    */
-  readonly usesTableFrame = computed(() => this.effectiveDisplay() === "table");
-  readonly collapsedOrganisationIds = computed(() =>
-    new Set(this.state.definition().collapsedOrganisationIds)
-  );
+  readonly usesTableFrame = computed(() => this.effectiveDisplay() === "table" || this.effectiveDisplay() === "timeline");
   readonly collapsedWorkspaceIds = computed(() =>
     new Set(this.state.definition().collapsedWorkspaceIds)
   );
@@ -318,39 +271,25 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly pageTitle = computed(() => ({
     my: $localize`:Page title:My Cards`,
     team: $localize`:Page title:Team Cards`,
-    portfolio: $localize`:Page title:Portfolio`,
   })[this.lens()]);
 
   /**
    * What the 56px chrome bar shows beside the title, replacing the old header's separate eyebrow and
    * full-sentence description. One dense phrase: the bar drops the subtitle entirely when it stacks,
-   * and the old header's full sentence would be the first thing to ellipsise away up there. A
-   * portfolio metric drill-down keeps its own banner above the table, which also carries the way
-   * back, so it deliberately does not also appear here.
+   * and the old header's full sentence would be the first thing to ellipsise away up there.
    */
-  readonly headerSubtitle = $localize`:Subtitle of My Cards, Team Cards and Portfolio:Across all boards`;
+  readonly headerSubtitle = $localize`:Subtitle of My Cards and Team Cards:Across all boards`;
 
   /**
-   * The display switch, in row 1 with every other page's view switch.
-   *
-   * Portfolio is a rollup lens: the summary is its home, and the table is only where a metric
-   * drill-down lands. It has no calendar — the rollups are counts rather than dated cards, and the
-   * drill-down already carries its own date filter, so a month grid added nothing.
-   *
-   * A display stays enabled while it is the current one even when the page is not interaction-ready,
-   * so a reader on a cached copy can still see which display they are on.
+   * The display switch, in row 1 with every other page's view switch. Cached cards and per-view
+   * snapshots remain browsable offline.
    */
   readonly displayOptions = computed<SegmentedOption<WorkDisplayMode>[]>(() => {
     const current = this.effectiveDisplay();
     const busy = !this.state.interactionReady();
+    const canBrowseSaved = !this.state.loading() && this.state.lastSyncedAt() !== null;
     const option = (id: WorkDisplayMode, icon: string, label: string, shortLabel?: string): SegmentedOption<WorkDisplayMode> =>
-      ({ id, icon, label, shortLabel, disabled: busy && current !== id });
-    if (this.lens() === "portfolio") {
-      return [
-        option("summary", "chart-bar", $localize`:Display option:Summary view`, $localize`:Short display option:Summary`),
-        option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),
-      ];
-    }
+      ({ id, icon, label, shortLabel, disabled: busy && current !== id && !canBrowseSaved });
     return [
       option("board", "layout-kanban", $localize`:Display option:Board view`, $localize`:Short display option:Board`),
       // Team only: the per-teammate overview sits beside the board view, since both read the same
@@ -361,6 +300,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
         : []),
       option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),
       option("calendar", "calendar", $localize`:Display option:Calendar view`, $localize`:Short display option:Calendar`),
+      // Only while some board in reach has start dates and the Timeline on; the preference
+      // normaliser drops a remembered timeline display on the same condition.
+      ...(this.timelineEnabled()
+        ? [option("timeline", "chart-arrows", $localize`:Display option; the Gantt-style view with a bar per card:Timeline view`, $localize`:Short display option for the Gantt-style view:Timeline`)]
+        : []),
       option("dependencies", "git-merge", $localize`:Display option; the view maps which cards block which:Dependencies view`, $localize`:Short display option for the view that maps which cards block which:Dependencies`),
       option("history", "history", $localize`:Display option:Work done`),
     ];
@@ -368,27 +312,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
 
   selectDisplay(display: WorkDisplayMode): void {
     this.state.setDisplay(display);
-    // Leaving a metric drill-down for another display drops the drill-down's scope label with it,
-    // since the label describes a table the reader is no longer looking at.
-    if (display === "summary") this.drilldownLabel.set(null);
   }
-  // History has no offline query, and the team's queues are deliberately not cached (a stale
-  // sequence reads as an instruction). The overview is built from both, so it falls back to the
-  // table over a cached snapshot. The dependency map reads its graph live, so it falls back too.
-  readonly effectiveDisplay = computed<WorkDisplayMode>(() =>
-    this.state.cachedAt() && ["history", "overview", "dependencies"].includes(this.state.definition().display)
-      ? "table"
-      : this.state.definition().display
-  );
-  readonly historyOfflineFallback = computed(() =>
-    this.state.cachedAt() !== null && this.state.definition().display === "history"
-  );
-  readonly overviewOfflineFallback = computed(() =>
-    this.state.cachedAt() !== null && this.state.definition().display === "overview"
-  );
-  readonly dependenciesOfflineFallback = computed(() =>
-    this.state.cachedAt() !== null && this.state.definition().display === "dependencies"
-  );
+  readonly effectiveDisplay = computed<WorkDisplayMode>(() => this.state.definition().display);
   /**
    * The dependency map's seeds: the lens's open loaded cards, after scope, search and filters. The
    * map walks out from them across boards, so a teammate's blocked card brings its blocker along
@@ -433,7 +358,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       && person.boardIds.some((boardId) => scopedBoardIds.has(boardId))
     );
   });
-  readonly portfolioPeople = computed(() => {
+  /** Everyone on a board in scope, the viewer included: the pool for filter and table pickers. */
+  readonly scopedPeople = computed(() => {
     const scopedBoardIds = new Set(this.state.scopedBoards().map((board) => board.id));
     return this.state.catalog().people.filter((person) =>
       person.boardIds.some((boardId) => scopedBoardIds.has(boardId))
@@ -567,7 +493,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const organisationOrder = new Map(
       this.state.catalog().organisations.map((organisation, index) => [organisation.id, index])
     );
-    return [...this.portfolioPeople()]
+    return [...this.scopedPeople()]
       .sort((a, b) =>
         (organisationOrder.get(a.organisationId) ?? Number.MAX_SAFE_INTEGER)
         - (organisationOrder.get(b.organisationId) ?? Number.MAX_SAFE_INTEGER)
@@ -598,8 +524,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const filters = this.state.definition().filters;
     return {
       labelIds: filters.labelIds,
-      // Assignee filtering only surfaces in the portfolio lens; "my"/"team" scope assignees elsewhere.
-      memberIds: this.lens() === "portfolio" ? filters.assigneeIds : [],
+      // Assignees are the lens's scope (the viewer, or the Teammate trigger), never a panel filter.
+      memberIds: [],
       listIds: filters.listIds,
       boardIds: [],
       cfConditions: filters.customFieldConditions.map((condition) => ({
@@ -814,7 +740,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * assignment is allowed is decided per row by `roleEditableCardIds`, not by this value.
    */
   readonly tableMembers = computed<AnyMember[]>(() =>
-    this.portfolioPeople().map((person) => ({
+    this.scopedPeople().map((person) => ({
       userId: person.userId,
       displayName: person.displayName,
       avatarUrl: person.avatarUrl,
@@ -854,8 +780,13 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       icon: board.icon,
       iconColor: board.iconColor,
       inProgressEnabled: board.inProgressEnabled,
+      timelineEnabled: board.timelineEnabled,
     }))
   );
+  /** Some board in view has dependencies on; otherwise the Blocked filter could never match. */
+  readonly dependenciesEnabled = computed(() => this.state.catalog().boards.some((board) => board.dependenciesEnabled));
+  /** Some board in view has start dates and the Timeline on; otherwise there is no Timeline display. */
+  readonly timelineEnabled = computed(() => this.state.catalog().boards.some((board) => board.timelineEnabled));
   readonly tableSourceWorkspaces = computed<SourceWorkspaceRef[]>(() =>
     this.state.catalog().workspaces.map((workspace) => ({
       id: workspace.id,
@@ -1026,15 +957,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly saveViewLabel = $localize`:Button, save the current filters as a view:Save view`;
   readonly openUpNextLabel = $localize`:Tooltip, open the Up next panel:Open Up next`;
   readonly closeUpNextLabel = $localize`:Tooltip, close the Up next panel:Close Up next`;
-  readonly expandAllLabel = $localize`:Button, expand every portfolio row:Expand all`;
-  readonly collapseAllLabel = $localize`:Button, collapse every portfolio row:Collapse all`;
-
-  portfolioRowToggleTitle(label: string, collapsed: boolean): string {
-    return collapsed
-      ? $localize`:Button, expand a portfolio row:Expand ${label}:name:`
-      : $localize`:Button, collapse a portfolio row:Collapse ${label}:name:`;
-  }
-
   offlineStamp(value: string | number | Date): string {
     return formatDateTime(value, "medium");
   }
@@ -1052,206 +974,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     return targetUserId ? [targetUserId] : [];
   });
 
-  /** Portfolio headline tiles. Each drills the table down to the matching slice. */
-  readonly portfolioMetrics = computed<{
-    key: PortfolioMetric;
-    label: string;
-    icon: string;
-    tone: "danger" | "warning" | "success" | null;
-    value: number;
-  }[]>(() => {
-    const totals = this.state.portfolio()?.totals;
-    if (!totals) return [];
-    const metrics: { key: PortfolioMetric; label: string; icon: string; tone: "danger" | "warning" | "success" | null; value: number }[] = [
-      { key: "active", label: $localize`:Portfolio stat tile, cards not completed:Active`, icon: "player-play", tone: null, value: totals.cards - totals.completed },
-      { key: "overdue", label: $localize`:Portfolio stat tile, overdue cards:Overdue`, icon: "alert-triangle", tone: "danger", value: totals.overdue },
-      // Older offline snapshots predate the blocked count; show none until the next refresh.
-      { key: "blocked", label: $localize`:Portfolio stat tile, open cards waiting on another open card:Blocked`, icon: "lock", tone: "danger", value: totals.blocked ?? 0 },
-      { key: "atRisk", label: $localize`:Portfolio stat tile, cards whose blocker is overdue or due after them:At risk`, icon: "alert-octagon", tone: "warning", value: totals.atRisk ?? 0 },
-      { key: "dueSoon", label: $localize`:Portfolio stat tile:Due next 7 days`, icon: "calendar-due", tone: null, value: totals.dueSoon },
-      { key: "unassigned", label: $localize`:Portfolio stat tile, cards with no assignee:Unassigned`, icon: "user-question", tone: null, value: totals.unassigned },
-      { key: "inactive", label: $localize`:Portfolio stat tile, cards untouched for 14 days:Inactive 14 days`, icon: "clock-pause", tone: null, value: totals.inactive },
-      // Older offline snapshots predate the in-progress counts; show none until the next refresh.
-      { key: "inProgress", label: $localize`:Portfolio stat tile, open cards whose time-in-progress clock is running:In progress`, icon: "progress", tone: null, value: totals.inProgress ?? 0 },
-      { key: "inProgressTooLong", label: $localize`:Portfolio stat tile, cards in progress past their workspace's alert:In progress too long`, icon: "progress-alert", tone: null, value: totals.inProgressTooLong ?? 0 },
-      { key: "completed", label: $localize`:Portfolio stat tile, completed cards:Completed`, icon: "circle-check", tone: "success", value: totals.completed },
-      { key: "overdueChecklistItems", label: $localize`:Portfolio stat tile, overdue checklist items:Overdue checklist`, icon: "list-check", tone: "danger", value: totals.overdueChecklistItems },
-    ];
-    return metrics.filter((metric) => this.inProgressEnabled() || (metric.key !== "inProgress" && metric.key !== "inProgressTooLong"));
-  });
-
   readonly inProgressEnabled = computed(() => this.state.catalog().boards.some((board) => board.inProgressEnabled !== false));
-  readonly portfolioColumns = computed(() => PORTFOLIO_COLUMNS.filter((column) => this.inProgressEnabled() || (column.key !== "inProgress" && column.key !== "inProgressTooLong")));
-
-  /** Full organisation → workspace → board tree. Collapse only affects which rows render. */
-  private readonly portfolioTree = computed<PortfolioRow[]>(() => {
-    const buckets = this.state.portfolio()?.buckets ?? [];
-    const organisations = new Map<string, PortfolioBucket[]>();
-    for (const bucket of buckets) {
-      const rows = organisations.get(bucket.organisationId) ?? [];
-      rows.push(bucket);
-      organisations.set(bucket.organisationId, rows);
-    }
-    const result: PortfolioRow[] = [];
-    for (const [organisationId, organisationBuckets] of organisations) {
-      result.push(this.rollupPortfolioRow(
-        `organisation:${organisationId}`,
-        "organisation",
-        organisationBuckets[0]?.organisationName ?? $localize`:Fallback name for an unknown organisation:Organisation`,
-        $localize`:Portfolio row context, this row is an organisation:Organisation`,
-        organisationId,
-        null,
-        organisationBuckets,
-      ));
-      const workspaces = new Map<string, PortfolioBucket[]>();
-      for (const bucket of organisationBuckets) {
-        const rows = workspaces.get(bucket.workspaceId) ?? [];
-        rows.push(bucket);
-        workspaces.set(bucket.workspaceId, rows);
-      }
-      for (const [workspaceId, workspaceBuckets] of workspaces) {
-        // A standalone board is a `kind: "board"` workspace wrapping a single board, and both carry
-        // the same name — rendering the wrapper and the board would repeat the row for no
-        // information. Collapse the pair into one leaf row, as the sidebar does.
-        const standalone = this.workspacesById().get(workspaceId)?.kind === "board"
-          && workspaceBuckets.length === 1;
-        result.push({
-          ...this.rollupPortfolioRow(
-            `workspace:${workspaceId}`,
-            "workspace",
-            standalone
-              ? workspaceBuckets[0]?.boardName ?? workspaceBuckets[0]?.workspaceName ?? $localize`:Fallback name for an unknown board:Board`
-              : workspaceBuckets[0]?.workspaceName ?? $localize`:Fallback name for an unknown workspace:Workspace`,
-            workspaceBuckets[0]?.organisationName ?? "",
-            organisationId,
-            workspaceId,
-            workspaceBuckets,
-          ),
-          // No children to fold, and drill-down targets the board itself rather than the wrapper.
-          ...(standalone ? { collapseId: null, standalone: true } : {}),
-        });
-        if (standalone) continue;
-        for (const bucket of workspaceBuckets) {
-          result.push({
-            id: `board:${bucket.boardId}`,
-            level: "board",
-            label: bucket.boardName,
-            context: `${bucket.organisationName} · ${bucket.workspaceName}`,
-            collapseId: null,
-            standalone: false,
-            organisationId,
-            workspaceId: bucket.workspaceId,
-            workspaceIds: [bucket.workspaceId],
-            boardIds: [bucket.boardId],
-            active: bucket.active,
-            overdue: bucket.overdue,
-            dueSoon: bucket.dueSoon,
-            unassigned: bucket.unassigned,
-            // Older offline Portfolio snapshots predate this metric; treat them as having no known
-            // inactive work until the next online refresh replaces the cached response.
-            inactive: bucket.inactive ?? 0,
-            inProgress: bucket.inProgress ?? 0,
-            inProgressTooLong: bucket.inProgressTooLong ?? 0,
-            blocked: bucket.blocked ?? 0,
-            atRisk: bucket.atRisk ?? 0,
-            completed: bucket.completed,
-            overdueChecklistItems: bucket.overdueChecklistItems,
-          });
-        }
-      }
-    }
-    return result;
-  });
-
-  readonly portfolioRows = computed<PortfolioRow[]>(() => {
-    const collapsedOrganisations = this.collapsedOrganisationIds();
-    const collapsedWorkspaces = this.collapsedWorkspaceIds();
-    return this.portfolioTree().filter((row) => {
-      if (row.level === "organisation") return true;
-      if (collapsedOrganisations.has(row.organisationId)) return false;
-      return row.level === "workspace" || !collapsedWorkspaces.has(row.workspaceId ?? "");
-    });
-  });
-
-  /**
-   * Excel-style conditional highlighting: one scale per column, spanning every row of the tree.
-   *
-   * Scaling within a tree level instead looked broken — a board holding 11 cards came out as hot as
-   * the workspace holding 89, because each was the leader of its own level. Rollups sitting at the
-   * top of the scale is the honest reading: they really do hold the largest numbers.
-   */
-  private readonly portfolioColumnPeaks = computed(() => {
-    const peaks = new Map<PortfolioMetric, number>();
-    for (const row of this.portfolioTree()) {
-      for (const column of PORTFOLIO_COLUMNS) {
-        peaks.set(column.key, Math.max(peaks.get(column.key) ?? 0, row[column.key]));
-      }
-    }
-    return peaks;
-  });
-
-  /** 0 (no tint) to 1 (largest number in the column). Consumed as the --heat CSS variable. */
-  portfolioHeat(row: PortfolioRow, metric: PortfolioMetric): number {
-    const value = row[metric];
-    if (value <= 0) return 0;
-    const peak = this.portfolioColumnPeaks().get(metric) ?? 0;
-    if (peak <= 0) return 0;
-    // Raw ratios waste the tint range: against a dominant rollup, everything else lands in the first
-    // few invisible percent. The gamma lifts the middle of the scale and the floor guarantees any
-    // non-zero count is visibly tinted, so the eye can rank rows instead of only spotting the peak.
-    const ratio = Math.min(1, value / peak);
-    const scaled = HEAT_FLOOR + (1 - HEAT_FLOOR) * ratio ** HEAT_GAMMA;
-    return Math.round(scaled * 100) / 100;
-  }
-
-  /**
-   * Two activity series over the same window: what moved, and what actually shipped. A board can look
-   * busy and deliver nothing, so the counts are never blended into one row. Rendering (day columns,
-   * level scaling, month labels) belongs to the shared k-activity-strip.
-   */
-  readonly activitySeries = computed<ActivityStripSeries[]>(() => {
-    const activity = this.state.portfolio()?.activity ?? [];
-    return [
-      {
-        key: "moved",
-        label: $localize`:Activity strip row, cards moved per day:Card movement`,
-        noun: "move",
-        countLabel: (count: number) => icu($localize`:Activity strip tooltip count:{count, plural, one {# move} other {# moves}}`, { count }),
-        tone: "accent" as const,
-      },
-      {
-        key: "completed",
-        label: $localize`:Activity strip row, cards completed per day:Completed`,
-        noun: "completion",
-        countLabel: (count: number) => icu($localize`:Activity strip tooltip count:{count, plural, one {# completion} other {# completions}}`, { count }),
-        tone: "success" as const,
-      },
-    ].map((series) => ({
-      ...series,
-      counts: new Map(activity.map((day) => [day.date, day[series.key as "moved" | "completed"]])),
-    }));
-  });
-
-  readonly activityWindowDays = computed(() => this.state.portfolio()?.activityDays ?? PORTFOLIO_ACTIVITY_DAYS);
-
-  /**
-   * Open work per list, one bar per workspace: lists are workspace-scoped, so one blended bar
-   * across workspaces would put two unrelated "Backlog"s side by side. Rows arrive in workspace
-   * then list order, so grouping by first appearance keeps that order. Older offline snapshots
-   * carry no `lists`, so the section simply stays empty until the next refresh.
-   */
-  readonly portfolioListBars = computed<{ workspaceId: string; workspaceName: string; segments: StatusBarSegment[] }[]>(() => {
-    const groups = new Map<string, { workspaceId: string; workspaceName: string; segments: StatusBarSegment[] }>();
-    for (const row of this.state.portfolio()?.lists ?? []) {
-      let group = groups.get(row.workspaceId);
-      if (!group) {
-        group = { workspaceId: row.workspaceId, workspaceName: row.workspaceName, segments: [] };
-        groups.set(row.workspaceId, group);
-      }
-      group.segments.push({ id: row.listId, name: row.name, icon: row.icon, color: row.color, count: row.open });
-    }
-    return [...groups.values()];
-  });
 
   constructor() {
     document.addEventListener("keydown", this.handleDocumentKeydown);
@@ -1395,8 +1118,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     if (this.selectedCard()) return;
     event.preventDefault();
     // Search stays outside the toolbar's collapsing controls, so it is focusable at every width.
-    // Portfolio summary intentionally has no card query; in that display this remains a no-op while
-    // still keeping the browser find UI from obscuring the app-level workspace.
     const input = this.el.nativeElement.querySelector<HTMLInputElement>('k-search-field .sf-input');
     input?.focus();
   }
@@ -1479,40 +1200,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.openMenu.update((current) => (current === menu ? null : current));
   }
 
-  /** Reporting windows the portfolio summary supports; the server caps completed work at 60 days. */
-  readonly portfolioDayOptions = [7, 30, 60];
-
-  // The period lives in the toolbar next to the other query controls rather than in a card above the
-  // metrics: it narrows the same result set the filters do, so it belongs with them.
-  readonly periodGroups = computed(() => [{
-    id: "period",
-    options: this.portfolioDayOptions.map((days) => ({
-      id: String(days),
-      label: lastDaysLabel(days),
-      icon: "calendar-stats",
-      hint: days === 60 ? $localize`:Hint beside the longest reporting period option:Longest window we report on` : null,
-    })),
-  }]);
-  readonly periodValue = computed(() => String(this.state.definition().portfolioDays));
-  readonly periodLabel = computed(() => lastDaysLabel(this.state.definition().portfolioDays));
-  readonly periodTooltip = computed(() => $localize`:Tooltip of the reporting period picker:Period: ${this.periodLabel()}:period:`);
-
-  selectPortfolioDays(days: number): void {
-    this.closeMenu("period");
-    this.state.setPortfolioDays(days);
-    this.applyQuery();
-  }
-
   /**
    * Toolbar inline clears. Each mirrors the `select…` path above for the same control, minus the
    * menu close (the × sits outside the panel, so the anchored panel dismisses itself), so a control
    * reset from the toolbar reloads exactly as it would when reset from inside its picker.
    */
-  clearPortfolioDays(): void {
-    this.state.resetPortfolioDays();
-    this.applyQuery();
-  }
-
   clearGrouping(): void {
     this.state.resetGrouping();
   }
@@ -1590,6 +1282,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   selectGrouping(groupBy: WorkGroupBy): void {
     this.closeMenu("group");
     this.state.setGrouping(groupBy);
+    // Here the page owns the table's grouping, so this is where the Getting started step ticks.
+    if (this.effectiveDisplay() === "table" && this.state.groupByIsSet()) this.gettingStarted.noteUsed("groupTable");
   }
 
   selectSort(sort: WorkSort): void {
@@ -1673,7 +1367,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       blockedOnly: value.showBlockedOnly,
       prioritySetOnly: value.showPrioritySetOnly,
       customFieldConditions,
-      ...(this.lens() === "portfolio" ? { assigneeIds: value.memberIds } : {}),
     });
     this.applyQuery();
   }
@@ -1718,12 +1411,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * "Clear all" from the filter panel. Scoped to what that panel actually offers, which is narrower
    * than "every filter in the definition":
    *
-   * - `assigneeIds` is only the panel's on the portfolio lens (see `filterValue` and
-   *   `onFilterValueChange`, which gate it the same way). On "my"/"team" it is the scope of the page
-   *   itself, driven by the Teammate trigger next door — clearing it from in here silently reset a
-   *   control the panel never showed and whose badge never counted it.
-   * - `unassignedOnly` has no panel row; it belongs to Portfolio drill-downs, which own their own
-   *   chip and close button.
+   * - `assigneeIds` is the scope of the page itself, driven by the Teammate trigger next door —
+   *   clearing it from in here silently reset a control the panel never showed and whose badge never
+   *   counted it.
+   * - `unassignedOnly` has no panel row; only Home's deep links set it.
    */
   clearFilters(): void {
     this.workDoneEventType.set(null);
@@ -1743,7 +1434,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       archived: false,
       completedFrom: null,
       completedTo: null,
-      ...(this.lens() === "portfolio" ? { assigneeIds: [] } : {}),
     });
     this.applyQuery();
   }
@@ -1784,25 +1474,19 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     return queue?.targetUserId === targetUserId ? queue : null;
   });
 
-  /**
-   * The whole feature is withheld on an offline snapshot: a stale sequence reads as an instruction,
-   * and someone following "do this first" from a cached queue can be reading last week's order with
-   * no way to tell. Rank pills and the panel disappear together, from this one gate.
-   */
+  /** Cached personal queues remain readable; interactionReady gates editing separately. */
   readonly upNextAvailable = computed(() =>
     this.currentPriorities() !== null
-    && this.state.cachedAt() === null
     && this.effectiveDisplay() !== "history"
-    && this.effectiveDisplay() !== "summary"
     // The overview has no person in focus; its dock follows `overviewDockQueue` instead.
     && this.effectiveDisplay() !== "overview"
   );
   /** The dock is a board curation tool; every other display keeps its own full-width reading mode. */
   readonly showUpNextControl = computed(() =>
-    this.lens() !== "portfolio" && this.effectiveDisplay() === "board"
+    this.effectiveDisplay() === "board"
   );
   readonly upNextUnavailableTooltip = computed(() => {
-    if (this.effectiveDisplay() === "history" || this.effectiveDisplay() === "summary") {
+    if (this.effectiveDisplay() === "history") {
       return $localize`:Tooltip on the disabled Up next button:Up next is unavailable on this view`;
     }
     if (!this.state.focusedTargetUserId()) {
@@ -1890,7 +1574,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   );
   /** Every queue this viewer may read, self first. */
   readonly overviewQueues = computed(() =>
-    this.overviewDock() && this.state.cachedAt() === null ? this.state.teamPriorities()?.queues ?? [] : []
+    this.overviewDock() ? this.state.teamPriorities()?.queues ?? [] : []
   );
   /**
    * Whether the focused person's dock is showing. Separate from the focus so closing the dock (on a
@@ -1931,7 +1615,15 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   });
   readonly dockAddableCards = computed(() => this.overviewDock() ? this.overviewDockAddableCards() : this.upNextAddableCards());
   // Quick complete goes through the shell's own-queue service, which the overview's batch copy is not.
-  readonly dockAllowQuickComplete = computed(() => !this.overviewDock() && this.isSelfUpNextTarget());
+  readonly dockCanEdit = computed(() => this.state.interactionReady() && (this.overviewDock()
+    ? this.state.teamPrioritiesCachedAt() === null
+    : this.isSelfUpNextTarget() ? this.myPriorities.canEdit() : this.state.prioritiesCachedAt() === null));
+  readonly dockOfflineMessage = computed(() => {
+    if (!this.overviewDock() && this.isSelfUpNextTarget()) return this.myPriorities.offlineMessage();
+    const time = this.overviewDock() ? this.state.teamPrioritiesCachedAt() : this.state.prioritiesCachedAt();
+    return time ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(time)}:time:` : "";
+  });
+  readonly dockAllowQuickComplete = computed(() => this.state.interactionReady() && this.myPriorities.canEdit() && !this.overviewDock() && this.isSelfUpNextTarget());
 
   /** The person strip and avatars: show one person with their Up next docked, or everyone again. */
   setOverviewFocus(userId: string | null): void {
@@ -2082,6 +1774,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * where the pointer released it). Failures render inside the panel, where the gesture ended.
    */
   onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null }): void {
+    if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
     const { cardId, ...anchor } = event;
     const target = this.overviewDockQueue()?.target.userId;
@@ -2101,6 +1794,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly upNextDropTargets = computed<string[]>(() => this.upNextOpen() ? ["up-next-drop"] : []);
 
   onPriorityReordered(event: { priorityId: string; afterId?: string | null; beforeId?: string | null }): void {
+    if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
     const { priorityId, ...anchor } = event;
     const target = this.overviewDockQueue()?.target.userId;
@@ -2113,6 +1807,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   onPriorityRemoved(event: { priorityId: string }): void {
+    if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
     const target = this.overviewDockQueue()?.target.userId;
     const removed = this.overviewDock() && target
@@ -2171,41 +1866,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
 
   isWorkspaceCollapsed(workspaceId: string): boolean {
     return this.collapsedWorkspaceIds().has(workspaceId);
-  }
-
-  isPortfolioRowCollapsed(row: PortfolioRow): boolean {
-    if (!row.collapseId) return false;
-    return row.level === "organisation"
-      ? this.collapsedOrganisationIds().has(row.collapseId)
-      : this.collapsedWorkspaceIds().has(row.collapseId);
-  }
-
-  /**
-   * Collapse persists through the view definition, so the shape survives a reload and travels with a
-   * saved view — the same contract the board and card-group collapses use.
-   */
-  togglePortfolioRow(row: PortfolioRow, event: Event): void {
-    event.stopPropagation();
-    this.setPortfolioRowCollapsed(row, !this.isPortfolioRowCollapsed(row));
-  }
-
-  /** One control for both directions: collapse everything still open, otherwise expand everything. */
-  togglePortfolioRowsCollapsed(): void {
-    const collapse = !this.portfolioAllCollapsed();
-    for (const row of this.portfolioTree()) this.setPortfolioRowCollapsed(row, collapse);
-  }
-
-  readonly portfolioGroupCount = computed(() =>
-    this.portfolioTree().filter((row) => row.collapseId).length
-  );
-  readonly portfolioAllCollapsed = computed(() =>
-    this.portfolioTree().every((row) => !row.collapseId || this.isPortfolioRowCollapsed(row))
-  );
-
-  private setPortfolioRowCollapsed(row: PortfolioRow, collapsed: boolean): void {
-    if (!row.collapseId || this.isPortfolioRowCollapsed(row) === collapsed) return;
-    if (row.level === "organisation") this.state.toggleOrganisationCollapsed(row.collapseId);
-    else this.state.toggleWorkspaceCollapsed(row.collapseId);
   }
 
   toggleWorkspaceCollapsed(workspaceId: string): void {
@@ -2489,7 +2149,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const route = ({
       my: "/my-cards",
       team: "/team-cards",
-      portfolio: "/portfolio",
     } as const)[this.lens()];
     this.cardNavigationTarget.set(cardId);
     return this.router.navigate(cardId ? [route, "c", cardId] : [route], {
@@ -2506,76 +2165,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       if (this.cardNavigationTarget() === cardId) this.cardNavigationTarget.set(undefined);
       throw error;
     });
-  }
-
-  drillDown(source: PortfolioRow | null, metric: PortfolioMetric): void {
-    if (!this.state.interactionReady()) return;
-    const now = new Date();
-    const today = localDateKey(now);
-    const nextSeven = new Date(now);
-    nextSeven.setDate(nextSeven.getDate() + 7);
-    const completedFrom = new Date(now.getTime() - this.state.definition().portfolioDays * 86_400_000).toISOString();
-    if (!source) this.state.setScope([], []);
-    else if (source.level === "organisation") this.state.setScope(source.workspaceIds, []);
-    else if (source.level === "workspace") this.state.setScope([source.workspaceIds[0]!], []);
-    else this.state.setScope([], [source.boardIds[0]!]);
-    this.state.updateFilters({
-      completion: metric === "completed" ? "completed" : "active",
-      overdueOnly: metric === "overdue",
-      unassignedOnly: metric === "unassigned",
-      inactiveOnly: metric === "inactive",
-      inProgressOnly: metric === "inProgress",
-      inProgressTooLongOnly: metric === "inProgressTooLong",
-      blockedOnly: metric === "blocked",
-      atRiskOnly: metric === "atRisk",
-      overdueChecklistOnly: metric === "overdueChecklistItems",
-      dueFrom: metric === "dueSoon" ? today : null,
-      dueTo: metric === "dueSoon" ? localDateKey(nextSeven) : null,
-      completedFrom: metric === "completed" ? completedFrom : null,
-      completedTo: metric === "completed" ? now.toISOString() : null,
-    });
-    this.state.setDisplay("table");
-    this.drilldownLabel.set(`${source?.label ?? $localize`:Scope picker option:All boards`} · ${this.metricLabel(metric)}`);
-    this.applyQuery();
-  }
-
-  closeDrilldown(): void {
-    if (!this.state.interactionReady()) return;
-    this.drilldownLabel.set(null);
-    this.state.setScope([], []);
-    this.state.updateFilters({
-      completion: DEFAULT_COMPLETION,
-      overdueOnly: false,
-      unassignedOnly: false,
-      inactiveOnly: false,
-      inProgressOnly: false,
-      inProgressTooLongOnly: false,
-      blockedOnly: false,
-      atRiskOnly: false,
-      overdueChecklistOnly: false,
-      dueFrom: null,
-      dueTo: null,
-      completedFrom: null,
-      completedTo: null,
-    });
-    this.state.setDisplay("summary");
-    this.applyQuery();
-  }
-
-  metricLabel(metric: string): string {
-    return ({
-      active: $localize`:Portfolio drill-down, cards not completed:Active`,
-      overdue: $localize`:Portfolio drill-down, overdue cards:Overdue`,
-      dueSoon: $localize`:Portfolio drill-down:Due next 7 days`,
-      unassigned: $localize`:Portfolio drill-down, cards with no assignee:Unassigned`,
-      inactive: $localize`:Portfolio drill-down, cards untouched for 14 days:Inactive 14 days`,
-      inProgress: $localize`:Portfolio drill-down, open cards whose time-in-progress clock is running:In progress`,
-      inProgressTooLong: $localize`:Portfolio drill-down, cards in progress past their workspace's alert:In progress too long`,
-      blocked: $localize`:Portfolio drill-down, open cards waiting on another open card:Blocked`,
-      atRisk: $localize`:Portfolio drill-down, cards whose blocker is overdue or due after them:At risk`,
-      completed: $localize`:Portfolio drill-down, cards completed in the last N days (d = days, keep it short):Completed (${this.state.definition().portfolioDays}:days:d)`,
-      overdueChecklistItems: $localize`:Portfolio drill-down:Overdue checklist items`,
-    } as Record<string, string>)[metric] ?? metric;
   }
 
   // Board and workspace icons/colours mirror the sidebar rendering so a card's source reads the
@@ -2605,19 +2194,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   listIconColor(listId: string): string | null {
     const color = this.listsById().get(listId)?.color;
     return color ? `var(--color-${color})` : null;
-  }
-
-  portfolioRowIconClass(row: PortfolioRow): string {
-    // A standalone row *is* its board, so it takes the board's icon rather than the wrapper's.
-    if (row.level === "board" || row.standalone) return this.boardIconClass(row.boardIds[0] ?? "");
-    if (row.level === "workspace") return this.workspaceIconClass(row.workspaceIds[0] ?? "");
-    return "ti ti-building";
-  }
-
-  portfolioRowIconColor(row: PortfolioRow): string | null {
-    if (row.level === "board" || row.standalone) return this.boardIconColor(row.boardIds[0] ?? "");
-    if (row.level === "workspace") return this.workspaceIconColor(row.workspaceIds[0] ?? "");
-    return null;
   }
 
   localDateLabel(value: string, style: "full" | "medium" = "medium"): string {
@@ -2684,57 +2260,5 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
 
   workspaceName(workspaceId: string): string {
     return this.workspacesById().get(workspaceId)?.name ?? $localize`:Fallback name for an unknown workspace:Workspace`;
-  }
-
-  private rollupPortfolioRow(
-    id: string,
-    level: "organisation" | "workspace",
-    label: string,
-    context: string,
-    organisationId: string,
-    workspaceId: string | null,
-    buckets: PortfolioBucket[],
-  ): PortfolioRow {
-    const row = buckets.reduce<PortfolioRow>((row, bucket) => ({
-      ...row,
-      workspaceIds: row.workspaceIds.includes(bucket.workspaceId)
-        ? row.workspaceIds
-        : [...row.workspaceIds, bucket.workspaceId],
-      boardIds: [...row.boardIds, bucket.boardId],
-      active: row.active + bucket.active,
-      overdue: row.overdue + bucket.overdue,
-      dueSoon: row.dueSoon + bucket.dueSoon,
-      unassigned: row.unassigned + bucket.unassigned,
-      inactive: row.inactive + (bucket.inactive ?? 0),
-      inProgress: row.inProgress + (bucket.inProgress ?? 0),
-      inProgressTooLong: row.inProgressTooLong + (bucket.inProgressTooLong ?? 0),
-      blocked: row.blocked + (bucket.blocked ?? 0),
-      atRisk: row.atRisk + (bucket.atRisk ?? 0),
-      completed: row.completed + bucket.completed,
-      overdueChecklistItems: row.overdueChecklistItems + bucket.overdueChecklistItems,
-    }), {
-      id,
-      level,
-      label,
-      context,
-      collapseId: workspaceId ?? organisationId,
-      standalone: false,
-      organisationId,
-      workspaceId,
-      workspaceIds: [],
-      boardIds: [],
-      active: 0,
-      overdue: 0,
-      dueSoon: 0,
-      unassigned: 0,
-      inactive: 0,
-      inProgress: 0,
-      inProgressTooLong: 0,
-      blocked: 0,
-      atRisk: 0,
-      completed: 0,
-      overdueChecklistItems: 0,
-    });
-    return row;
   }
 }

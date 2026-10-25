@@ -4,7 +4,7 @@
  * The head of the queue is what "Up next" means, so the first few ranks each step down a visible
  * shade and everything deeper shares the resting tint — a ramp spread over the whole 50-entry
  * queue would leave adjacent ranks indistinguishable. Consumed as the `--rank-heat` custom
- * property by shared/_rank-pill.scss, the same pattern as the portfolio table's heat cells.
+ * property by shared/_rank-pill.scss.
  */
 export function priorityRankHeat(rank: number): number {
   return Math.max(0, (5 - rank) / 4);

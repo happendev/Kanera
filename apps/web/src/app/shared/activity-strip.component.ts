@@ -81,8 +81,7 @@ export function buildActivityStripCells(
  * direct read — a busy movement strip over an empty completion strip is the "lots of churn, nothing
  * shipped" signal these exist to surface.
  *
- * Shared by the portfolio summary and the work-done timeline so the product has exactly one visual
- * language for per-day activity.
+ * Used by the work-done timeline; kept generic so any per-day activity shares one visual language.
  */
 @Component({
   selector: "k-activity-strip",

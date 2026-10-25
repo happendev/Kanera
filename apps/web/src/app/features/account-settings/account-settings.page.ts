@@ -451,9 +451,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly inProgressEnabledDraft = signal(true);
   readonly inProgressEnabledSaving = signal(false);
   readonly inProgressEnabledError = signal<string | null>(null);
-  readonly portfolioEnabledDraft = signal(true);
-  readonly portfolioEnabledSaving = signal(false);
-  readonly portfolioEnabledError = signal<string | null>(null);
+  readonly dependenciesEnabledDraft = signal(true);
+  readonly timelineEnabledDraft = signal(true);
+  readonly planningFeatureSaving = signal(false);
+  readonly planningFeatureError = signal<string | null>(null);
   // Hosted-only organisation cap on AI agent (MCP) credentials; the API enforces it per resource.
   readonly mcpPolicyDraft = signal<ClientMcpPolicy>("write");
   readonly mcpPolicySaving = signal(false);
@@ -741,8 +742,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
     this.pushEnabledDraft.set(c.pushEnabled);
     this.requireMfaDraft.set(c.requireMfa);
-    this.portfolioEnabledDraft.set(c.portfolioEnabled);
     this.inProgressEnabledDraft.set(c.inProgressEnabled);
+    this.dependenciesEnabledDraft.set(c.dependenciesEnabled);
+    this.timelineEnabledDraft.set(c.timelineEnabled);
     this.mcpPolicyDraft.set(c.mcpPolicy);
     this.defaultCompletedCardsActiveDays.set(c.defaultCompletedCardsActiveDays);
     this.defaultInactiveCardsDays.set(c.defaultInactiveCardsDays);
@@ -2102,21 +2104,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     finally { this.requireMfaSaving.set(false); }
   }
 
-  async savePortfolioEnabled(next: boolean) {
-    const current = this.client();
-    if (!current || current.portfolioEnabled === next) return;
-    this.portfolioEnabledDraft.set(next);
-    this.portfolioEnabledSaving.set(true); this.portfolioEnabledError.set(null);
-    try {
-      const updated = await this.api.patch<PublicClientResponse>("/clients/me", { portfolioEnabled: next });
-      this.applyClient(updated);
-      // Other members pick the change up on their next session refresh.
-      this.auth.updateUser((u) => ({ ...u, portfolioEnabled: updated.portfolioEnabled }));
-    }
-    catch (err) { this.portfolioEnabledDraft.set(current.portfolioEnabled); this.portfolioEnabledError.set(extractErrorMessage(err)); }
-    finally { this.portfolioEnabledSaving.set(false); }
-  }
-
   async saveInProgressEnabled(next: boolean) {
     const current = this.client();
     if (!current || current.inProgressEnabled === next) return;
@@ -2130,6 +2117,23 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
     catch (err) { this.inProgressEnabledDraft.set(current.inProgressEnabled); this.inProgressEnabledError.set(extractErrorMessage(err)); }
     finally { this.inProgressEnabledSaving.set(false); }
+  }
+
+  /**
+   * Organisation master switches for dependencies and the timeline. Workspaces can also turn either
+   * off for themselves; board events carry the new effective setting to every open board.
+   */
+  async savePlanningFeature(key: "dependenciesEnabled" | "timelineEnabled", next: boolean) {
+    const current = this.client();
+    if (!current || current[key] === next) return;
+    const draft = key === "dependenciesEnabled" ? this.dependenciesEnabledDraft : this.timelineEnabledDraft;
+    draft.set(next);
+    this.planningFeatureSaving.set(true); this.planningFeatureError.set(null);
+    try {
+      this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", { [key]: next }));
+    }
+    catch (err) { draft.set(current[key]); this.planningFeatureError.set(extractErrorMessage(err)); }
+    finally { this.planningFeatureSaving.set(false); }
   }
 
   async saveMcpPolicy() {

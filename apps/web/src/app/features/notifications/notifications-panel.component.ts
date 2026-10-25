@@ -16,6 +16,7 @@ import { NotificationsService, type NotificationFeedMode } from "../../core/noti
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { SystemAvatarComponent } from "../../shared/system-avatar.component";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
 import { BodyScrollLockService } from "../../shared/body-scroll-lock.service";
@@ -52,7 +53,7 @@ const UNKNOWN_USER = $localize`:Fallback name for a person who no longer exists:
 @Component({
   selector: "k-notifications-panel",
   standalone: true,
-  imports: [CdkTrapFocus, NgOptimizedImage, AvatarComponent, EmptyStateComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
+  imports: [CdkTrapFocus, NgOptimizedImage, AvatarComponent, SystemAvatarComponent, EmptyStateComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
   providers: [BoardState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./notifications-panel.component.html",

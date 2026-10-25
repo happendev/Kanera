@@ -888,8 +888,8 @@ export class FilterBarComponent implements OnDestroy {
   readonly showArchived = input(false);
   /**
    * Opt in to the "Hide completed" toggle. Pages whose default view already includes recently
-   * completed cards (the global work pages) need a way back to open-work-only; a board has no such
-   * toggle, so this stays off unless a page asks for it.
+   * completed cards need a way back to open-work-only. The host owns the completion state so this
+   * control stays in sync with view-specific shortcuts such as the Timeline toolbar.
    */
   readonly showHideCompleted = input(false);
 

@@ -98,9 +98,3 @@ export const standaloneBoardSettingsGuard: CanActivateFn = async (route) => {
   }
   return router.createUrlTree(["/"]);
 };
-
-// Portfolio can be hidden per organisation; bookmarks and shortcuts land on Home instead.
-export const portfolioGuard: CanActivateFn = () => {
-  const auth = inject(AuthService);
-  return auth.user()?.portfolioEnabled !== false ? true : inject(Router).createUrlTree(["/"]);
-};

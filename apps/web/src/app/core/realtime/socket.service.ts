@@ -45,6 +45,14 @@ export class SocketService {
     if (typeof window !== "undefined") {
       window.addEventListener("online", () => {
         this.browserOnline.set(true);
+        // A cold offline start has cached identity but no bearer token. Restore the cookie-backed
+        // session before reconnecting so cached views can leave their read-only state.
+        if (this.auth.offlineSession?.()) {
+          void this.auth.refresh().then((token) => {
+            if (token && this.socket && !this.socket.connected) this.forceReconnect(this.socket);
+          });
+          return;
+        }
         if (this.socket && !this.socket.connected && this.connectionProblem()) this.forceReconnect(this.socket);
       });
       window.addEventListener("offline", () => this.browserOnline.set(false));

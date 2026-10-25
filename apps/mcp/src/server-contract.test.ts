@@ -176,9 +176,11 @@ const allToolCases: ToolCase[] = [
   { name: "cards.get", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
   { name: "cards.list_history", args: { cardId: C, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/feed?limit=50` },
   { name: "cards.get_content", args: { boardId: B, cardIds: [C] }, method: "POST", path: `/api/v1/boards/${B}/cards/content/query`, body: { cardIds: [C] } },
-  { name: "cards.create", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, labelIds: [O], assigneeIds: [U], dueDateLocalDate: "2026-10-16", dueDateSlot: "morning", idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, labelIds: [O], assigneeIds: [U], dueDateLocalDate: "2026-10-16", dueDateSlot: "morning" } },
-  { name: "cards.bulk_create", args: { boardId: B, cards: [{ listId: L, title: "One", labelIds: [O] }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] }, method: "POST", path: `/api/v1/boards/${B}/cards/bulk/create`, body: { cards: [{ listId: L, title: "One", labelIds: [O] }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] } },
-  { name: "cards.update", args: { cardId: C, changes: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } },
+  { name: "cards.create", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, labelIds: [O], assigneeIds: [U], startDateLocalDate: "2026-10-12", dueDateLocalDate: "2026-10-16", dueDateSlot: "morning", idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, labelIds: [O], assigneeIds: [U], startDateLocalDate: "2026-10-12", dueDateLocalDate: "2026-10-16", dueDateSlot: "morning" } },
+  { name: "cards.bulk_create", args: { boardId: B, cards: [{ listId: L, title: "One", labelIds: [O], startDateLocalDate: "2026-10-12" }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] }, method: "POST", path: `/api/v1/boards/${B}/cards/bulk/create`, body: { cards: [{ listId: L, title: "One", labelIds: [O], startDateLocalDate: "2026-10-12" }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] } },
+  { name: "cards.update", args: { cardId: C, changes: { title: "New", startDateLocalDate: "2026-06-24", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { title: "New", startDateLocalDate: "2026-06-24", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } },
+  // A start date alone is a valid update, and null clears it.
+  { name: "cards.update", args: { cardId: C, changes: { startDateLocalDate: null } }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { startDateLocalDate: null } },
   { name: "cards.move", args: { cardId: C, listId: L, anchor: { side: "before", item: { type: "separator", id: O } } }, method: "POST", path: `/api/v1/cards/${C}/move`, body: { listId: L, beforeItem: { type: "separator", id: O } } },
   { name: "cards.archive", args: { cardId: C, archived: true }, method: "PATCH", path: `/api/v1/cards/${C}/archive`, body: { archived: true } },
   { name: "cards.set_assignees", args: { cardId: C, userIds: [U] }, method: "PUT", path: `/api/v1/cards/${C}/assignees`, body: { userIds: [U] } },
@@ -276,6 +278,8 @@ const allToolCases: ToolCase[] = [
   { name: "priorities.remove", args: { priorityId: O }, method: "DELETE", path: `/api/v1/card-priorities/${O}` },
   { name: "work.portfolio_summary", args: { days: 30, timeZone: "UTC" }, method: "POST", path: "/api/v1/work/portfolio/query", body: { days: 30, timeZone: "UTC" } },
   { name: "cards.dependency_graph", args: { boardId: B }, method: "POST", path: "/api/v1/cards/dependency-graph", body: { boardId: B } },
+  { name: "work.schedule", args: { boardId: B }, method: "POST", path: "/api/v1/cards/schedule", body: { boardId: B } },
+  { name: "work.schedule", args: { workspaceId: W }, method: "POST", path: "/api/v1/cards/schedule", body: { workspaceId: W } },
   { name: "comments.update", args: { commentId: N, body: "Updated" }, method: "PATCH", path: `/api/v1/comments/${N}`, body: { body: "Updated" } },
   { name: "comments.set_reaction", args: { commentId: N, type: "thumbs_up", active: true }, method: "POST", path: `/api/v1/comments/${N}/reactions`, body: { type: "thumbs_up" } },
   { name: "cards.delete_attachment", args: { cardId: C, attachmentId: N }, method: "DELETE", path: `/api/v1/cards/${C}/attachments/${N}` },
@@ -287,6 +291,14 @@ const allToolCases: ToolCase[] = [
   { name: "reminders.list", args: { status: "pending" }, method: "GET", path: "/api/v1/reminders?status=pending" },
   { name: "notifications.list", args: { since: "2026-10-11T08:00:00.000Z|abc", limit: 20, includeSelf: false }, method: "GET", path: "/api/v1/notifications?since=2026-10-11T08%3A00%3A00.000Z%7Cabc&limit=20&includeSelf=false" },
 ];
+
+// Empty schedule-engine responses: the shapes the public API returns for a scope with no open cards.
+const EMPTY_SCHEDULE = {
+  cards: [], edges: [], criticalEdgeIds: [],
+  summary: { scheduledCount: 0, unscheduledCount: 0, conflictCount: 0, criticalCount: 0, range: null, projectedFinish: null, latestDue: null, slipDays: 0 },
+  boards: [], lists: [], labels: [], people: [], truncated: false,
+};
+const EMPTY_SCHEDULE_ATTENTION = { conflicts: [], critical: [], lateToStart: [], truncated: false };
 
 const nonDefaultToolNames = new Set([
   "kanera_set_standalone_board_retention",
@@ -415,7 +427,8 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
     ],
   },
   {
-    // my_day fans out four bounded work queries plus the caller's own Up next queue.
+    // my_day fans out four bounded work queries, the schedule engine's attention list (same limit)
+    // and the caller's own Up next queue.
     name: "work.my_day",
     args: { timeZone: "UTC", limit: 5, upNextLimit: 3 },
     requests: [
@@ -424,6 +437,7 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
         path: "/api/v1/work/cards/query",
         body: { lens: "my", filters: { completion: "active", ...filters }, sort: "dueAsc", limit: 5 },
       })),
+      { method: "POST", path: "/api/v1/work/schedule-attention/query", body: { limit: 5, timeZone: "UTC" } },
       { method: "GET", path: "/api/v1/session" },
       { method: "GET", path: `/api/v1/work/priorities/${U}?limit=3` },
     ],
@@ -496,7 +510,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 103);
+  assert.equal(expectedNames.length, 104);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -570,6 +584,9 @@ void test("every MCP tool maps to the expected public API request", async () => 
         if (url.pathname === "/api/v1/cards/dependency-graph") {
           return new Response(JSON.stringify({ cards: [], edges: [], boards: [], lists: [], labels: [], people: [], truncated: false }), { status: 200 });
         }
+        if (url.pathname === "/api/v1/cards/schedule") {
+          return new Response(JSON.stringify(EMPTY_SCHEDULE), { status: 200 });
+        }
         if (url.pathname === "/api/v1/work/history/query") {
           return new Response(JSON.stringify({
             actor: { userId: U, displayName: "User" },
@@ -625,6 +642,9 @@ void test("every MCP tool maps to the expected public API request", async () => 
         }
         if (url.pathname === "/api/v1/work/cards/query") {
           return new Response(JSON.stringify({ cards: [], checklistItems: [], nextCursor: null }), { status: 200 });
+        }
+        if (url.pathname === "/api/v1/work/schedule-attention/query") {
+          return new Response(JSON.stringify(EMPTY_SCHEDULE_ATTENTION), { status: 200 });
         }
         if (url.pathname === `/api/v1/cards/${C}/attachments`) {
           return new Response(JSON.stringify([{ id: O, cardId: C, fileName: "run.log", mimeType: "text/plain", byteSize: 11, thumbnailUrl: null, url: "https://kanera.test/api/media/x", createdAt: "2026-06-30T00:00:00.000Z" }]), { status: 200 });
@@ -790,6 +810,22 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     assert.ok(byName.get("boards.list_accessible")?.inputSchema.properties?.cursor, "board discovery is paginated");
     assert.ok(byName.get("notes.list")?.inputSchema.properties?.cursor, "note discovery is paginated");
     assert.ok(getCardsContent?.inputSchema.properties?.cardIds, "bounded selected-card content reads are advertised");
+    // The schedule engine's surface: a read tool over the Timeline's schedule, a schedule section in
+    // my_day, and the two automation triggers it raises (derived from the shared trigger list).
+    const schedule = byName.get("work.schedule");
+    assert.equal(schedule?.annotations?.readOnlyHint, true, "work.schedule is a read");
+    assert.match(schedule?.description ?? "", /working day/u);
+    assert.match(schedule?.description ?? "", /cards\.dependency_graph/u);
+    assert.deepEqual(Object.keys(schedule?.inputSchema.properties ?? {}).sort(), ["boardId", "workspaceId"]);
+    assert.ok((schedule?.outputSchema as { properties?: Record<string, unknown> } | undefined)?.properties?.summary, "work.schedule advertises its summary shape");
+    assert.ok(((byName.get("work.my_day")?.outputSchema as { properties?: Record<string, unknown> } | undefined)?.properties?.schedule), "work.my_day advertises its schedule section");
+    assert.match(byName.get("work.portfolio_summary")?.description ?? "", /schedule health/u);
+    for (const name of ["automations.create", "automations.update"]) {
+      const trigger = JSON.stringify(byName.get(name)?.inputSchema);
+      for (const triggerType of ["scheduling_conflict_appears", "critical_path_slips"]) {
+        assert.match(trigger, new RegExp(`"${triggerType}"`, "u"), `${name} accepts the ${triggerType} trigger`);
+      }
+    }
     assert.equal(byName.get("cards.get")?.inputSchema.properties?.idempotencyKey, undefined, "reads do not advertise replay keys");
     assert.ok(byName.get("comments.add")?.inputSchema.properties?.idempotencyKey, "JSON mutations advertise replay keys");
     assert.equal(byName.get("cards.add_attachment")?.inputSchema.properties?.idempotencyKey, undefined, "multipart uploads do not claim replay protection");
@@ -817,14 +853,21 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // cards.set_relations semantics and the blockedOnly work filter). cards.dependency_graph adds
     // roughly 1.4k so agents can read blocking chains in one call; both ceilings move by 1k. The
     // atRiskOnly work filter adds ~0.1k, so the totals move by 0.5k and the per-tool ceiling by 0.1k.
+    // The planned start date (startDateLocalDate on cards.create, cards.bulk_create and every
+    // variant of the cards.update union) adds ~2.3k; both ceilings move by 2.5k.
+    // The schedule engine (work.schedule with its typed per-card output, the schedule section and
+    // output schema on work.my_day, schedule health on work.portfolio_summary and the two schedule
+    // triggers described on automations.create/update) adds ~8.9k; both ceilings move by 9k.
+    // In-progress limits on automations.create/update (fixed or number-field thresholds and the
+    // include-existing switch) plus schedule.lateToStart on work.my_day add ~2.4k; both move by 2.5k.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
     // OAuth declarations add a fixed per-tool cost. Preserve the original routing/schema
     // budget independently, and bound the extra auth metadata rather than granting schema growth.
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
     // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
-    assert.ok(schemaCatalogLength <= 186_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 195_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    assert.ok(schemaCatalogLength <= 200_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 209_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8.5k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.
@@ -1119,6 +1162,9 @@ void test("date phrases resolve in the user's zone before reaching the public AP
       // 2026-10-09 is a Friday in Auckland.
       return new Response(JSON.stringify({ userId: U, timeZone: "Pacific/Auckland", today: "2026-10-09" }), { status: 200 });
     }
+    if (url.pathname === "/api/v1/work/schedule-attention/query") {
+      return new Response(JSON.stringify({ ...EMPTY_SCHEDULE_ATTENTION, truncated: true }), { status: 200 });
+    }
     return new Response(JSON.stringify({ id: C, cards: [], nextCursor: null }), { status: 200 });
   };
   try {
@@ -1130,6 +1176,15 @@ void test("date phrases resolve in the user's zone before reaching the public AP
     requests.length = 0;
     await tools["cards.update"]!.handler({ cardId: C, changes: { dueDateLocalDate: "2026-11-02", dueDateSlot: "morning" } });
     assert.deepEqual(requests.map((request) => request.path), [`/api/v1/cards/${C}`]);
+
+    // A start-date phrase resolves to a date only; its time never produces a due slot.
+    requests.length = 0;
+    result = await tools["cards.create"]!.handler({ boardId: B, listId: L, title: "Plan", startDateLocalDate: "next monday 9am", dueDateLocalDate: "next friday" });
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(requests.at(-1), { method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Plan", startDateLocalDate: "2026-10-19", dueDateLocalDate: "2026-10-16" } });
+    result = await tools["cards.update"]!.handler({ cardId: C, changes: { startDateLocalDate: "someday" } });
+    assert.equal(result.isError, true);
+    assert.match(String(result.content[0]?.type === "text" && result.content[0].text), /changes\.startDateLocalDate: Could not read the date \\"someday\\"/u);
 
     // Instants resolve to the start of the local day, converted to UTC (Auckland is UTC+13 in October).
     requests.length = 0;
@@ -1145,8 +1200,10 @@ void test("date phrases resolve in the user's zone before reaching the public AP
     // Without a timeZone argument, my_day uses the profile zone instead of UTC.
     requests.length = 0;
     const myDay = await tools["work.my_day"]!.handler({ limit: 5, upNextLimit: 0 });
-    const structured = myDay.structuredContent as { timeZone: string; today: string; dueThisWeekThrough: string };
+    const structured = myDay.structuredContent as { timeZone: string; today: string; dueThisWeekThrough: string; schedule: unknown };
     assert.deepEqual([structured.timeZone, structured.today, structured.dueThisWeekThrough], ["Pacific/Auckland", "2026-10-09", "2026-10-15"]);
+    // The schedule section is the attention endpoint's four fields and nothing else.
+    assert.deepEqual(structured.schedule, { conflicts: [], critical: [], lateToStart: [], truncated: true });
   } finally {
     globalThis.fetch = originalFetch;
   }

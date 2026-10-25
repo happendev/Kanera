@@ -1,6 +1,6 @@
 import { paginateCursor, type PageIterator } from "../pagination.js";
 import type {
-  Card, PriorityAnchor, PriorityQueue, PriorityTarget, Uuid, WorkCardsResult, WorkFilters, WorkScope, WorkSort,
+  Card, PriorityAnchor, PriorityQueue, PriorityTarget, Schedule, ScheduleAttention, Uuid, WorkCardsResult, WorkFilters, WorkScope, WorkSort,
 } from "../types.js";
 import type { CallOptions, ResourceContext } from "./base.js";
 
@@ -26,6 +26,9 @@ export interface WorkHistoryInput {
   cursor?: string;
   limit?: number;
 }
+
+/** What `schedule` computes over: one board (chains are followed into other boards) or a whole workspace. */
+export type ScheduleScope = { boardId: Uuid } | { workspaceId: Uuid };
 
 function anchorBody(anchor: PriorityAnchor): { afterId: Uuid | null } | { beforeId: Uuid | null } {
   return anchor.side === "after" ? { afterId: anchor.id } : { beforeId: anchor.id };
@@ -62,6 +65,26 @@ export class Work {
     options: CallOptions = {},
   ): Promise<Record<string, unknown>> {
     return this.ctx.http.post("/api/v1/work/portfolio/query", { days: 30, timeZone: "UTC", ...input }, options);
+  }
+
+  /**
+   * The Timeline view's schedule for a board or workspace: planned bars, earliest and latest dates,
+   * slack and the critical path over open cards and their `blocks` relations, computed server-side by
+   * the same engine the chart uses. Every date is a working day (Mon–Fri) and `slackDays` counts
+   * working days. Use `cards.dependencyGraph` for who blocks whom; use this for when work finishes,
+   * how much room a card has and what slips.
+   */
+  schedule(scope: ScheduleScope, options: CallOptions = {}): Promise<Schedule> {
+    return this.ctx.http.post<Schedule>("/api/v1/cards/schedule", scope, options);
+  }
+
+  /**
+   * The credential owner's own open cards with scheduling conflicts, and their critical-path cards,
+   * each board scheduled on its own as the Timeline shows it. `limit` caps each section (1–50,
+   * default 20).
+   */
+  scheduleAttention(input: { limit?: number; timeZone?: string } = {}, options: CallOptions = {}): Promise<ScheduleAttention> {
+    return this.ctx.http.post<ScheduleAttention>("/api/v1/work/schedule-attention/query", input, options);
   }
 
   /** Whose queues this credential may read: the owner, plus teammates it has admin authority over. */

@@ -56,6 +56,9 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     inProgressAlertDays: 7, timeZone: "UTC",
     boardLinkingEnabled: true,
     notesEnabled: true,
+    dependenciesEnabled: true,
+    timelineEnabled: true,
+    inProgressEnabled: true,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     archivedAt: null,
@@ -334,6 +337,8 @@ describe("AppShellComponent board search", () => {
         {
           provide: OfflineCacheService,
           useValue: {
+            savePriorityQueue: vi.fn(async () => undefined),
+            loadPriorityQueue: vi.fn(async () => null),
             saveShell: vi.fn(() => Promise.resolve()),
             loadShell: vi.fn(() => Promise.resolve(null)),
             revokeBoardAccess: vi.fn(() => Promise.resolve()),
@@ -350,6 +355,7 @@ describe("AppShellComponent board search", () => {
             disconnect: vi.fn(),
             pauseForOrganisationSwitch,
             resumeAfterOrganisationSwitch,
+            online: signal(true),
             displayedOnline: signal(true),
             reconnecting: signal(false),
             accessRefreshing: signal(false),
@@ -771,7 +777,6 @@ describe("AppShellComponent board search", () => {
     // the board tree during search.
     expect(text()).toContain("My Cards");
     expect(text()).toContain("Team Cards");
-    expect(text()).toContain("Portfolio");
     expect(text()).not.toContain("Notes");
   });
 
@@ -1436,7 +1441,7 @@ describe("AppShellComponent board search", () => {
       (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/w/workspace-1/notes"]');
     expect(workspaceNotesLink?.querySelector(".nav-label")?.textContent?.trim()).toBe("Notes");
 
-    for (const href of ["/my-cards", "/team-cards", "/portfolio", "/w/workspace-1/notes"]) {
+    for (const href of ["/my-cards", "/team-cards", "/w/workspace-1/notes"]) {
       const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`a[href="${href}"]`);
       link?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
       fixture.detectChanges();

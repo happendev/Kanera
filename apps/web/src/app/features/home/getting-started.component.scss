@@ -1,18 +1,18 @@
-// A compact checklist under a progress header. Each step is one row with a ring that fills and ticks
-// when the step is done; done rows strike through and fade. One open row at a time shows what the
-// step teaches and the button that does it. Rows never reorder, so nothing jumps under the pointer
-// when the palette or a push prompt ticks a step off.
+// A progress header over two parts: a spotlight on the one open step (what it teaches and the button
+// that does it) and the full checklist beside it. Done steps keep a tick and quiet text rather than a
+// strikethrough, so a mostly finished list stays calm and the steps left stand out. Rows never
+// reorder, so nothing jumps under the pointer when the palette or a push prompt ticks a step off.
 :host {
   display: block;
 }
 
 .getting-started {
-  // Sections sit side by side when the card is wide and stack when it is not. Measured on the card
-  // itself, because home's content column is narrower than the window beside an open sidebar.
+  // The layout keys on the card's own width, because home's content column is narrower than the
+  // window beside an open sidebar.
   container-type: inline-size;
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-5) var(--space-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -28,7 +28,7 @@
 .gs-title {
   margin: 0;
   color: var(--text);
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 650;
   letter-spacing: var(--tracking-tight);
 }
@@ -88,24 +88,124 @@
   white-space: nowrap;
 }
 
-.gs-sections {
+.gs-body {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--space-2) var(--space-5);
-  align-items: start;
+  gap: var(--space-4) var(--space-6);
+  min-width: 0;
+  margin-top: var(--space-1);
+}
+
+// Narrow cards open the step under its row, where the tap was; the spotlight would sit above the
+// list, off screen on a phone.
+.gs-spotlight {
+  display: none;
+}
+
+@container (min-width: 720px) {
+  .gs-body.has-spotlight {
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .gs-spotlight {
+    display: grid;
+  }
+
+  // Outranks .gs-inline's own display below.
+  .gs-step .gs-inline {
+    display: none;
+  }
+}
+
+.gs-spotlight {
+  justify-items: start;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  // A tinted wash with a matching ring marks it as the step to do, without a stripe.
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+
+  .gs-text {
+    color: var(--text-3);
+    font-size: var(--text-md);
+    line-height: 1.5;
+  }
+
+  .gs-action {
+    margin-top: var(--space-2);
+  }
+}
+
+.gs-spotlight-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 22px; // glyph sized to the 40px tile, off the text scale
+}
+
+.gs-eyebrow {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.gs-spotlight-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: 650;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.3;
+}
+
+// Sections flow down balanced columns, so a two-step section doesn't leave a hole beside a
+// five-step one the way grid rows would.
+.gs-sections {
+  min-width: 0;
+  columns: 200px;
+  column-gap: var(--space-5);
 }
 
 .gs-section {
   display: grid;
   gap: 2px;
   min-width: 0;
+  margin-bottom: var(--space-3);
+  break-inside: avoid;
 }
 
 .gs-section-label {
-  margin: var(--space-1) 0 2px;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 2px;
+  padding: 0 8px;
   color: var(--text-muted);
   font-size: var(--text-sm);
   font-weight: 550;
+}
+
+.gs-section-count {
+  margin-left: auto;
+  color: var(--text-4);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+
+  .gs-section.is-done & {
+    color: var(--accent);
+  }
 }
 
 .gs-list {
@@ -136,8 +236,8 @@
   gap: 10px;
   width: 100%;
   height: auto;
-  min-height: 34px;
-  padding: 6px 8px;
+  min-height: 32px;
+  padding: 5px 8px;
   border: 0;
   border-radius: var(--radius);
   background: transparent;
@@ -160,8 +260,10 @@
 
   .is-done & {
     color: var(--text-muted);
-    text-decoration: line-through;
-    text-decoration-color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+  }
+
+  .is-open & {
+    font-weight: 550;
   }
 }
 
@@ -174,16 +276,17 @@
   height: 18px;
   border: 1.5px solid var(--border-strong);
   border-radius: 50%;
-  color: var(--accent-fg);
+  color: var(--accent);
   font-size: var(--text-sm);
 
   .is-open & {
     border-color: var(--accent);
   }
 
+  // A soft tick, so the finished steps recede and the open ones carry the list.
   .is-done & {
-    border-color: var(--accent);
-    background: var(--accent);
+    border-color: transparent;
+    background: var(--accent-soft);
   }
 
   .just-done & {
@@ -199,22 +302,30 @@
   transition: opacity var(--motion-fast), transform var(--motion-fast);
 
   .gs-row:hover &,
-  .gs-row:focus-visible & {
-    opacity: 1;
-  }
-
+  .gs-row:focus-visible &,
   .is-open & {
     opacity: 1;
-    transform: rotate(180deg);
   }
 }
 
-.gs-detail {
+// On a narrow card the chevron points down at the step's inline detail.
+@container (max-width: 719.98px) {
+  .is-open .gs-chevron {
+    transform: rotate(90deg);
+  }
+}
+
+.gs-inline {
   display: grid;
   justify-items: start;
   gap: var(--space-2);
   // Lines the text up under the label, past the ring and its gap.
   padding: 0 8px 10px 36px;
+
+  .gs-action {
+    height: var(--h-md);
+    font-size: var(--text-base);
+  }
 }
 
 .gs-text {
@@ -238,8 +349,14 @@
   }
 }
 
-.gs-detail .gs-action {
-  text-decoration: none;
+.gs-action {
+  .ti-arrow-right {
+    transition: transform var(--dur);
+  }
+
+  &:hover .ti-arrow-right {
+    transform: translateX(2px);
+  }
 }
 
 // Hover-revealed controls stay visible on touch, and rows and buttons grow to touch size.
@@ -252,7 +369,8 @@
     opacity: 1;
   }
 
-  .gs-detail .gs-action {
+  .gs-inline .gs-action,
+  .gs-spotlight .gs-action {
     height: 44px;
     padding: 0 14px;
   }
@@ -276,7 +394,8 @@
 @media (prefers-reduced-motion: reduce) {
   .gs-bar-fill,
   .gs-step,
-  .gs-chevron {
+  .gs-chevron,
+  .gs-action .ti-arrow-right {
     transition: none;
   }
 

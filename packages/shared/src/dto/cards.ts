@@ -7,6 +7,17 @@ import { separatorAnchorItem } from "./separators.js";
 export const dueDateSlot = z.enum(CARD_DUE_DATE_SLOTS);
 export type DueDateSlot = z.infer<typeof dueDateSlot>;
 
+const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+/**
+ * A request may name both ends of a card's schedule; when it does, they must be in order. A start
+ * sent on its own is checked against the stored due date by the API (see lib/due-date.ts), which
+ * also pulls an existing start along when the due date alone moves before it.
+ */
+const startBeforeDue = (v: { startDateLocalDate?: string | null; dueDateLocalDate?: string | null }) =>
+  !v.startDateLocalDate || !v.dueDateLocalDate || v.startDateLocalDate <= v.dueDateLocalDate;
+const START_BEFORE_DUE = "startDateLocalDate must be on or before dueDateLocalDate";
+
 export const createCardBody = z.object({
   title: z.string().min(1).max(CARD_TITLE_MAX_LENGTH),
   description: z.string().max(50000).optional(),
@@ -22,13 +33,14 @@ export const createCardBody = z.object({
   // Set at creation so an integration gets a fully described card in one atomic write instead of
   // create + set labels + set due date (three activity rows and three chances to fail half way).
   labelIds: z.array(z.uuid()).max(100).optional(),
-  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dueDateLocalDate: localDate.optional(),
   dueDateSlot: dueDateSlot.optional(),
+  startDateLocalDate: localDate.optional(),
   clientToken: z.uuid().optional(),
 }).refine(
   (v) => v.dueDateSlot === undefined || v.dueDateLocalDate !== undefined,
   "provide dueDateLocalDate when setting dueDateSlot",
-).refine(
+).refine(startBeforeDue, START_BEFORE_DUE).refine(
   (v) => !(v.afterItem !== undefined && v.beforeItem !== undefined),
   "provide at most one of afterItem or beforeItem",
 ).refine(
@@ -43,15 +55,17 @@ export type CreateCardBody = z.infer<typeof createCardBody>;
 export const updateCardBody = z.object({
   title: z.string().min(1).max(CARD_TITLE_MAX_LENGTH).optional(),
   description: z.string().max(50000).nullable().optional(),
-  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  dueDateLocalDate: localDate.nullable().optional(),
   dueDateSlot: dueDateSlot.nullable().optional(),
+  startDateLocalDate: localDate.nullable().optional(),
 }).refine(
   (value) => value.title !== undefined
     || value.description !== undefined
     || value.dueDateLocalDate !== undefined
-    || value.dueDateSlot !== undefined,
+    || value.dueDateSlot !== undefined
+    || value.startDateLocalDate !== undefined,
   "provide at least one card field to update",
-);
+).refine(startBeforeDue, START_BEFORE_DUE);
 export type UpdateCardBody = z.infer<typeof updateCardBody>;
 
 export const setCardCompletionBody = z.object({
@@ -124,12 +138,13 @@ export const bulkCreateCardItem = z.object({
   description: z.string().max(50000).optional(),
   labelIds: z.array(z.uuid()).max(100).optional(),
   assigneeIds: z.array(z.uuid()).max(100).optional(),
-  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dueDateLocalDate: localDate.optional(),
   dueDateSlot: dueDateSlot.optional(),
+  startDateLocalDate: localDate.optional(),
 }).refine(
   (v) => v.dueDateSlot === undefined || v.dueDateLocalDate !== undefined,
   "provide dueDateLocalDate when setting dueDateSlot",
-);
+).refine(startBeforeDue, START_BEFORE_DUE);
 export type BulkCreateCardItem = z.infer<typeof bulkCreateCardItem>;
 
 // Cards land at the bottom of their list in request order, so a plan reads top to bottom as written.

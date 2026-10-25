@@ -14,6 +14,7 @@ import type {
 } from "@kanera/shared/dto";
 import { expandCardSummary, type WireCardSummary } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
+import { CachedViewService } from "../../core/offline/cached-view.service";
 import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
@@ -154,6 +155,7 @@ type Touch = { at: string; verb: TouchVerb };
 })
 export class TeamOverviewComponent {
   private readonly api = inject(ApiClient);
+  private readonly queries = inject(CachedViewService);
   private readonly clock = inject(MinuteClockService);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   protected readonly rankHeat = priorityRankHeat;
@@ -168,8 +170,15 @@ export class TeamOverviewComponent {
   readonly workspaces = input<WorkCatalogWorkspace[]>([]);
   readonly scope = input<WorkScope | null>(null);
   readonly filters = input<WorkFilters | null>(null);
-  /** False while the page cannot query, e.g. offline; the activity feed is not cached. */
-  readonly enabled = input(true);
+  /** Opening a new filtered board needs a live query; local panel browsing stays available. */
+  readonly canNavigate = input(true);
+  private readonly activityCachedAt = signal<string | null>(null);
+  private readonly unownedCachedAt = signal<string | null>(null);
+  readonly unownedError = signal(false);
+  readonly offlineMessage = computed(() => {
+    const time = [this.activityCachedAt(), this.unownedCachedAt()].filter((value): value is string => !!value).sort()[0];
+    return time ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(time)}:time:` : "";
+  });
   /** Bumped by the host on reconciles and realtime echoes, like the Work done display's. */
   readonly refreshVersion = input(0);
   readonly selectedCardId = input<string | null>(null);
@@ -271,7 +280,7 @@ export class TeamOverviewComponent {
     effect(() => {
       this.scope();
       this.filters();
-      this.enabled();
+      this.queries.online();
       this.refreshVersion();
       void this.loadActivity();
       void this.loadUnowned();
@@ -586,6 +595,7 @@ export class TeamOverviewComponent {
   }
 
   upNextActionLabel(name: string, open: boolean): string {
+    if (!open && !this.canNavigate()) return $localize`:Tooltip, open the Up next panel:Open Up next`;
     return open
       ? $localize`:Button closing the Up next panel for one teammate:Close Up next for ${name}:person:`
       : $localize`:Button opening the Up next panel to change one teammate's queue:Edit Up next for ${name}:person:`;
@@ -631,11 +641,10 @@ export class TeamOverviewComponent {
 
   private async loadUnowned(): Promise<void> {
     const seq = ++this.unownedSeq;
-    if (!this.enabled()) return;
     const filters = this.filters();
     try {
-      const response = await this.api.post<WorkQueryResponse>("/work/cards/query", {
-        // The portfolio lens is the one that does not require an assignee; scope, search and the
+      const { response, cachedAt } = await this.queries.read<WorkQueryResponse>({ url: "/work/cards/query", body: {
+        // The ownerless "portfolio" query lens is the one that does not require an assignee; scope, search and the
         // page's other filters still apply, like the rest of the overview's card sections.
         lens: "portfolio",
         scope: this.scope() ?? undefined,
@@ -643,21 +652,22 @@ export class TeamOverviewComponent {
         sort: "inProgressAsc",
         limit: UNOWNED_LIMIT,
         includeMetadata: true,
-      });
+      } });
       if (seq !== this.unownedSeq) return;
+      this.unownedCachedAt.set(cachedAt);
+      this.unownedError.set(false);
       this.unowned.set({ cards: response.cards.map((card) => expandCardSummary(card)), total: response.totals.cards });
     } catch {
-      // Best-effort: keep what is on screen; the person panels do not depend on it.
-      if (seq === this.unownedSeq && this.unowned() === null) this.unowned.set({ cards: [], total: 0 });
+      if (seq === this.unownedSeq) {
+        this.unowned.set(null);
+        this.unownedCachedAt.set(null);
+        this.unownedError.set(true);
+      }
     }
   }
 
   private async loadActivity(): Promise<void> {
     const seq = ++this.loadSeq;
-    if (!this.enabled()) {
-      this.activityLoading.set(false);
-      return;
-    }
     const today = startOfLocalDay(new Date());
     const body = {
       lens: "team" as const,
@@ -675,9 +685,15 @@ export class TeamOverviewComponent {
     this.activityLoading.set(true);
     this.activityError.set(null);
     try {
-      const response = await this.api.post<WorkDoneResponse>("/work/work-done/query", body);
+      // Overview is a rolling window: offline, show its last update even after midnight.
+      // Explicit date ranges in Work done keep their own exact-query snapshots.
+      const { response, cachedAt } = await this.queries.read<WorkDoneResponse>({
+        url: "/work/work-done/query",
+        body: { ...body, from: undefined, to: undefined, windowDays: OVERVIEW_ACTIVITY_DAYS },
+      }, () => this.api.post<WorkDoneResponse>("/work/work-done/query", body));
       if (seq !== this.loadSeq) return;
       this.events.set(response.events ?? []);
+      this.activityCachedAt.set(cachedAt);
       this.loadedKey = key;
     } catch {
       if (seq === this.loadSeq && !refreshing) {

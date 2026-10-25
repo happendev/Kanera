@@ -1,12 +1,14 @@
 import { Injectable, effect, inject, signal } from "@angular/core";
 import type { WireSearchResults } from "@kanera/shared/dto";
 import { ApiClient } from "../api/api.client";
+import { SocketService } from "../realtime/socket.service";
 
 const DEBOUNCE_MS = 200; // 0.2 seconds
 
 @Injectable({ providedIn: "root" })
 export class GlobalSearchService {
   private readonly api = inject(ApiClient);
+  private readonly sockets = inject(SocketService);
 
   readonly isOpen = signal(false);
   readonly query = signal("");
@@ -19,6 +21,12 @@ export class GlobalSearchService {
   constructor() {
     // Debounced fetch driven by the query signal while the overlay is open.
     effect((onCleanup) => {
+      // Search has no offline index. Close it and invalidate pending results on disconnect,
+      // including when it was opened through a keyboard shortcut or another page's trigger.
+      if (!this.sockets.online()) {
+        this.close();
+        return;
+      }
       const q = this.query().trim();
       if (!this.isOpen()) return;
       if (q.length === 0) {
@@ -35,6 +43,7 @@ export class GlobalSearchService {
   }
 
   open() {
+    if (!this.sockets.online()) return;
     this.isOpen.set(true);
   }
 
@@ -53,6 +62,7 @@ export class GlobalSearchService {
   }
 
   private async run(q: string) {
+    if (!this.sockets.online()) return;
     const seq = ++this.requestSeq;
     try {
       const res = await this.api.get<WireSearchResults>(`/search?q=${encodeURIComponent(q)}`);

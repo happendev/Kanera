@@ -140,6 +140,8 @@ export const nb: ErrorCatalog = {
   "custom field trigger user is not a workspace member": "Brukeren i utløseren er ikke medlem av arbeidsområdet",
   "custom field trigger value does not match field type": "Utløserverdien samsvarer ikke med felttypen",
   "delivery not found": "Leveringen ble ikke funnet",
+  "dependencies are disabled for this workspace":
+    "Avhengigheter er deaktivert for dette arbeidsområdet",
   "destination credentials are required": "Legitimasjon for målet er påkrevd",
   "email already registered": "E-postadressen er allerede registrert",
   "email not found": "E-postadressen ble ikke funnet",
@@ -293,6 +295,8 @@ export const nb: ErrorCatalog = {
   "standalone board configuration must contain exactly one board": "Konfigurasjonen for en selvstendig tavle må inneholde nøyaktig én tavle",
   "standalone board import target not found": "Importmålet for den selvstendige tavlen ble ikke funnet",
   "standalone boards cannot contain another board": "Selvstendige tavler kan ikke inneholde en annen tavle",
+  "start dates and the timeline are disabled for this workspace":
+    "Startdatoer og tidslinjen er deaktivert for dette arbeidsområdet",
   "storage is configured by environment variables": "Lagring er konfigurert gjennom miljøvariabler",
   "storage is configured by the hosted deployment": "Lagring er konfigurert av den hostede installasjonen",
   "storageConfig required": "storageConfig er påkrevd",
@@ -326,9 +330,15 @@ export const nb: ErrorCatalog = {
   "this board mirror already exists": "Denne tavlespeilingen finnes allerede",
   "this guest must subscribe to an assigned card": "Denne gjesten må abonnere på et tilordnet kort",
   "this invitation was sent to a different email address": "Denne invitasjonen ble sendt til en annen e-postadresse",
+  "time in progress is disabled for this workspace":
+    "Tid i arbeid er deaktivert for dette arbeidsområdet",
   "too many attempts; request a new code": "For mange forsøk; be om en ny kode",
   "triggerCustomFieldId and triggerCustomFieldValue are required": "triggerCustomFieldId og triggerCustomFieldValue er påkrevd",
   "triggerDaysBefore is required": "triggerDaysBefore er påkrevd",
+  "in-progress limit field must be a number field": "Grensefeltet for tid i arbeid må være et tallfelt",
+  "triggerCustomFieldId is required": "triggerCustomFieldId er påkrevd",
+  "triggerThresholdAmount is required": "triggerThresholdAmount er påkrevd",
+  "triggerThresholdUnit is required": "triggerThresholdUnit er påkrevd",
   "triggerLabelId is required": "triggerLabelId er påkrevd",
   "triggerListId is required": "triggerListId er påkrevd",
   "triggerUserIds is required": "triggerUserIds er påkrevd",

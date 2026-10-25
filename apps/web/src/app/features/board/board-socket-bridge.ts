@@ -39,12 +39,16 @@ export class BoardSocketBridge {
     const handlers: Partial<ServerToClientEvents> = {
       // Lists, labels, and custom fields are workspace-scoped, so ignore events from
       // other workspaces even if the socket connection itself remains alive.
-      [SERVER_EVENTS.BOARD_UPDATED]: ({ board, organisationInProgressEnabled }) => {
+      [SERVER_EVENTS.BOARD_UPDATED]: ({ board, organisationInProgressEnabled, features }) => {
         if (board.id !== boardId) return;
         const changed = state.board()?.inProgressEnabled !== board.inProgressEnabled
-          || organisationInProgressEnabled !== undefined;
+          || organisationInProgressEnabled !== undefined
+          || features !== undefined;
         state.board.set(board);
         if (organisationInProgressEnabled !== undefined) state.organisationInProgressEnabled.set(organisationInProgressEnabled);
+        // An organisation or workspace switched a planning feature. The server now reports (or stops
+        // reporting) its blocked counts, start dates and clocks, so the resync below refetches them.
+        if (features !== undefined) state.features.set(features);
         // The database reconciles all clocks; refetch rather than guessing elapsed working time.
         if (changed) requestResync();
       },

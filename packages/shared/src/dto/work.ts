@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CompactCardSummary, WireChecklistAssignment, WireCustomField, WireGlobalWorkSeparator } from "../events/index.js";
 import type { ColorToken } from "../lib/colors.js";
+import type { ScheduleHealth } from "./schedule.js";
 import { WORK_VIEW_LENSES, WORK_VIEW_VISIBILITIES } from "../schema/work-view.js";
 import { ianaTimeZone } from "./_time-zone.js";
 
@@ -146,20 +147,23 @@ export const workViewDefinitionSchema = z.object({
     aggregateSplitBy: "none",
     collapsedGroupKeys: [],
   }),
-  portfolioDays: z.number().int().min(1).max(60).default(30),
   // Collapse state is view layout, not transient component state: saved views and per-lens browser
   // preferences restore the same workspace/section shape the user was looking at.
-  // The portfolio summary tree reuses collapsedWorkspaceIds for its workspace rows (the portfolio
-  // lens has no board display, so the two consumers never share a lens) and pairs it with
-  // collapsedOrganisationIds for the level above.
-  collapsedOrganisationIds: z.array(z.uuid()).max(20).default([]),
   collapsedWorkspaceIds: z.array(z.uuid()).max(100).default([]),
   collapsedSectionIds: z.array(z.string().min(1).max(100)).max(500).default([]),
 });
 export type WorkViewDefinition = z.infer<typeof workViewDefinitionSchema>;
 
+/**
+ * Lenses a card query accepts. "my" and "team" are the saved-view lenses; "portfolio" is the
+ * ownerless projection (every accessible card, no assignee required) behind the Team overview's
+ * unowned section, agent reporting and the portfolio rollup's drill-downs.
+ */
+export const WORK_QUERY_LENSES = [...WORK_VIEW_LENSES, "portfolio"] as const;
+export type WorkQueryLens = (typeof WORK_QUERY_LENSES)[number];
+
 export const workCardsQueryBody = z.object({
-  lens: z.enum(WORK_VIEW_LENSES),
+  lens: z.enum(WORK_QUERY_LENSES),
   scope: workScopeSchema.optional(),
   filters: workFiltersSchema.optional(),
   sort: z.enum(WORK_SORT_VALUES).default("dueAsc"),
@@ -238,6 +242,10 @@ export type WorkCatalogWorkspace = {
 
 export type WorkCatalogBoard = {
   inProgressEnabled: boolean;
+  /** The board's workspace has dependencies on (`@kanera/shared/workspace-features`). */
+  dependenciesEnabled: boolean;
+  /** The board's workspace has start dates and the timeline on. */
+  timelineEnabled: boolean;
   id: string;
   workspaceId: string;
   name: string;
@@ -348,6 +356,12 @@ export type PortfolioBucket = {
   atRisk: number;
   completed: number;
   overdueChecklistItems: number;
+  /**
+   * The schedule engine's verdict for this board's open cards (`POST /cards/schedule`). Computed
+   * only for boards with an open `blocks` edge or a card with both dates; every other board reports
+   * zeroes. Optional because offline snapshots predate it.
+   */
+  schedule?: ScheduleHealth;
 };
 
 /**
@@ -380,7 +394,12 @@ export type PortfolioListCount = {
 
 export type PortfolioSummary = {
   days: number;
-  totals: Omit<WorkTotals, "checklistItems"> & { unassigned: number; inactive: number; inProgress: number; inProgressTooLong: number; blocked: number; atRisk: number };
+  totals: Omit<WorkTotals, "checklistItems"> & {
+    unassigned: number; inactive: number; inProgress: number; inProgressTooLong: number; blocked: number; atRisk: number;
+    /** Sums of the buckets' `schedule` counts. Optional for offline snapshots that predate them. */
+    scheduleConflicts?: number;
+    criticalCards?: number;
+  };
   buckets: PortfolioBucket[];
   /** Optional for older offline snapshots, which predate it. */
   lists?: PortfolioListCount[];

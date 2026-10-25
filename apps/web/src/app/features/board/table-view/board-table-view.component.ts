@@ -1,3 +1,4 @@
+import { GettingStartedService } from "../../../core/getting-started/getting-started.service";
 import { ToastService } from "../../../shared/toast.service";
 import { NgTemplateOutlet } from "@angular/common";
 import { MenuDirective } from "../../../shared/menu.directive";
@@ -30,6 +31,7 @@ import { AnchoredPickerPopover } from "../../../shared/anchored-picker.popover";
 import { AutofocusDirective } from "../../../shared/autofocus.directive";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { CardKeyDisplayService } from "../../../shared/card-key-display.service";
+import { FitLabelsDirective } from "../../../shared/fit-labels.directive";
 import type { PickerGroup } from "../../../shared/picker-list.component";
 import { PendingCustomFieldIds } from "../../../shared/pending-custom-field-ids";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
@@ -212,6 +214,7 @@ interface GroupByOption {
     CdkDropListGroup,
     DatePickerPopover,
     FilterBarComponent,
+    FitLabelsDirective,
     LabelPickerPopover,
     MemberPickerPopover,
     SelectPickerPopover,
@@ -223,6 +226,7 @@ interface GroupByOption {
 })
 export class BoardTableViewComponent implements OnDestroy {
   private readonly toasts = inject(ToastService);
+  private readonly gettingStarted = inject(GettingStartedService);
   private readonly api = inject(ApiClient);
   private readonly pendingCustomFieldIds = new PendingCustomFieldIds();
   private readonly state = inject(BoardState);
@@ -399,9 +403,12 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly effectiveGroupBy = computed<GroupBy>(() => this.hostGroupBy() ?? this.groupBy());
   readonly effectiveSortBy = computed<SortBy>(() => {
     const sort = this.hostSortBy() ?? this.sortBy();
-    return !this.inProgressEnabled() && sort.startsWith("in-progress-") ? "position" : sort;
+    if (!this.inProgressEnabled() && sort.startsWith("in-progress-")) return "position";
+    return !this.timelineEnabled() && sort.startsWith("start-") ? "position" : sort;
   });
   readonly inProgressEnabled = computed(() => this.crossBoard() ? this.sourceBoards().some((board) => board.inProgressEnabled !== false) : this.state.inProgressEnabled());
+  /** Start dates belong to the Timeline; a workspace that switched it off has no Start date column. */
+  readonly timelineEnabled = computed(() => this.crossBoard() ? this.sourceBoards().some((board) => board.timelineEnabled !== false) : this.state.timelineEnabled());
   readonly crossBoard = computed(() => this.sourceBoards().length > 0);
   /** More than one list/label/custom-field vocabulary in play, since all three are workspace-scoped. */
   readonly crossWorkspace = computed(() => this.sourceWorkspaces().length > 1);
@@ -489,6 +496,7 @@ export class BoardTableViewComponent implements OnDestroy {
     "status",
     ...(this.crossBoard() ? ["board"] : []),
     "assignees",
+    ...(this.timelineEnabled() ? ["start"] : []),
     "due",
     ...(this.inProgressEnabled() ? ["inProgress"] : []),
     "labels",
@@ -796,7 +804,9 @@ export class BoardTableViewComponent implements OnDestroy {
     return unreadMarkLabel(this.unreadCount(cardId));
   }
 
-  readonly sortOptions = computed(() => SORT_BY_OPTIONS.filter((option) => this.inProgressEnabled() || !option.value.startsWith("in-progress-")));
+  readonly sortOptions = computed(() => SORT_BY_OPTIONS.filter((option) =>
+    (this.inProgressEnabled() || !option.value.startsWith("in-progress-"))
+    && (this.timelineEnabled() || !option.value.startsWith("start-"))));
 
   readonly groupByOptions = computed<GroupByOption[]>(() => [
     ...GROUP_BY_OPTIONS,
@@ -1109,6 +1119,8 @@ export class BoardTableViewComponent implements OnDestroy {
     const next = this.validDimension(value, "list");
     this.groupBy.set(next);
     writeGroupBy(this.prefScope(), next);
+    // Lists are the default grouping; choosing anything else is what the Getting started step teaches.
+    if (next !== "list") this.gettingStarted.noteUsed("groupTable");
     // The old axis is a legal breakdown again and the new one no longer is, so a split that has just
     // become a no-op is cleared rather than left selected and silently doing nothing.
     if (this.aggregateSplitBy() === next) this.setSplitBy("none");
@@ -1594,6 +1606,16 @@ export class BoardTableViewComponent implements OnDestroy {
     }
   }
 
+  /**
+   * Planned start, date-only. The picker caps it at the due date because the API rejects a later
+   * start; moving the due date before it clamps the start server-side instead.
+   */
+  async setStartDate(card: AnyCard, value: string) {
+    const updated = await this.api.patch<AnyCard>(`/cards/${card.id}`, { startDateLocalDate: value || null });
+    this.cardStore.updateCard(updated);
+    this.closePickers();
+  }
+
   async setDueDate(card: AnyCard, value: string, slot: DueDateSlotSelection = "anyTime") {
     const dueDateLocalDate = value || null;
     const updated = await this.api.patch<AnyCard>(`/cards/${card.id}`, {
@@ -1741,6 +1763,11 @@ export class BoardTableViewComponent implements OnDestroy {
     }
     return presentation;
   });
+
+  /** Plain calendar date: a start has no slot and nothing is "overdue" about it. */
+  formattedStart(card: AnyCard): string {
+    return card.startDateLocalDate ? formatDate(card.startDateLocalDate, "short") : "";
+  }
 
   formattedDue(card: AnyCard): string {
     const memoized = this.dueDatePresentationByCard().get(card.id);
@@ -2353,6 +2380,7 @@ export class BoardTableViewComponent implements OnDestroy {
           stickyRowsCount: 4,
         })),
       ).toFile(this.exportFileName("xlsx"));
+      this.gettingStarted.noteUsed("exportExcel");
     });
   }
 
@@ -2376,6 +2404,7 @@ export class BoardTableViewComponent implements OnDestroy {
     this.aggregateConfig.set(next);
     if (!this.emitHostedPresentation()) writeAggregateConfig(this.prefScope(), next);
     this.aggregateOpenFieldId.set(null);
+    if (metric) this.gettingStarted.noteUsed("totalColumn");
   }
 
   aggregateFor(fieldId: string): AggregateMetric | null {
@@ -2538,6 +2567,7 @@ export class BoardTableViewComponent implements OnDestroy {
       status: 176,
       // Fits an avatar plus a full name, which is what a single-assignee cell now renders.
       assignees: 170,
+      start: 130,
       due: 150,
       inProgress: 140,
       priority: 112,
@@ -2570,6 +2600,7 @@ export class BoardTableViewComponent implements OnDestroy {
       case "status": return this.listName(card);
       case "board": return this.boardFor(card)?.name ?? "";
       case "assignees": return this.assigneesForCard(card.id).map((member) => member.displayName).join(", ");
+      case "start": return this.formattedStart(card);
       case "due": return this.formattedDue(card);
       case "labels": return this.labelsForCard(card.id).map((label) => label.name).join(", ");
       case "checklist": {

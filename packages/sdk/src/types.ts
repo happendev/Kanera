@@ -55,6 +55,14 @@ export interface Workspace {
   cardKeyPrefix: string;
   icon: string | null;
   accentColor: ColorToken | null;
+  /**
+   * Optional planning features this workspace keeps on. Each is effective only while the
+   * organisation's switch is also on; requests that need a disabled one fail with 403
+   * `DEPENDENCIES_DISABLED`, `TIMELINE_DISABLED` or `IN_PROGRESS_DISABLED`.
+   */
+  dependenciesEnabled?: boolean;
+  timelineEnabled?: boolean;
+  inProgressEnabled?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -77,6 +85,8 @@ export type WorkspaceTemplateId =
 export type WorkspaceSeedAutomationTrigger =
   | { type: "card_enters_list"; listName: string; applyOnCreate?: boolean; applyOnMove?: boolean }
   | { type: "due_date_arrives" }
+  /** Fires on the card's planned start day; takes no lead time. */
+  | { type: "start_date_arrives" }
   | { type: "all_checklist_items_complete" }
   | { type: "card_marked_complete" }
   | { type: "card_unblocked" }
@@ -121,7 +131,7 @@ export interface CreateWorkspaceInput {
   icon?: string | null;
   initialBoard?: { name: string; icon?: string | null; iconColor?: ColorToken | null };
   /** Ordered workflow lists. Empty or at least two entries. `inProgress` marks active-work lists. */
-  lists?: { name: string; icon?: string | null; inProgress?: boolean }[];
+  lists?: { name: string; icon?: string | null; color?: ColorToken | null; inProgress?: boolean }[];
   /** Plain list names; an alternative to `lists`. */
   listNames?: string[];
   customFields?: {
@@ -271,6 +281,8 @@ export interface Card {
   title: string;
   description: string | null;
   position: string;
+  /** Planned start, date-only; never after `dueDateLocalDate`. */
+  startDateLocalDate: LocalDate | null;
   dueDateLocalDate: LocalDate | null;
   dueDateSlot: DueDateSlot | null;
   dueDateTimezone: string | null;
@@ -449,6 +461,7 @@ export interface DependencyGraphCard {
   /** True for cards the request scoped; false for cards a chain pulled in from elsewhere. */
   inScope: boolean;
   completedAt?: Timestamp;
+  startDateLocalDate?: LocalDate;
   dueDateLocalDate?: LocalDate;
   dueDateSlot?: DueDateSlot;
   inProgressSince?: Timestamp;
@@ -738,6 +751,129 @@ export interface WorkCardsResult {
   totals: { cards: number; overdue: number; dueSoon: number; completed: number; checklistItems: number; overdueChecklistItems: number };
   sources: WorkSources;
   nextCursor: string | null;
+}
+
+/** An open blocker planned to finish on or after the dependent card's planned start. */
+export interface ScheduleConflict {
+  kind: "blockerFinishesAfterStart";
+  edgeId: Uuid;
+  blockerId: Uuid;
+  /** Working days (Mon–Fri) the card would have to move right for the blocker to finish first. */
+  days: number;
+}
+
+/** One open card in a schedule, with the engine's verdict beside the dates the card itself holds. */
+export interface ScheduleCard {
+  id: Uuid;
+  key: string;
+  title: string;
+  url: string;
+  boardId: Uuid;
+  listId: Uuid;
+  labelIds: Uuid[];
+  assigneeIds: Uuid[];
+  /** The planned bar; null when the card has neither a start nor a due date. */
+  plannedStart: LocalDate | null;
+  plannedEnd: LocalDate | null;
+  /** Working days (Mon–Fri) the bar covers, inclusive; a point is one day. */
+  durationDays: number;
+  earliestStart: LocalDate | null;
+  earliestFinish: LocalDate | null;
+  latestStart: LocalDate | null;
+  latestFinish: LocalDate | null;
+  /** Working days this card can slip without delaying the end of its chain; null when unanchored. */
+  slackDays: number | null;
+  /** On the critical path: chained to at least one other open card and without slack. */
+  critical: boolean;
+  conflicts: ScheduleConflict[];
+  blockerIds: Uuid[];
+  dependentIds: Uuid[];
+}
+
+export interface ScheduleSummary {
+  /** Open cards with at least one date. */
+  scheduledCount: number;
+  /** Open cards with neither date; listed but taking no part in the schedule. */
+  unscheduledCount: number;
+  conflictCount: number;
+  criticalCount: number;
+  range: { start: LocalDate; end: LocalDate } | null;
+  /** When the critical chain is expected to finish; null with no dated cards. */
+  projectedFinish: LocalDate | null;
+  /** The latest due date among the open dated cards: what the plan promised. */
+  latestDue: LocalDate | null;
+  /** Working days `projectedFinish` lands after `latestDue`; 0 when the plan still holds. */
+  slipDays: number;
+}
+
+/**
+ * The Timeline view's schedule for a board or workspace, from the same critical-path engine, so an
+ * integration and the person looking at the chart never disagree about slack or the critical path.
+ */
+export interface Schedule {
+  cards: ScheduleCard[];
+  /** `blocks` edges between two cards in `cards`. */
+  edges: { id: Uuid; sourceCardId: Uuid; targetCardId: Uuid }[];
+  criticalEdgeIds: Uuid[];
+  summary: ScheduleSummary;
+  boards: { id: Uuid; name: string; icon: string | null; iconColor: ColorToken | null }[];
+  lists: { id: Uuid; name: string }[];
+  labels: { id: Uuid; name: string; color: ColorToken | null }[];
+  people: { userId: Uuid; displayName: string; avatarUrl: string | null }[];
+  /** Reserved for partial responses; complete schedules currently return false. */
+  truncated: boolean;
+}
+
+/** Schedule health for one board inside a portfolio rollup. */
+export interface ScheduleHealth {
+  conflictCount: number;
+  criticalCount: number;
+  projectedFinish: LocalDate | null;
+  latestDue: LocalDate | null;
+  slipDays: number;
+}
+
+export interface ScheduleAttentionCard {
+  id: Uuid;
+  key: string;
+  title: string;
+  url: string;
+  boardId: Uuid;
+  boardName: string;
+  listId: Uuid;
+  plannedStart: LocalDate | null;
+  plannedEnd: LocalDate | null;
+  slackDays: number | null;
+  critical: boolean;
+  conflicts: { blockerId: Uuid; blockerKey: string; blockerTitle: string; days: number }[];
+}
+
+/** The credential owner's own open cards that the schedule engine flags, for a morning briefing. */
+/** An open card whose planned start has passed but that has never been in progress. */
+export interface LateStartCard {
+  id: Uuid;
+  key: string;
+  title: string;
+  url: string;
+  boardId: Uuid;
+  boardName: string;
+  listId: Uuid;
+  startDate: string;
+  dueDate: string | null;
+}
+
+export interface ScheduleAttention {
+  /** Cards with at least one conflict, soonest planned start first. */
+  conflicts: ScheduleAttentionCard[];
+  /** Critical-path cards without a conflict, soonest planned end first. */
+  critical: ScheduleAttentionCard[];
+  /**
+   * Cards past their planned start that never went in progress, earliest start first. Only where the
+   * workspace tracks time in progress and has an in-progress list; overdue cards are left out.
+   */
+  lateToStart: LateStartCard[];
+  /** Reserved for incomplete evaluations; section limits do not truncate the underlying schedule. */
+  truncated: boolean;
 }
 
 export type SearchResultType = "card" | "comment" | "note" | "attachment";

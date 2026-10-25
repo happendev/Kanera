@@ -113,6 +113,13 @@ export type DailyDigestEmailQueueData = {
     cardUrl: string;
     dueLabel?: string | null;
   }[];
+  /** Cards whose planned start has passed but that never went in progress. Optional for the same reason. */
+  lateStarts?: {
+    title: string;
+    boardName: string;
+    cardUrl: string;
+    dueLabel?: string | null;
+  }[];
 };
 
 export type WeeklyAdminRecapUpcomingGroup = {
@@ -221,6 +228,10 @@ export type CardDueDateChangedEmailQueueData = {
   cardUrl: string;
   previousDueLabel: string | null;
   nextDueLabel: string | null;
+  /** Absent on rows queued before start dates: those were always due-date changes. */
+  dueChanged?: boolean;
+  previousStartLabel?: string | null;
+  nextStartLabel?: string | null;
 };
 
 export type CardOverdueEmailQueueData = {

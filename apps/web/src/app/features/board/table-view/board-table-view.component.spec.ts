@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../../core/api/api.client";
 import { STORAGE_KEYS, viewPreferenceKey } from "../../../core/browser/browser-contracts";
 import { NotificationsService } from "../../../core/notifications/notifications.service";
+import { formatDate } from "../../../shared/date-format";
 import { MinuteClockService } from "../../../shared/minute-clock.service";
 import { timeInProgressChip } from "../time-in-progress.util";
 import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
@@ -94,6 +95,7 @@ describe("BoardTableViewComponent", () => {
   };
   const state = {
     inProgressEnabled: vi.fn(() => true),
+    timelineEnabled: vi.fn(() => true),
     updateCard: vi.fn(),
     cardById: vi.fn((id: string) => card(id)),
     positionForCardDrop: vi.fn(() => "2000.0000000000"),
@@ -199,6 +201,25 @@ describe("BoardTableViewComponent", () => {
       "labels",
       "cf:field-1",
     ]);
+  });
+
+  it("offers a hidden Start date column that renders the planned start as a plain date", async () => {
+    const started = { ...card("card-1"), startDateLocalDate: "2026-05-11", dueDateLocalDate: "2026-05-15" } as AnyCard;
+    const view = fixture([started]);
+    const component = view.componentInstance;
+
+    expect(component.availableColumns()).toContain("start");
+    expect(component.visibleColumns()).not.toContain("start");
+    expect(component.columnLabel("start")).toBe("Start date");
+    expect(component.formattedStart(started)).toBe(formatDate("2026-05-11", "short"));
+    expect(component.formattedStart(card("card-2"))).toBe("");
+
+    component.toggleColumn("start");
+    expect(component.visibleColumns()).toContain("start");
+
+    api.patch.mockResolvedValueOnce({ ...started, startDateLocalDate: "2026-05-12" });
+    await component.setStartDate(started, "2026-05-12");
+    expect(api.patch).toHaveBeenCalledWith("/cards/card-1", { startDateLocalDate: "2026-05-12" });
   });
 
   it("offers Up next order on board tables without showing it by default", () => {

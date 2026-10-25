@@ -41,6 +41,7 @@ import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmen
 import { assertBoardLimit } from "../../lib/tier-limits.js";
 import type { NormalizedTrelloBoard, TrelloAttachmentSource, TrelloCardSource, TrelloChecklistSource, TrelloCustomFieldSource } from "./types.js";
 import { insertMany, mapWithConcurrency, toWireImportedCard } from "./shared.js";
+import { requestScheduleRecheckForBoards } from "../../lib/schedule-events.js";
 
 export type TrelloAttachmentImportProgress = {
   phase: "attachments" | "finalizing";
@@ -726,6 +727,8 @@ export async function runTrelloImport(
     };
   });
   const insertedCards = await insertMany<typeof cardRows[number], Card>(tx, cards, cardRows);
+  // Imported bars join the board's schedule in one go; one recheck per board covers the batch.
+  await requestScheduleRecheckForBoards(tx, insertedCards.filter((card) => card.dueDateLocalDate || card.startDateLocalDate).map((card) => card.boardId));
   const cardIdByTrelloId = new Map<string, string>();
   insertedCards.forEach((card, index) => cardIdByTrelloId.set(importCards[index]!.id, card.id));
 

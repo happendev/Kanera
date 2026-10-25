@@ -41,12 +41,15 @@ const initialAutomationTrigger = z.discriminatedUnion("type", [
     applyOnMove: z.boolean().default(true),
   }),
   z.object({ type: z.literal("due_date_arrives") }),
+  z.object({ type: z.literal("start_date_arrives") }),
   z.object({ type: z.literal("card_becomes_inactive") }),
   z.object({ type: z.literal("card_in_progress_too_long") }),
   z.object({ type: z.literal("all_checklist_items_complete") }),
   z.object({ type: z.literal("card_marked_complete") }),
   z.object({ type: z.literal("card_unblocked") }),
   z.object({ type: z.literal("card_blocked") }),
+  z.object({ type: z.literal("scheduling_conflict_appears") }),
+  z.object({ type: z.literal("critical_path_slips") }),
   z.object({
     type: z.literal("card_label_set"),
     labelName: z.string().trim().min(1).max(CARD_LABEL_NAME_MAX_LENGTH),
@@ -133,6 +136,7 @@ export const createWorkspaceBody = z
     lists: z.array(z.object({
       name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
       icon: createIconSchema(DEFAULT_LIST_ICON),
+      color: colorTokenSchema.nullable().optional(),
       inProgress: z.boolean().optional(),
     }))
       .max(32)
@@ -394,6 +398,10 @@ export const updateWorkspaceBody = z.object({
   timeZone: workspaceTimeZoneSchema.optional(),
   boardLinkingEnabled: z.boolean().optional(),
   notesEnabled: z.boolean().optional(),
+  /** Optional planning features (`@kanera/shared/workspace-features`); the organisation's switch wins. */
+  dependenciesEnabled: z.boolean().optional(),
+  timelineEnabled: z.boolean().optional(),
+  inProgressEnabled: z.boolean().optional(),
 });
 export type UpdateWorkspaceBody = z.infer<typeof updateWorkspaceBody>;
 

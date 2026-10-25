@@ -118,6 +118,28 @@ The map follows `blocks` relations both ways through open cards you can open, in
 blockers where a chain reaches them, and stops at 400 cards (`truncated`). Cards on boards you
 cannot open are never included; `blockedByCount` still counts them.
 
+## Schedules
+
+The map says who blocks whom. For when work finishes, how much room each card has and what slips,
+read the schedule the Timeline view draws, computed by the same critical-path engine:
+
+```ts
+const schedule = await kanera.work.schedule({ boardId }); // or { workspaceId }
+const { projectedFinish, latestDue, slipDays, conflictCount } = schedule.summary;
+const critical = schedule.cards.filter((card) => card.critical);
+const atRisk = schedule.cards.filter((card) => card.conflicts.length > 0);
+```
+
+Every date is a working day (Mon–Fri). `slackDays` is the working days a card can slip before it
+delays the end of its chain; a `critical` card has none. A conflict is an open blocker planned to
+finish on or after the card's planned start, with the `days` the card would have to move right.
+`summary.slipDays` is how far `projectedFinish` lands after `latestDue`; 0 means the plan holds.
+
+For a morning briefing, `kanera.work.scheduleAttention({ limit: 10 })` returns the credential
+owner's own cards with conflicts and their critical-path cards, across every board they are
+assigned on. Apply a reschedule with `kanera.cards.update(card, { startDateLocalDate, dueDateLocalDate })`,
+keeping the start on or before the due date.
+
 ## Card references
 
 Anywhere a card is named, you may pass a UUID, a human key such as `MKT-42`, or a canonical card

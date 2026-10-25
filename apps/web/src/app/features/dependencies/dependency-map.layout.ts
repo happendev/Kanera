@@ -151,7 +151,7 @@ type RiskCard = Partial<Pick<WireCardSummary, "completedAt" | "archivedAt" | "du
  * Jira calls these off-track dependencies: the dependent cannot finish on time if its blocker
  * finishes on time (due after it), or the blocker has already slipped (overdue). Only open pairs
  * count; a cleared blocker cannot put anything at risk. The board overview's At risk count and the
- * portfolio's (`dependencyAtRiskSql` in the API) use this same rule.
+ * agents' portfolio rollup (`dependencyAtRiskSql` in the API) use this same rule.
  */
 export function dependencyRisk(blocker: RiskCard | undefined, dependent: RiskCard | undefined, now: number): AtRiskReason | null {
   if (!blocker || !dependent || blocker.completedAt || blocker.archivedAt || dependent.completedAt || dependent.archivedAt) return null;

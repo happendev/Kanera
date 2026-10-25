@@ -33,6 +33,7 @@ function summaryCard(id: string): WireCardSummary {
     title: `Card ${id}`,
     position: "1000.0000000000",
     dueDateLocalDate: null,
+    startDateLocalDate: null,
     dueDateSlot: null,
     dueDateTimezone: null,
     completedAt: null,

@@ -117,6 +117,7 @@ async function withDemoResetLock<T>(run: () => Promise<T>): Promise<T> {
 }
 
 async function resetDemo(req: FastifyRequest, password?: string): Promise<AdminDemoResetResponse> {
+  const referenceDate = new Date();
   return withDemoResetLock(async () => {
     const existingClients = await findDemoClients();
     const existingClientIds = existingClients.map((client) => client.id);
@@ -179,6 +180,7 @@ async function resetDemo(req: FastifyRequest, password?: string): Promise<AdminD
 
     const seeded = await seedDatabase({
       requireBlankDatabase: false,
+      referenceDate,
       password,
       passwordHash: password ? undefined : existingCredential!.passwordHash,
       paid: true,

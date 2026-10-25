@@ -3,6 +3,8 @@ import type { BoardMirrorRow } from "../dto/board-mirrors.js";
 import type { WireCardReminder } from "../dto/card-follow.js";
 import type { WorkPriorityQueueSnapshot } from "../dto/card-priorities.js";
 import type { CardAttachmentRow } from "../dto/card-attachments.js";
+import type { ScheduleTransition } from "../dto/schedule.js";
+import type { WorkspaceFeatures } from "../lib/workspace-features.js";
 import type { NoteAttachmentRow } from "../dto/note-attachments.js";
 import type {
   CommentReactionSummary,
@@ -99,6 +101,7 @@ export function compactWireCard(card: WireCard | CompactWireCard): CompactWireCa
   if (card.dueDateLocalDate != null) out.dueDateLocalDate = card.dueDateLocalDate;
   if (card.dueDateSlot != null) out.dueDateSlot = card.dueDateSlot;
   if (card.dueDateTimezone != null) out.dueDateTimezone = card.dueDateTimezone;
+  if (card.startDateLocalDate != null) out.startDateLocalDate = card.startDateLocalDate;
   if (card.completedAt != null) out.completedAt = card.completedAt;
   if (card.archivedAt != null) out.archivedAt = card.archivedAt;
   if (card.coverAttachmentId != null) out.coverAttachmentId = card.coverAttachmentId;
@@ -122,6 +125,7 @@ export function expandWireCard(card: CompactWireCard): WireCard {
     dueDateLocalDate: card.dueDateLocalDate ?? null,
     dueDateSlot: card.dueDateSlot ?? null,
     dueDateTimezone: card.dueDateTimezone ?? null,
+    startDateLocalDate: card.startDateLocalDate ?? null,
     completedAt: card.completedAt ?? null,
     archivedAt: card.archivedAt ?? null,
     createdById: card.createdById,
@@ -146,6 +150,7 @@ export type WireCardSummary = Pick<
   | "dueDateLocalDate"
   | "dueDateSlot"
   | "dueDateTimezone"
+  | "startDateLocalDate"
   | "completedAt"
   | "archivedAt"
   | "coverAttachmentId"
@@ -241,6 +246,7 @@ export function compactCardSummary(
   if (card.dueDateLocalDate !== null) out.dueDateLocalDate = card.dueDateLocalDate;
   if (card.dueDateSlot !== null) out.dueDateSlot = card.dueDateSlot;
   if (card.dueDateTimezone !== null) out.dueDateTimezone = card.dueDateTimezone;
+  if (card.startDateLocalDate !== null) out.startDateLocalDate = card.startDateLocalDate;
   if (card.completedAt !== null) out.completedAt = card.completedAt;
   if (card.archivedAt !== null) out.archivedAt = card.archivedAt;
   if (card.coverAttachmentId !== null) out.coverAttachmentId = card.coverAttachmentId;
@@ -278,6 +284,7 @@ export function expandCardSummary(card: CompactCardSummary): WireCardSummary {
     dueDateLocalDate: card.dueDateLocalDate ?? null,
     dueDateSlot: card.dueDateSlot ?? null,
     dueDateTimezone: card.dueDateTimezone ?? null,
+    startDateLocalDate: card.startDateLocalDate ?? null,
     completedAt: card.completedAt ?? null,
     archivedAt: card.archivedAt ?? null,
     coverAttachmentId: card.coverAttachmentId ?? null,
@@ -519,7 +526,10 @@ export interface ServerToClientEvents {
   // deleted). Absent means unchanged: the card row itself does not carry the count.
   // dependencyTransition marks an actual zero/open-blocker boundary, captured with the mutation.
   // Count refreshes omit it; MCP uses it to identify card.blocked/card.unblocked occurrences.
-  "card:updated": (payload: { boardId: string; card: CompactWireCard; blockedByCount?: number; dependencyTransition?: "blocked" | "unblocked" }) => void;
+  // scheduleTransition marks a boundary the schedule engine found when a board was rechecked (see
+  // apps/api/src/lib/schedule-events.ts); like dependencyTransition it is written for integrations
+  // only and is what MCP turns into the schedule.* occurrences. Browsers ignore it.
+  "card:updated": (payload: { boardId: string; card: CompactWireCard; blockedByCount?: number; dependencyTransition?: "blocked" | "unblocked"; scheduleTransition?: ScheduleTransition }) => void;
   "card:moved": (payload: {
     boardId: string;
     cardId: string;
@@ -720,7 +730,9 @@ export interface ServerToClientEvents {
   "card:feedItem:deleted": (payload: { boardId: string; cardId: string; type: CardFeedItem["type"]; itemId: string }) => void;
 
   "board:created": (payload: { workspaceId: string; board: WireBoard }) => void;
-  "board:updated": (payload: { board: WireBoard; organisationInProgressEnabled?: boolean }) => void;
+  // features is present when an organisation or workspace switched an optional planning feature
+  // (see @kanera/shared/workspace-features); it is the board's new effective set.
+  "board:updated": (payload: { board: WireBoard; organisationInProgressEnabled?: boolean; features?: WorkspaceFeatures }) => void;
   "board:moved": (payload: {
     workspaceId: string;
     boardId: string;
@@ -767,7 +779,7 @@ export interface ServerToClientEvents {
     targetCardId: string;
     targetBoardId: string;
   }) => void;
-  "client:updated": (payload: { clientId: string; name: string; logoUrl: string | null; inProgressEnabled?: boolean }) => void;
+  "client:updated": (payload: { clientId: string; name: string; logoUrl: string | null; inProgressEnabled?: boolean; dependenciesEnabled?: boolean; timelineEnabled?: boolean }) => void;
   "client:entitlements:changed": (payload: { clientId: string }) => void;
   "user:profile:updated": (payload: { userId: string; displayName: string; avatarUrl: string | null }) => void;
 

@@ -567,7 +567,7 @@ export function buildWorkDoneReport(input: WorkDoneReportInput): WorkDoneReport 
   }
 
   // --- By workspace ------------------------------------------------------------------------------
-  // Only when the boards sit in several workspaces, so a portfolio reader sees which workspace holds
+  // Only when the boards sit in several workspaces, so a cross-board reader sees which workspace holds
   // the open work and which one delivered.
   const workspacesById = new Map((input.workspaces ?? []).map((workspace) => [workspace.id, workspace]));
   let workspaces: ReportBar[] = [];

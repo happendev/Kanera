@@ -20,6 +20,7 @@ function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     title: "Ship tests",
     position: "1000.0000000000",
     dueDateLocalDate: null,
+    startDateLocalDate: null,
     dueDateSlot: "anyTime",
     dueDateTimezone: "UTC",
     completedAt: null,

@@ -1,18 +1,20 @@
 import type { WireAutomation, WireAutomationRunStats, WireCard, WireCardChecklist, WireComment } from "@kanera/shared/events";
 import { inProgressClockOf, SERVER_EVENTS, type InProgressClock } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, automationActions, automationDueDateRuns, automationInactiveRuns, automationInProgressRuns, automationRunStats, automationRuns, automations, boardMembers, boards, cardAssignees, cardCustomFieldValues, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, comments, customFieldOptions, customFields, lists, users, webhookEndpoints, workspaceMembers, workspaces, type ActivityEvent, type Automation, type AutomationAction, type AutomationRunStats, type AutomationTriggerCustomFieldValue, type Card, type CardCustomFieldValue, type CustomField, type AutomationTriggerType } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, automationActions, automationDueDateRuns, automationInactiveRuns, automationStartDateRuns, automationInProgressRuns, automationRunStats, automationRuns, automations, boardMembers, boards, cardAssignees, cardCustomFieldValues, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, comments, customFieldOptions, customFields, lists, users, webhookEndpoints, workspaceMembers, workspaces, type ActivityEvent, type Automation, type AutomationAction, type AutomationRunStats, type AutomationTriggerCustomFieldValue, type Card, type CardCustomFieldValue, type CustomField, type AutomationTriggerType } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Db, type Tx, type TxOnly } from "../db.js";
 import { env } from "../env.js";
 import { emitToBoard } from "../realtime/emit.js";
 import { publishAsAutomation } from "../realtime/outbox.js";
+import { workspaceFeatureEnabledSql } from "./workspace-features.js";
 import { invalidateQueuesForCards } from "./card-priority-invalidation.js";
 import { emitActivityFeedItem, recordActivity } from "./activity.js";
 import { enqueueCardAssignedEmails } from "./assignee-email-notifications.js";
 import { applyChecklistTemplates } from "./checklist-templates.js";
 import { dateTimeFormatter, wallClockPartsOrUtc } from "./date-time-formatter.js";
-import { addDays, isDueDateOverdue, localDateInTimezone } from "./due-date.js";
+import { addDays, clampStartToDue, isDueDateOverdue, localDateInTimezone } from "./due-date.js";
+import { WORKDAY_END_HOUR, WORKDAY_START_HOUR } from "@kanera/shared/time-in-progress";
 import { createMailer } from "./mailer.js";
 import { clearOverdueNotificationsForCards } from "./notifications.js";
 import { createOverdueNotificationsForCards } from "./overdue-notifications.js";
@@ -25,8 +27,9 @@ import { absoluteCardUrl } from "./wire-card.js";
 import { customFieldValueEquals, emptyValueColumns, type CustomFieldValueColumns } from "./custom-fields.js";
 import { clearRemindersOnCompletedCards, emitClearedCardReminders, type ClearedCardReminder } from "./card-follow.js";
 import { blockedByCounts, captureUnblockedDependents, recordDependencyTransition, captureBlockedDependents, emitDependentsChanged, emitRelationNeighboursChanged, lockWorkspaceRelations } from "./card-relations.js";
-import { notifyDependencyHandoffs, recordBlockersCleared, recordBlockersReopened, type DependencyHandoff } from "./dependency-notifications.js";
+import { notifyDependencyHandoffs, notifyScheduleConflicts, recordBlockersCleared, recordBlockersReopened, type DependencyHandoff, type ScheduleConflictNotice } from "./dependency-notifications.js";
 import { executableAutomationAction, type ExecutableAutomationAction } from "./automation-action.js";
+import { evaluateBoardSchedule, finishScheduleRecheck, pendingScheduleRechecks, recordScheduleBoundary, requestScheduleRecheckForCards, scheduleConflictAuthor, type ScheduleBoundary, type ScheduleRecheckRequest } from "./schedule-events.js";
 
 interface AutomationEffectMetadata {
   // Automation activity remains system-authored, but user-triggered automation
@@ -85,9 +88,15 @@ const AUTOMATION_COMMENT_TEMPLATE_VARIABLES = [
   "card.key",
   "card.url",
   "card.dueDate",
+  "card.startDate",
   "list.name",
   "board.name",
   "workspace.name",
+  // Set only by the scheduling triggers: the blocker ("KEY title") and working days behind a
+  // scheduling_conflict_appears run, or the days the finish moved for critical_path_slips. Empty
+  // for every other trigger, so a shared template degrades to a blank rather than a leaked token.
+  "schedule.blocker",
+  "schedule.days",
 ] as const;
 
 // Comments an automation writes are labelled with this name in the card feed (system-authored
@@ -107,6 +116,8 @@ interface AutomationRunContext {
   handoffActorId?: string | null;
   commentAuthorId?: string | null;
   templateContexts?: Map<string, { list: { id: string; name: string } | null; boardName: string; workspaceName: string }>;
+  /** What the schedule engine found, for the scheduling triggers' comment placeholders. */
+  schedule?: { blocker: string; days: number };
 }
 
 export const EMPTY_EFFECTS: AutomationEffects = { effects: [] };
@@ -651,6 +662,11 @@ async function applyChecklistsAction(tx: Tx, ctx: AutomationRunContext, action: 
 }
 
 async function applyDueDateAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"set_due_date" | "clear_due_date">): Promise<AutomationEffect | null> {
+  // The trigger context can predate another editor's write. Its dates are authoritative only
+  // after taking the row lock (the caller already holds the workspace graph lock).
+  const [current] = await tx.select().from(cards).where(eq(cards.id, ctx.card.id)).for("update");
+  if (!current) return null;
+  ctx.card = current;
   const previousDueDateLocalDate = ctx.card.dueDateLocalDate;
   const previousDueDateSlot = ctx.card.dueDateSlot;
   const timezone = ctx.card.dueDateTimezone || "UTC";
@@ -668,8 +684,17 @@ async function applyDueDateAction(tx: Tx, ctx: AutomationRunContext, action: Exe
   ) {
     return null;
   }
-  const [card] = await tx.update(cards).set({ ...next, updatedAt: new Date() }).where(eq(cards.id, ctx.card.id)).returning();
+  // A start may never sit after the due date: an automation that pulls the due date before the
+  // planned start drags the start along in the same write, exactly as a person's PATCH would, and
+  // the history row names the clamped start so the Timeline bar stays explainable. Clearing the
+  // due date leaves the start alone (see lib/due-date.ts).
+  const startDateLocalDate = clampStartToDue(ctx.card.startDateLocalDate, next.dueDateLocalDate);
+  const startClamped = startDateLocalDate !== ctx.card.startDateLocalDate;
+  const write = { ...next, ...(startClamped && { startDateLocalDate }) };
+  const [card] = await tx.update(cards).set({ ...write, updatedAt: new Date() }).where(eq(cards.id, ctx.card.id)).returning();
   ctx.card = card!;
+  // A moved bar can open or close a scheduling conflict for the card and its chain (schedule-events.ts).
+  await requestScheduleRecheckForCards(tx, [ctx.card.id]);
   if (next.dueDateLocalDate) await createOverdueNotificationsForCards(tx, [ctx.card.id]);
   else await clearOverdueNotificationsForCards(tx, [ctx.card.id]);
   const activity = await recordActivity(tx, {
@@ -680,7 +705,7 @@ async function applyDueDateAction(tx: Tx, ctx: AutomationRunContext, action: Exe
     entityType: "card",
     entityId: ctx.card.id,
     action: ACTIVITY_ACTION.UPDATED,
-    payload: { ...next, automationActionId: action.id },
+    payload: { ...write, automationActionId: action.id },
   });
   return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, suppressNotificationUserId: ctx.triggerActorId };
 }
@@ -693,6 +718,8 @@ async function applyCompletionAction(tx: Tx, ctx: AutomationRunContext, action: 
   const completedAt = completed ? new Date() : null;
   const [card] = await tx.update(cards).set({ completedAt, updatedAt: new Date() }).where(eq(cards.id, ctx.card.id)).returning();
   ctx.card = card!;
+  // Completing releases the card's dependents on the schedule; reopening holds them up again.
+  await requestScheduleRecheckForCards(tx, [ctx.card.id]);
   if (completed) await clearOverdueNotificationsForCards(tx, [ctx.card.id]);
   else await createOverdueNotificationsForCards(tx, [ctx.card.id]);
   const clearedReminders = completed ? await clearRemindersOnCompletedCards(tx, [ctx.card.id]) : [];
@@ -941,9 +968,12 @@ async function applyPostCommentAction(tx: Tx, ctx: AutomationRunContext, action:
     "card.key": ctx.card.key,
     "card.url": absoluteCardUrl(ctx.card.organisationKey, ctx.card.key),
     "card.dueDate": ctx.card.dueDateLocalDate ?? "",
+    "card.startDate": ctx.card.startDateLocalDate ?? "",
     "list.name": context.list?.name ?? "",
     "board.name": context.boardName,
     "workspace.name": context.workspaceName,
+    "schedule.blocker": ctx.schedule?.blocker ?? "",
+    "schedule.days": ctx.schedule ? String(ctx.schedule.days) : "",
   });
   const [comment] = await tx
     .insert(comments)
@@ -1062,7 +1092,7 @@ async function applyAutomationActionsAndRecordStats(tx: Tx, automationId: string
 async function applyTriggeredAutomations(
   tx: Tx,
   rows: (typeof automations.$inferSelect)[],
-  opts: { cardId: string; boardId: string; workspaceId: string; clientId: string; triggerActorId?: string | null; handoffActorId?: string | null },
+  opts: { cardId: string; boardId: string; workspaceId: string; clientId: string; triggerActorId?: string | null; handoffActorId?: string | null; schedule?: AutomationRunContext["schedule"] },
   cardGate: (card: typeof cards.$inferSelect) => boolean = () => true,
 ): Promise<AutomationEffects> {
   const actions = await tx
@@ -1087,6 +1117,7 @@ async function applyTriggeredAutomations(
     fireDate: new Date(),
     triggerActorId: opts.triggerActorId,
     handoffActorId: opts.handoffActorId,
+    ...(opts.schedule && { schedule: opts.schedule }),
   };
   const effects: AutomationEffect[] = [];
   for (const automation of rows) {
@@ -1307,6 +1338,103 @@ export async function runCardBlockedAutomations(
     effects.push(...result.effects);
   }
   return { effects, handoffs };
+}
+
+/**
+ * Fires the scheduling triggers for one boundary the engine reported (see schedule-events.ts).
+ * `scheduling_conflict_appears` mirrors `schedule.conflict_detected`, `critical_path_slips` mirrors
+ * `schedule.critical_path_slipped`; the latch that decides both lives in the recheck sweep, so this
+ * runner has no visited-set of its own. Like every system-driven run there is no trigger actor.
+ */
+async function runScheduleBoundaryAutomations(tx: Tx, boundary: ScheduleBoundary, request: ScheduleRecheckRequest): Promise<AutomationEffects> {
+  const trigger: AutomationTriggerType | null = boundary.transition.name === "schedule.conflict_detected" ? "scheduling_conflict_appears"
+    : boundary.transition.name === "schedule.critical_path_slipped" ? "critical_path_slips"
+    : null;
+  if (!trigger) return EMPTY_EFFECTS;
+  const rows = await enabledAutomationsFor(tx, request.workspaceId, eq(automations.triggerType, trigger));
+  if (!rows.length) return EMPTY_EFFECTS;
+  // A comment is persisted for everyone who can read the dependent, including future members.
+  // Never copy cross-board identities into it; assigned-only boards cannot safely name siblings.
+  const [restrictedMember] = boundary.blocker?.boardId === boundary.card.boardId
+    ? await tx.select({ id: boardMembers.userId }).from(boardMembers)
+      .where(and(eq(boardMembers.boardId, boundary.card.boardId), eq(boardMembers.assignedItemsOnly, true))).limit(1)
+    : [true];
+  const safeBlocker = boundary.blocker?.boardId === boundary.card.boardId && !restrictedMember ? boundary.blocker : undefined;
+  const schedule = boundary.transition.name === "schedule.conflict_detected"
+    ? { blocker: safeBlocker ? `${safeBlocker.key} ${safeBlocker.title}` : "", days: boundary.transition.days }
+    : { blocker: "", days: boundary.transition.name === "schedule.critical_path_slipped" ? boundary.transition.days : 0 };
+  return applyTriggeredAutomations(tx, rows, {
+    cardId: boundary.card.id, boardId: boundary.card.boardId, workspaceId: request.workspaceId, clientId: request.clientId, schedule,
+  }, (current) => !current.completedAt && !current.archivedAt);
+}
+
+/** Boards evaluated per sweep run; the scheduler reruns at once while the queue is this full. */
+const SCHEDULE_RECHECK_BATCH_SIZE = 25;
+
+/**
+ * Drains `schedule_recheck_queue`: for each queued board, recompute its schedule, report the
+ * boundaries against the latch (outbox rows for MCP and webhooks, then the scheduling automations),
+ * persist the new verdict and answer the request. One board per transaction, so a failing board
+ * neither blocks the others nor is answered: it stays queued and the next run retries it.
+ */
+export async function runScheduleRecheckSweep(log?: FastifyBaseLogger, batchSize = SCHEDULE_RECHECK_BATCH_SIZE): Promise<number> {
+  const requests = await pendingScheduleRechecks(db, batchSize);
+  let evaluated = 0;
+  for (const request of requests) {
+    try {
+      const outcome = await db.transaction(async (tx) => {
+        // Serialised with every write that touches the dependency graph, so the engine never reads
+        // a half-written chain and no write can slip between the evaluation and the latch update.
+        await lockWorkspaceRelations(tx, request.workspaceId);
+        const evaluation = await evaluateBoardSchedule(tx, request.boardId);
+        const collected: AutomationEffect[] = [];
+        const notices: ScheduleConflictNotice[] = [];
+        // Read before this loop writes any activity of its own: the feed rows and automation effects
+        // below are system-authored and would otherwise count as a second editor.
+        const authors = new Map<string, string | null>();
+        for (const boundary of evaluation.boundaries) {
+          if (boundary.transition.name !== "schedule.conflict_detected" || !boundary.blocker) continue;
+          authors.set(boundary.card.id, await scheduleConflictAuthor(tx, [boundary.card.id, boundary.blocker.id], evaluation.previousEvaluatedAt));
+        }
+        for (const boundary of evaluation.boundaries) {
+          await recordScheduleBoundary(tx, boundary, request.workspaceId, request.clientId);
+          // The feed row and notification are written before the boundary's automations run, so a
+          // rule that reacts (say, by moving the start) reads as a response to it in the card's feed.
+          if (boundary.transition.name === "schedule.conflict_detected" && boundary.blocker) {
+            notices.push({
+              card: boundary.card,
+              blocker: boundary.blocker,
+              suppressUserId: authors.get(boundary.card.id) ?? null,
+              activity: await recordActivity(tx, {
+                boardId: boundary.card.boardId,
+                workspaceId: request.workspaceId,
+                actorId: null,
+                actorKind: "system",
+                entityType: "card",
+                entityId: boundary.card.id,
+                action: ACTIVITY_ACTION.SCHEDULE_CONFLICT,
+                payload: { otherCardId: boundary.blocker.id, otherCardKey: boundary.blocker.key, days: boundary.transition.days },
+              }),
+            });
+          }
+          const result = await publishAsAutomation(() => runScheduleBoundaryAutomations(tx, boundary, request));
+          collected.push(...result.effects);
+        }
+        await evaluation.commit();
+        await finishScheduleRecheck(tx, request);
+        return { effects: { effects: collected }, notices };
+      });
+      evaluated += 1;
+      if (outcome.notices.length > 0) {
+        await notifyScheduleConflicts({ notices: outcome.notices, webOrigin: env.WEB_ORIGIN })
+          .catch((err: unknown) => log?.error({ err, boardId: request.boardId }, "schedule conflict notifications failed"));
+      }
+      if (outcome.effects.effects.length > 0) await emitAutomationEffects(outcome.effects);
+    } catch (err) {
+      log?.error({ err, boardId: request.boardId }, "schedule recheck failed");
+    }
+  }
+  return evaluated;
 }
 
 export async function runCardAssignedAutomations(
@@ -1608,6 +1736,127 @@ export async function runDueDateAutomationSweep(
   return ran;
 }
 
+/**
+ * Fires `start_date_arrives` once per card per planned start. A start is a calendar date with no
+ * time of day, so it "arrives" at the start of that day in the card's zone (the due-date zone, else
+ * the workspace's, else UTC); there is no slot cut-off to wait for, unlike `due_date_arrives`.
+ * The latch in automation_start_date_run is keyed on the start date, so a card fires again only
+ * when its planned start moves. Same keyset shape as the due-date sweeps, over
+ * cards_active_incomplete_start_date_idx.
+ */
+export async function runStartDateAutomationSweep(
+  log?: FastifyBaseLogger,
+  now = new Date(),
+  batchSize = DUE_DATE_SWEEP_BATCH_SIZE,
+): Promise<number> {
+  // Broad SQL prefilter in UTC, one day ahead so zones east of UTC are not starved; the exact
+  // per-card zone comparison happens below.
+  const cutoffLocalDate = addDays(localDateInTimezone(now, "UTC"), 1);
+
+  const automationsByWorkspace = new Map<string, ScheduledWorkspaceAutomation[]>();
+  const ensureWorkspacesLoaded = ensureWorkspacesLoadedFor("start_date_arrives", automationsByWorkspace);
+
+  const seen = new Set<string>();
+  let ran = 0;
+  let cursorDate: string | null = null;
+  let cursorId: string | null = null;
+
+  for (;;) {
+    const afterCursor: SQL | undefined = cursorDate !== null && cursorId !== null
+      ? sql`(${cards.startDateLocalDate}, ${cards.id}) > (${cursorDate}::date, ${cursorId}::uuid)`
+      : undefined;
+    const candidates: (DueDateCandidate & { workspaceTimeZone: string })[] = await db
+      .select({
+        card: cards,
+        workspaceId: lists.workspaceId,
+        clientId: workspaces.clientId,
+        workspaceTimeZone: workspaces.timeZone,
+      })
+      .from(cards)
+      .innerJoin(lists, eq(lists.id, cards.listId))
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, lists.workspaceId))
+      .where(and(
+        isNull(cards.archivedAt),
+        isNull(cards.completedAt),
+        isNull(lists.archivedAt),
+        isNull(boards.archivedAt),
+        sql`${cards.startDateLocalDate} is not null`,
+        sql`${cards.startDateLocalDate} <= ${cutoffLocalDate}`,
+        // Start dates are kept but do not arrive while the timeline is switched off.
+        workspaceFeatureEnabledSql("timeline", lists.workspaceId),
+        afterCursor,
+        sql`exists (
+          select 1 from automation a
+          inner join automation_action aa on aa.automation_id = a.id
+          where a.workspace_id = ${lists.workspaceId}
+            and a.enabled = true
+            and a.archived_at is null
+            and a.trigger_type = 'start_date_arrives'
+        )`,
+      ))
+      .orderBy(asc(cards.startDateLocalDate), asc(cards.id))
+      .limit(batchSize);
+    if (candidates.length === 0) break;
+
+    const last = candidates[candidates.length - 1]!;
+    cursorDate = last.card.startDateLocalDate;
+    cursorId = last.card.id;
+
+    await ensureWorkspacesLoaded(Array.from(new Set(candidates.map((candidate) => candidate.workspaceId))));
+
+    for (const candidate of candidates) {
+      if (seen.has(candidate.card.id)) continue;
+      seen.add(candidate.card.id);
+      const zone = candidate.card.dueDateTimezone || candidate.workspaceTimeZone || "UTC";
+      const hasArrived = (card: Card) => card.startDateLocalDate !== null && localDateInTimezone(now, zone) >= card.startDateLocalDate;
+      if (!hasArrived(candidate.card)) continue;
+      for (const { automation, actions: automationActions } of automationsByWorkspace.get(candidate.workspaceId) ?? []) {
+        if (!automationActions.length) continue;
+        try {
+          const effects = await db.transaction(async (tx) => {
+            const [existing] = await tx
+              .select()
+              .from(automationStartDateRuns)
+              .where(and(eq(automationStartDateRuns.automationId, automation.id), eq(automationStartDateRuns.cardId, candidate.card.id)))
+              .limit(1);
+            if (existing?.startDateLocalDate === candidate.card.startDateLocalDate) return EMPTY_EFFECTS;
+            // Re-read inside the transaction: an earlier automation in this loop may have moved,
+            // completed or archived the card.
+            const [card] = await tx.select().from(cards).where(eq(cards.id, candidate.card.id)).limit(1);
+            if (!card?.startDateLocalDate || card.archivedAt || card.completedAt || !hasArrived(card)) return EMPTY_EFFECTS;
+            const result = await applyAutomationActionsAndRecordStats(tx, automation.id, {
+              card,
+              boardId: card.boardId,
+              workspaceId: candidate.workspaceId,
+              clientId: candidate.clientId,
+              fireDateLocalDate: card.startDateLocalDate,
+              fireDate: now,
+            }, automationActions);
+            await tx
+              .insert(automationStartDateRuns)
+              .values({ automationId: automation.id, cardId: card.id, startDateLocalDate: card.startDateLocalDate, firedAt: now })
+              .onConflictDoUpdate({
+                target: [automationStartDateRuns.automationId, automationStartDateRuns.cardId],
+                set: { startDateLocalDate: card.startDateLocalDate, firedAt: now },
+              });
+            return result;
+          });
+          if (effects.effects.length > 0) {
+            await emitAutomationEffects(effects);
+            ran += 1;
+          }
+        } catch (err) {
+          log?.error({ err, automationId: automation.id, cardId: candidate.card.id }, "start date automation failed");
+        }
+      }
+    }
+
+    if (candidates.length < batchSize) break;
+  }
+  return ran;
+}
+
 export async function runDueDateApproachingAutomationSweep(
   log?: FastifyBaseLogger,
   now = new Date(),
@@ -1852,12 +2101,137 @@ export async function runInactivityAutomationSweep(
 }
 
 const IN_PROGRESS_ALERT_SWEEP_BATCH_SIZE = 500;
-const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Calendar seconds per unit for `fixed` limits, and tracked working seconds for `custom_field`. */
+const IN_PROGRESS_FIXED_UNIT_SECONDS = { hours: 3600, days: 86_400 } as const;
+// A working day is the tracked window in `@kanera/shared/time-in-progress` (09:00-17:00).
+const IN_PROGRESS_WORKING_UNIT_SECONDS = { hours: 3600, days: (WORKDAY_END_HOUR - WORKDAY_START_HOUR) * 3600 } as const;
+// automation_in_progress_run.threshold_seconds is an integer column; an absurd estimate clamps here.
+const IN_PROGRESS_MAX_LIMIT_SECONDS = 2_000_000_000;
+
+type InProgressLimitRow = {
+  cardId: string;
+  automationId: string;
+  workspaceId: string;
+  limitSeconds: number;
+  /** When the limit was crossed: exact for a stint limit, the sweep's clock for tracked time. */
+  crossedAt: Date;
+  /** The card was already past this limit when its estimate was set (custom_field only). */
+  alreadyPast: boolean;
+};
 
 /**
- * Fires once when a running card passes its workspace alert (0 disables it).
- * The ledger stays latched across list moves and setting changes; only an admin correction
- * below the threshold clears it. Completed cards are skipped because their clock is frozen.
+ * Every (running card, card_in_progress_too_long rule) pair whose limit the card has passed and that
+ * the rule has not handled yet. The limit and the clock it is compared with depend on the rule:
+ *
+ * - `workspace` / `fixed`: the current stint in calendar time, like the amber chip. A card is handled
+ *   once; only an admin correction below the alert clears it (cards/routes.ts), never a list move.
+ * - `custom_field`: total tracked working time against the card's own number ("over its estimate").
+ *   The run row keeps the limit it was handled at and only a strictly higher limit is due again, so
+ *   the rule repeats only when an estimate is raised and the card then outgrows that too.
+ *
+ * `alreadyPast` reconstructs how much time was tracked when the estimate was last written: the
+ * running stint's working time since then is the only time that can have accrued (the banked total
+ * only grows when a stint ends). A card that was already over when someone typed its estimate is
+ * recorded without running the rule, so bulk-filling an estimate column does not fire it per card.
+ */
+function inProgressLimitRows(
+  executor: Db | Tx,
+  opts: { now: Date; automationIds?: readonly string[]; cardIds?: readonly string[]; includeHandled?: boolean; after?: { cardId: string; automationId: string } | null; limit?: number },
+): Promise<InProgressLimitRow[]> {
+  const now = sql`${opts.now.toISOString()}::timestamptz`;
+  const source = sql`coalesce(a.trigger_threshold_source, 'workspace')`;
+  return executor.execute<InProgressLimitRow>(sql`
+    select c.id as "cardId", a.id as "automationId", c.workspace_id as "workspaceId",
+           lim.limit_seconds as "limitSeconds",
+           case when ${source} = 'custom_field' then ${now} else c.in_progress_since + make_interval(secs => lim.limit_seconds) end as "crossedAt",
+           (${source} = 'custom_field'
+             and m.measure - in_progress_working_seconds(greatest(est.updated_at, c.in_progress_since), ${now}, w.time_zone) >= lim.limit_seconds) as "alreadyPast"
+    from card c
+    inner join list l on l.id = c.list_id and l.archived_at is null
+    inner join board b on b.id = c.board_id and b.archived_at is null
+    inner join workspace w on w.id = c.workspace_id
+    inner join automation a on a.workspace_id = c.workspace_id
+      and a.archived_at is null
+      and a.trigger_type = 'card_in_progress_too_long'
+    left join lateral (
+      select v.value_number::double precision as value, v.updated_at
+      from card_custom_field_value v
+      inner join custom_field f on f.id = v.field_id and f.archived_at is null and f.type = 'number'
+      where v.card_id = c.id and v.field_id = a.trigger_custom_field_id
+    ) est on ${source} = 'custom_field'
+    cross join lateral (
+      select case when ${source} = 'custom_field'
+        then c.in_progress_seconds + in_progress_working_seconds(c.in_progress_since, ${now}, w.time_zone)
+        else extract(epoch from (${now} - c.in_progress_since))
+      end as measure
+    ) m
+    -- Unit sizes are inlined as literals: bound parameters would arrive as text inside the CASE.
+    cross join lateral (
+      select case ${source}
+        when 'workspace' then nullif(w.in_progress_alert_days, 0) * 86400
+        when 'fixed' then a.trigger_threshold_amount * (case a.trigger_threshold_unit when 'hours' then ${sql.raw(String(IN_PROGRESS_FIXED_UNIT_SECONDS.hours))} else ${sql.raw(String(IN_PROGRESS_FIXED_UNIT_SECONDS.days))} end)
+        -- An empty, zero or negative estimate is no limit at all, not an instant alert.
+        when 'custom_field' then case when est.value > 0
+          then least(ceil(est.value * (case a.trigger_threshold_unit when 'hours' then ${sql.raw(String(IN_PROGRESS_WORKING_UNIT_SECONDS.hours))} else ${sql.raw(String(IN_PROGRESS_WORKING_UNIT_SECONDS.days))} end)), ${sql.raw(String(IN_PROGRESS_MAX_LIMIT_SECONDS))})::int
+        end
+      end as limit_seconds
+    ) lim
+    where c.in_progress_since is not null
+      and c.completed_at is null
+      and c.archived_at is null
+      and lim.limit_seconds is not null
+      and m.measure >= lim.limit_seconds
+      ${opts.automationIds ? sql`and a.id in (${sql.join(opts.automationIds.map((id) => sql`${id}::uuid`), sql`, `)})` : sql`and a.enabled = true and exists (select 1 from automation_action aa where aa.automation_id = a.id)`}
+      ${opts.cardIds ? sql`and c.id in (${sql.join(opts.cardIds.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``}
+      ${opts.includeHandled ? sql`` : sql`and not exists (
+        select 1 from automation_in_progress_run r
+        where r.automation_id = a.id and r.card_id = c.id
+          and (${source} <> 'custom_field' or coalesce(r.threshold_seconds, 0) >= lim.limit_seconds)
+      )`}
+      ${opts.after ? sql`and (c.id, a.id) > (${opts.after.cardId}::uuid, ${opts.after.automationId}::uuid)` : sql``}
+    order by c.id, a.id
+    ${opts.limit ? sql`limit ${opts.limit}` : sql``}
+  `).then((result) => result.rows.map((row) => ({ ...row, limitSeconds: Number(row.limitSeconds), crossedAt: new Date(row.crossedAt) })));
+}
+
+async function recordInProgressRun(tx: Tx, row: InProgressLimitRow, now: Date): Promise<void> {
+  await tx
+    .insert(automationInProgressRuns)
+    .values({ automationId: row.automationId, cardId: row.cardId, alertAt: row.crossedAt, thresholdSeconds: row.limitSeconds, firedAt: now })
+    .onConflictDoUpdate({
+      target: [automationInProgressRuns.automationId, automationInProgressRuns.cardId],
+      set: { alertAt: row.crossedAt, thresholdSeconds: sql`greatest(coalesce(${automationInProgressRuns.thresholdSeconds}, 0), excluded.threshold_seconds)`, firedAt: now },
+    });
+}
+
+/**
+ * Called when a card_in_progress_too_long rule is turned on or its limit changes, inside that
+ * write's transaction. A changed limit forgets which cards were handled under the old one. Unless the
+ * rule includes existing cards, every card already past the new limit is then recorded as handled
+ * without running it: turning a rule on is a settings change, not news about those cards, and a
+ * rule that posts a comment or calls a webhook would otherwise do so for the whole backlog at once.
+ */
+export async function armInProgressAutomation(tx: Tx, automationId: string, opts: { limitChanged: boolean; includeExisting: boolean }, now = new Date()): Promise<void> {
+  if (opts.limitChanged) await tx.delete(automationInProgressRuns).where(eq(automationInProgressRuns.automationId, automationId));
+  if (opts.includeExisting) return;
+  const rows = await inProgressLimitRows(tx, { now, automationIds: [automationId], includeHandled: true });
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500);
+    await tx
+      .insert(automationInProgressRuns)
+      .values(chunk.map((row) => ({ automationId: row.automationId, cardId: row.cardId, alertAt: row.crossedAt, thresholdSeconds: row.limitSeconds, firedAt: now })))
+      .onConflictDoUpdate({
+        target: [automationInProgressRuns.automationId, automationInProgressRuns.cardId],
+        set: { thresholdSeconds: sql`greatest(coalesce(${automationInProgressRuns.thresholdSeconds}, 0), excluded.threshold_seconds)` },
+      });
+  }
+}
+
+/**
+ * Runs card_in_progress_too_long rules for cards that passed their limit (see inProgressLimitRows).
+ * Hourly, so the shortest useful limit is about an hour. Completed cards are skipped because their
+ * clock is frozen; a card out of progress has a stopped clock and cannot cross anything.
  */
 export async function runInProgressAlertAutomationSweep(
   log?: FastifyBaseLogger,
@@ -1867,112 +2241,58 @@ export async function runInProgressAlertAutomationSweep(
   const automationsByWorkspace = new Map<string, ScheduledWorkspaceAutomation[]>();
   const ensureWorkspacesLoaded = ensureWorkspacesLoadedFor("card_in_progress_too_long", automationsByWorkspace);
 
-  const seen = new Set<string>();
   let ran = 0;
-  let cursorSince: Date | null = null;
-  let cursorId: string | null = null;
-
+  let after: { cardId: string; automationId: string } | null = null;
   for (;;) {
-    const afterCursor: SQL | undefined = cursorSince && cursorId
-      ? sql`(${cards.inProgressSince}, ${cards.id}) > (${cursorSince}, ${cursorId}::uuid)`
-      : undefined;
-    const candidates: InactivityCandidate[] = await db
-      .select({
-        card: cards,
-        workspaceId: workspaces.id,
-      })
-      .from(cards)
-      .innerJoin(lists, eq(lists.id, cards.listId))
-      .innerJoin(boards, eq(boards.id, cards.boardId))
-      .innerJoin(workspaces, eq(workspaces.id, cards.workspaceId))
-      .where(and(
-        isNotNull(cards.inProgressSince),
-        isNull(cards.archivedAt),
-        isNull(cards.completedAt),
-        isNull(lists.archivedAt),
-        isNull(boards.archivedAt),
-        sql`${workspaces.inProgressAlertDays} > 0`,
-        // Cast for the same reason as the inactivity sweep: keep the bound Date a timestamptz.
-        sql`${cards.inProgressSince} <= ${now}::timestamptz - make_interval(days => ${workspaces.inProgressAlertDays})`,
-        afterCursor,
-        sql`exists (
-          select 1 from automation a
-          inner join automation_action aa on aa.automation_id = a.id
-          where a.workspace_id = ${workspaces.id}
-            and a.enabled = true
-            and a.archived_at is null
-            and a.trigger_type = 'card_in_progress_too_long'
-            and not exists (
-              select 1 from automation_in_progress_run aipr
-              where aipr.automation_id = a.id
-                and aipr.card_id = ${cards.id}
-            )
-        )`,
-      ))
-      .orderBy(asc(cards.inProgressSince), asc(cards.id))
-      .limit(batchSize);
-    if (candidates.length === 0) break;
+    const due = await inProgressLimitRows(db, { now, after, limit: batchSize });
+    if (due.length === 0) break;
+    after = { cardId: due[due.length - 1]!.cardId, automationId: due[due.length - 1]!.automationId };
+    await ensureWorkspacesLoaded(Array.from(new Set(due.map((row) => row.workspaceId))));
+    // The cursor pages by (card, rule id); a card's rules still run in their configured order, so an
+    // earlier rule that moves the card out of progress stops the later ones (re-checked below).
+    const order = (row: InProgressLimitRow) => automationsByWorkspace.get(row.workspaceId)?.findIndex((item) => item.automation.id === row.automationId) ?? -1;
+    const ordered = [...due].sort((a, b) => (a.cardId === b.cardId ? order(a) - order(b) : a.cardId < b.cardId ? -1 : 1));
 
-    const last = candidates[candidates.length - 1]!;
-    cursorSince = last.card.inProgressSince;
-    cursorId = last.card.id;
-    await ensureWorkspacesLoaded(Array.from(new Set(candidates.map((candidate) => candidate.workspaceId))));
-
-    for (const candidate of candidates) {
-      if (seen.has(candidate.card.id)) continue;
-      seen.add(candidate.card.id);
-      for (const { automation, actions: alertActions } of automationsByWorkspace.get(candidate.workspaceId) ?? []) {
-        if (!alertActions.length) continue;
-        try {
-          const effects = await db.transaction(async (tx) => {
-            // Re-check under the card's row lock: a move out of progress, a completion or an earlier
-            // sibling rule (say, one that moves the card back to the backlog) ends the stint.
-            // Graph lock first (see the due-date sweep).
-            await lockWorkspaceRelations(tx as TxOnly, candidate.workspaceId);
-            const [card] = await tx.select().from(cards).where(eq(cards.id, candidate.card.id)).for("update").limit(1);
-            if (!card || card.archivedAt || card.completedAt || !card.inProgressSince) return EMPTY_EFFECTS;
-            const [workspace] = await tx
-              .select({ inProgressAlertDays: workspaces.inProgressAlertDays, clientId: workspaces.clientId })
-              .from(workspaces)
-              .where(eq(workspaces.id, candidate.workspaceId))
-              .limit(1);
-            if (!workspace || workspace.inProgressAlertDays <= 0) return EMPTY_EFFECTS;
-            const alertAt = new Date(card.inProgressSince.getTime() + workspace.inProgressAlertDays * DAY_MS);
-            if (alertAt.getTime() > now.getTime()) return EMPTY_EFFECTS;
-            const [existing] = await tx
-              .select({ alertAt: automationInProgressRuns.alertAt })
-              .from(automationInProgressRuns)
-              .where(and(eq(automationInProgressRuns.automationId, automation.id), eq(automationInProgressRuns.cardId, card.id)))
-              .limit(1);
-            if (existing) return EMPTY_EFFECTS;
-            const result = await applyAutomationActionsAndRecordStats(tx, automation.id, {
-              card,
-              boardId: card.boardId,
-              workspaceId: candidate.workspaceId,
-              clientId: workspace.clientId,
-              fireDateLocalDate: localDateInTimezone(now, card.dueDateTimezone || "UTC"),
-              fireDate: now,
-            }, alertActions);
-            await tx
-              .insert(automationInProgressRuns)
-              .values({ automationId: automation.id, cardId: card.id, alertAt, firedAt: now })
-              .onConflictDoUpdate({
-                target: [automationInProgressRuns.automationId, automationInProgressRuns.cardId],
-                set: { alertAt, firedAt: now },
-              });
-            return result;
-          });
-          if (effects.effects.length > 0) {
-            await emitAutomationEffects(effects);
-            ran += 1;
+    for (const candidate of ordered) {
+      const scheduled = automationsByWorkspace.get(candidate.workspaceId)?.find((item) => item.automation.id === candidate.automationId);
+      if (!scheduled?.actions.length) continue;
+      try {
+        const effects = await db.transaction(async (tx) => {
+          // Re-check under the card's row lock: a move out of progress, a completion, an estimate
+          // edit or an earlier sibling rule (say, one that moves the card back to the backlog) can
+          // all have changed the answer since the batch was read. Graph lock first (see the due-date sweep).
+          await lockWorkspaceRelations(tx as TxOnly, candidate.workspaceId);
+          const [card] = await tx.select().from(cards).where(eq(cards.id, candidate.cardId)).for("update").limit(1);
+          if (!card || card.archivedAt || card.completedAt || !card.inProgressSince) return EMPTY_EFFECTS;
+          const [current] = await inProgressLimitRows(tx, { now, automationIds: [candidate.automationId], cardIds: [card.id] });
+          if (!current) return EMPTY_EFFECTS;
+          if (current.alreadyPast) {
+            await recordInProgressRun(tx, current, now);
+            return EMPTY_EFFECTS;
           }
-        } catch (err) {
-          log?.error({ err, automationId: automation.id, cardId: candidate.card.id }, "in-progress alert automation failed");
+          const [workspace] = await tx.select({ clientId: workspaces.clientId }).from(workspaces).where(eq(workspaces.id, candidate.workspaceId)).limit(1);
+          if (!workspace) return EMPTY_EFFECTS;
+          const result = await applyAutomationActionsAndRecordStats(tx, candidate.automationId, {
+            card,
+            boardId: card.boardId,
+            workspaceId: candidate.workspaceId,
+            clientId: workspace.clientId,
+            fireDateLocalDate: localDateInTimezone(now, card.dueDateTimezone || "UTC"),
+            fireDate: now,
+          }, scheduled.actions);
+          await recordInProgressRun(tx, current, now);
+          return result;
+        });
+        if (effects.effects.length > 0) {
+          await emitAutomationEffects(effects);
+          ran += 1;
         }
+      } catch (err) {
+        log?.error({ err, automationId: candidate.automationId, cardId: candidate.cardId }, "in-progress alert automation failed");
       }
     }
 
-    if (candidates.length < batchSize) break;
+    if (due.length < batchSize) break;
   }
   return ran;
 }
@@ -2002,14 +2322,28 @@ export function startDueDateAutomationScheduler(log?: FastifyBaseLogger): () => 
     nextDelayMs: 60 * 60 * 1000,
     log,
   });
+  const startDateSweep = startSweepScheduler({
+    name: "start-date-automation",
+    task: () => runStartDateAutomationSweep(log),
+    nextDelayMs: 60 * 60 * 1000,
+    log,
+  });
   const inProgressAlertSweep = startSweepScheduler({
     name: "in-progress-alert-automation",
     task: () => runInProgressAlertAutomationSweep(log),
     nextDelayMs: 60 * 60 * 1000,
     log,
   });
+  // Near-realtime, unlike the calendar sweeps above: a scheduling conflict should reach an agent
+  // seconds after the edit that caused it. A full batch means a backlog, so run again at once.
+  const scheduleRecheckSweep = startSweepScheduler({
+    name: "schedule-recheck",
+    task: () => runScheduleRecheckSweep(log),
+    nextDelayMs: (evaluated) => (evaluated !== undefined && evaluated >= SCHEDULE_RECHECK_BATCH_SIZE ? 0 : 10 * 1000),
+    log,
+  });
   return async () => {
-    await Promise.all([dueDateSweep.stop(), dueDateApproachingSweep.stop(), inactivitySweep.stop(), inProgressAlertSweep.stop(), cleanup.stop()]);
+    await Promise.all([dueDateSweep.stop(), dueDateApproachingSweep.stop(), startDateSweep.stop(), inactivitySweep.stop(), inProgressAlertSweep.stop(), scheduleRecheckSweep.stop(), cleanup.stop()]);
   };
 }
 

@@ -10,10 +10,12 @@ import {
   activityEvents,
   automationActions,
   automationDueDateRuns,
+  automationStartDateRuns,
   automationInactiveRuns,
   automationRunStats,
   automations,
   boardMembers,
+  boardScheduleState,
   boardWatchers,
   boards,
   cardAssignees,
@@ -26,6 +28,7 @@ import {
   cards,
   cardCustomFieldValues,
   cardReminders,
+  cardScheduleState,
   comments,
   customFieldOptions,
   emailQueue,
@@ -33,6 +36,7 @@ import {
   lists,
   notifications,
   customFields,
+  scheduleRecheckQueue,
   webhookDeliveries,
   webhookEndpoints,
   workspaceMembers,
@@ -43,7 +47,7 @@ import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db, pool } from "../../db.js";
-import { emitAutomationEffects, runDueDateApproachingAutomationSweep, runDueDateAutomationSweep, runInactivityAutomationSweep, runListEntryAutomations } from "../../lib/automations.js";
+import { emitAutomationEffects, runDueDateApproachingAutomationSweep, runDueDateAutomationSweep, runInactivityAutomationSweep, runListEntryAutomations, runScheduleRecheckSweep, runStartDateAutomationSweep } from "../../lib/automations.js";
 import { enqueueWebhookDeliveriesForOutboxEvent } from "../../lib/webhooks.js";
 import { waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildIntegrationServer } from "../../test/integration.js";
@@ -3425,4 +3429,163 @@ void test("an automation that completes a card clears the reminders on it", asyn
   const completion = result.effects.find((effect) => effect.type === "cardUpdated");
   assert.equal(completion?.type === "cardUpdated" ? completion.clearedReminders?.length : null, 1);
   assert.deepEqual(await db.select().from(cardReminders).where(eq(cardReminders.cardId, card.id)), []);
+});
+
+void test("start date automation sweep fires once per planned start, in the card's own zone", async () => {
+  const f = await setupWorkspace("owner-automation-start-date-sweep@example.com");
+  // East of UTC, so a card without its own zone is already on the next calendar day at noon UTC.
+  await db.update(workspaces).set({ timeZone: "Pacific/Kiritimati" }).where(eq(workspaces.id, f.workspace.id));
+  // The route accepts the trigger without a lead-time setting; only due_date_approaching has one.
+  const createdAutomation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "start_date_arrives",
+      actions: [{ type: "post_comment", config: { template: "Started {{card.startDate}}" } }],
+    },
+  });
+  assert.equal(createdAutomation.statusCode, 201, createdAutomation.body);
+  const automation = createdAutomation.json<{ id: string; triggerType: string; triggerDaysBefore: number | null }>();
+  assert.deepEqual([automation.triggerType, automation.triggerDaysBefore], ["start_date_arrives", null]);
+
+  const now = new Date("2026-05-21T12:00:00.000Z");
+  const [starting, tomorrowUtc, tomorrowWorkspaceZone, future, completed] = await db
+    .insert(cards)
+    .values([
+      { listId: f.list.id, boardId: f.board.id, title: "Starting", position: "1000.0000000000", createdById: f.user.id, startDateLocalDate: "2026-05-20", dueDateLocalDate: "2026-05-25", dueDateSlot: "anyTime", dueDateTimezone: "UTC" },
+      // The card's own due-date zone wins over the workspace zone: still 21 May in UTC.
+      { listId: f.list.id, boardId: f.board.id, title: "Tomorrow UTC", position: "2000.0000000000", createdById: f.user.id, startDateLocalDate: "2026-05-22", dueDateLocalDate: "2026-05-25", dueDateSlot: "anyTime", dueDateTimezone: "UTC" },
+      // No due-date zone: the workspace zone (UTC+14) is already on 22 May.
+      { listId: f.list.id, boardId: f.board.id, title: "Tomorrow workspace zone", position: "3000.0000000000", createdById: f.user.id, startDateLocalDate: "2026-05-22" },
+      { listId: f.list.id, boardId: f.board.id, title: "Future", position: "4000.0000000000", createdById: f.user.id, startDateLocalDate: "2026-06-20" },
+      { listId: f.list.id, boardId: f.board.id, title: "Completed", position: "5000.0000000000", createdById: f.user.id, startDateLocalDate: "2026-05-20", completedAt: new Date("2026-05-20T12:00:00.000Z") },
+    ])
+    .returning();
+  assert.ok(starting && tomorrowUtc && tomorrowWorkspaceZone && future && completed);
+
+  assert.equal(await runStartDateAutomationSweep(undefined, now), 2);
+  const commentsFor = async (cardId: string) => (await db.select({ body: comments.body }).from(comments).where(eq(comments.cardId, cardId))).map((row) => row.body);
+  assert.deepEqual(await commentsFor(starting.id), ["Started 2026-05-20"]);
+  assert.deepEqual(await commentsFor(tomorrowWorkspaceZone.id), ["Started 2026-05-22"]);
+  assert.deepEqual(await commentsFor(tomorrowUtc.id), []);
+  assert.deepEqual(await commentsFor(future.id), []);
+  assert.deepEqual(await commentsFor(completed.id), []);
+
+  // Latched: the same planned start never fires twice.
+  assert.equal(await runStartDateAutomationSweep(undefined, now), 0);
+  assert.deepEqual(await commentsFor(starting.id), ["Started 2026-05-20"]);
+
+  // A moved start is a new plan and fires again; the latch follows it.
+  await db.update(cards).set({ startDateLocalDate: "2026-05-19" }).where(eq(cards.id, starting.id));
+  assert.equal(await runStartDateAutomationSweep(undefined, now), 1);
+  assert.deepEqual(await commentsFor(starting.id), ["Started 2026-05-20", "Started 2026-05-19"]);
+  const latches = await db.select().from(automationStartDateRuns).where(and(eq(automationStartDateRuns.automationId, automation.id), eq(automationStartDateRuns.cardId, starting.id)));
+  assert.deepEqual(latches.map((row) => row.startDateLocalDate), ["2026-05-19"]);
+
+  // The day after, the UTC card's start has arrived too.
+  assert.equal(await runStartDateAutomationSweep(undefined, new Date("2026-05-22T12:00:00.000Z")), 1);
+  assert.deepEqual(await commentsFor(tomorrowUtc.id), ["Started 2026-05-22"]);
+});
+
+void test("set_due_date automation pulls the planned start back to an earlier due date", async () => {
+  const f = await setupWorkspace("owner-automation-set-due-clamps-start@example.com");
+  const [automation] = await db
+    .insert(automations)
+    .values({ workspaceId: f.workspace.id, enabled: true, position: "1000.0000000000", triggerType: "card_enters_list", triggerListId: f.list.id })
+    .returning();
+  assert.ok(automation);
+  await db.insert(automationActions).values({ automationId: automation.id, type: "set_due_date", position: "1000.0000000000", config: { offsetDays: 0, slot: "anyTime" } });
+  // Planned well after today, so "due today" lands before the start and must drag it along.
+  const [card] = await db
+    .insert(cards)
+    .values({ listId: f.list.id, boardId: f.board.id, title: "Planned", position: "1000.0000000000", createdById: f.user.id, startDateLocalDate: "2099-12-01", dueDateLocalDate: "2099-12-10", dueDateSlot: "anyTime", dueDateTimezone: "UTC" })
+    .returning();
+  assert.ok(card);
+
+  const result = await runListEntryAutomations(db, { cardId: card.id, listId: f.list.id, boardId: f.board.id, workspaceId: f.workspace.id, clientId: f.user.clientId, trigger: "create" });
+  assert.equal(result.effects.length, 1);
+  const [updated] = await db.select().from(cards).where(eq(cards.id, card.id)).limit(1);
+  assert.ok(updated?.dueDateLocalDate);
+  assert.equal(updated.startDateLocalDate, updated.dueDateLocalDate);
+  const [activity] = await db
+    .select({ payload: activityEvents.payload })
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityType, "card"), eq(activityEvents.entityId, card.id), eq(activityEvents.action, ACTIVITY_ACTION.UPDATED)))
+    .limit(1);
+  assert.equal((activity?.payload as Record<string, unknown>).startDateLocalDate, updated.dueDateLocalDate);
+});
+
+/**
+ * Failure modes: the first recheck after a deploy announces every existing conflict; a conflict
+ * fires on every edit instead of once per boundary; a critical card's slip fires without the
+ * board's finish moving, or reports the wrong projected finish; a no-op edit fires anything; the
+ * placeholders render blank. Dates sit in June 2030 (3 June is a Monday; 8 and 9 June are the weekend).
+ */
+void test("scheduling triggers fire once per boundary from the recheck sweep", async () => {
+  const f = await setupWorkspace("owner-automation-schedule-triggers@example.com");
+  for (const [triggerType, template] of [["scheduling_conflict_appears", "Conflict with {{schedule.blocker}} ({{schedule.days}}d)"], ["critical_path_slips", "Slipped {{schedule.days}} on {{card.key}}"]] as const) {
+    const created = await f.app.inject({ method: "POST", url: `/workspaces/${f.workspace.id}/automations`, headers: f.auth, payload: { enabled: true, triggerType, actions: [{ type: "post_comment", config: { template } }] } });
+    assert.equal(created.statusCode, 201, created.body);
+  }
+  const create = async (title: string, startDateLocalDate: string, dueDateLocalDate: string) => {
+    const response = await f.app.inject({ method: "POST", url: `/boards/${f.board.id}/lists/${f.list.id}/cards`, headers: f.auth, payload: { title, startDateLocalDate, dueDateLocalDate } });
+    assert.equal(response.statusCode, 201, response.body);
+    return response.json<{ id: string; key: string }>();
+  };
+  const patchDue = async (id: string, dueDateLocalDate: string) => {
+    const response = await f.app.inject({ method: "PATCH", url: `/cards/${id}`, headers: f.auth, payload: { dueDateLocalDate } });
+    assert.equal(response.statusCode, 200, response.body);
+  };
+  const commentsFor = async (cardId: string) => (await db.select({ body: comments.body }).from(comments).where(eq(comments.cardId, cardId)).orderBy(asc(comments.createdAt))).map((row) => row.body);
+  const boundaries = async () => (await db.select().from(eventOutbox).where(eq(eventOutbox.boardId, f.board.id)))
+    .flatMap((row) => ("scheduleTransition" in row.payload && row.payload.scheduleTransition ? [row.payload.scheduleTransition.name] : []));
+
+  const blocker = await create("Blocker", "2030-06-03", "2030-06-05");
+  const waiting = await create("Waiting", "2030-06-06", "2030-06-07");
+  const related = await f.app.inject({ method: "POST", url: `/cards/${blocker.id}/relations`, headers: f.auth, payload: { targetCardId: waiting.id, direction: "blocks" } });
+  assert.equal(related.statusCode, 201, related.body);
+  assert.equal((await db.select().from(scheduleRecheckQueue).where(eq(scheduleRecheckQueue.boardId, f.board.id))).length, 1, "the writes queued one recheck for the board");
+
+  // First evaluation seeds the latch without announcing anything.
+  assert.equal(await runScheduleRecheckSweep(), 1);
+  assert.deepEqual(await boundaries(), []);
+  assert.deepEqual(await commentsFor(waiting.id), []);
+  assert.equal((await db.select().from(cardScheduleState)).length, 2);
+  assert.equal((await db.select().from(boardScheduleState).where(eq(boardScheduleState.boardId, f.board.id)))[0]?.projectedFinish, "2030-06-07");
+  assert.deepEqual(await db.select().from(scheduleRecheckQueue), [], "the request was answered");
+  assert.equal(await runScheduleRecheckSweep(), 0, "nothing queued, nothing evaluated");
+
+  // The blocker now finishes on the day the waiting card starts: one conflict, and the chain's
+  // finish moves from 7 to 10 June because the blocker, which is critical, moved its own end later.
+  await patchDue(blocker.id, "2030-06-06");
+  assert.equal(await runScheduleRecheckSweep(), 1);
+  assert.deepEqual((await boundaries()).sort(), ["schedule.conflict_detected", "schedule.critical_path_slipped"]);
+  assert.deepEqual(await commentsFor(waiting.id), [`Conflict with ${blocker.key} Blocker (1d)`]);
+  assert.deepEqual(await commentsFor(blocker.id), [`Slipped 1 on ${blocker.key}`]);
+  const slipped = (await db.select().from(eventOutbox).where(eq(eventOutbox.boardId, f.board.id))).map((row) => row.payload).find((payload) => "scheduleTransition" in payload && payload.scheduleTransition?.name === "schedule.critical_path_slipped");
+  assert.ok(slipped && "scheduleTransition" in slipped && slipped.scheduleTransition?.name === "schedule.critical_path_slipped");
+  assert.deepEqual(slipped.scheduleTransition, { name: "schedule.critical_path_slipped", previousProjectedFinish: "2030-06-07", projectedFinish: "2030-06-10", days: 1, slipDays: 1 });
+
+  // Another edit that keeps the conflict and the finish fires nothing more: the boundary was
+  // already crossed, and a start moved inside the bar changes neither the end nor the chain.
+  const patched = await f.app.inject({ method: "PATCH", url: `/cards/${blocker.id}`, headers: f.auth, payload: { startDateLocalDate: "2030-06-04" } });
+  assert.equal(patched.statusCode, 200, patched.body);
+  assert.equal(await runScheduleRecheckSweep(), 1);
+  assert.equal((await boundaries()).length, 2);
+  assert.equal((await commentsFor(waiting.id)).length, 1);
+
+  // Pulling the blocker back resolves the conflict (an event, but no trigger), and nothing slips.
+  await patchDue(blocker.id, "2030-06-05");
+  assert.equal(await runScheduleRecheckSweep(), 1);
+  assert.deepEqual((await boundaries()).sort(), ["schedule.conflict_detected", "schedule.conflict_resolved", "schedule.critical_path_slipped"]);
+  assert.equal((await commentsFor(waiting.id)).length, 1);
+  assert.equal((await commentsFor(blocker.id)).length, 1);
+
+  // The same date again is a write without a schedule change.
+  await patchDue(blocker.id, "2030-06-05");
+  assert.equal(await runScheduleRecheckSweep(), 1);
+  assert.equal((await boundaries()).length, 3);
+  assert.equal((await db.select().from(automationRunStats)).reduce((sum, row) => sum + row.effectfulRunCount, 0), 2);
 });

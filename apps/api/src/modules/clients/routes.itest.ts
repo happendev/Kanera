@@ -396,7 +396,7 @@ void test("hosted mode bootstraps push messaging for existing and new organisati
   });
 });
 
-void test("hosted admins can start Stripe Checkout with persisted interval and active seat count", async () => {
+void test("hosted admins can start Stripe Checkout without changing the billed interval before payment", async () => {
   await withHostedStripe(async () => {
     const app = await buildIntegrationServer();
     const owner = await signupOwner(app, "billing-owner@example.com", "Billing Org");
@@ -420,11 +420,13 @@ void test("hosted admins can start Stripe Checkout with persisted interval and a
     let checkoutPrice: string | undefined;
     let checkoutQuantity: number | undefined;
     setStripeClientForTests({
+      subscriptions: { list: emptyStripeList },
       customers: {
         create: async () => ({ id: "cus_test" }),
       },
       checkout: {
         sessions: {
+          list: emptyStripeList,
           create: async (params: Stripe.Checkout.SessionCreateParams) => {
             checkoutPrice = typeof params.line_items?.[0]?.price === "string" ? params.line_items[0].price : undefined;
             checkoutQuantity = params.line_items?.[0]?.quantity ?? undefined;
@@ -453,7 +455,7 @@ void test("hosted admins can start Stripe Checkout with persisted interval and a
       .from(clients)
       .where(eq(clients.id, owner.user.clientId))
       .limit(1);
-    assert.equal(client?.billingInterval, "annual");
+    assert.equal(client?.billingInterval, null);
     assert.equal(client?.stripeCustomerId, "cus_test");
   });
 });
@@ -545,6 +547,12 @@ void test("billing summary and checkout reject non-admins and self-hosted billin
   }
 });
 
+function emptyStripeList() {
+  return Object.assign(Promise.resolve({ data: [] }), {
+    async *[Symbol.asyncIterator]() { yield* []; },
+  });
+}
+
 void test("checkout validates input, Stripe configuration, existing customer reuse, metadata, URLs, and missing URL", async () => {
   await withHostedStripe(async () => {
     const app = await buildIntegrationServer();
@@ -561,6 +569,7 @@ void test("checkout validates input, Stripe configuration, existing customer reu
 
     const calls: { customerCreates: number; session?: Stripe.Checkout.SessionCreateParams } = { customerCreates: 0 };
     setStripeClientForTests({
+      subscriptions: { list: emptyStripeList },
       customers: {
         create: async () => {
           calls.customerCreates += 1;
@@ -569,6 +578,7 @@ void test("checkout validates input, Stripe configuration, existing customer reu
       },
       checkout: {
         sessions: {
+          list: emptyStripeList,
           create: async (params: Stripe.Checkout.SessionCreateParams) => {
             calls.session = params;
             return { url: "https://checkout.stripe.test/reuse" };
@@ -595,7 +605,8 @@ void test("checkout validates input, Stripe configuration, existing customer reu
     assert.equal(calls.session?.cancel_url, `${env.WEB_ORIGIN}/settings/account-plan?billing=cancelled`);
 
     setStripeClientForTests({
-      checkout: { sessions: { create: async () => ({ url: null }) } },
+      subscriptions: { list: emptyStripeList },
+      checkout: { sessions: { list: emptyStripeList, create: async () => ({ url: null }) } },
     } as unknown as Stripe);
     const missingUrl = await app.inject({
       method: "POST",

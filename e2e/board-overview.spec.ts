@@ -1,7 +1,7 @@
 import { expect, test } from "./support/fixtures";
 import { boardHref, openBoard, workspaceSettingsHref } from "./support/ui";
 
-test("board overview and portfolio show card counts without health verdicts or settings", async ({ page, signIn }, testInfo) => {
+test("board overview shows card counts without health verdicts or settings", async ({ page, signIn }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem("kanera-theme", "dark"));
   await signIn(page, "amelia");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -22,15 +22,6 @@ test("board overview and portfolio show card counts without health verdicts or s
   expect(await overview.evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("board-overview.png") });
   await overview.screenshot({ path: testInfo.outputPath("board-overview.jpg"), quality: 88 });
-  await overview.getByRole("button", { name: /Portfolio/ }).click();
-  await expect(page.getByRole("columnheader", { name: "Overdue", exact: true })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Work risk", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("columnheader", { name: "In progress", exact: true })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Too long", exact: true })).toBeVisible();
-  await expect(page.locator(".portfolio-health")).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath("portfolio.png") });
-  const surface = await page.locator(".work-page").boundingBox();
-  await page.screenshot({ path: testInfo.outputPath("portfolio-summary.jpg"), quality: 88, clip: surface! });
   await page.goto(`${settingsHref}/general`);
   await expect(page.getByText("Mark cards inactive after", { exact: true })).toBeVisible();
   await expect(page.getByRole("checkbox", { name: "Show board health" })).toHaveCount(0);

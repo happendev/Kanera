@@ -4,8 +4,14 @@ import { contextDefaults, SEED_PASSWORD, users, webOrigin, type SeedUser } from 
 type LoginResult = { status: string; accessToken?: string };
 
 type Fixtures = {
-  /** Signs `page`'s context in as a seeded user through the API and lands on the app shell. */
-  signIn: (page: Page, user: SeedUser) => Promise<void>;
+  /** An empty workspace owned by this test, removed even when an assertion fails. */
+  testWorkspace: {
+    id: string; name: string; boardId: string; boardName: string;
+    lists: Map<string, string>;
+    addBoard: (name: string) => Promise<string>;
+  };
+  /** Signs in through the API and opens the destination directly, avoiding an unused Home boot. */
+  signIn: (page: Page, user: SeedUser, destination?: string) => Promise<void>;
   /**
    * A signed-in page for another seeded user, in its own browser context (closed after the test).
    * `beforeSignIn` runs on the fresh context first, for routes that must exist before the app loads.
@@ -53,6 +59,48 @@ async function login(request: APIRequestContext, user: SeedUser): Promise<string
 }
 
 export const test = base.extend<Fixtures>({
+  testWorkspace: async ({ apiAs }, use, testInfo) => {
+    const api = await apiAs("amelia");
+    // Keep fixture names independent of the test's naming counter and short credential labels.
+    const suffix = `${testInfo.testId.slice(0, 6)}-${testInfo.repeatEachIndex}`;
+    const name = `E2E owned workspace ${suffix}`;
+    const boardName = `E2E owned board ${suffix}`;
+    const created = await api.post("/api/workspaces", { data: {
+      name, initialBoard: { name: boardName, iconColor: "blue" },
+      lists: [{ name: "Backlog" }, { name: "Wishlist" }, { name: "In Progress", inProgress: true }, { name: "Done" }],
+      customFields: [], labels: [], timeZone: "UTC",
+    } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const workspace = await created.json() as { id: string; initialBoard: { id: string } };
+    try {
+      // Workspace membership alone does not grant board access. Admin roles materialize pinned
+      // board memberships; explicit memberships also make Marcus assignable, unlike an access override.
+      const members = await Promise.all((["marcus", "priya"] as const).map(async (person) => {
+        const profile = await (await apiAs(person)).get("/api/me");
+        expect(profile.ok(), await profile.text()).toBe(true);
+        return await profile.json() as { id: string };
+      }));
+      for (const user of members) {
+        const member = await api.post(`/api/workspaces/${workspace.id}/members`, { data: { userId: user.id, role: "admin" } });
+        expect(member.ok(), await member.text()).toBe(true);
+      }
+      const opened = await api.get(`/api/boards/${workspace.initialBoard.id}?includeCards=false`);
+      expect(opened.ok(), await opened.text()).toBe(true);
+      const board = await opened.json() as { lists: { id: string; name: string }[] };
+      await use({
+        id: workspace.id, name, boardId: workspace.initialBoard.id, boardName,
+        lists: new Map(board.lists.map((list) => [list.name, list.id])),
+        addBoard: async (name) => {
+          const response = await api.post(`/api/workspaces/${workspace.id}/boards`, { data: { name } });
+          expect(response.ok(), await response.text()).toBe(true);
+          return (await response.json() as { id: string }).id;
+        },
+      });
+    } finally {
+      const removed = await api.delete(`/api/workspaces/${workspace.id}`, { data: { confirmationName: name } });
+      expect(removed.ok(), await removed.text()).toBe(true);
+    }
+  },
   runtimeGuard: [
     async ({ context }, use, testInfo) => {
       const guard = new RuntimeGuard();
@@ -67,12 +115,12 @@ export const test = base.extend<Fixtures>({
   ],
 
   signIn: async ({}, use) => {
-    await use(async (page, user) => {
+    await use(async (page, user, destination = "/") => {
       // Password login through the form is covered once in auth.spec.ts. Everything else signs in
       // through the API: /auth/login is rate limited per IP, and a UI login per user per test made
       // the suite's headroom depend on how fast the machine ran it.
       await login(page.request, user);
-      await page.goto("/");
+      await page.goto(destination);
       await expect(page.locator("k-app-shell")).toBeVisible();
     });
   },
@@ -93,7 +141,10 @@ export const test = base.extend<Fixtures>({
 
   apiAs: async ({ playwright }, use) => {
     const clients: APIRequestContext[] = [];
-    await use(async (user) => {
+    // Setup calls for one user in one test share a session. Never share across tests or with
+    // browser contexts: fresh-device, refresh-cookie and logout behavior still need real logins.
+    const sessions = new Map<SeedUser, Promise<APIRequestContext>>();
+    const createClient = async (user: SeedUser) => {
       const anonymous = await playwright.request.newContext({ baseURL: webOrigin });
       clients.push(anonymous);
       const accessToken = await login(anonymous, user);
@@ -103,6 +154,14 @@ export const test = base.extend<Fixtures>({
       });
       clients.push(client);
       return client;
+    };
+    await use((user) => {
+      let session = sessions.get(user);
+      if (!session) {
+        session = createClient(user);
+        sessions.set(user, session);
+      }
+      return session;
     });
     for (const client of clients) await client.dispose();
   },

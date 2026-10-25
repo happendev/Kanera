@@ -55,7 +55,7 @@ jobs:
       - run: pnpm bundle:web:check
 
   e2e-shard:
-    name: E2E shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+    name: E2E ${{ matrix.label }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Seeded users, boards and realtime channels are shared inside a stack. Separate runners give
@@ -63,8 +63,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3]
-        shardTotal: [3]
+        include:
+          - label: shard 1/3
+            shard: 1/3
+            artifact: 1-of-3
+          - label: shard 2/3
+            shard: 2/3
+            artifact: 2-of-3
+          - label: shard 3/3
+            shard: 3/3
+            artifact: 3-of-3
+          - label: compression enabled
+            shard: ""
+            artifact: compression
     steps:
       - uses: actions/checkout@v4
 
@@ -75,6 +86,16 @@ jobs:
       - run: corepack enable
 
       - run: corepack prepare pnpm@11.23.0 --activate
+
+      - id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      # Reuse downloaded packages across the isolated runners, while still validating and
+      # installing the complete frozen lockfile in each checkout.
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: e2e-pnpm-${{ runner.os }}-${{ runner.arch }}-node24-${{ hashFiles('pnpm-lock.yaml') }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -95,12 +116,22 @@ jobs:
       - if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
-      - run: pnpm test:e2e -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+      - if: matrix.shard != ''
+        run: pnpm test:e2e
+        env:
+          KANERA_E2E_SHARD: ${{ matrix.shard }}
+
+      # The normal shards pin compression off. Exercise the opt-in handshake and payload path too,
+      # in its own parallel stack so a second startup does not extend the slowest shard.
+      - if: matrix.shard == ''
+        run: pnpm test:e2e -- realtime-compression.spec.ts --project=behavior --no-deps
+        env:
+          REALTIME_WEBSOCKET_COMPRESSION_ENABLED: "true"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: e2e-results-${{ matrix.shardIndex }}-of-${{ matrix.shardTotal }}
+          name: e2e-results-${{ matrix.artifact }}
           path: e2e/artifacts/
           if-no-files-found: ignore
           retention-days: 7

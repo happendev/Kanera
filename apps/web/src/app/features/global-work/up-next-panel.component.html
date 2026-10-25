@@ -41,6 +41,10 @@
   </button>
 </header>
 
+@if (offlineMessage(); as message) {
+  <p class="panel-offline"><i class="ti ti-wifi-off"></i>{{ message }}</p>
+}
+
 @if (error(); as message) {
   <p class="panel-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
 }
@@ -53,6 +57,7 @@
   [catalog]="catalog()"
   [boardSummariesById]="boardSummariesById()"
   [canDrag]="canDrag()"
+  [readOnly]="!canDrag()"
   [maxEntries]="maxEntries()"
   [selectedCardId]="selectedCardId()"
   [addableCards]="addableCards()"

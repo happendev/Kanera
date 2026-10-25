@@ -66,9 +66,10 @@ export const clients = pgTable(
     requireMfa: boolean("require_mfa").notNull().default(false),
     // Master switch: boards can opt out, but cannot override an organisation disabling tracking.
     inProgressEnabled: boolean("in_progress_enabled").notNull().default(true),
-    // Shows the Portfolio rollup in this organisation's web navigation. Some teams don't want a
-    // cross-board counts view, so admins can hide it; it is a navigation choice, not an access control.
-    portfolioEnabled: boolean("portfolio_enabled").notNull().default(true),
+    // Master switches for the other optional planning features (`@kanera/shared/workspace-features`):
+    // workspaces can opt out, but cannot override an organisation turning a feature off.
+    dependenciesEnabled: boolean("dependencies_enabled").notNull().default(true),
+    timelineEnabled: boolean("timeline_enabled").notNull().default(true),
     // Applies to every personal agent credential (interactive OAuth grants and personal API keys)
     // touching this organisation's data, including board guests from other organisations, because
     // the data owner decides. Workspace keys are admin-issued integrations and are not capped here.

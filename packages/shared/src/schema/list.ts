@@ -15,7 +15,7 @@ export const lists = pgTable(
     icon: text("icon").default("list"),
     color: text("color", { enum: COLOR_TOKENS }),
     // Marks the workspace's "work is actively happening" lists. Cards entering one start their
-    // time-in-progress clock when both organisation and board enable tracking
+    // time-in-progress clock when the organisation, workspace and board all enable tracking
     // (`card.in_progress_since`, maintained by database triggers).
     inProgress: boolean("in_progress").notNull().default(false),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),

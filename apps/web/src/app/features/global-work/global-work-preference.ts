@@ -30,7 +30,6 @@ export { DEFAULT_WORK_COMPLETION as DEFAULT_COMPLETION } from "@kanera/shared/wo
 export type GlobalWorkPreference = {
   definition: WorkViewDefinition;
   selectedViewId: string | null;
-  drilldownLabel: string | null;
   collapsedHistoryDayKeys?: string[];
   collapsedChecklistGroupIds?: string[];
   /**
@@ -155,7 +154,6 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
     || !WORK_DISPLAY_MODES.includes(display as WorkDisplayMode)
   ) return null;
   const completion = filters["completion"];
-  const portfolioDays = definition["portfolioDays"];
   const parsedFilters: WorkFilters = {
     q: typeof filters["q"] === "string" ? filters["q"].slice(0, 200) : "",
     assigneeIds: stringArray(filters["assigneeIds"], 100),
@@ -196,10 +194,6 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
     display: display as WorkDisplayMode,
     columns: stringArray(definition["columns"], 50),
     table: storedTablePresentation(definition["table"]),
-    portfolioDays: typeof portfolioDays === "number" && Number.isFinite(portfolioDays)
-      ? Math.max(1, Math.min(60, Math.round(portfolioDays)))
-      : 30,
-    collapsedOrganisationIds: stringArray(definition["collapsedOrganisationIds"], 20),
     collapsedWorkspaceIds: stringArray(definition["collapsedWorkspaceIds"], 100),
     collapsedSectionIds: stringArray(definition["collapsedSectionIds"], 500),
   };
@@ -227,9 +221,6 @@ export function readGlobalWorkPreference(
     return {
       definition,
       selectedViewId: typeof value["selectedViewId"] === "string" ? value["selectedViewId"] : null,
-      drilldownLabel: typeof value["drilldownLabel"] === "string"
-        ? value["drilldownLabel"].slice(0, 250)
-        : null,
       collapsedHistoryDayKeys: stringArray(value["collapsedHistoryDayKeys"], 60),
       collapsedChecklistGroupIds: stringArray(value["collapsedChecklistGroupIds"], 5),
       ...(typeof value["upNextPanelOpen"] === "boolean"
@@ -262,7 +253,6 @@ export function writeGlobalWorkPreference(
       version: GLOBAL_WORK_PREFERENCE_VERSION,
       definition,
       selectedViewId: preference.selectedViewId,
-      drilldownLabel: preference.drilldownLabel,
       collapsedHistoryDayKeys: preference.collapsedHistoryDayKeys ?? [],
       collapsedChecklistGroupIds: preference.collapsedChecklistGroupIds ?? [],
       // Tri-state, matching the read: only a real choice is stored, so "never chosen" keeps
@@ -310,20 +300,18 @@ export function sanitizeGlobalWorkDefinition(
   };
   const hasExplicitScope =
     scope.organisationIds.length > 0 || scope.workspaceIds.length > 0 || scope.boardIds.length > 0;
-  // Portfolio is a rollup lens: a summary, plus the table its metric drill-downs land in. It has no
-  // board, history, or calendar display, so a stored definition naming one falls back to the summary.
-  // The overview is per-teammate, so it only exists where there are teammates.
-  const allowedDisplays = lens === "portfolio"
-    ? new Set(["summary", "table"])
-    : lens === "team"
-      ? new Set(["board", "table", "calendar", "overview", "dependencies", "history"])
-      : new Set(["board", "table", "calendar", "dependencies", "history"]);
+  // The overview is per-teammate, so it only exists where there are teammates. The timeline exists
+  // while some board in reach has start dates and the Timeline on (a workspace feature).
+  const timelineEnabled = catalog.boards.some((board) => board.timelineEnabled);
+  const allowedDisplays = lens === "team"
+    ? new Set(["board", "table", "calendar", ...(timelineEnabled ? ["timeline"] : []), "overview", "dependencies", "history"])
+    : new Set(["board", "table", "calendar", ...(timelineEnabled ? ["timeline"] : []), "dependencies", "history"]);
   // The retired team Up next lanes display lands on its successor: the overview, whose dock now
   // curates each teammate's queue. Saved views and remembered preferences may still name it.
   const requestedDisplay = lens === "team" && definition.display === "priorities" ? "overview" : definition.display;
   const display = allowedDisplays.has(requestedDisplay)
     ? requestedDisplay
-    : lens === "portfolio" ? "summary" : lens === "team" ? "board" : "table";
+    : lens === "team" ? "board" : "table";
   const progressEnabled = catalog.boards.some((board) => board.inProgressEnabled !== false);
   const builtinTableColumns = new Set([
     "status", "board", "assignees", "due", "inProgress", "labels", "checklist", "description", "created", "updated",
@@ -396,7 +384,6 @@ export function sanitizeGlobalWorkDefinition(
       aggregateSplitBy: validSplit ? split : "none",
       collapsedGroupKeys: definition.table.collapsedGroupKeys.filter((key) => validCollapsedTableGroupKeys.has(key)),
     },
-    collapsedOrganisationIds: definition.collapsedOrganisationIds.filter((id) => organisationIds.has(id)),
     collapsedWorkspaceIds: definition.collapsedWorkspaceIds.filter((id) => workspaceIds.has(id)),
     collapsedSectionIds: definition.collapsedSectionIds.filter((id) => validSectionIds.has(id)),
   };

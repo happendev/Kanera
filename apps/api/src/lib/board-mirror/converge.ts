@@ -37,7 +37,7 @@ import { deleteExternalLinks, findExternalLink, findExternalLinks, listExternalL
 import { withSignedMedia } from "../media-keys.js";
 import { cardAttachmentUrlMap, rewriteCopiedMediaUrls } from "../copied-media-urls.js";
 import { replaceCardMentions } from "../mentions.js";
-import { clearNotificationsForCards, emitDeletedNotifications, type DeletedNotificationRef } from "../notifications.js";
+import { clearNotificationsForCards, clearNotificationsForComments, emitDeletedNotifications, type DeletedNotificationRef } from "../notifications.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { getStorageForClient, isStorageObjectMissing } from "../storage/index.js";
 import {
@@ -55,6 +55,7 @@ import { emitInternalLinksChanged, linkNeighbours } from "../internal-links.js";
 import { clearRemindersOnCompletedCards, emitClearedCardReminders } from "../card-follow.js";
 import { emitAutomationEffects, emitDependencyHandoffs, runCardBlockedAutomations, runCardUnblockedAutomations } from "../automations.js";
 import { recordBlockersCleared } from "../dependency-notifications.js";
+import { requestScheduleRecheckForCards } from "../schedule-events.js";
 import { captureUnblockedDependents, captureBlockedDependents, emitDependentsChanged, emitRelationNeighboursChanged } from "../card-relations.js";
 
 // Facets always run in this order, regardless of the array-union order on a dirty row. In
@@ -480,6 +481,8 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
         updatedAt: new Date(),
       }).where(eq(cards.id, target.id)).returning()
       : [target];
+    // A mirrored completion or archive moves the copy in or out of its board's schedule.
+    if (cardChanged && (source.completedAt?.getTime() !== target.completedAt?.getTime() || archiving || unarchiving)) await requestScheduleRecheckForCards(tx, [target.id]);
     if (description !== target.description) await replaceCardMentions({ tx, boardId: mirror.targetBoardId, cardId: target.id, source: "description", markdown: description });
     // A mirrored completion completes the destination card too, so its reminders go like a native one's.
     const clearedReminders = source.completedAt && !target.completedAt ? await clearRemindersOnCompletedCards(tx, [target.id]) : [];
@@ -633,7 +636,10 @@ async function convergeComments(mirror: BoardMirror, sourceCardId: string, targe
   const mediaUrls = await mirroredMediaUrls(mirror, sourceCardId, targetCardId);
   for (const link of links) {
     if (sourceIds.has(link.externalId)) continue;
-    await db.delete(comments).where(and(eq(comments.id, link.entityId), eq(comments.cardId, targetCardId)));
+    await db.transaction(async (tx) => {
+      await tx.delete(comments).where(and(eq(comments.id, link.entityId), eq(comments.cardId, targetCardId)));
+      await clearNotificationsForComments(tx, [link.entityId]);
+    });
     await deleteExternalLinks({ workspaceId: mirror.targetWorkspaceId, provider, externalType: "comment", externalId: link.externalId });
     await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.COMMENT_DELETED, { boardId: mirror.targetBoardId, cardId: targetCardId, commentId: link.entityId });
     await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_FEED_ITEM_DELETED, { boardId: mirror.targetBoardId, cardId: targetCardId, type: "comment", itemId: link.entityId });
@@ -1228,7 +1234,8 @@ async function syncMirrorActivities(
     const sourcePayload = sourceActivity.payload && typeof sourceActivity.payload === "object" && !Array.isArray(sourceActivity.payload)
       ? sourceActivity.payload as Record<string, unknown>
       : {};
-    const hasDueDateChange = "dueDateLocalDate" in sourcePayload || "dueDateSlot" in sourcePayload || "dueDateTimezone" in sourcePayload;
+    // The planned start is snapshotted with the due date at creation and then destination-owned.
+    const hasDueDateChange = "dueDateLocalDate" in sourcePayload || "dueDateSlot" in sourcePayload || "dueDateTimezone" in sourcePayload || "startDateLocalDate" in sourcePayload;
     const hasOtherCardChange = "title" in sourcePayload || "description" in sourcePayload;
     if (sourceActivity.action === ACTIVITY_ACTION.UPDATED && hasDueDateChange && !hasOtherCardChange) {
       await deleteMappedActivity(sourceActivity.id);
@@ -1241,6 +1248,7 @@ async function syncMirrorActivities(
       delete payload.dueDateLocalDate;
       delete payload.dueDateSlot;
       delete payload.dueDateTimezone;
+      delete payload.startDateLocalDate;
     }
     if (payload.cardId === source.id) payload.cardId = target.id;
     const fromListId = typeof payload.fromListId === "string" ? payload.fromListId : null;

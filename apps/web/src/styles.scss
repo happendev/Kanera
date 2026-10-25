@@ -28,6 +28,11 @@
 
 .k-toast-panel {
   z-index: var(--z-toast, 1100);
+  // Persistent status notices can overlap the phone's account button. Only toasts with actions
+  // need to intercept taps; passive notices must leave the navigation underneath usable.
+  &:not(:has(button, a, [tabindex])) {
+    pointer-events: none;
+  }
   // The global position strategy writes the stack offset as margin-bottom; easing it lets the
   // remaining toasts slide into place when one above or below them leaves.
   transition: margin-bottom var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1);

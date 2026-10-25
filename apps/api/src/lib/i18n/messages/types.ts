@@ -111,6 +111,9 @@ export interface EmailMessages {
     itemToday: string;
     /** Item label for another due date: "Due 24 May". */
     itemDue: (p: { date: string }) => string;
+    /** Section for cards whose planned start passed without going in progress. */
+    lateToStart: string;
+    itemPlannedStart: (p: { date: string }) => string;
   };
   weeklyAdminRecap: {
     /** Queue/inbox subject; `period` is last week's date range. */
@@ -209,6 +212,14 @@ export interface EmailMessages {
     set: (p: { to: string }) => string;
     clearedFrom: (p: { from: string }) => string;
     cleared: string;
+    /** The same email when only the planned start moved; a due-date email names a dragged start too. */
+    startSubject: string;
+    startPreheader: (p: { actor: string; card: string }) => string;
+    startHeading: string;
+    startIntro: (p: { firstName: string; actor: string }) => string;
+    startChanged: (p: { from: string; to: string }) => string;
+    startSet: (p: { to: string }) => string;
+    startClearedFrom: (p: { from: string }) => string;
   };
   cardOverdue: {
     subject: string;
@@ -546,7 +557,10 @@ export interface PushMessages {
   unblocked: { title: string; body: (p: { card: string; other: string }) => string };
   /** A blocker of an assigned or watched card was reopened, so it is blocked again; `other` is that blocker's key. */
   reblocked: { title: string; body: (p: { card: string; other: string }) => string };
+  /** `other` is the blocker's key: push bodies are built per locale, not per reader's access. */
+  scheduleConflict: { title: string; body: (p: { card: string; other: string }) => string };
   dueDateChanged: { title: string; body: (p: { actor: string; card: string }) => string };
+  startDateChanged: { title: string; body: (p: { actor: string; card: string }) => string };
   cardOverdue: { title: string; body: (p: { card: string }) => string };
   checklistItemOverdue: { title: string; body: (p: { item: string; card: string }) => string };
   /** The body is the card title. */

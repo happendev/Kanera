@@ -377,6 +377,40 @@ describe("ScratchpadService", () => {
     expect(service.notes()[0]?.content).toBe("typing right now");
   });
 
+  it("never rewrites a clean editor from a refetch that is not newer than its own save", async () => {
+    const { service, get } = setup([note(NOTE_A, { content: "before" })]);
+    service.initialise();
+    await vi.runOnlyPendingTimersAsync();
+
+    const editor = new EditorStub(NOTE_A, "before", "before");
+    service.registerEditor(editor);
+    editor.type("after");
+    service.updateContent(NOTE_A, "after");
+    await vi.advanceTimersByTimeAsync(700);
+    expect(editor.markClean).toHaveBeenCalledWith("after");
+
+    // A reconnect/foreground GET sent before the PATCH, answered after its ack: the pre-save body.
+    get.mockResolvedValueOnce([note(NOTE_A, { content: "before" })]);
+    await service.refresh();
+    // The same version again, with media URLs re-signed so the text differs from what was acked.
+    get.mockResolvedValueOnce([note(NOTE_A, {
+      content: "after ![](/media/a.png?sig=fresh)",
+      updatedAt: new Date("2026-08-01T00:00:10.000Z"),
+    })]);
+    await service.refresh();
+
+    expect(editor.replaceWithCleanMarkdown).not.toHaveBeenCalled();
+    expect(service.notes()[0]?.content).toBe("after");
+
+    // A genuinely newer body (written on another device while the socket missed it) still lands.
+    get.mockResolvedValueOnce([note(NOTE_A, {
+      content: "from my phone",
+      updatedAt: new Date("2026-08-01T00:00:20.000Z"),
+    })]);
+    await service.refresh();
+    expect(editor.replaceWithCleanMarkdown).toHaveBeenCalledWith("from my phone");
+  });
+
   it("retains the pending patch when a save fails so the next flush retries it", async () => {
     const { service, patch } = setup();
     service.initialise();

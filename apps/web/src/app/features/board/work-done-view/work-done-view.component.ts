@@ -13,7 +13,7 @@ import type {
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import type { WorkViewLens } from "@kanera/shared/schema";
 import { DEFAULT_IN_PROGRESS_ALERT_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
-import { ApiClient } from "../../../core/api/api.client";
+import { CachedViewService } from "../../../core/offline/cached-view.service";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../../shared/activity-strip.component";
 import { ToastService } from "../../../shared/toast.service";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
@@ -40,7 +40,7 @@ import { buildReportText, buildWorkDoneReport, type WorkDoneReportField, type Wo
 import { WorkDoneReportComponent } from "./work-done-report.component";
 import { readWorkDonePreferences, updateWorkDonePreferences } from "./work-done-preferences";
 import type { CardDayDigest, WorkDoneDay, WorkDoneLayout, WorkDoneRangePreset } from "./work-done.types";
-import { formatDate, formatDateRange } from "../../../shared/date-format";
+import { formatDate, formatDateRange, formatRelativeTime } from "../../../shared/date-format";
 import { icu } from "../../../core/i18n/icu";
 
 type WorkDoneList = {
@@ -148,7 +148,12 @@ function toDateInputValue(date: Date): string {
   styleUrl: "./work-done-view.component.scss",
 })
 export class WorkDoneViewComponent {
-  private readonly api = inject(ApiClient);
+  private readonly queries = inject(CachedViewService);
+  readonly cachedAt = signal<string | null>(null);
+  readonly offlineCopyLabel = computed(() => {
+    const time = this.cachedAt();
+    return time ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(time)}:time:` : "";
+  });
   private readonly toasts = inject(ToastService);
   // The board and global-work hosts provide BoardState in this view's DI scope, so
   // label/custom-field filters resolve against the same workspace catalogs the live board cards use.
@@ -159,7 +164,7 @@ export class WorkDoneViewComponent {
   readonly scope = input.required<"board" | "global">();
   readonly boardId = input<string | null>(null);
   readonly workspaceId = input<string | null>(null);
-  readonly globalLens = input<Exclude<WorkViewLens, "portfolio"> | null>(null);
+  readonly globalLens = input<WorkViewLens | null>(null);
   readonly globalScope = input<WorkScope | null>(null);
   readonly globalFilters = input<WorkFilters | null>(null);
   readonly catalogCustomFields = input<AnyCustomField[]>([]);
@@ -267,6 +272,7 @@ export class WorkDoneViewComponent {
       this.filterLabelIds();
       this.filterMemberIds();
       this.refreshVersion();
+      this.queries.online();
       void this.loadPreviousPeriod();
     });
 
@@ -282,6 +288,7 @@ export class WorkDoneViewComponent {
       this.boardFilterIds();
       this.searchQuery();
       this.refreshVersion();
+      this.queries.online();
       void this.load();
     });
 
@@ -296,6 +303,7 @@ export class WorkDoneViewComponent {
       this.boardFilterIds();
       this.searchQuery();
       this.refreshVersion();
+      this.queries.online();
       void this.loadStrip();
     });
   }
@@ -695,13 +703,18 @@ export class WorkDoneViewComponent {
     // mounted; only a new scope or filter needs a skeleton while its first response is pending.
     const refreshing = this.loadedRequestKey === requestKey;
     this.loading.set(!refreshing);
+    if (!refreshing) {
+      this.loadedRequestKey = null;
+      this.events.set([]);
+      this.loadedOnce.set(false);
+      this.cachedAt.set(null);
+    }
     this.error.set(null);
     try {
-      const response = request.body
-        ? await this.api.post<WorkDoneResponse>(request.url, request.body)
-        : await this.api.get<WorkDoneResponse>(request.url);
+      const { response, cachedAt } = await this.queries.read<WorkDoneResponse>(request);
       if (seq !== this.loadSeq) return;
       this.events.set(response.events ?? []);
+      this.cachedAt.set(cachedAt);
       this.loadedRequestKey = requestKey;
       this.loadedOnce.set(true);
     } catch {
@@ -720,9 +733,7 @@ export class WorkDoneViewComponent {
     }
     const seq = ++this.stripSeq;
     try {
-      const response = request.body
-        ? await this.api.post<WorkDoneSummaryResponse>(request.url, request.body)
-        : await this.api.get<WorkDoneSummaryResponse>(request.url);
+      const { response } = await this.queries.read<WorkDoneSummaryResponse>(request);
       if (seq !== this.stripSeq) return;
       this.stripDays.set(response.days ?? []);
     } catch {
@@ -752,9 +763,7 @@ export class WorkDoneViewComponent {
       return;
     }
     try {
-      const response = request.body
-        ? await this.api.post<WorkDoneSummaryResponse>(request.url, request.body)
-        : await this.api.get<WorkDoneSummaryResponse>(request.url);
+      const { response } = await this.queries.read<WorkDoneSummaryResponse>(request);
       if (seq !== this.previousSeq) return;
       this.previousDays.set(response.days ?? []);
     } catch {

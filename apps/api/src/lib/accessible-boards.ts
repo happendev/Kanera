@@ -14,6 +14,7 @@ import {
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
+import { featureEnabledSql } from "./workspace-features.js";
 import { isOrgAdmin } from "./access.js";
 import { effectiveMcpPolicy } from "./mcp-policy.js";
 
@@ -41,6 +42,9 @@ export type AccessibleBoard = {
   canAccessWorkspace: boolean;
   navigationOrder: number;
   inProgressEnabled: boolean;
+  /** Effective optional planning features of the board's workspace (`lib/workspace-features.ts`). */
+  dependenciesEnabled: boolean;
+  timelineEnabled: boolean;
 };
 
 type UnorderedAccessibleBoard = Omit<AccessibleBoard, "navigationOrder">;
@@ -251,7 +255,9 @@ const accessibleBoardColumns = {
   boardName: boards.name,
   boardIcon: boards.icon,
   boardIconColor: boards.iconColor,
-  inProgressEnabled: sql<boolean>`${boards.inProgressEnabled} and ${clients.inProgressEnabled}`,
+  inProgressEnabled: sql<boolean>`${boards.inProgressEnabled} and ${workspaces.inProgressEnabled} and ${clients.inProgressEnabled}`,
+  dependenciesEnabled: featureEnabledSql("dependencies"),
+  timelineEnabled: featureEnabledSql("timeline"),
 } as const;
 
 async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<AccessibleBoard[]> {
@@ -291,6 +297,8 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
       icon: row.boardIcon,
       iconColor: row.boardIconColor,
       inProgressEnabled: row.inProgressEnabled,
+      dependenciesEnabled: row.dependenciesEnabled,
+      timelineEnabled: row.timelineEnabled,
       viewerRole: auth.apiKeyScope === "read" ? "observer" : "editor",
       assignedItemsOnly: false,
       canAccessWorkspace: true,
@@ -311,7 +319,9 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
         boardName: boards.name,
         boardIcon: boards.icon,
         boardIconColor: boards.iconColor,
-        inProgressEnabled: sql<boolean>`${boards.inProgressEnabled} and ${clients.inProgressEnabled}`,
+        inProgressEnabled: sql<boolean>`${boards.inProgressEnabled} and ${workspaces.inProgressEnabled} and ${clients.inProgressEnabled}`,
+        dependenciesEnabled: featureEnabledSql("dependencies"),
+        timelineEnabled: featureEnabledSql("timeline"),
         clientRole: clientMembers.clientRole,
         clientSuspendedAt: clientMembers.suspendedAt,
         clientRemovedAt: clientMembers.removedAt,
@@ -373,6 +383,8 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
         icon: row.boardIcon,
         iconColor: row.boardIconColor,
         inProgressEnabled: row.inProgressEnabled,
+        dependenciesEnabled: row.dependenciesEnabled,
+        timelineEnabled: row.timelineEnabled,
         viewerRole: readOnly ? "observer" as const : orgAdmin ? "editor" as const : row.boardRole!,
         assignedItemsOnly: orgAdmin ? false : row.assignedItemsOnly ?? false,
         canAccessWorkspace: Boolean(row.clientRole && (orgAdmin || row.workspaceMemberId)),
@@ -452,6 +464,8 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
       icon: row.boardIcon,
       iconColor: row.boardIconColor,
       inProgressEnabled: row.inProgressEnabled,
+      dependenciesEnabled: row.dependenciesEnabled,
+      timelineEnabled: row.timelineEnabled,
       viewerRole: readOnlyCredential ? "observer" : "editor",
       assignedItemsOnly: false,
       canAccessWorkspace: true,
@@ -473,6 +487,8 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
       icon: row.boardIcon,
       iconColor: row.boardIconColor,
       inProgressEnabled: row.inProgressEnabled,
+      dependenciesEnabled: row.dependenciesEnabled,
+      timelineEnabled: row.timelineEnabled,
       viewerRole: readOnlyCredential ? "observer" : row.role,
       assignedItemsOnly: row.assignedItemsOnly,
       canAccessWorkspace: row.clientId === auth.cid && Boolean(row.workspaceMemberId),

@@ -1,8 +1,8 @@
 /**
  * Local calendar-day helpers shared by every surface that groups timestamps into days.
  *
- * Day keys are always YYYY-MM-DD in the *viewer's* zone, matching the `timeZone` the work-done and
- * portfolio queries send to the server. Grouping must never go through `toISOString()`, which is
+ * Day keys are always YYYY-MM-DD in the *viewer's* zone, matching the `timeZone` the work-done
+ * queries send to the server. Grouping must never go through `toISOString()`, which is
  * UTC: an evening event would jump to the next day for anyone east of UTC.
  */
 

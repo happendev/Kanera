@@ -43,6 +43,7 @@ import { cardAttachmentRoutes } from "./modules/cards/attachments.routes.js";
 import { attachmentUploadRoutes, uploadLinkRoutes } from "./modules/cards/upload-links.routes.js";
 import { cardRoutes } from "./modules/cards/routes.js";
 import { dependencyGraphRoutes } from "./modules/cards/dependency-graph.routes.js";
+import { scheduleRoutes } from "./modules/cards/schedule.routes.js";
 import { commentRoutes } from "./modules/comments/routes.js";
 import { customFieldRoutes } from "./modules/custom-fields/routes.js";
 import { agentRunRoutes } from "./modules/agent-runs/routes.js";
@@ -494,6 +495,8 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     // The Dependencies view's map, for agents asking what blocks a card or what a board waits on.
     // Same handler as the web app, so the walk hides cards on boards the credential cannot open.
     await api.register(dependencyGraphRoutes);
+    // The Timeline schedule (critical path, slack, conflicts) from the same engine the web app runs.
+    await api.register(scheduleRoutes);
     // Priority ("Up next") queues reuse the app routes so activity, the invalidation ping, and the
     // per-card write authorisation stay identical; the invalidation reaches connected web clients
     // through the realtime outbox like every other public API mutation.

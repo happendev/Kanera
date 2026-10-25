@@ -73,19 +73,10 @@
         <span class="nav-label" i18n="Sidebar link to the Team Cards page">Team Cards</span>
       </a>
     </div>
-    @if (showPortfolio()) {
-    <div class="nav-item-row">
-      <a class="nav-item" routerLink="/portfolio" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? text.portfolio : ''"
-        (contextmenu)="openNavContextMenu($event, { label: 'Portfolio', url: '/portfolio', canMarkAllRead: false, clearBoardSearch: false })">
-        <i class="ti ti-chart-bar"></i>
-        <span class="nav-label" i18n="Sidebar link to the Portfolio page">Portfolio</span>
-      </a>
-    </div>
-    }
 
     @if (!sidebarCollapsed()) {
     @if (hasNavBoards()) {
-    <button type="button" class="board-search" (click)="search.open()" aria-label="Find content" i18n-aria-label="Button: open search">
+    <button type="button" class="board-search" [disabled]="!online()" (click)="search.open()" aria-label="Find content" i18n-aria-label="Button: open search">
       <i class="ti ti-search"></i>
       <span i18n="Button: open search">Find content</span>
       @if (searchShortcutLabel(); as shortcutLabel) {
@@ -99,7 +90,7 @@
       <span class="offline-copy" i18n="Badge: the sidebar shows cached data while offline">Offline copy</span>
       }
       @if (isOrgAdmin()) {
-      <button class="new-ws-btn ghost icon" (click)="newWorkspace()" (contextmenu)="openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" i18n-kTooltip aria-label="New workspace" i18n-aria-label>
+      <button class="new-ws-btn ghost icon" [disabled]="!online()" (click)="newWorkspace()" (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" i18n-kTooltip aria-label="New workspace" i18n-aria-label>
         <i class="ti ti-plus"></i>
       </button>
       }
@@ -135,16 +126,16 @@
           <span class="ws-name">{{ group.workspace.name }}</span>
         </button>
         @if (canManageWorkspace(group.workspace)) {
-        <a class="ws-settings" [routerLink]="['/w', group.workspace.id, 'settings']" routerLinkActive="active" kTooltip="Workspace settings" i18n-kTooltip
-          (contextmenu)="openNavContextMenu($event, { label: group.workspace.name + ' settings', url: '/w/' + group.workspace.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
+        <a class="ws-settings" [routerLink]="online() ? ['/w', group.workspace.id, 'settings'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" routerLinkActive="active" kTooltip="Workspace settings" i18n-kTooltip
+          (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: group.workspace.name + ' settings', url: '/w/' + group.workspace.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-settings"></i>
         </a>
         }
       </div>
       } @else {
       @if (canManageWorkspace(group.workspace)) {
-      <a class="ws-icon-link" [routerLink]="['/w', group.workspace.id, 'settings']" routerLinkActive="active" [kTooltip]="group.workspace.name"
-        (contextmenu)="openNavContextMenu($event, { label: group.workspace.name + ' settings', url: '/w/' + group.workspace.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
+      <a class="ws-icon-link" [routerLink]="online() ? ['/w', group.workspace.id, 'settings'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" routerLinkActive="active" [kTooltip]="group.workspace.name"
+        (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: group.workspace.name + ' settings', url: '/w/' + group.workspace.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
         <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="workspaceIconColor(group.workspace.id)"></i>
       </a>
       } @else {
@@ -244,7 +235,7 @@
     <div class="section-label">
       <span i18n="Sidebar section heading: standalone boards">Boards</span>
       @if (isOrgAdmin()) {
-      <button class="new-board-btn ghost icon" (click)="newStandaloneBoard()" kTooltip="New standalone board" i18n-kTooltip aria-label="New standalone board" i18n-aria-label>
+      <button class="new-board-btn ghost icon" [disabled]="!online()" (click)="newStandaloneBoard()" kTooltip="New standalone board" i18n-kTooltip aria-label="New standalone board" i18n-aria-label>
         <i class="ti ti-plus"></i>
       </button>
       }
@@ -302,8 +293,8 @@
             }
           </a>
           @if (canManageWorkspace(item.homeGroup.workspace) && !isPlanDisabled(board)) {
-          <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings" i18n-kTooltip [attr.aria-label]="boardSettingsLabel(board.name)"
-            (contextmenu)="openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
+          <a class="ws-settings" [routerLink]="online() ? ['/b', board.id, 'settings'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" routerLinkActive="active" kTooltip="Board settings" i18n-kTooltip [attr.aria-label]="boardSettingsLabel(board.name)"
+            (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
             <i class="ti ti-settings"></i>
           </a>
           }
@@ -330,8 +321,8 @@
           }
         </a>
         @if (canManageWorkspace(item.homeGroup.workspace) && !isPlanDisabled(board)) {
-        <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings" i18n-kTooltip [attr.aria-label]="boardSettingsLabel(board.name)"
-          (contextmenu)="openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
+        <a class="ws-settings" [routerLink]="online() ? ['/b', board.id, 'settings'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" routerLinkActive="active" kTooltip="Board settings" i18n-kTooltip [attr.aria-label]="boardSettingsLabel(board.name)"
+          (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-settings"></i>
         </a>
         }
@@ -437,7 +428,7 @@
     }
 
     @if (sidebarCollapsed() && isOrgAdmin()) {
-    <button class="new-ws-icon ghost icon" (click)="newWorkspace()" (contextmenu)="openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" i18n-kTooltip aria-label="New workspace" i18n-aria-label>
+    <button class="new-ws-icon ghost icon" [disabled]="!online()" (click)="newWorkspace()" (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" i18n-kTooltip aria-label="New workspace" i18n-aria-label>
       <i class="ti ti-plus"></i>
     </button>
     }
@@ -505,12 +496,12 @@
            ring goes to it on home (bringing it back if hidden), the × removes it for good. Two sibling items rather than a button inside a button, so
            both stay reachable with the menu's arrow keys. -->
       <div class="popover-group getting-started-menu" role="group" aria-label="Getting started" i18n-aria-label="Account menu group: the getting started checklist">
-        <button type="button" class="k-menu-item popover-item getting-started-open" (click)="reopenGettingStarted()" role="menuitem" [attr.aria-label]="gettingStartedMenuLabel()">
+        <button type="button" class="k-menu-item popover-item getting-started-open" [disabled]="!online()" (click)="reopenGettingStarted()" role="menuitem" [attr.aria-label]="gettingStartedMenuLabel()">
           <span class="getting-started-ring" [style.--gs-progress]="progress.percent" aria-hidden="true"></span>
           <span class="getting-started-name" i18n="Account menu item: open the getting started checklist on home">Getting started</span>
           <span class="getting-started-count" aria-hidden="true">{{ progress.done }}/{{ progress.total }}</span>
         </button>
-        <button type="button" class="k-menu-item popover-item getting-started-remove" (click)="removeGettingStarted()" role="menuitem"
+        <button type="button" class="k-menu-item popover-item getting-started-remove" [disabled]="!online()" (click)="removeGettingStarted()" role="menuitem"
           aria-label="Remove getting started" i18n-aria-label="Account menu button: remove the getting started checklist for good" kTooltip="Remove for good" i18n-kTooltip="Tooltip: remove the getting started checklist for good">
           <i class="ti ti-x"></i>
         </button>
@@ -524,7 +515,7 @@
            keeps the account menu open while the submenu is up. -->
       <div class="popover-group organisation-switcher" role="group" aria-label="Organisation" i18n-aria-label="Menu group">
         <button #organisationMenuTrigger type="button" class="k-menu-item popover-item organisation-trigger" [class.active]="organisationMenuOpen()"
-          [attr.aria-expanded]="organisationMenuOpen()" (click)="toggleOrganisationMenu()" role="menuitem">
+          [attr.aria-expanded]="organisationMenuOpen()" [disabled]="!online()" (click)="toggleOrganisationMenu()" role="menuitem">
           @if (activeOrganisation()?.logoUrl) {
           <img class="organisation-avatar" [ngSrc]="activeOrganisation()!.logoUrl!" [alt]="activeOrganisation()!.name" width="24" height="24" />
           } @else {
@@ -552,7 +543,7 @@
           @for (organisation of organisations(); track organisation.clientId) {
           <button type="button" class="k-menu-item popover-item organisation-item"
             [class.active]="organisation.clientId === activeClientId()"
-            [disabled]="!!switchingOrganisationId()"
+            [disabled]="!online() || !!switchingOrganisationId()"
             (click)="switchOrganisation(organisation.clientId)" role="menuitem">
             @if (organisation.logoUrl) {
             <img class="organisation-avatar" [ngSrc]="organisation.logoUrl" [alt]="organisation.name" width="24" height="24" />
@@ -568,11 +559,11 @@
           </button>
           }
           <div class="organisation-actions">
-            <button type="button" class="k-menu-item popover-item organisation-action" [disabled]="!!switchingOrganisationId()" (click)="createOrganisation()" role="menuitem">
+            <button type="button" class="k-menu-item popover-item organisation-action" [disabled]="!online() || !!switchingOrganisationId()" (click)="createOrganisation()" role="menuitem">
               <i class="ti ti-building-plus"></i>
               <span i18n="Menu item">Create organisation</span>
             </button>
-            <button type="button" class="k-menu-item popover-item organisation-action" (click)="joinOrganisation()" role="menuitem">
+            <button type="button" class="k-menu-item popover-item organisation-action" [disabled]="!online()" (click)="joinOrganisation()" role="menuitem">
               <i class="ti ti-link-plus"></i>
               <span i18n="Menu item">Join organisation</span>
             </button>
@@ -583,11 +574,11 @@
       }
       <div class="popover-group" role="group" aria-label="Account" i18n-aria-label="Account menu group">
         <div class="k-menu-heading popover-group-label" aria-hidden="true" i18n="Account menu group heading">Account</div>
-        <a class="k-menu-item popover-item" routerLink="/settings" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [routerLink]="online() ? '/settings' : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" (click)="online() && closeUserMenu()" role="menuitem">
           <i class="ti ti-user-circle"></i>
           <span i18n="Menu item">Profile settings</span>
         </a>
-        <a class="k-menu-item popover-item" [routerLink]="['/settings', 'notifications']" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [routerLink]="online() ? ['/settings', 'notifications'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" (click)="online() && closeUserMenu()" role="menuitem">
           <i class="ti ti-bell"></i>
           <span i18n="Menu item: notification settings">Notifications</span>
         </a>
@@ -595,17 +586,17 @@
       @if (isOrgAdmin()) {
       <div class="popover-group" role="group" aria-label="Administration" i18n-aria-label="Account menu group">
         <div class="k-menu-heading popover-group-label" aria-hidden="true" i18n="Account menu group heading">Administration</div>
-        <a class="k-menu-item popover-item" [routerLink]="['/settings', 'users']" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [routerLink]="online() ? ['/settings', 'users'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" (click)="online() && closeUserMenu()" role="menuitem">
           <i class="ti ti-users"></i>
           <span i18n="Menu item">Manage users</span>
         </a>
         @if (isHosted()) {
-        <a class="k-menu-item popover-item" [routerLink]="['/settings', 'account-plan']" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [routerLink]="online() ? ['/settings', 'account-plan'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" (click)="online() && closeUserMenu()" role="menuitem">
           <i class="ti ti-credit-card"></i>
           <span i18n="Menu item: billing plan">Account plan</span>
         </a>
         }
-        <a class="k-menu-item popover-item" [routerLink]="['/settings', 'org']" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [routerLink]="online() ? ['/settings', 'org'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" (click)="online() && closeUserMenu()" role="menuitem">
           <i class="ti ti-building-skyscraper"></i>
           <span i18n="Menu item">Organisation settings</span>
         </a>
@@ -615,18 +606,18 @@
       <div class="popover-group" role="group" aria-label="Support and session" i18n-aria-label="Account menu group">
         @if (!pwaInstall.installed()) {
         @if (pwaInstall.canPrompt()) {
-        <button type="button" class="k-menu-item popover-item" (click)="installKanera()" role="menuitem">
+        <button type="button" class="k-menu-item popover-item" [disabled]="!online()" (click)="installKanera()" role="menuitem">
           <i class="ti ti-device-mobile-plus"></i>
           <span i18n="Menu item: install the app">Install Kanera</span>
         </button>
         } @else {
-        <a class="k-menu-item popover-item" [href]="installGuideUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [attr.href]="online() ? installGuideUrl : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" target="_blank" rel="noopener noreferrer" (click)="online() && closeUserMenu()" role="menuitem">
           <i class="ti ti-device-mobile-plus"></i>
           <span i18n="Menu item: link to install instructions">How to install Kanera</span>
         </a>
         }
         }
-        <a class="k-menu-item popover-item" [href]="docsUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [attr.href]="online() ? docsUrl : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" target="_blank" rel="noopener noreferrer" (click)="online() && closeUserMenu()" role="menuitem">
           <i class="ti ti-help-circle"></i>
           <span i18n="Menu item: link to documentation">Help &amp; docs</span>
         </a>

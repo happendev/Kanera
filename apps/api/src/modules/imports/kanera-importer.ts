@@ -30,6 +30,7 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { TxOnly as Tx } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
 import { allocateCardKeys } from "../../lib/card-keys.js";
+import { clampStartToDue } from "../../lib/due-date.js";
 import { env } from "../../env.js";
 import { badRequest } from "../../lib/errors.js";
 import { parseMediaReference, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
@@ -40,6 +41,7 @@ import type { StorageProvider } from "../../lib/storage/index.js";
 import { cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { assertBoardLimit } from "../../lib/tier-limits.js";
 import { insertMany, mapWithConcurrency, toWireImportedCard } from "./shared.js";
+import { requestScheduleRecheckForBoards } from "../../lib/schedule-events.js";
 
 
 // Attachment copy is network-bound (download from the source export, upload to storage). The
@@ -454,6 +456,9 @@ export async function runKaneraBoardImport(tx: Tx, args: { locale?: Locale; sour
       dueDateLocalDate: card.dueDateLocalDate,
       dueDateSlot: card.dueDateSlot,
       dueDateTimezone: card.dueDateTimezone,
+      // Exports written before the planned start existed carry no column for it; a hand-edited
+      // archive may put the start after the due date, which the card invariant forbids.
+      startDateLocalDate: clampStartToDue(card.startDateLocalDate ?? null, card.dueDateLocalDate),
       completedAt: toDate(card.completedAt),
       archivedAt: toDate(card.archivedAt),
       // Time in progress is restored, not restarted. card_track_in_progress keeps the running start
@@ -469,6 +474,8 @@ export async function runKaneraBoardImport(tx: Tx, args: { locale?: Locale; sour
     };
   });
   const insertedCards = await insertMany<typeof cardRows[number], Card>(tx, cards, cardRows);
+  // Imported bars join the board's schedule in one go; one recheck per board covers the batch.
+  await requestScheduleRecheckForBoards(tx, insertedCards.filter((card) => card.dueDateLocalDate || card.startDateLocalDate).map((card) => card.boardId));
   const cardIdBySourceId = new Map<string, string>();
   insertedCards.forEach((card, index) => cardIdBySourceId.set(importCards[index]!.id, card.id));
 

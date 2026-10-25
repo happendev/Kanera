@@ -1,9 +1,27 @@
-import type { ElementRef, OnDestroy } from "@angular/core";
+import type { AfterViewInit, ElementRef, OnDestroy } from "@angular/core";
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal, viewChild } from "@angular/core";
 import { PanelStackService } from "./panel-stack.service";
 
 /** Per-instance so `aria-controls` still resolves if a page ever renders two toolbars. */
 let nextControlsId = 0;
+
+/**
+ * The search field's desktop width, mirrored from `--pt-search-width` in page-toolbar.component.scss.
+ * The fit check counts this rather than the field's measured width, which is smaller whenever the
+ * field is already giving way on an overfull row.
+ */
+const SEARCH_WIDTH = 340;
+/** `$bp-collapse` from _breakpoints.scss, where the controls fold behind the ⚙. */
+const COLLAPSED_QUERY = "(max-width: 1024px)";
+/** The `.pt-main` flex gap (`--space-2`). */
+const ROW_GAP = 8;
+/**
+ * Spare width `is-roomy` keeps in hand beyond the exact fit: one row gap, so a switch that only just
+ * fits is not pressed against Filter, and no more — labels show whenever there is room for them.
+ */
+const ROOMY_SLACK = 8;
+/** What revealing one auto label adds beyond its text: its margin and the wider segment padding. */
+const AUTO_LABEL_CHROME = 6 + 2 * 4;
 
 /**
  * The app's one page toolbar — row 2 of the canonical page chrome, and purely the query bar.
@@ -41,8 +59,8 @@ let nextControlsId = 0;
         Search and the controls wrap inside their own box so the tail is never the item that gets
         pushed onto a line of its own. See .pt-main in the stylesheet.
       -->
-      <div class="pt-main">
-        <div class="pt-search">
+      <div class="pt-main" #main>
+        <div class="pt-search" #search>
           <ng-content select="[ptSearch]" />
         </div>
 
@@ -77,8 +95,11 @@ let nextControlsId = 0;
     </div>
   `,
   styleUrl: "./page-toolbar.component.scss",
+  host: {
+    "[class.is-roomy]": "roomy()",
+  },
 })
-export class PageToolbarComponent implements OnDestroy {
+export class PageToolbarComponent implements AfterViewInit, OnDestroy {
   /**
    * Accents the `⚙`. This is the only signal a phone user gets that filters are hiding rows behind a
    * collapsed panel, so it must be true whenever *any* control inside `[ptControls]` is away from
@@ -96,9 +117,23 @@ export class PageToolbarComponent implements OnDestroy {
   private readonly panelStack = inject(PanelStackService);
   private readonly controlsBody = viewChild<ElementRef<HTMLElement>>("controlsBody");
   private readonly compactTrigger = viewChild<ElementRef<HTMLElement>>("compactTrigger");
+  private readonly mainRef = viewChild.required<ElementRef<HTMLElement>>("main");
+  private readonly searchRef = viewChild.required<ElementRef<HTMLElement>>("search");
   private unregister: (() => void) | null = null;
+  private resizeObserver: ResizeObserver | null = null;
+  private mutationObserver: MutationObserver | null = null;
 
   protected readonly open = signal(false);
+
+  /**
+   * The query row has room for a search-slot switch's labels (a layout or grouping `k-segmented`
+   * with `autoLabels`) beside a full-width search field and every control.
+   *
+   * Measured rather than read off the slot's width, because the slot used to flex to make room for
+   * the switch, and so the search field came out a different width in every view that had one.
+   * Now the field is the same fixed width everywhere and the switch's labels are what give way.
+   */
+  protected readonly roomy = signal(false);
 
   constructor() {
     effect(() => {
@@ -125,9 +160,79 @@ export class PageToolbarComponent implements OnDestroy {
     });
   }
 
+  ngAfterViewInit(): void {
+    // Absent under the unit-test DOM, where layout is not real anyway; switches stay icon-only.
+    if (typeof ResizeObserver === "undefined") return;
+
+    const main = this.mainRef().nativeElement;
+    const controls = this.controlsBody()?.nativeElement;
+    // The row changes with the window and the sidebar (main), with the view's switch (search), and
+    // with a control relabelling itself or a view swapping its controls (each projected group).
+    this.resizeObserver = new ResizeObserver(() => this.measureRoom());
+    const observeAll = () => {
+      this.resizeObserver?.disconnect();
+      this.resizeObserver?.observe(main);
+      this.resizeObserver?.observe(this.searchRef().nativeElement);
+      for (const child of controls?.children ?? []) this.resizeObserver?.observe(child);
+    };
+    observeAll();
+    // A view swapping its switch or its controls is a DOM change that need not resize anything the
+    // ResizeObserver is watching (the slot can end the same width), so it re-measures here too.
+    if (typeof MutationObserver !== "undefined") {
+      this.mutationObserver = new MutationObserver(() => {
+        observeAll();
+        this.measureRoom();
+      });
+      this.mutationObserver.observe(this.searchRef().nativeElement, { childList: true, subtree: true });
+      if (controls) this.mutationObserver.observe(controls, { childList: true });
+    }
+    this.measureRoom();
+  }
+
   ngOnDestroy(): void {
     this.unregister?.();
     this.unregister = null;
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.mutationObserver?.disconnect();
+    this.mutationObserver = null;
+  }
+
+  /**
+   * Sums the row as if it were one line, wrapped or not. The labels' cost is subtracted back out
+   * while they show (scrollWidth is their natural width collapsed or revealed), so the measurement is
+   * the same in both states and the decision cannot oscillate at one width.
+   */
+  private measureRoom(): void {
+    const main = this.mainRef().nativeElement;
+    const search = this.searchRef().nativeElement;
+    // Detached, or in a hidden route: keep the last decision rather than collapsing on zero.
+    if (main.clientWidth === 0) return;
+    // Collapsed, the switch has a row of its own and measures it itself (k-segmented fill mode), so
+    // the row check does not apply.
+    if (window.matchMedia(COLLAPSED_QUERY).matches) {
+      this.roomy.set(false);
+      return;
+    }
+
+    let labelsWidth = 0;
+    for (const label of search.querySelectorAll<HTMLElement>(".sg-auto-label")) {
+      labelsWidth += label.scrollWidth + AUTO_LABEL_CHROME;
+    }
+    if (labelsWidth === 0) {
+      this.roomy.set(false);
+      return;
+    }
+
+    const field = search.querySelector<HTMLElement>("k-search-field");
+    let need = search.offsetWidth - (field ? field.offsetWidth - SEARCH_WIDTH : 0);
+    for (const child of this.controlsBody()?.nativeElement.children ?? []) {
+      const width = (child as HTMLElement).offsetWidth;
+      if (width > 0) need += ROW_GAP + width;
+    }
+    if (this.roomy()) need -= labelsWidth;
+
+    this.roomy.set(need + labelsWidth + ROOMY_SLACK <= main.clientWidth);
   }
 
   /**

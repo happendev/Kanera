@@ -1,3 +1,4 @@
+import { featuresFromColumns, workspaceFeatureColumns } from "../../lib/workspace-features.js";
 import { runCardUnblockedAutomations, emitAutomationEffects } from "../../lib/automations.js";
 import { recordBlockersCleared, notifyDependencyHandoffs } from "../../lib/dependency-notifications.js";
 import { clearNotificationsForScope } from "../../lib/notifications.js";
@@ -46,6 +47,7 @@ import { emitBoardRebalancedToVisibleUsers, emitCardPriorityInvalidated, emitToB
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 import { escapedSearchPattern } from "../../lib/search-pattern.js";
 import { captureBlockedDependents, emitBlockedByCountChanged, emitRelationNeighboursChanged, lockWorkspaceRelations, relationNeighbourIds } from "../../lib/card-relations.js";
+import { requestScheduleRecheckForCards } from "../../lib/schedule-events.js";
 
 type BoardMemberUser = {
   userId: string;
@@ -109,6 +111,7 @@ async function boardPayload(
         plan: clients.plan,
         billingStatus: clients.billingStatus,
       },
+      featureColumns: workspaceFeatureColumns,
     })
     .from(boards)
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
@@ -117,6 +120,7 @@ async function boardPayload(
     .limit(1);
   if (!context) throw notFound();
   const { board, workspace } = context;
+  const features = featuresFromColumns(context.featureColumns);
 
   const [boardLists, boardCardSummaries, boardSeparatorsRows, boardCustomFields, boardMemberRows, boardLabels, checklistTemplates, participatingMirrors, workspaceCardKeyPrefixRows] = await Promise.all([
     db
@@ -215,7 +219,7 @@ async function boardPayload(
     ? hydratedCardSummaries
     : hydratedCardSummaries.slice(0, cardQuery.limit);
 
-  return { board, organisationInProgressEnabled: workspace.inProgressEnabled, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceInactiveCardsDays: workspace.inactiveCardsDays, workspaceInProgressAlertDays: workspace.inProgressAlertDays, workspaceTimeZone: workspace.timeZone, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, notesEnabled: workspace.notesEnabled, boardSyncAllowed: hasBoardSyncEntitlement(workspace.plan, workspace.billingStatus), hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
+  return { board, organisationInProgressEnabled: workspace.inProgressEnabled, features, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceInactiveCardsDays: workspace.inactiveCardsDays, workspaceInProgressAlertDays: workspace.inProgressAlertDays, workspaceTimeZone: workspace.timeZone, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, notesEnabled: workspace.notesEnabled, boardSyncAllowed: hasBoardSyncEntitlement(workspace.plan, workspace.billingStatus), hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
@@ -882,6 +886,9 @@ export async function boardRoutes(app: FastifyInstance) {
       const survivingDependents = [...new Set(before.map((row) => row.dependentId))].filter((cardId) => !boardCardIds.has(cardId));
       // Every surviving related card loses a row from its Dependencies section.
       const neighbours = await relationNeighbourIds(tx, [...boardCardIds]);
+      // Boards chained into this one lose blockers in the cascade; the queue row for this board
+      // itself cascades away with it, which is right: there is nothing left to evaluate.
+      await requestScheduleRecheckForCards(tx, [...boardCardIds]);
       await clearNotificationsForScope(tx, { boardId: id });
       await tx.delete(boards).where(eq(boards.id, id));
       const handoffs = await recordBlockersCleared(tx, { before, actorId: req.auth.sub });

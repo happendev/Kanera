@@ -20,6 +20,7 @@ function card(id: string, boardId: string, listId = "list-1"): WireCardSummary {
     title: id,
     position: "1000.0000000000",
     dueDateLocalDate: null,
+    startDateLocalDate: null,
     dueDateSlot: null,
     dueDateTimezone: null,
     completedAt: null,

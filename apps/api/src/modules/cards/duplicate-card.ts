@@ -44,6 +44,7 @@ import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { toWireCard } from "../../lib/wire-card.js";
+import { requestScheduleRecheckForBoards } from "../../lib/schedule-events.js";
 import { ensureBoardMembershipForUsers, shouldAutoWatchAuthoredCards } from "../../lib/card-assignment.js";
 import { loadChecklistsForCard } from "../../lib/checklist-rows.js";
 
@@ -645,12 +646,15 @@ export async function duplicateCardInto({
           dueDateLocalDate: source.dueDateLocalDate,
           dueDateSlot: source.dueDateSlot,
           dueDateTimezone: source.dueDateTimezone,
+          startDateLocalDate: source.startDateLocalDate,
           ...(includeLifecycleState && { completedAt: source.completedAt }),
           ...(includeArchivedState && { archivedAt: source.archivedAt }),
           position,
           createdById: actor.sub,
         })
         .returning();
+      // Relations are not copied, so only a dated copy adds a bar to the destination's schedule.
+      if (inserted!.dueDateLocalDate || inserted!.startDateLocalDate) await requestScheduleRecheckForBoards(tx, [targetBoardId]);
 
       await replaceCardMentions({
         tx,

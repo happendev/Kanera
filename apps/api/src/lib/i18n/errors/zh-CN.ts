@@ -140,6 +140,8 @@ export const zhCN: ErrorCatalog = {
   "custom field trigger user is not a workspace member": "自定义字段触发器用户不是工作区成员",
   "custom field trigger value does not match field type": "自定义字段触发器值与字段类型不匹配",
   "delivery not found": "未找到交货",
+  "dependencies are disabled for this workspace":
+    "此工作区已停用依赖关系",
   "destination credentials are required": "需要目的地凭据",
   "email already registered": "电子邮件已注册",
   "email not found": "找不到电子邮件",
@@ -293,6 +295,8 @@ export const zhCN: ErrorCatalog = {
   "standalone board configuration must contain exactly one board": "独立看板配置必须仅包含一块看板",
   "standalone board import target not found": "找不到独立看板导入目标",
   "standalone boards cannot contain another board": "独立看板不能包含另一个看板",
+  "start dates and the timeline are disabled for this workspace":
+    "此工作区已停用开始日期和时间线",
   "storage is configured by environment variables": "存储由环境变量配置",
   "storage is configured by the hosted deployment": "存储由托管部署配置",
   "storageConfig required": "需要存储配置",
@@ -326,9 +330,15 @@ export const zhCN: ErrorCatalog = {
   "this board mirror already exists": "该看板镜像像已存在",
   "this guest must subscribe to an assigned card": "该访客必须订阅指定的卡片",
   "this invitation was sent to a different email address": "此邀请已发送至其他电子邮件地址",
+  "time in progress is disabled for this workspace":
+    "此工作区已停用进行中时长",
   "too many attempts; request a new code": "尝试次数过多；请求新代码",
   "triggerCustomFieldId and triggerCustomFieldValue are required": "触发器自定义字段 ID 和触发器自定义字段值 是必需的",
   "triggerDaysBefore is required": "需要触发DaysBefore",
+  "in-progress limit field must be a number field": "进行中时长的上限字段必须是数字字段",
+  "triggerCustomFieldId is required": "triggerCustomFieldId 为必填项",
+  "triggerThresholdAmount is required": "triggerThresholdAmount 为必填项",
+  "triggerThresholdUnit is required": "triggerThresholdUnit 为必填项",
   "triggerLabelId is required": "触发器标签 ID 为必填项",
   "triggerListId is required": "触发器列表 ID 为必填项",
   "triggerUserIds is required": "触发用户 ID 为必填项",

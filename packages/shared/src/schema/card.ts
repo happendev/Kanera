@@ -38,6 +38,12 @@ export const cards = pgTable(
     dueDateLocalDate: date("due_date_local_date", { mode: "string" }),
     dueDateSlot: text("due_date_slot", { enum: CARD_DUE_DATE_SLOTS }),
     dueDateTimezone: text("due_date_timezone"),
+    // Planned start, as a calendar date with no time of day. The Timeline view draws a card as a bar
+    // from here to its due date and the scheduling engine measures durations between the two, so
+    // the API never lets a start land after the due date: an explicit later start is rejected and a
+    // due date moved before the start pulls the start with it (see apps/api/src/lib/due-date.ts).
+    // A card with a due date and no start is a point in time, as every card was before this column.
+    startDateLocalDate: date("start_date_local_date", { mode: "string" }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     // Time in progress is tracked as finished stints plus the running one, both owned by the
     // `card_track_in_progress` / `list_backfill_in_progress` triggers so every write path (app,
@@ -73,6 +79,7 @@ export const cards = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("cards_start_before_due_ck", sql`${t.startDateLocalDate} is null or ${t.dueDateLocalDate} is null or ${t.startDateLocalDate} <= ${t.dueDateLocalDate}`),
     check("cards_due_date_slot_ck", valueIn(t.dueDateSlot, CARD_DUE_DATE_SLOTS)),
     check("cards_number_ck", sql`${t.number} > 0`),
     check("cards_in_progress_seconds_ck", sql`${t.inProgressSeconds} >= 0`),
@@ -109,6 +116,11 @@ export const cards = pgTable(
     index("cards_active_incomplete_due_date_idx")
       .on(t.dueDateLocalDate, t.id)
       .where(sql`${t.dueDateLocalDate} is not null and ${t.completedAt} is null and ${t.archivedAt} is null`),
+    // The start_date_arrives automation sweep pages open cards by planned start, as the due-date
+    // sweeps do above.
+    index("cards_active_incomplete_start_date_idx")
+      .on(t.startDateLocalDate, t.id)
+      .where(sql`${t.startDateLocalDate} is not null and ${t.completedAt} is null and ${t.archivedAt} is null`),
     // Inactivity automations page candidates by the canonical card-activity clock.
     index("cards_active_incomplete_updated_at_idx")
       .on(t.updatedAt, t.id)

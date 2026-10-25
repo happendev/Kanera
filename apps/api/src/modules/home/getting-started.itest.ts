@@ -61,8 +61,9 @@ test("members get only the personal steps; admins get the team steps and the wor
   try {
     const member = await load(f, f.memberToken);
     assert.deepEqual(Object.keys(stepState(member)), [
-      "createCard", "assignCard", "comment", "mention", "addDependency", "completeCard",
-      "quickEdit", "useFilter", "commandPalette", "viewWorkDone", "scratchpad", "saveNote", "connectAgent", "useAgent",
+      "createCard", "assignCard", "comment", "mention", "completeCard",
+      "quickEdit", "useFilter", "commandPalette", "viewWorkDone", "groupTable", "totalColumn", "exportExcel",
+      "addDependency", "setStartDate", "viewTimeline", "scratchpad", "saveNote", "connectAgent", "useAgent",
     ]);
     assert.equal(member.notesWorkspaceId, f.workspace.id);
     assert.equal(member.teamTarget, null);
@@ -74,12 +75,17 @@ test("members get only the personal steps; admins get the team steps and the wor
       assignCard: false,
       comment: false,
       mention: false,
-      addDependency: false,
       completeCard: false,
       quickEdit: false,
       useFilter: false,
       commandPalette: false,
       viewWorkDone: false,
+      groupTable: false,
+      totalColumn: false,
+      exportExcel: false,
+      addDependency: false,
+      setStartDate: false,
+      viewTimeline: false,
       scratchpad: false,
       saveNote: false,
       inviteTeam: true,
@@ -112,12 +118,17 @@ test("steps tick themselves off from the rows each step creates", async () => {
       assignCard: false,
       comment: false,
       mention: false,
-      addDependency: false,
       completeCard: false,
       quickEdit: false,
       useFilter: false,
       commandPalette: false,
       viewWorkDone: false,
+      groupTable: false,
+      totalColumn: false,
+      exportExcel: false,
+      addDependency: false,
+      setStartDate: false,
+      viewTimeline: false,
       scratchpad: false,
       saveNote: false,
       inviteTeam: true,
@@ -291,6 +302,12 @@ test("the palette stamp and dismissal are one-way and personal, and hiding toggl
     // The first stamp is kept, and a second step adds to the map rather than replacing it.
     assert.equal(second!.used.commandPalette, first!.used.commandPalette);
     assert.ok(second!.used.quickEdit);
+    // The Table view's steps leave only browser preferences or a download, so they are stamped too.
+    for (const used of ["groupTable", "totalColumn", "exportExcel"] as const) {
+      const tableStep = await patch({ used });
+      assert.equal(tableStep.statusCode, 200, tableStep.body);
+      assert.equal(stepState(tableStep.json<HomeGettingStartedResponse>())[used], true);
+    }
     // Only steps with no trace of their own can be stamped.
     assert.equal((await patch({ used: "createCard" })).statusCode, 400);
 
@@ -304,7 +321,7 @@ test("the palette stamp and dismissal are one-way and personal, and hiding toggl
     assert.equal((await patch({ hidden: false })).json<HomeGettingStartedResponse>().hidden, false);
 
     const closed = await patch({ dismissed: true });
-    assert.deepEqual(closed.json(), { dismissed: true, hidden: false, steps: [], teamTarget: null, notesWorkspaceId: null });
+    assert.deepEqual(closed.json(), { dismissed: true, hidden: false, steps: [], teamTarget: null, notesWorkspaceId: null, timelineBoardId: null });
     assert.equal((await load(f, f.memberToken)).dismissed, false);
   } finally {
     await f.app.close();

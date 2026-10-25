@@ -343,6 +343,9 @@
               @case ('due_date_arrives') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs once per card on the day its due date arrives, on this board.} other {Runs once per card on the day its due date arrives, on every board in this workspace.} }</ng-container></p>
               }
+              @case ('start_date_arrives') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs once per card on the day its planned start date arrives, on this board.} other {Runs once per card on the day its planned start date arrives, on every board in this workspace.} }</ng-container></p>
+              }
               @case ('due_date_approaching') {
                 <label class="ac-field">
                   <span class="ac-field-label" i18n>Days before due date</span>
@@ -395,11 +398,71 @@
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs when a card reaches the inactivity period, on this board. New card activity resets the period.} other {Runs when a card reaches the inactivity period, on every board in this workspace. New card activity resets the period.} }</ng-container></p>
               }
               @case ('card_in_progress_too_long') {
+                @let thresholdSource = settings.automationThresholdSource(automation);
+                @let thresholdUnit = settings.automationThresholdUnit(automation);
+                <label class="ac-field">
+                  <span class="ac-field-label" i18n="Field label - where an in-progress automation takes its time limit from">Limit</span>
+                  <select (change)="settings.updateAutomationThresholdSource(automation.id, $any($event.target).value)">
+                    <option value="workspace" [selected]="thresholdSource === 'workspace'" i18n="In-progress automation limit option - the workspace's time in progress alert">Workspace alert</option>
+                    <option value="fixed" [selected]="thresholdSource === 'fixed'" i18n="In-progress automation limit option - an amount of time set on this automation">Set time</option>
+                    <option value="custom_field" [selected]="thresholdSource === 'custom_field'" [disabled]="thresholdSource !== 'custom_field' && settings.automationNumberFields().length === 0" i18n="In-progress automation limit option - a number custom field on each card, such as an estimate">Number field, such as an estimate</option>
+                  </select>
+                </label>
+                @if (thresholdSource === 'fixed') {
+                  <label class="ac-field">
+                    <span class="ac-field-label" i18n="Field label - how many hours or days">Amount</span>
+                    <input type="number" min="1" max="87600" [value]="automation.triggerThresholdAmount ?? 1" (change)="settings.updateAutomationThresholdAmount(automation.id, +$any($event.target).value)" />
+                  </label>
+                  <label class="ac-field">
+                    <span class="ac-field-label" i18n="Field label - unit of time">Unit</span>
+                    <select (change)="settings.updateAutomationThresholdUnit(automation.id, $any($event.target).value)">
+                      <option value="hours" [selected]="thresholdUnit === 'hours'" i18n="Unit of time for an automation limit">Hours</option>
+                      <option value="days" [selected]="thresholdUnit === 'days'" i18n="Unit of time for an automation limit">Days</option>
+                    </select>
+                  </label>
+                }
+                @if (thresholdSource === 'custom_field') {
+                  <label class="ac-field">
+                    <span class="ac-field-label" i18n="Field label">Custom field</span>
+                    <select (change)="settings.updateAutomationThresholdField(automation.id, $any($event.target).value)">
+                      @if (settings.automationThresholdFieldMissing(automation)) {
+                      <option [value]="automation.triggerCustomFieldId" [selected]="true" i18n>Deleted field — pick a replacement</option>
+                      }
+                      @for (field of settings.automationNumberFields(); track field.id) {
+                      <option [value]="field.id" [selected]="automation.triggerCustomFieldId === field.id">{{ field.name }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label class="ac-field">
+                    <span class="ac-field-label" i18n="Field label - the unit a number custom field is counted in">Counted in</span>
+                    <select (change)="settings.updateAutomationThresholdUnit(automation.id, $any($event.target).value)">
+                      <option value="hours" [selected]="thresholdUnit === 'hours'" i18n="Unit for an estimate - hours of tracked work">Working hours</option>
+                      <option value="days" [selected]="thresholdUnit === 'days'" i18n="Unit for an estimate - days of tracked work, 8 hours each">Working days</option>
+                    </select>
+                  </label>
+                }
+                <div class="ac-field ac-field-wide">
+                  <div class="ac-scope">
+                    <button type="button" class="ac-scope-option" [class.is-active]="automation.triggerIncludeExisting" [attr.aria-pressed]="automation.triggerIncludeExisting" kTooltip="When off, cards already past the limit when this automation is turned on, or when its limit changes, are skipped." i18n-kTooltip (click)="settings.toggleAutomationIncludeExisting(automation.id)">
+                      <i class="ti" [class.ti-check]="automation.triggerIncludeExisting" [class.ti-plus]="!automation.triggerIncludeExisting" aria-hidden="true"></i> <ng-container i18n="Toggle on an in-progress automation - also run it for cards that already passed the limit">Include cards already past the limit</ng-container>
+                    </button>
+                  </div>
+                </div>
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i>
-                  @if (settings.inProgressAlertDaysDraft() > 0) {
-                    <ng-container i18n="Help for the Card in progress too long automation trigger">{ settings.inProgressAlertDaysDraft(), plural, =1 {Runs once each time an open card has been in progress for more than 1 day. Leaving and re-entering In progress starts a new clock.} other {Runs once each time an open card has been in progress for more than {{ settings.inProgressAlertDaysDraft() }} days. Leaving and re-entering In progress starts a new clock.} }</ng-container>
-                  } @else {
-                    <ng-container i18n="Help for the Card in progress too long automation trigger when the alert setting is 0">Won't run: the time in progress alert is off in General settings.</ng-container>
+                  @switch (thresholdSource) {
+                    @case ('fixed') {
+                      <ng-container i18n="Help for the Card in progress too long automation trigger with its own time limit">Runs once per card when its current time in progress passes this limit. Moving between lists doesn't run it again.</ng-container>
+                    }
+                    @case ('custom_field') {
+                      <ng-container i18n="Help for the Card in progress too long automation trigger with a number field limit">Runs once per card when its tracked time passes the field's value. Raising the value runs it again only if the card passes that too. A working day is 8 tracked hours.</ng-container>
+                    }
+                    @default {
+                      @if (settings.inProgressAlertDaysDraft() > 0) {
+                        <ng-container i18n="Help for the Card in progress too long automation trigger">{ settings.inProgressAlertDaysDraft(), plural, =1 {Runs once per card when its current time in progress passes the workspace alert of 1 day. Moving between lists doesn't run it again.} other {Runs once per card when its current time in progress passes the workspace alert of {{ settings.inProgressAlertDaysDraft() }} days. Moving between lists doesn't run it again.} }</ng-container>
+                      } @else {
+                        <ng-container i18n="Help for the Card in progress too long automation trigger when the alert setting is 0">Won't run: the time in progress alert is off in General settings.</ng-container>
+                      }
+                    }
                   }
                 </p>
               }
@@ -411,6 +474,12 @@
               }
               @case ('card_blocked') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Card blocked automation trigger">Runs when a card gains its first active blocker, including when a blocker is reopened or restored. Includes changes made by integrations and automations.</ng-container></p>
+              }
+              @case ('scheduling_conflict_appears') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Scheduling conflict appears automation trigger">Runs when a card it waits on is first planned to finish on or after this card's planned start, whichever card's dates changed. Includes changes made by integrations and automations.</ng-container></p>
+              }
+              @case ('critical_path_slips') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Critical path slips automation trigger">Runs for a card on the board's critical path when it is rescheduled later and the chain's projected finish moves with it. Includes changes made by integrations and automations.</ng-container></p>
               }
               @case ('card_unblocked') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Card unblocked automation trigger">Runs when a card's last active blocker is completed, archived, deleted or removed. Includes changes made by integrations and automations.</ng-container></p>

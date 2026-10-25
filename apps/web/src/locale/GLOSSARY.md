@@ -77,7 +77,6 @@ Everywhere:
 | Home (page) | Home | Inicio | Início | Accueil | Start | ホーム | Start | Hjem | 首页 | 首頁 |
 | My Cards (page) | My Cards | Mis tarjetas | Meus cartões | Mes cartes | Meine Karten | マイカード | Mijn kaarten | Mine kort | 我的卡片 | 我的卡片 |
 | Team Cards (page) | Team Cards | Tarjetas del equipo | Cartões da equipe | Cartes de l'équipe | Team-Karten | チームのカード | Teamkaarten | Teamkort | 团队卡片 | 團隊卡片 |
-| Portfolio (page) | Portfolio | Portafolio | Portfólio | Portefeuille | Portfolio | ポートフォリオ | Portfolio | Portefølje | 项目总览 | 專案總覽 |
 | Priorities | Priorities | Prioridades | Prioridades | Priorités | Prioritäten | 優先事項 | Prioriteiten | Prioriteringer | 优先事项 | 優先事項 |
 | Notes | Notes | Notas | Notas | Notes | Notizen | ノート | Notities | Notater | 笔记 | 筆記 |
 | Scratchpad | Scratchpad | Bloc de notas | Bloco de rascunho | Bloc-notes | Notizblock | スクラッチパッド | Kladblok | Kladd | 草稿本 | 草稿本 |

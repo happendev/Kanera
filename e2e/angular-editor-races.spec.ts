@@ -322,7 +322,9 @@ test("a saved note response cannot close the next note's unsaved editor", async 
     pending.release();
   }
   expect((await saved).ok()).toBe(true);
-  await editor.locator(".tiptap").fill("Keep the second note's draft after acknowledgement");
+  await expect(editor.locator(".tiptap")).toHaveText("Keep the second note's draft");
+  await editor.locator(".tiptap").press("Control+End");
+  await page.keyboard.insertText(" after acknowledgement");
   await page.screenshot({ path: testInfo.outputPath("next-note-draft-survives-old-save.png") });
   await editor.getByRole("button", { name: "Save", exact: true }).click();
   await expect(editor).toHaveCount(0);

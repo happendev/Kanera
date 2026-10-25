@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { contextDefaults } from "./support/env";
 import { expect, test } from "./support/fixtures";
 
@@ -6,11 +7,22 @@ import { expect, test } from "./support/fixtures";
 // itself, the account copy following the person to a fresh device, and the API answering in the
 // language on screen.
 
+async function expectLocalizedMissingBoard(page: Page, locale: string, message: string) {
+  const id = "00000000-0000-7000-8000-000000000000";
+  const failed = page.waitForResponse((response) => response.url().includes(`/api/boards/${id}`));
+  // Use the app's own request so forgetting its language header cannot be hidden by a test header.
+  await page.goto(`/b/${id}`);
+  const response = await failed;
+  expect(response.request().headers()["accept-language"]).toBe(locale);
+  expect(response.status()).toBe(404);
+  expect((await response.json() as { message: string }).message).toBe(message);
+}
+
 for (const language of [
-  { locale: "zh-CN", name: "简体中文", signIn: "登录", heading: "语言", shortcut: "快速记录", days: /星期[一二三四五六日天]|周[一二三四五六日天]/ },
-  { locale: "zh-TW", name: "繁體中文", signIn: "登入", heading: "語言", shortcut: "快速記錄", days: /星期[一二三四五六日天]|週[一二三四五六日天]/ },
-  { locale: "nl", name: "Nederlands", signIn: "Inloggen", heading: "Taal", shortcut: "Snel vastleggen", days: /maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag/i },
-  { locale: "nb", name: "Norsk (bokmål)", signIn: "Logg inn", heading: "Språk", shortcut: "Hurtigregistrering", days: /mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag/i },
+  { locale: "zh-CN", missingBoard: "未找到看板", name: "简体中文", signIn: "登录", heading: "语言", shortcut: "快速记录", days: /星期[一二三四五六日天]|周[一二三四五六日天]/ },
+  { locale: "zh-TW", missingBoard: "未找到看板", name: "繁體中文", signIn: "登入", heading: "語言", shortcut: "快速記錄", days: /星期[一二三四五六日天]|週[一二三四五六日天]/ },
+  { locale: "nl", missingBoard: "bord niet gevonden", name: "Nederlands", signIn: "Inloggen", heading: "Taal", shortcut: "Snel vastleggen", days: /maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag/i },
+  { locale: "nb", missingBoard: "Tavlen ble ikke funnet", name: "Norsk (bokmål)", signIn: "Logg inn", heading: "Språk", shortcut: "Hurtigregistrering", days: /mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag/i },
 ]) {
   for (const width of [1280, 390]) {
     test(`${language.locale} sign-in and installed-app copy at ${width}px`, async ({ page }, testInfo) => {
@@ -29,30 +41,28 @@ for (const language of [
     });
   }
 
-  test(`${language.locale} account language persists and formats dates and API errors`, async ({ page, browser, signIn, apiAs }, testInfo) => {
+  test(`${language.locale} account language persists and formats dates and API errors`, async ({ page, browser, runtimeGuard, signIn, apiAs }, testInfo) => {
     const api = await apiAs("priya");
     const previous = await (await api.get("/api/me")).json() as { locale: string | null };
     try {
       await api.patch("/api/auth/me", { data: { locale: "en-GB" } });
-      await signIn(page, "priya");
-      await page.goto("/settings/profile");
+      await signIn(page, "priya", "/settings/profile");
       await page.getByRole("button", { name: "Language" }).click();
       await page.getByRole("menuitemradio", { name: language.name }).click();
       await expect(page.getByRole("heading", { name: language.heading })).toBeVisible();
       expect((await (await api.get("/api/me")).json() as { locale: string }).locale).toBe(language.locale);
       await page.screenshot({ path: testInfo.outputPath(`${language.locale}-profile.png`), fullPage: true });
       const fresh = await browser.newContext(contextDefaults);
+      runtimeGuard.watchContext(fresh, "fresh language device");
       try {
         const other = await fresh.newPage();
         await signIn(other, "priya");
         await expect(other.locator("html")).toHaveAttribute("lang", language.locale);
         await expect(other.locator("k-page-header")).toContainText(language.days);
+        await expectLocalizedMissingBoard(other, language.locale, language.missingBoard);
       } finally {
         await fresh.close();
       }
-      const missing = await api.get("/api/boards/00000000-0000-7000-8000-000000000000", { headers: { "Accept-Language": language.locale } });
-      expect(missing.ok()).toBe(false);
-      expect((await missing.json() as { message: string }).message).not.toBe("board not found");
     } finally {
       await api.patch("/api/auth/me", { data: { locale: previous.locale ?? "en-GB" } });
     }
@@ -76,11 +86,10 @@ test("a signed-out visitor can switch the sign-in page to another language", asy
   await expect(page.getByRole("button", { name: "Iniciar sesión" })).toBeVisible();
 });
 
-test("the account language follows the person to a new device, with dates and API errors in it", async ({ page, browser, signIn, apiAs }) => {
+test("the account language follows the person to a new device, with dates and API errors in it", async ({ page, browser, runtimeGuard, signIn, apiAs }) => {
   const priya = await apiAs("priya");
   try {
-    await signIn(page, "priya");
-    await page.goto("/settings/profile");
+    await signIn(page, "priya", "/settings/profile");
     await page.getByRole("button", { name: "Language" }).click();
     await page.getByRole("menuitemradio", { name: /Deutsch/ }).click();
 
@@ -92,6 +101,7 @@ test("the account language follows the person to a new device, with dates and AP
 
     // A fresh browser that has never seen German (en-GB) still lands in German after sign-in.
     const fresh = await browser.newContext(contextDefaults);
+    runtimeGuard.watchContext(fresh, "fresh German device");
     try {
       const other = await fresh.newPage();
       await signIn(other, "priya");
@@ -99,14 +109,11 @@ test("the account language follows the person to a new device, with dates and AP
       await expect(other).toHaveTitle(/Start · Kanera/);
       // Dates follow the language, not the browser: German weekday and month names.
       await expect(other.locator("k-page-header")).toContainText(/Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag/);
+      await expectLocalizedMissingBoard(other, "de", "Board nicht gefunden.");
     } finally {
       await fresh.close();
     }
 
-    // The API writes user-facing errors in the language the web app sends.
-    const missing = await priya.get("/api/boards/00000000-0000-7000-8000-000000000000", { headers: { "Accept-Language": "de" } });
-    expect(missing.ok()).toBe(false);
-    expect(((await missing.json()) as { message: string }).message).not.toMatch(/^[a-z ]+$/);
   } finally {
     // Seed users are shared across the suite; put Priya back in the source language.
     await priya.patch("/api/auth/me", { data: { locale: "en-GB" } });
