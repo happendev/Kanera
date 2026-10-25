@@ -21,9 +21,10 @@ test("Global Work table folds survive saving a view, reloading and realtime refr
     await signIn(page, "amelia");
     await page.goto("/my-cards");
     await page.getByRole("button", { name: "Table view", exact: true }).click();
-    // Earlier specs leave more cards than the first query page or table render cap can show.
-    // Scope this fold-persistence check to its own card, including after saving and reloading.
-    await page.getByRole("searchbox", { name: "Search cards" }).fill(title);
+    // Search is deliberately transient across reloads; use the persisted workspace scope so
+    // this group stays in the first query page even when earlier specs have created many cards.
+    await page.getByRole("button", { name: /All boards/ }).click();
+    await page.locator("k-anchored-picker").getByRole("option", { name: new RegExp(`${workspaceName} 1$`) }).click();
     const row = page.locator(`.tv-row[data-card-id="${card.id}"]`);
     await expect(row).toBeVisible();
     await page.locator("button.k-toolbar-trigger").filter({ has: page.locator(".ti-layout-rows") }).click();
@@ -37,9 +38,11 @@ test("Global Work table folds survive saving a view, reloading and realtime refr
     await page.getByPlaceholder("e.g. Launch risks").fill(uniqueName("Folded view"));
     const saved = page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/api/work-views"));
     await page.locator("k-save-view").getByRole("button", { name: "Save view", exact: true }).click();
-    const view = await result<{ id: string; definition: { table: { collapsedGroupKeys: string[] } } }>(await saved);
+    const view = await result<{ id: string; definition: { scope: { workspaceIds: string[] }; table: { collapsedGroupKeys: string[] } } }>(await saved);
     viewId = view.id;
+    expect(view.definition.scope.workspaceIds).toEqual([workspace.id]);
     expect(view.definition.table.collapsedGroupKeys).toContain(`workspace:${workspace.id}`);
+    await expect(page.locator("k-save-view")).toHaveCount(0);
     await page.reload();
     await expect(expand).toBeVisible();
     await expect(row).toHaveCount(0);
