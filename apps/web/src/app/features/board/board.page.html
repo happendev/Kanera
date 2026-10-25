@@ -92,9 +92,6 @@
         }
         <div class="board-overview-actions">
           <button type="button" (click)="setView('history'); overviewOpen.set(false)"><i class="ti ti-history"></i> <ng-container i18n="Button: open the Work done view">Work done</ng-container></button>
-          @if (auth.user()?.portfolioEnabled !== false) {
-          <button type="button" (click)="openPortfolio()"><i class="ti ti-chart-dots-3"></i> <ng-container i18n="Button: open the Portfolio page">Portfolio</ng-container></button>
-          }
         </div>
       </section>
       }

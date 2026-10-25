@@ -868,6 +868,11 @@ function hasOpenBlockerSql(cardId: SQLWrapper) {
   )`;
 }
 
+/**
+ * The cross-board rollup behind `work.portfolio_summary` (MCP), `kanera portfolio` and the SDK. It
+ * is agent-only: the web app has no Portfolio page, but keeps the same predicates in the board
+ * overview and board tile summaries so an agent's numbers match what members see per board.
+ */
 async function portfolio(auth: AuthClaims, allBoards: AccessibleBoard[], input: unknown): Promise<PortfolioSummary> {
   const authUserId = auth.sub;
   const query = dto.workPortfolioQueryBody.parse(input);
@@ -1310,7 +1315,6 @@ function sanitizedDefinition(
       aggregateSplitBy: validTableSplit ? tableSplit : "none",
       collapsedGroupKeys: definition.table.collapsedGroupKeys.filter((key) => validCollapsedTableGroupKeys.has(key)),
     },
-    collapsedOrganisationIds: definition.collapsedOrganisationIds.filter((id) => accessibleOrganisationIds.has(id)),
     collapsedWorkspaceIds: definition.collapsedWorkspaceIds.filter((id) => accessibleWorkspaceIds.has(id)),
     collapsedSectionIds: definition.collapsedSectionIds.filter((id) => validCollapsedSectionIds.has(id)),
   });
@@ -1780,19 +1784,6 @@ export async function workRoutes(app: FastifyInstance) {
     return response;
   });
 
-  app.post("/work/portfolio/query", async (req) => {
-    const startedAt = performance.now();
-    const accessibleBoards = await loadAccessibleBoards(req.auth);
-    const result = await portfolio(req.auth, accessibleBoards, req.body);
-    req.log.info({
-      event: "work_portfolio_queried",
-      durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
-      days: result.days,
-      bucketCount: result.buckets.length,
-      resultSize: result.totals.cards,
-    });
-    return result;
-  });
 
   app.get("/work-views/share-candidates", async (req) => {
     const rows = await db

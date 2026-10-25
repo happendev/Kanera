@@ -1,6 +1,6 @@
 import type { WorkspaceFeatures } from "@kanera/shared/workspace-features";
 import { Injectable, signal } from "@angular/core";
-import type { DependencyGraphResponse, HomeTodayResponse, PendingBoardInvitationSummary, PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkPrioritiesResponse, WorkViewDefinition } from "@kanera/shared/dto";
+import type { DependencyGraphResponse, HomeTodayResponse, PendingBoardInvitationSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkPrioritiesResponse, WorkViewDefinition } from "@kanera/shared/dto";
 import type { CardAttachmentRow, CardFeedItem, WireBoardMemberUser, WireCard, WireCardDetail, WireCardLabel, WireCardSummary, WireChecklistTemplate, WireList, WireNote, WireSeparator } from "@kanera/shared/events";
 import type {
   Board,
@@ -156,7 +156,6 @@ export type OfflineGlobalWorkSnapshot = {
   definition: WorkViewDefinition;
   catalog: WorkCatalog;
   response: WorkQueryResponse;
-  portfolio: PortfolioSummary | null;
   savedViews: SavedWorkView[];
   // Personal queues have their own user/organisation-scoped snapshot shared across surfaces.
 };
@@ -315,7 +314,7 @@ export class OfflineCacheService {
       .map((entry) => tx.objectStore("cardDetails").delete(entry.cardId)));
     // A consolidated snapshot mixes multiple sources and aggregate counts. Clear it atomically on
     // any definitive revocation rather than trying to subtract one board and risk retaining its
-    // metadata or leaking it indirectly through stale portfolio totals.
+    // metadata or leaking it indirectly through stale totals.
     await tx.objectStore("globalWork").clear();
     // Same reasoning for the home agenda: it mixes boards with aggregate counts and a completion
     // trend, so subtracting one board risks leaking it indirectly through stale totals.
@@ -404,7 +403,6 @@ export class OfflineCacheService {
     definition: WorkViewDefinition,
     catalog: WorkCatalog,
     response: WorkQueryResponse,
-    portfolio: PortfolioSummary | null,
     savedViews: SavedWorkView[],
   ): Promise<void> {
     await this.put("globalWork", {
@@ -413,7 +411,6 @@ export class OfflineCacheService {
       definition,
       catalog,
       response,
-      portfolio,
       savedViews,
     }, key);
   }

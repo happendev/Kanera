@@ -1,6 +1,6 @@
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import { expect, test } from "./support/fixtures";
-import { expectBoardLoaded, openBoard } from "./support/ui";
+import { expectBoardLoaded, expectTableRowMounted, openBoard } from "./support/ui";
 
 // Every race holds a real response or mutation at the browser boundary. Tests deliberately let the
 // realtime debounce elapse before releasing it; assertions then check the user's view and durable API.
@@ -166,7 +166,13 @@ test("Global Work retains loaded table pages after a realtime edit", async ({ pa
   await page.getByRole("searchbox", { name: "Search cards" }).fill(prefix);
   const loadMore = page.getByRole("button", { name: "Load more", exact: true });
   await expect(loadMore).toBeEnabled();
+  const nextPage = page.waitForResponse((response) => response.url().endsWith("/work/cards/query")
+    && Boolean((response.request().postDataJSON() as { cursor?: string }).cursor));
   await loadMore.click();
+  const nextCards = await (await nextPage).json() as { cards: { id: string; title: string }[] };
+  expect(nextCards.cards).toHaveLength(1);
+  const tail = nextCards.cards[0]!;
+  await expect(await expectTableRowMounted(page, tail.id)).toContainText(tail.title);
   await expect(loadMore).toHaveCount(0);
   const reconciled = page.waitForResponse((response) => {
     if (!response.url().endsWith("/work/cards/query")) return false;
@@ -174,8 +180,12 @@ test("Global Work retains loaded table pages after a realtime edit", async ({ pa
     return request.filters?.q === prefix && !request.cursor;
   });
   await json(await api.patch(`/api/cards/${cards[0]!.id}`, { data: { title: `${prefix} renamed` } }));
-  await (await reconciled).finished();
-  await page.waitForTimeout(400);
+  const response = await reconciled;
+  expect(response.ok()).toBe(true);
+  const refreshed = await response.json() as { cards: { id: string }[] };
+  expect(refreshed.cards.map((card) => card.id).sort()).toEqual(cards.map((card) => card.id).sort());
+  await expect(await expectTableRowMounted(page, cards[0]!.id)).toContainText(`${prefix} renamed`);
+  await expect(await expectTableRowMounted(page, tail.id)).toContainText(tail.id === cards[0]!.id ? `${prefix} renamed` : tail.title);
   await expect(loadMore).toHaveCount(0);
   await expect(page.getByRole("button", { name: "New card", exact: true })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath("table-pagination-realtime.png") });

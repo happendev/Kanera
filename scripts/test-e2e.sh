@@ -56,13 +56,14 @@ if [[ -n "$(git status --porcelain)" ]]; then tree_state="dirty (apply worktree.
 
 cat >"$KANERA_E2E_ARTIFACT_DIR/REPRODUCE.txt" <<EOF
 Command: pnpm test:e2e${*:+ -- $*}
+Environment: KANERA_E2E_SHARD=${KANERA_E2E_SHARD:-} REALTIME_WEBSOCKET_COMPRESSION_ENABLED=${REALTIME_WEBSOCKET_COMPRESSION_ENABLED:-false}
 Git revision: $(git rev-parse HEAD)
 Working tree: $tree_state
 Run UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 Fixture: fresh isolated Docker Postgres and Valkey; pnpm --filter @kanera/api db:seed
 Accounts: seeded users from dev-db-seed-content/README.md (password Abc12345); signup tests create their own
 Test data: names carry a per-test suffix (uniqueName in e2e/support/fixtures.ts); every run starts from a fresh migrated and seeded database
-Browser: Playwright Chromium, timezone UTC, locale en-US; install with pnpm exec playwright install chromium
+Browser: Playwright Chromium, timezone UTC, locale en-GB; install with pnpm exec playwright install chromium
 EOF
 
 cleanup() {

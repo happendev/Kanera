@@ -59,7 +59,7 @@
   // Mirrored as SEARCH_WIDTH in page-toolbar.component.ts, which counts it in the room check.
   --search-field-width: var(--pt-search-width, 340px);
 
-  // A page can omit search entirely (the portfolio summary lists counts, not cards); without this
+  // A page can omit search entirely (a page of counts has no cards to search); without this
   // the gap after it would still be held open.
   &:empty {
     display: none;
@@ -162,8 +162,8 @@
     }
   }
 
-  // Collapsed, the search field is the only thing left in .pt-main. A page without one (the portfolio
-  // summary counts rollups, so there is nothing to search) was left with an empty query track pushing
+  // Collapsed, the search field is the only thing left in .pt-main. A page without one (a page of
+  // counts has nothing to search) was left with an empty query track pushing
   // the ⚙ and the tail to the far right of an otherwise blank row. Swapping which track flexes puts
   // the pair at the leading edge instead, where it reads as one group.
   .pt-bar:has(.pt-search:empty) {

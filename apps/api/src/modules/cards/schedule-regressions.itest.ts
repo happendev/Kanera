@@ -6,6 +6,7 @@ import { boardMembers, boards, cardAssignees, cards, cardScheduleState, boardSch
 import { eq } from "drizzle-orm";
 import { db, pool } from "../../db.js";
 import { runScheduleRecheckSweep } from "../../lib/automations.js";
+import { agentWorkQueryRoutes } from "../work/routes.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { signupOwner } from "../../test/api-fixtures.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
@@ -14,6 +15,7 @@ import { insertTestUsers } from "../../test/user-fixtures.js";
 // inspect worker latches, or count SQL queries independently of background processes.
 async function fixture(seed: string) {
   const app = await buildIntegrationServer();
+  await app.register(agentWorkQueryRoutes, { prefix: "/agent-public" });
   const owner = await signupOwner(app, { seed });
   const workspace = await app.inject({ method: "POST", url: "/workspaces", headers: owner.auth, payload: { name: "Planning regression" } });
   assert.equal(workspace.statusCode, 201, workspace.body);
@@ -139,7 +141,7 @@ void test("portfolio schedule SQL count stays constant as dated boards grow", as
     const read = async () => {
       queries = 0;
       const start = performance.now();
-      const response = await f.app.inject({ method: "POST", url: "/work/portfolio/query", headers: f.owner.auth, payload: { days: 30 } });
+      const response = await f.app.inject({ method: "POST", url: "/agent-public/work/portfolio/query", headers: f.owner.auth, payload: { days: 30 } });
       assert.equal(response.statusCode, 200, response.body);
       return { queries, ms: Math.round(performance.now() - start), response };
     };

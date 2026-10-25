@@ -40,7 +40,6 @@ export async function listActiveOrganisations(userId: string, tx: Tx = db, known
       billingStatus: clients.billingStatus,
       analyticsExcluded: clients.analyticsExcluded,
       requireMfa: clients.requireMfa,
-      portfolioEnabled: clients.portfolioEnabled,
       inProgressEnabled: clients.inProgressEnabled,
       addedAt: clientMembers.addedAt,
       hasWorkspace: sql<boolean>`case
@@ -92,7 +91,6 @@ export async function listActiveOrganisations(userId: string, tx: Tx = db, known
     addedAt: row.addedAt,
     analyticsExcluded: row.analyticsExcluded,
     requireMfa: row.requireMfa,
-    portfolioEnabled: row.portfolioEnabled,
     inProgressEnabled: row.inProgressEnabled,
   }));
 }

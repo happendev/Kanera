@@ -50,7 +50,7 @@ test("websocket compression follows configuration and delivers small and large p
   let keyId: string | undefined;
   let publicApi: Awaited<ReturnType<typeof playwright.request.newContext>> | undefined;
   try {
-    const key = await result<{ id: string; secret: string }>(await api.post("/api/me/api-keys", { data: { label: uniqueName("Compression key"), scope: "write" } }));
+    const key = await result<{ id: string; secret: string }>(await api.post("/api/me/api-keys", { data: { label: uniqueName("Compress key"), scope: "write" } }));
     keyId = key.id;
     publicApi = await playwright.request.newContext({ baseURL: webOrigin, extraHTTPHeaders: { authorization: `Bearer ${key.secret}` } });
     const title = uniqueName("Compression card");

@@ -21,13 +21,13 @@ async function cardIdByTitle(api: APIRequestContext, boardId: string, title: str
 // second session of the same person converges without a reload, including writes made through the
 // public API process (direct outbox drained by the worker), and that the worker's reminder sweep
 // lands a notification in the inbox.
-test("reminders and watching follow the user across sessions and processes, and a due reminder reaches the inbox", async ({ page, signIn, pageAs, apiAs, playwright, uniqueName }) => {
+test("reminders and watching follow the user across sessions and processes, and a due reminder reaches the inbox", async ({ page, testWorkspace, signIn, pageAs, apiAs, playwright, uniqueName }) => {
   test.setTimeout(120_000);
   const title = uniqueName("E2E reminder card");
   await signIn(page, "amelia");
   const otherTab = await pageAs("amelia");
-  await openBoard(page, "Platform Delivery");
-  await openBoard(otherTab, "Platform Delivery");
+  await openBoard(page, testWorkspace.boardName);
+  await openBoard(otherTab, testWorkspace.boardName);
   await createCard(page, title);
   await expect(cardTile(otherTab, title)).toBeVisible();
 
@@ -40,7 +40,7 @@ test("reminders and watching follow the user across sessions and processes, and 
   await expect(cardTile(otherTab, title).locator(".card-reminder-indicator")).toBeVisible();
 
   const api = await apiAs("amelia");
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, testWorkspace.boardName);
   const cardId = await cardIdByTitle(api, boardId, title);
 
   // Compose a time instead: a day from next month's calendar plus a typed time, nudged by ArrowUp.
@@ -97,10 +97,10 @@ test("reminders and watching follow the user across sessions and processes, and 
   }
 });
 
-test("a reminder can be set from a card's right-click menu without opening the card", async ({ page, signIn, uniqueName }) => {
+test("a reminder can be set from a card's right-click menu without opening the card", async ({ page, testWorkspace, signIn, uniqueName }) => {
   const title = uniqueName("E2E menu reminder card");
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, testWorkspace.boardName);
   await createCard(page, title);
 
   const tile = cardTile(page, title);
@@ -122,13 +122,13 @@ test("a reminder can be set from a card's right-click menu without opening the c
   await page.keyboard.press("Escape");
 });
 
-test("Home lists your upcoming reminders live, and the board can filter to the cards you set one on", async ({ page, signIn, pageAs, uniqueName }) => {
+test("Home lists your upcoming reminders live, and the board can filter to the cards you set one on", async ({ page, testWorkspace, signIn, pageAs, uniqueName }) => {
   const reminded = uniqueName("E2E reminded card");
   const other = uniqueName("E2E unreminded card");
   await signIn(page, "amelia");
   const home = await pageAs("amelia");
   await home.goto(`${webOrigin}/`);
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, testWorkspace.boardName);
   await createCard(page, reminded);
   await createCard(page, other);
 

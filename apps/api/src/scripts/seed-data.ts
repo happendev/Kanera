@@ -1,5 +1,5 @@
 import { enhanceDemoSeed } from "./seed-demo-enhancements.js";
-import { seedCalendar } from "./seed-calendar.js";
+import { seedActivityTime, seedCalendar, seedNotificationTime, type SeedNotificationTime } from "./seed-calendar.js";
 import type { ColorToken } from "@kanera/shared/colors";
 import { workingMs } from "@kanera/shared/time-in-progress";
 import { addWorkingDays, dateKeyOf, dayNumber, nextWorkingDayOnOrAfter, lastWorkingDayOnOrBefore } from "@kanera/shared/schedule";
@@ -49,7 +49,7 @@ import {
   type NoteAttachmentSource,
   type NoteScope,
 } from "@kanera/shared/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -154,6 +154,7 @@ type SeedComment = {
   quotesAttachment?: number;
   mentions?: SeedUserKey[];
   unreadFor?: SeedUserKey[];
+  notificationTime?: SeedNotificationTime;
 };
 
 type SeedNotificationActivity = {
@@ -162,6 +163,7 @@ type SeedNotificationActivity = {
   action: "assignees:set" | "customFieldValue:set";
   payload: Record<string, unknown>;
   hoursAfterCreation: number;
+  notificationTime?: SeedNotificationTime;
 };
 
 type SeedChecklistItem = {
@@ -793,13 +795,6 @@ API reference: https://docs.kanera.app/api`,
           },
         ],
         separators: [
-          {
-            title: "Validated defects",
-            list: "Bugs / Issues / Feedback",
-            position: "1500",
-            color: "red",
-            createdBy: "nina",
-          },
           {
             title: "Implementation follow-ups",
             list: "In Progress",
@@ -1498,6 +1493,7 @@ function buildMarketingWorkspace(reference: Date): SeedWorkspace {
             body: "Please advise if the campaign setup is correct before we share it.",
             mentions: ["amelia"],
             unreadFor: ["amelia"],
+            notificationTime: { workingDaysAgo: 2, hour: 12, minute: 9 },
           }],
           // Keep the demo inbox representative after every reseed: this card produces one unread
           // burst with a comment and ordinary card changes, alongside the overdue reminders.
@@ -1508,6 +1504,7 @@ function buildMarketingWorkspace(reference: Date): SeedWorkspace {
               action: "customFieldValue:set",
               payload: { fieldName: "Campaign", toValue: "Commercial" },
               hoursAfterCreation: 19.75,
+              notificationTime: { workingDaysAgo: 2, hour: 11, minute: 53 },
             },
             {
               actor: "ben",
@@ -1515,6 +1512,7 @@ function buildMarketingWorkspace(reference: Date): SeedWorkspace {
               action: "assignees:set",
               payload: { addedAssigneeNames: ["Amelia Hart"] },
               hoursAfterCreation: 19.5,
+              notificationTime: { workingDaysAgo: 2, hour: 11, minute: 36 },
             },
           ],
         },
@@ -3955,10 +3953,14 @@ function realisticChecklistItems(
   });
 }
 
-function addDays(value: Date, days: number): Date {
+function calendarDays(value: Date, days: number): Date {
   const result = new Date(value);
   result.setUTCDate(result.getUTCDate() + days);
   return result;
+}
+
+function addDays(value: Date, days: number): Date {
+  return seedActivityTime(calendarDays(value, days));
 }
 
 function seedDueDate(baseDate: Date, dueOffsetDays: number): Date {
@@ -3974,13 +3976,13 @@ function addHours(value: Date, hours: number): Date {
   const secondJitter = 7 + salt * 7 % 47;
   const result = new Date(approximateTime + minuteJitter * 60_000 + secondJitter * 1000);
   if (result.getUTCMinutes() === 0) result.setUTCMinutes(7);
-  return result;
+  return seedActivityTime(result);
 }
 
 function addMinutes(value: Date, minutes: number): Date {
   const result = new Date(value.getTime() + minutes * 60 * 1000);
   if (result.getUTCMinutes() === 0) result.setUTCMinutes(7);
-  return result;
+  return seedActivityTime(result);
 }
 
 function formatLocalDate(value: Date): string {
@@ -4003,7 +4005,7 @@ function seedCardSchedule(input: {
   let startDateLocalDate: string | null = null;
   if (seed.startOffsetDays !== undefined) {
     startDateLocalDate = seed.startOffsetDays === null ? null
-      : dateKeyOf(nextWorkingDayOnOrAfter(dayNumber(formatLocalDate(addDays(baseDate, seed.startOffsetDays)))));
+      : dateKeyOf(nextWorkingDayOnOrAfter(dayNumber(formatLocalDate(calendarDays(baseDate, seed.startOffsetDays)))));
   } else if (dueDate && (completedAt || cardIndex % 3 !== 2)) {
     let start = addWorkingDays(dayNumber(dueDateLocalDate!), -(1 + cardIndex % 5));
     // A card already being implemented or reviewed must not be planned to start in the future.
@@ -4124,7 +4126,8 @@ async function insertSeedMovementHistory(input: {
     const fromList = listByName.get(movementPath[step]!)!;
     const toList = listByName.get(movementPath[step + 1]!)!;
     const movedAt = input.showcaseDay
-      ? addHours(input.showcaseDay, 1 + step / 4)
+      // Leave more than the 23-minute seed jitter between steps so the audit path stays ordered.
+      ? addHours(input.showcaseDay, 1 + step / 2)
       : addMinutes(
         new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1))),
         0,
@@ -5683,7 +5686,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           // A repeatable recording range: the previous calendar week’s Monday–Friday, in UTC.
           // Keep this on one existing board so the board filter gives a compact demo even as
           // other fixtures grow. Other boards retain their broad historical activity.
-          const demoMonday = addDays(baseDate, -((baseDate.getUTCDay() + 6) % 7) - 7);
+          const demoMonday = calendarDays(baseDate, -((baseDate.getUTCDay() + 6) % 7) - 7);
           const isWorkDoneShowcase = boardSeed.key === "autumn-campaign-launch";
           let showcaseCompletedIndex = 0;
           let showcaseChecklistIndex = 0;
@@ -5720,7 +5723,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             let showcaseTickUsed = false;
             const completedAt = completedDaysAgo === undefined
               ? null
-              : completedDaysAgo === 0 ? calendar.instant
+              : completedDaysAgo === 0 ? calendar.activityInstant
               : showcaseDay ? addHours(showcaseDay, 6) : addHours(addDays(baseDate, -completedDaysAgo), 16);
             // Three weeks keeps the replayed progress stage across a weekday, even
             // when the evenly spaced moves would otherwise land entirely on a weekend.
@@ -6098,7 +6101,10 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             }
 
             for (const commentSeed of cardSeed.comments ?? []) {
-              const commentCreatedAt = addHours(cardCreatedAt, commentSeed.hoursAfterCreation);
+              // Inbox examples stay recent even when Work Done anchors this card's creation weeks ago.
+              const commentCreatedAt = commentSeed.notificationTime
+                ? seedNotificationTime(calendar.instant, commentSeed.notificationTime)
+                : addHours(cardCreatedAt, commentSeed.hoursAfterCreation);
               let body = seedCommentBody(commentSeed, userIdByKey);
               let quotedUploader: SeedUserKey | null = null;
               if (commentSeed.quotesAttachment !== undefined) {
@@ -6181,7 +6187,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             }
 
             for (const notificationSeed of cardSeed.notificationActivities ?? []) {
-              const notificationCreatedAt = addHours(cardCreatedAt, notificationSeed.hoursAfterCreation);
+              const notificationCreatedAt = notificationSeed.notificationTime
+                ? seedNotificationTime(calendar.instant, notificationSeed.notificationTime)
+                : addHours(cardCreatedAt, notificationSeed.hoursAfterCreation);
               const [activity] = await tx.insert(activityEvents).values({
                 boardId: board!.id,
                 workspaceId: workspace!.id,
@@ -6301,13 +6309,22 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         summary.cardPriorities += selected.length;
       }
 
-      // Historical notifications belong to synthetic fixture history. Fresh unread notifications
-      // must come from a real application action by a demo account, not inserted inbox rows.
+      // Keep ordinary history read, with a small dated inbox for the default demo account. These
+      // notifications reference actual seeded comments and changes, so their bodies remain readable.
       await tx.update(notifications).set({ readAt: capturedAt }).where(inArray(notifications.clientId, [client!.id, guestClient!.id]));
+      await tx.update(notifications).set({ readAt: null }).where(and(
+        eq(notifications.userId, userIdByKey.get("amelia")!),
+        or(
+          eq(notifications.reason, "overdue"),
+          inArray(notifications.cardId, tx.select({ id: cards.id }).from(cards)
+            .innerJoin(workspaces, eq(workspaces.id, cards.workspaceId))
+            .where(and(eq(workspaces.clientId, client!.id), eq(cards.title, "Build the launch measurement sheet")))),
+        ),
+      ));
 
       demo = await enhanceDemoSeed(tx, { clientId: client!.id, userIds: userIdByKey, calendar });
       summary.cards += demo.created.length;
-      summary.separators += 15;
+      summary.separators += demo.separatorCount;
       const seededWorkspaces = await tx.select({ id: workspaces.id }).from(workspaces)
         .where(inArray(workspaces.clientId, [client!.id, guestClient!.id]));
       const seededWorkspaceIds = seededWorkspaces.map((row) => row.id);

@@ -15,6 +15,25 @@ test("signup creates a workspace whose lists and fields belong to a second board
   await page.getByRole("button", { name: "Continue" }).click();
   await page.locator('input[name="name"]').fill(workspaceName);
   await page.getByRole("button", { name: "Continue" }).click();
+  const workflowColors = [
+    ["Wishlist", "purple"],
+    ["Planning / Review", "violet"],
+    ["Backlog", "gray"],
+    ["Bugs / Issues / Feedback", "red"],
+    ["Awaiting Feedback", "amber"],
+    ["In Progress", "blue"],
+    ["Ready for QA", "teal"],
+    ["Complete", "green"],
+  ];
+  for (const [name, color] of workflowColors) {
+    await expect(page.locator(".ob-item").filter({ has: page.locator("span", { hasText: name }) }).locator(".ob-icon"))
+      .toHaveAttribute("style", `color: var(--color-${color});`);
+  }
+  await page.screenshot({ path: test.info().outputPath("template-list-colors-desktop.png"), fullPage: true });
+  const desktopViewport = page.viewportSize()!;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: test.info().outputPath("template-list-colors-phone.png"), fullPage: true });
+  await page.setViewportSize(desktopViewport);
   await page.getByPlaceholder("New list name").fill(listName);
   await page.getByRole("button", { name: "Add list" }).click();
   // The Development Team template marks "In Progress" as active work; a custom list can opt in too.
@@ -34,6 +53,10 @@ test("signup creates a workspace whose lists and fields belong to a second board
   await expect(firstBoard).toBeVisible();
   await firstBoard.click();
   await expectBoardLoaded(page, "Engineering");
+  for (const [name, color] of workflowColors) {
+    await expect(page.locator("k-list .list-header h3").filter({ hasText: name }))
+      .toHaveAttribute("style", `--list-color: var(--color-${color});`);
+  }
   await scrollBoardToEnd(page);
   await expect(page.locator("k-list").filter({ hasText: listName })).toHaveCount(1);
   // Both flags reached the created workspace: the list headers wear the in-progress marker.
@@ -49,6 +72,8 @@ test("signup creates a workspace whose lists and fields belong to a second board
   await expect(secondLink).toBeVisible();
   await secondLink.click();
   await expectBoardLoaded(page, secondBoard);
+  await expect(page.locator("k-list .list-header h3").filter({ hasText: "In Progress" }))
+    .toHaveAttribute("style", "--list-color: var(--color-blue);");
   await scrollBoardToEnd(page);
   // Lists and custom fields are workspace-scoped: a board created later inherits both.
   await expect(page.locator("k-list").filter({ hasText: listName })).toHaveCount(1);
@@ -71,6 +96,10 @@ test("signup can start with a standalone board without completing workspace onbo
   await expectBoardLoaded(page, boardName);
   await page.reload();
   await expectBoardLoaded(page, boardName);
+  await expect(page.locator("k-list .list-header h3").filter({ hasText: "In Progress" }))
+    .toHaveAttribute("style", "--list-color: var(--color-blue);");
+  await expect(page.locator("k-list .list-header h3").filter({ hasText: "Complete" }))
+    .toHaveAttribute("style", "--list-color: var(--color-green);");
   await page.goto("/onboarding");
   // A standalone board remains independent: it does not turn hasWorkspace on.
   await expect(page.getByRole("heading", { name: "How do you want to start?" })).toBeVisible();

@@ -38,8 +38,15 @@ test("the seed demonstrates realistic timeline dates and dependency handoffs", a
   expect(unscheduled.startDateLocalDate ?? null).toBeNull();
   expect(unscheduled.dueDateLocalDate ?? null).toBeNull();
 
+  const isWeekday = (value: string | Date) => {
+    const date = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(value));
+    return ![0, 6].includes(new Date(`${date}T12:00:00Z`).getUTCDay());
+  };
   let historicalBars = 0;
   for (const row of cards) {
+    if (row.completedAt) expect(isWeekday(row.completedAt), `${row.title}: completed`).toBe(true);
     if (row.startDateLocalDate && row.dueDateLocalDate) {
       expect(row.startDateLocalDate <= row.dueDateLocalDate, row.title).toBe(true);
     }
@@ -63,10 +70,9 @@ test("the seed demonstrates realistic timeline dates and dependency handoffs", a
   const marketing = schedules[1]!;
   const qa = card("Run QA pass for onboarding with no existing workspaces");
   const cleanup = card("Retry orphaned attachment cleanup on startup");
-  expect(development.cards.filter((row) => row.conflicts.length).map((row) => row.id)).toEqual([qa.id]);
-  expect(development.cards.find((row) => row.id === qa.id)?.conflicts).toEqual([
-    expect.objectContaining({ blockerId: cleanup.id, days: 3 }),
-  ]);
+  // The recording calendar now puts QA after cleanup rather than demonstrating a conflict.
+  expect(development.cards.filter((row) => row.conflicts.length)).toEqual([]);
+  expect(qa.startDateLocalDate! > cleanup.dueDateLocalDate!).toBe(true);
   expect(qa.blockedByCount).toBe(2);
   expect(marketing.summary.conflictCount).toBe(0);
   for (const title of ["Produce the launch-day explainer video", "Approve the campaign launch package", "Prepare autumn campaign launch"]) {
@@ -90,13 +96,18 @@ test("the seed demonstrates realistic timeline dates and dependency handoffs", a
   await signIn(page, "amelia");
   await page.goto(`/b/${qa.boardId}?view=timeline`);
   const qaBar = page.locator(`.tl-row-card[data-card-id="${qa.id}"] .tl-bar`);
-  await expect(qaBar).toHaveClass(/has-conflict/);
-  await expect(page.locator(".tl-count.is-warning")).toContainText("1 scheduling conflict");
+  await expect(qaBar).not.toHaveClass(/has-conflict/);
+  await expect(page.locator(".tl-count.is-warning")).toHaveCount(0);
   await expect(page.locator(`.tl-wire-hit[aria-label="${qa.key} waits on ${cleanup.key}"]`)).toHaveCount(1);
   await qaBar.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: testInfo.outputPath("seed-timeline-conflict-desktop.png") });
+  await page.screenshot({ path: testInfo.outputPath("seed-timeline-handoff-desktop.png") });
 
   const launch = card("Prepare autumn campaign launch");
+  const launchFeed = await api.get(`/api/cards/${launch.id}/feed?limit=100`);
+  expect(launchFeed.ok()).toBe(true);
+  const feed = await launchFeed.json() as { items: { data: { createdAt: string } }[] };
+  expect(feed.items.length).toBeGreaterThan(0);
+  for (const item of feed.items) expect(isWeekday(item.data.createdAt), item.data.createdAt).toBe(true);
   await page.goto(`/b/${launch.boardId}?view=timeline`);
   await page.getByRole("button", { name: "Critical path", exact: true }).click();
   await expect(page.locator(`.tl-row-card[data-card-id="${launch.id}"] .tl-bar`)).toHaveClass(/is-critical/);

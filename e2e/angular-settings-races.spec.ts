@@ -43,10 +43,8 @@ test("automation save echoes preserve newer action text and persist edits in ord
   await page.route(`**/api/automations/${automation.id}/actions`, async (route) => {
     if (route.request().method() !== "PUT") return route.continue();
     requests.push(route.request().postDataJSON());
-    if (requests.length !== 1) {
-      await releaseFirstResponse.promise;
-      return route.continue();
-    }
+    // Only hold the first request. Serializing later requests here would hide a broken app queue.
+    if (requests.length !== 1) return route.continue();
     firstStarted.resolve();
     await releaseFirstRequest.promise;
     // The real server commits and broadcasts its old snapshot, while its HTTP acknowledgement
@@ -59,10 +57,17 @@ test("automation save echoes preserve newer action text and persist edits in ord
     await comment.fill(firstText);
     await firstStarted.promise;
     await comment.fill(finalText);
+    await comment.blur();
+    // Blur flushes the second draft immediately. Give an incorrectly concurrent fetch time to
+    // reach the route handler while the first write is still held before the server.
+    await page.waitForTimeout(500);
+    expect(requests).toHaveLength(1);
     releaseFirstRequest.resolve();
     await expect.poll(() => socketFrames.some((frame) => frame.includes(firstText))).toBe(true);
     await expect(comment).toHaveValue(finalText);
+    expect(requests).toHaveLength(1);
     releaseFirstResponse.resolve();
+    await expect.poll(() => requests.length).toBe(2);
     await expect.poll(async () => {
       const response = await api.get(`/api/workspaces/${workspace.id}`);
       const data = await response.json() as { automations: { id: string; actions: { config: { template?: string } }[] }[] };
@@ -184,17 +189,12 @@ test("a foreground scratchpad refresh keeps the caret of a clean editor whose se
   try {
     await expect(editor).toContainText("Keep the caret");
     await editor.click();
-    // Establish the exact starting caret independently of keyboard/layout timing. The refresh
-    // and subsequent real keystroke still exercise whether the mounted editor preserves it.
-    await editor.evaluate((element) => {
-      const text = element.querySelector("p")!.firstChild!;
-      const range = document.createRange();
-      range.setStart(text, 4);
-      range.collapse(true);
-      const selection = window.getSelection()!;
-      selection.removeAllRanges();
-      selection.addRange(range);
-    });
+    // Use editor input so ProseMirror's selection and the DOM selection agree before refreshing.
+    await page.keyboard.press("Home");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
     expect(await editor.evaluate(() => window.getSelection()?.anchorOffset)).toBe(4);
     const refreshed = page.waitForResponse((result) => result.request().method() === "GET" && result.url().endsWith("/api/scratchpad/notes"));
     await setVisibility(page, "hidden");

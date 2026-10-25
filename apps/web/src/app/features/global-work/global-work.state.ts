@@ -2,7 +2,6 @@ import { CompletionWarningService } from "../../shared/completion-warning.servic
 import { DestroyRef, Injectable, computed, effect, inject, signal } from "@angular/core";
 import { compactInProgressClock, resolveInProgressClock, type ReportedInProgressClock } from "../board/time-in-progress.util";
 import type {
-  PortfolioSummary,
   SavedWorkView,
   WorkCatalog,
   WorkDisplayMode,
@@ -34,7 +33,6 @@ import {
   sanitizeGlobalWorkDefinition,
   writeGlobalWorkPreference,
 } from "./global-work-preference";
-import { viewerTimeZone } from "../../shared/day-key.util";
 import { toggleId } from "../../shared/toggle-id";
 import { byPosition } from "../../shared/position-sort";
 
@@ -77,7 +75,7 @@ function defaultTablePresentation(): WorkTablePresentation {
   };
 }
 
-function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
+function defaultDefinition(): WorkViewDefinition {
   return {
     scope: { allAccessible: true, organisationIds: [], workspaceIds: [], boardIds: [] },
     filters: {
@@ -105,13 +103,11 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
       lastActivityBefore: null,
       lastMovedBefore: null,
     },
-    groupBy: lens === "portfolio" ? "board" : "dueDate",
+    groupBy: "dueDate",
     sort: "dueAsc",
-    display: lens === "portfolio" ? "summary" : "board",
+    display: "board",
     columns: ["source", "list", "assignees", "dueDate", "completion"],
     table: defaultTablePresentation(),
-    portfolioDays: 30,
-    collapsedOrganisationIds: [],
     collapsedWorkspaceIds: [],
     collapsedSectionIds: [],
   };
@@ -159,10 +155,9 @@ export class GlobalWorkState {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly lens = signal<WorkViewLens>("my");
-  readonly definition = signal<WorkViewDefinition>(defaultDefinition("my"));
+  readonly definition = signal<WorkViewDefinition>(defaultDefinition());
   readonly catalog = signal<WorkCatalog>(EMPTY_CATALOG);
   readonly response = signal<WorkQueryResponse>(EMPTY_RESPONSE);
-  readonly portfolio = signal<PortfolioSummary | null>(null);
   readonly savedViews = signal<SavedWorkView[]>([]);
   readonly shareCandidates = signal<WorkViewShareCandidate[]>([]);
   readonly loading = signal(true);
@@ -180,22 +175,16 @@ export class GlobalWorkState {
     this.sockets.online() && !this.loading() && !this.cachedAt()
   );
   /**
-   * Group and Sort away from the lens default.
+   * Group and Sort away from the default.
    *
-   * Exposed rather than derived in the page because the default itself is lens-dependent (portfolio
-   * groups by board, everything else by due date) and `defaultDefinition` is private to this file.
+   * Exposed rather than derived in the page because `defaultDefinition` is private to this file.
    * The toolbar triggers accent on these, so the reader can tell "grouped by Assignee" from "showing
    * the default grouping" without opening the menu.
    */
-  readonly groupByIsSet = computed(() => this.definition().groupBy !== defaultDefinition(this.lens()).groupBy);
-  readonly sortIsSet = computed(() => this.definition().sort !== defaultDefinition(this.lens()).sort);
-  /** The portfolio's reporting window is a query control like Group and Sort, so it accents too. */
-  readonly portfolioDaysIsSet = computed(
-    () => this.definition().portfolioDays !== defaultDefinition(this.lens()).portfolioDays,
-  );
+  readonly groupByIsSet = computed(() => this.definition().groupBy !== defaultDefinition().groupBy);
+  readonly sortIsSet = computed(() => this.definition().sort !== defaultDefinition().sort);
   readonly reconciliationVersion = signal(0);
   readonly selectedViewId = signal<string | null>(null);
-  readonly drilldownLabel = signal<string | null>(null);
   readonly collapsedTableGroupKeys = computed(() => this.definition().table.collapsedGroupKeys);
   readonly collapsedHistoryDayKeys = signal<string[]>([]);
   readonly collapsedChecklistGroupIds = signal<string[]>([]);
@@ -219,8 +208,7 @@ export class GlobalWorkState {
   /**
    * The one person this view is about: yourself on My Cards, or the single teammate in focus on Team
    * Cards. Personal separators and priority queues both key off it — they are the two surfaces that
-   * only mean anything when exactly one person is in focus, and neither exists for a whole team or
-   * the portfolio.
+   * only mean anything when exactly one person is in focus, and neither exists for a whole team.
    */
   readonly focusedTargetUserId = computed(() => {
     if (this.lens() === "my") return this.auth.user()?.id ?? null;
@@ -337,7 +325,6 @@ export class GlobalWorkState {
       writeGlobalWorkPreference(userId, this.lens(), {
         definition: this.definition(),
         selectedViewId: this.selectedViewId(),
-        drilldownLabel: this.drilldownLabel(),
         collapsedHistoryDayKeys: this.collapsedHistoryDayKeys(),
         collapsedChecklistGroupIds: this.collapsedChecklistGroupIds(),
         upNextPanelOpen: this.upNextPanelOpen(),
@@ -379,10 +366,9 @@ export class GlobalWorkState {
     this.lens.set(lens);
     const userId = this.auth.user()?.id;
     const preference = userId ? readGlobalWorkPreference(userId, lens) : null;
-    this.definition.set(preference?.definition ?? defaultDefinition(lens));
+    this.definition.set(preference?.definition ?? defaultDefinition());
     this.catalog.set(EMPTY_CATALOG);
     this.response.set(EMPTY_RESPONSE);
-    this.portfolio.set(null);
     this.otherPriorities.set(null);
     this.teamPriorities.set(null);
     this.prioritiesCachedAt.set(null);
@@ -394,7 +380,6 @@ export class GlobalWorkState {
     this.cachedAt.set(null);
     this.lastSyncedAt.set(null);
     this.selectedViewId.set(preference?.selectedViewId ?? null);
-    this.drilldownLabel.set(lens === "portfolio" ? preference?.drilldownLabel ?? null : null);
     this.collapsedHistoryDayKeys.set(preference?.collapsedHistoryDayKeys ?? []);
     this.collapsedChecklistGroupIds.set(preference?.collapsedChecklistGroupIds ?? []);
     // Open unless this person has explicitly closed it: the queue is the page's headline feature,
@@ -428,7 +413,6 @@ export class GlobalWorkState {
             groupBy: previousDefinition.groupBy,
             sort: previousDefinition.sort,
             table: previousDefinition.table,
-            collapsedOrganisationIds: previousDefinition.collapsedOrganisationIds,
             collapsedWorkspaceIds: previousDefinition.collapsedWorkspaceIds,
             collapsedSectionIds: previousDefinition.collapsedSectionIds,
           },
@@ -437,11 +421,7 @@ export class GlobalWorkState {
           this.auth.user()?.id ?? null,
         );
         this.definition.set(definition);
-        if (JSON.stringify(definition) !== JSON.stringify(previousDefinition)) {
-          this.drilldownLabel.set(null);
-        }
         this.response.set(cached.response);
-        this.portfolio.set(cached.portfolio);
         this.savedViews.set(cached.savedViews);
         this.cachedAt.set(cached.cachedAt);
         this.lastSyncedAt.set(cached.cachedAt);
@@ -504,9 +484,7 @@ export class GlobalWorkState {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const cardsRequest = this.lens() === "portfolio" && this.definition().display === "summary"
-        ? Promise.resolve(EMPTY_RESPONSE)
-        : this.loadCards();
+      const cardsRequest = this.loadCards();
       // The candidate pool is scoped to the lane owners, so it chains off the (single, small)
       // priorities batch rather than running blind. Still concurrent with everything else.
       const teamPrioritiesRequest = this.loadTeamPriorities();
@@ -523,9 +501,6 @@ export class GlobalWorkState {
       this.teamPriorityCandidates.set(priorityCandidateCards);
       if (displayNeedsEveryCard(this.definition().display)) {
         await this.loadRemainingCards(version);
-      }
-      if (this.lens() === "portfolio") {
-        this.portfolio.set(await this.loadPortfolio());
       }
       this.cachedAt.set(null);
       this.lastSyncedAt.set(new Date().toISOString());
@@ -617,20 +592,16 @@ export class GlobalWorkState {
    * control is away from its default but cannot work out what to put it back to.
    */
   resetGrouping(): void {
-    this.setGrouping(defaultDefinition(this.lens()).groupBy);
+    this.setGrouping(defaultDefinition().groupBy);
   }
 
   resetSort(): void {
-    this.setSort(defaultDefinition(this.lens()).sort);
-  }
-
-  resetPortfolioDays(): void {
-    this.setPortfolioDays(defaultDefinition(this.lens()).portfolioDays);
+    this.setSort(defaultDefinition().sort);
   }
 
   /** Restore only the table/calendar presentation axes; query scope and filters remain intentional. */
   resetTablePresentation(): void {
-    const defaults = defaultDefinition(this.lens());
+    const defaults = defaultDefinition();
     this.definition.update((definition) => ({
       ...definition,
       groupBy: defaults.groupBy,
@@ -654,10 +625,6 @@ export class GlobalWorkState {
   }
 
   setDisplay(display: WorkDisplayMode): void {
-    // The portfolio summary shows aggregates, not cards, and hides the search box with them. Clearing
-    // the title filter on the way in stops a query typed during a drill-down from silently narrowing
-    // every count and heatmap with no visible control explaining why.
-    const clearSearch = this.lens() === "portfolio" && display === "summary";
     // The overview is whole-team by definition: a carried-over focus would silently empty every
     // other panel.
     const clearTeamFocus = this.lens() === "team"
@@ -668,28 +635,13 @@ export class GlobalWorkState {
     this.definition.update((definition) => ({
       ...definition,
       display,
-      ...(clearSearch || clearTeamFocus
-        ? {
-            filters: {
-              ...definition.filters,
-              ...(clearSearch ? { q: "" } : {}),
-              ...(clearTeamFocus ? { assigneeIds: [] } : {}),
-            },
-          }
-        : {}),
+      ...(clearTeamFocus ? { filters: { ...definition.filters, assigneeIds: [] } } : {}),
     }));
     this.persistPreference();
     // Offline display changes are local navigation. Do not page the server or stamp the old card
     // snapshot as newly fetched merely because the reader opened a different cached view.
     if (!this.sockets.online() || !this.interactionReady()) {
       void this.restorePrioritySnapshots(this.requestVersion);
-      return;
-    }
-    // Summary renders only portfolio aggregates. Defer the card projection until the viewer opens
-    // a row display; switching either direction queries exactly the data that display needs.
-    if (this.lens() === "portfolio") {
-      this.teamPriorityCandidates.set([]);
-      void this.queryFirstPage();
       return;
     }
     if (display === "overview" && clearTeamFocus) {
@@ -727,21 +679,6 @@ export class GlobalWorkState {
     void this.queryFirstPage();
   }
 
-  setPortfolioDays(portfolioDays: number): void {
-    this.definition.update((definition) => ({
-      ...definition,
-      portfolioDays: Math.max(1, Math.min(60, Math.round(portfolioDays))),
-    }));
-  }
-
-  /** Portfolio summary tree only; workspaces below a collapsed organisation stay in the set. */
-  toggleOrganisationCollapsed(organisationId: string): void {
-    this.definition.update((definition) => ({
-      ...definition,
-      collapsedOrganisationIds: toggleId(definition.collapsedOrganisationIds, organisationId),
-    }));
-    this.persistPreference();
-  }
 
   toggleWorkspaceCollapsed(workspaceId: string): void {
     this.definition.update((definition) => ({
@@ -778,7 +715,6 @@ export class GlobalWorkState {
   applySavedView(view: SavedWorkView): void {
     if (view.lens !== this.lens()) return;
     this.selectedViewId.set(view.id);
-    this.drilldownLabel.set(null);
     this.overviewFocusUserId.set(null);
     // A view saved on the retired Up next lanes display opens its successor, the overview.
     this.definition.set(view.definition.display === "priorities"
@@ -789,9 +725,8 @@ export class GlobalWorkState {
   }
 
   clearSavedView(): void {
-    const defaults = defaultDefinition(this.lens());
+    const defaults = defaultDefinition();
     this.selectedViewId.set(null);
-    this.drilldownLabel.set(null);
     this.definition.set(defaults);
     this.updateRooms();
     void this.queryFirstPage();
@@ -1352,7 +1287,6 @@ export class GlobalWorkState {
     writeGlobalWorkPreference(userId, this.lens(), {
       definition: this.definition(),
       selectedViewId: this.selectedViewId(),
-      drilldownLabel: this.drilldownLabel(),
       collapsedHistoryDayKeys: this.collapsedHistoryDayKeys(),
       collapsedChecklistGroupIds: this.collapsedChecklistGroupIds(),
       upNextPanelOpen: this.upNextPanelOpen(),
@@ -1371,9 +1305,7 @@ export class GlobalWorkState {
   ): Promise<void> {
     const { onNetworkApplied, atomicCards = false } = options;
     const requestedDefinition = this.definition();
-    const initialCardsRequest = this.lens() === "portfolio" && requestedDefinition.display === "summary"
-      ? Promise.resolve(EMPTY_RESPONSE)
-      : atomicCards ? this.loadAllCards(version) : this.loadCards();
+    const initialCardsRequest = atomicCards ? this.loadAllCards(version) : this.loadCards();
     // Priorities rides in the same Promise.all as the cards, so the ranked lane and the tail can
     // never be applied at different instants — the invariant that keeps a card from briefly
     // appearing in both, or in neither.
@@ -1383,7 +1315,6 @@ export class GlobalWorkState {
       initialResponse,
       savedViews,
       shareCandidates,
-      initialPortfolio,
       priorities,
       teamPriorities,
       initialPriorityCandidateCards,
@@ -1392,7 +1323,6 @@ export class GlobalWorkState {
       initialCardsRequest,
       this.api.get<SavedWorkView[]>("/work-views"),
       this.api.get<WorkViewShareCandidate[]>("/work-views/share-candidates"),
-      this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
       this.loadPriorities(),
       initialTeamPrioritiesRequest,
       initialTeamPrioritiesRequest.then((queues) => this.loadTeamPriorityCandidateCards(version, queues)),
@@ -1406,23 +1336,17 @@ export class GlobalWorkState {
       catalog,
       this.auth.user()?.id ?? null,
     );
-    const definitionChanged = JSON.stringify(definition) !== JSON.stringify(previousDefinition);
     const queryDefinitionChanged = JSON.stringify(definition) !== JSON.stringify(requestedDefinition);
     this.definition.set(definition);
-    if (definitionChanged) this.drilldownLabel.set(null);
     let response = initialResponse;
-    let portfolio = initialPortfolio;
     let priorityCandidateCards = initialPriorityCandidateCards;
     if (queryDefinitionChanged) {
       // A cached definition can paint while this request is in flight, and remembered sources can
       // become inaccessible. Refetch whenever the now-canonical definition differs from the one
       // that produced the first response so controls, rows, and aggregates always describe one view.
-      const correctedCardsRequest = this.lens() === "portfolio" && definition.display === "summary"
-        ? Promise.resolve(EMPTY_RESPONSE)
-        : atomicCards ? this.loadAllCards(version) : this.loadCards();
-      [response, portfolio, priorityCandidateCards] = await Promise.all([
+      const correctedCardsRequest = atomicCards ? this.loadAllCards(version) : this.loadCards();
+      [response, priorityCandidateCards] = await Promise.all([
         correctedCardsRequest,
-        this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
         this.loadTeamPriorityCandidateCards(version, teamPriorities),
       ]);
       if (version !== this.requestVersion) return;
@@ -1436,7 +1360,6 @@ export class GlobalWorkState {
     this.response.set(response);
     this.savedViews.set(savedViews);
     this.shareCandidates.set(shareCandidates);
-    this.portfolio.set(portfolio);
     this.otherPriorities.set(priorities);
     this.teamPriorities.set(teamPriorities);
     this.teamPriorityCandidates.set(priorityCandidateCards);
@@ -1469,8 +1392,8 @@ export class GlobalWorkState {
    *
    * Fetched whenever exactly one *other* person is in focus, on every display: the rank pills on
    * card tiles and the Up next panel both read it ambiently, so it cannot wait for a display switch.
-   * One indexed range scan per query reload is the whole cost. Returns null for a whole team or
-   * the portfolio — a queue belongs to one person — and for the viewer themselves, whose queue the
+   * One indexed range scan per query reload is the whole cost. Returns null for a whole team — a
+   * queue belongs to one person — and for the viewer themselves, whose queue the
    * shell-wide `MyPrioritiesService` already owns and keeps live.
    */
   private async loadPriorities(): Promise<WorkPrioritiesResponse | null> {
@@ -1690,18 +1613,6 @@ export class GlobalWorkState {
   private whenCardDragIdle(): Promise<void> {
     if (!this.cardDrag.active()) return Promise.resolve();
     return new Promise<void>((resolve) => this.dragIdleWaiters.push(resolve));
-  }
-
-  private loadPortfolio(): Promise<PortfolioSummary> {
-    const definition = this.definition();
-    return this.api.post<PortfolioSummary>("/work/portfolio/query", {
-      scope: definition.scope,
-      filters: definition.filters,
-      days: definition.portfolioDays,
-      // The heatmap buckets by calendar day, so the server needs the viewer's zone to decide which
-      // square a late-evening event belongs to.
-      timeZone: viewerTimeZone(),
-    });
   }
 
   private attachRealtime(): void {
@@ -2028,13 +1939,10 @@ export class GlobalWorkState {
       if (includeCatalog) {
         await this.refreshAll(version, { atomicCards: true });
       } else {
-        const cardsRequest = this.lens() === "portfolio" && this.definition().display === "summary"
-          ? Promise.resolve(EMPTY_RESPONSE)
-          : this.loadAllCards(version);
+        const cardsRequest = this.loadAllCards(version);
         const reconcileTeamPrioritiesRequest = this.loadTeamPriorities();
-        const [response, portfolio, priorities, teamPriorities, priorityCandidateCards] = await Promise.all([
+        const [response, priorities, teamPriorities, priorityCandidateCards] = await Promise.all([
           cardsRequest,
-          this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
           this.loadPriorities(),
           reconcileTeamPrioritiesRequest,
           reconcileTeamPrioritiesRequest.then((queues) => this.loadTeamPriorityCandidateCards(version, queues)),
@@ -2043,7 +1951,6 @@ export class GlobalWorkState {
         await this.whenCardDragIdle();
         if (version !== this.requestVersion) return;
         this.response.set(response);
-        if (this.lens() === "portfolio") this.portfolio.set(portfolio);
         this.otherPriorities.set(priorities);
         this.teamPriorities.set(teamPriorities);
         this.teamPriorityCandidates.set(priorityCandidateCards);
@@ -2117,7 +2024,6 @@ export class GlobalWorkState {
       this.definition(),
       this.catalog(),
       this.response(),
-      this.portfolio(),
       this.savedViews(),
     ).catch(() => undefined);
   }

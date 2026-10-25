@@ -75,11 +75,10 @@ export async function authUserPayload(userId: string, requestedClientId?: string
     deploymentMode: env.KANERA_DEPLOYMENT_MODE,
     kaneraEnvironment: env.KANERA_ENVIRONMENT,
     hasWorkspace: active.hasWorkspace,
-    portfolioEnabled: active.portfolioEnabled,
     inProgressEnabled: active.inProgressEnabled,
     role: active.role,
     isClientAdmin: isClientAdminRole(active.role),
-    organisations: organisations.map(({ addedAt: _addedAt, analyticsExcluded: _analyticsExcluded, requireMfa: _requireMfa, portfolioEnabled: _portfolioEnabled, ...organisation }) => organisation),
+    organisations: organisations.map(({ addedAt: _addedAt, analyticsExcluded: _analyticsExcluded, requireMfa: _requireMfa, ...organisation }) => organisation),
     // Organisations carry independent plans and billing, so creation is not identity-limited.
     canCreateOrganisation: true,
     ...(await accountPayload(active.clientId)),

@@ -49,7 +49,7 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
   clientId: string; userIds: ReadonlyMap<string, string>; calendar: ReturnType<typeof seedCalendar>;
 }) {
   const { calendar, userIds } = input;
-  const at = calendar.instant;
+  const at = calendar.activityInstant;
   const boardRows = await tx.select({ board: boards, workspace: workspaces }).from(boards)
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId)).where(eq(workspaces.clientId, input.clientId));
   const marketing = boardRows.find(({ workspace }) => workspace.name === "Marketing & Creative")!.workspace;
@@ -195,13 +195,18 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
   const colors: Record<string, ColorToken> = { "Ideas & Requests": "gray", "Ready to Start": "teal", "In Progress": "blue", "Review & Approval": "violet", "Waiting on Others": "amber", Done: "green" };
   for (const row of listRows) await tx.update(lists).set({ color: colors[row.name] }).where(eq(lists.id, row.id));
   const positions = new Map<string, number>();
+  let separatorCount = 0;
   for (const [boardName, listName, title, numbers] of GROUPS) {
     const board = boardId(boardName); const list = listId(listName); const scope = `${board}:${list}`;
     let position = positions.get(scope) ?? 0;
-    const separator = await tx.select().from(boardSeparators).where(and(eq(boardSeparators.boardId, board), eq(boardSeparators.listId, list), eq(boardSeparators.title, title)));
-    position += 1000;
-    if (!separator.length) await tx.insert(boardSeparators).values({ boardId: board, listId: list, title, position: String(position), createdById: userIds.get("ben")!, createdAt: at, updatedAt: at });
-    else await tx.update(boardSeparators).set({ position: String(position) }).where(eq(boardSeparators.id, separator[0]!.id));
+    // A separator divides existing cards from the next group; the first group needs no heading.
+    if (positions.has(scope)) {
+      const separator = await tx.select().from(boardSeparators).where(and(eq(boardSeparators.boardId, board), eq(boardSeparators.listId, list), eq(boardSeparators.title, title)));
+      position += 1000;
+      if (!separator.length) await tx.insert(boardSeparators).values({ boardId: board, listId: list, title, position: String(position), createdById: userIds.get("ben")!, createdAt: at, updatedAt: at });
+      else await tx.update(boardSeparators).set({ position: String(position) }).where(eq(boardSeparators.id, separator[0]!.id));
+      separatorCount += 1;
+    }
     for (const number of numbers) {
       const row = typeof number === "number" ? card(number) : aliasCards.get(number)!;
       position += 1000;
@@ -261,6 +266,6 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
     }
     if (content !== row.content) await tx.update(notes).set({ content, updatedAt: at }).where(eq(notes.id, row.id));
   }
-  return { referenceDate: calendar.date, created, offsetMap,
+  return { referenceDate: calendar.date, created, offsetMap, separatorCount,
     warnings: ["MARKETINGC-7 remains incomplete: desktop/mobile hero, email header, three social formats and partner lockup exports are missing. Permanent totals are 111 unarchived = 82 active + 29 completed until the exports can be verified; the temporary automation card adds one.", "Ben’s active launch set also includes NEW-LAUNCH, as requested; its blank Budget leaves the total at EUR 3000. The three-card set in the brief describes the pre-existing cards only.", "No genuine Claude history is available in the local fixture source. Agent successes and unread inbox activity are not fabricated; use real application actions for demonstrations."] };
 }

@@ -26,6 +26,7 @@ interface DraftItem {
   id: string;
   name: string;
   icon?: string;
+  color?: ColorToken | null;
   /** Lists only: work in this list is actively happening (drives time in progress). */
   inProgress?: boolean;
   type?: CustomFieldTypeName;
@@ -511,7 +512,7 @@ export class OnboardingPage implements OnInit {
             icon: template.icon,
           },
         } : {}),
-        lists: this.lists().map((list) => ({ name: list.name.trim(), icon: list.icon ?? null, inProgress: list.inProgress ?? false })),
+        lists: this.lists().map((list) => ({ name: list.name.trim(), icon: list.icon ?? null, color: list.color ?? null, inProgress: list.inProgress ?? false })),
         customFields: this.fields().map((field) => ({
           name: field.name.trim(),
           icon: field.icon ?? "forms",

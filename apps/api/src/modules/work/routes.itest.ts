@@ -31,6 +31,8 @@ import { agentWorkQueryRoutes } from "./routes.js";
 
 async function seed() {
   const app = await buildIntegrationServer();
+  // The portfolio rollup is an agent-only route: the web app has no Portfolio page.
+  await app.register(agentWorkQueryRoutes, { prefix: "/agent-public" });
   const [homeClient, externalClient] = await db.insert(clients).values([
     { name: "Home org" },
     { name: "Partner org" },
@@ -563,7 +565,6 @@ void test("agent work routes return the connected user's cross-board history and
 
 void test("agent work queries review one visible person across a workspace without leaking other actors", async () => {
   const f = await seed();
-  await f.app.register(agentWorkQueryRoutes, { prefix: "/agent-public" });
   const now = new Date();
   await db.insert(activityEvents).values([
     {
@@ -877,7 +878,7 @@ void test("portfolio summaries match access-filtered card drill-downs", async ()
     .where(eq(cards.id, f.restrictedMine.id));
   const summaryResponse = await f.app.inject({
     method: "POST",
-    url: "/work/portfolio/query",
+    url: "/agent-public/work/portfolio/query",
     headers: auth(f.viewerToken),
     payload: { days: 30 },
   });
@@ -967,7 +968,7 @@ void test("portfolio activity heatmaps split movement from delivery inside the f
 
   const response = await f.app.inject({
     method: "POST",
-    url: "/work/portfolio/query",
+    url: "/agent-public/work/portfolio/query",
     headers: auth(f.viewerToken),
     payload: { days: 30, timeZone: "UTC" },
   });
@@ -985,7 +986,7 @@ void test("portfolio activity heatmaps split movement from delivery inside the f
   // them too — here down to the single matching card's own activity.
   const filtered = await f.app.inject({
     method: "POST",
-    url: "/work/portfolio/query",
+    url: "/agent-public/work/portfolio/query",
     headers: auth(f.viewerToken),
     payload: { days: 30, timeZone: "UTC", filters: { q: "My shared card" } },
   });
@@ -1106,7 +1107,7 @@ void test("atRiskOnly and the portfolio At risk count follow the Dependencies vi
   const atRisk = async () => {
     const [query, summary] = await Promise.all([
       f.app.inject({ method: "POST", url: "/work/cards/query", headers: auth(f.viewerToken), payload: { lens: "my", filters: { atRiskOnly: true }, limit: 100 } }),
-      f.app.inject({ method: "POST", url: "/work/portfolio/query", headers: auth(f.viewerToken), payload: { days: 30 } }),
+      f.app.inject({ method: "POST", url: "/agent-public/work/portfolio/query", headers: auth(f.viewerToken), payload: { days: 30 } }),
     ]);
     assert.equal(query.statusCode, 200, query.body);
     assert.equal(summary.statusCode, 200, summary.body);
@@ -1159,7 +1160,7 @@ void test("blockedOnly returns open cards with an open blocker, hidden blockers 
   const portfolioBlocked = async () => {
     const response = await f.app.inject({
       method: "POST",
-      url: "/work/portfolio/query",
+      url: "/agent-public/work/portfolio/query",
       headers: auth(f.viewerToken),
       payload: { days: 30 },
     });
@@ -1216,7 +1217,7 @@ void test("schedule attention and portfolio health report the engine's verdict f
     assert.deepEqual(teammateView.conflicts.map((card) => card.title), ["Teammate's conflict"]);
     assert.deepEqual(teammateView.critical, []);
 
-    const portfolio = await f.app.inject({ method: "POST", url: "/work/portfolio/query", headers: auth(f.viewerToken), payload: { days: 30 } });
+    const portfolio = await f.app.inject({ method: "POST", url: "/agent-public/work/portfolio/query", headers: auth(f.viewerToken), payload: { days: 30 } });
     assert.equal(portfolio.statusCode, 200, portfolio.body);
     const summary = portfolio.json<PortfolioSummary>();
     const shared = summary.buckets.find((bucket) => bucket.boardName === "Shared");

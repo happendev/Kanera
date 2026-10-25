@@ -723,6 +723,25 @@ export async function clearNotificationsForScope(tx: Tx, scope: { boardId: strin
   await enqueueDeletedNotifications(tx, deleted);
 }
 
+/**
+ * Comment, mention and reaction notifications all hang off an activity keyed to the comment, and
+ * render the comment's current body. Once the comment is gone they would claim someone "commented"
+ * with nothing to show, so they leave every inbox with it.
+ */
+export async function clearNotificationsForComments(tx: Tx, commentIds: string[]): Promise<void> {
+  if (commentIds.length === 0) return;
+  const deleted = await tx.delete(notifications)
+    .where(inArray(notifications.activityId, tx
+      .select({ id: activityEvents.id })
+      .from(activityEvents)
+      .where(and(
+        eq(activityEvents.entityType, ACTIVITY_ENTITY_TYPE.COMMENT),
+        inArray(activityEvents.entityId, commentIds),
+      ))))
+    .returning({ id: notifications.id, userId: notifications.userId });
+  await enqueueDeletedNotifications(tx, deleted);
+}
+
 export type DeletedNotificationRef = { id: string; userId: string };
 
 export type RelocatedNotifications = {

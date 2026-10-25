@@ -34,13 +34,15 @@ async function revealedSecret(page: Page, copyLabel: string): Promise<string> {
   return (await reveal.locator("code").innerText()).trim();
 }
 
-test("a public API write reaches an open board live and a signed webhook", async ({ page, signIn, pageAs, playwright, uniqueName }) => {
+test("a public API write reaches an open board live and a signed webhook", async ({ page, testWorkspace, signIn, pageAs, apiAs, playwright, uniqueName }) => {
   const title = uniqueName("E2E public API card");
   const receiver = await startReceiver();
+  const api = await apiAs("amelia");
+  let webhookId: string | undefined;
   try {
     await signIn(page, "amelia");
-    const boardId = await boardIdOf(page, "Platform Delivery");
-    const settingsHref = await workspaceSettingsHref(page, "Platform Delivery");
+    const boardId = await boardIdOf(page, testWorkspace.boardName);
+    const settingsHref = await workspaceSettingsHref(page, testWorkspace.boardName);
 
     // Credentials are created the way an integrator would: once, from workspace settings.
     const apiKey = await createWorkspaceApiKey(page, settingsHref, uniqueName("E2E key"));
@@ -48,12 +50,17 @@ test("a public API write reaches an open board live and a signed webhook", async
 
     await page.locator('input[name="webhookName"]').fill(uniqueName("E2E webhook"));
     await page.locator('input[name="webhookUrl"]').fill(receiver.url);
+    const addedWebhook = page.waitForResponse((response) => response.request().method() === "POST"
+      && response.url().endsWith(`/api/workspaces/${testWorkspace.id}/webhooks`));
     await page.getByRole("button", { name: "Add webhook" }).click();
+    const added = await addedWebhook;
+    expect(added.ok(), await added.text()).toBe(true);
+    webhookId = (await added.json() as { id: string }).id;
     const webhookSecret = await revealedSecret(page, "Copy webhook secret");
     expect(webhookSecret).toMatch(/^whsec_/);
 
     const member = await pageAs("marcus");
-    await openBoard(member, "Platform Delivery");
+    await openBoard(member, testWorkspace.boardName);
 
     // The public API runs as its own process. The web client only sees this write if the durable
     // outbox row is drained by the app API and fanned out to the board room.
@@ -86,6 +93,14 @@ test("a public API write reaches an open board live and a signed webhook", async
       await publicApi.dispose();
     }
   } finally {
-    receiver.server.close();
+    try {
+      // Stop future deliveries before closing the receiver; otherwise later writes leave retries.
+      if (webhookId) {
+        const removed = await api.delete(`/api/workspaces/${testWorkspace.id}/webhooks/${webhookId}`);
+        expect(removed.status()).toBe(204);
+      }
+    } finally {
+      await new Promise<void>((resolve, reject) => receiver.server.close((error) => error ? reject(error) : resolve()));
+    }
   }
 });

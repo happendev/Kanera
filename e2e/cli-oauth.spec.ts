@@ -138,12 +138,16 @@ async function mcpRequest(child: ChildProcess, id: number, method: string, param
   });
 }
 
-test("the CLI signs in with the browser device flow, works on the board, refreshes, and signs out", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
+test("the CLI signs in with the browser device flow, works on the board, refreshes, and signs out", async ({ page, testWorkspace, signIn, apiAs, uniqueName }, testInfo) => {
   const cliEnv = cliHome();
   let bridge: ChildProcess | undefined;
+  const app = await apiAs("amelia");
+  const connections = async () => (await (await app.get("/api/me/oauth-connections")).json() as { id: string; clientName: string }[])
+    .filter((connection) => connection.clientName.startsWith("Kanera CLI ("));
+  const previousConnections = new Set((await connections()).map((connection) => connection.id));
   try {
     await signIn(page, "amelia");
-    const boardPath = await boardHref(page, "Platform Delivery");
+    const boardPath = await boardHref(page, testWorkspace.boardName);
     const boardId = boardPath.split("/")[2]!;
 
     const login = cliEnv.start(["auth", "login", "--mcp-url", mcpUrl, "--no-browser", "--json"]);
@@ -163,9 +167,6 @@ test("the CLI signs in with the browser device flow, works on the board, refresh
     expect(statSync(cliEnv.configFile).mode & 0o777).toBe(0o600);
 
     // The connection is visible to the user under their AI agent connections, named for the machine.
-    const app = await apiAs("amelia");
-    const connections = async () => (await (await app.get("/api/me/oauth-connections")).json() as { id: string; clientName: string }[])
-      .filter((connection) => connection.clientName.startsWith("Kanera CLI ("));
     expect(await connections()).toHaveLength(1);
 
     bridge = cliEnv.startMcp();
@@ -186,7 +187,7 @@ test("the CLI signs in with the browser device flow, works on the board, refresh
     // A write made through the CLI reaches a board a person has open, live.
     // The page is still on the consent screen; open the board directly.
     await page.goto(boardPath);
-    await expectBoardLoaded(page, "Platform Delivery");
+    await expectBoardLoaded(page, testWorkspace.boardName);
     const catalogDirectory = path.join(cliEnv.home, "kanera", "tool-cache");
     // OAuth login validates its token with a real tool session, which already warms this cache.
     // Clear only this test's temporary catalogue so the captured command really is a cold read.
@@ -288,7 +289,16 @@ test("the CLI signs in with the browser device flow, works on the board, refresh
       bridge.kill();
       await closed;
     }
-    cliEnv.cleanup();
+    try {
+      // A failed lifecycle assertion must not leave a live personal connection for the next run.
+      for (const connection of await connections()) {
+        if (!previousConnections.has(connection.id)) {
+          expect((await app.delete(`/api/me/oauth-connections/${connection.id}`)).status()).toBe(204);
+        }
+      }
+    } finally {
+      cliEnv.cleanup();
+    }
   }
 });
 
@@ -310,17 +320,19 @@ test("denying the CLI sign-in in the browser stores nothing and exits unauthenti
   }
 });
 
-test("a read-only API key profile reads through the CLI and MCP bridge but is refused every write", async ({ page, signIn, apiAs, uniqueName }) => {
+test("a read-only API key profile reads through the CLI and MCP bridge but is refused every write", async ({ page, testWorkspace, signIn, apiAs, uniqueName }) => {
   const cliEnv = cliHome();
   let bridge: ChildProcess | undefined;
+  const app = await apiAs("amelia");
+  let keyId: string | undefined;
   try {
     await signIn(page, "amelia");
-    const boardPath = await boardHref(page, "Platform Delivery");
+    const boardPath = await boardHref(page, testWorkspace.boardName);
     const boardId = boardPath.split("/")[2]!;
-    const app = await apiAs("amelia");
-    const minted = await app.post("/api/me/api-keys", { data: { label: uniqueName("E2E read-only key"), scope: "read" } });
+    const minted = await app.post("/api/me/api-keys", { data: { label: uniqueName("CLI read key"), scope: "read" } });
     expect(minted.status(), await minted.text()).toBe(201);
-    const { secret } = await minted.json() as { secret: string };
+    const { id, secret } = await minted.json() as { id: string; secret: string };
+    keyId = id;
     json(await cliEnv.run(["auth", "login", "--with-api-key", "--api-key", secret, "--url", publicApiOrigin, "--json"]));
     const stored = cliEnv.profile();
     expect(stored.oauth).toBeUndefined();
@@ -352,7 +364,7 @@ test("a read-only API key profile reads through the CLI and MCP bridge but is re
     expect(refused.error?.message).toContain("Tool cards.create not found");
 
     await page.goto(boardPath);
-    await expectBoardLoaded(page, "Platform Delivery");
+    await expectBoardLoaded(page, testWorkspace.boardName);
     await expect(cardTile(page, title)).toHaveCount(0);
   } finally {
     if (bridge && bridge.exitCode === null) {
@@ -360,6 +372,10 @@ test("a read-only API key profile reads through the CLI and MCP bridge but is re
       bridge.kill();
       await closed;
     }
-    cliEnv.cleanup();
+    try {
+      if (keyId) expect((await app.delete(`/api/me/api-keys/${keyId}`)).status()).toBe(204);
+    } finally {
+      cliEnv.cleanup();
+    }
   }
 });

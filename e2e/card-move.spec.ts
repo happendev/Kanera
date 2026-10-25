@@ -1,7 +1,7 @@
 import { expect, test } from "./support/fixtures";
 import { boardHref, cardTile, createCard, expectBoardLoaded, moveCardToBoard, openCard } from "./support/ui";
 
-test("a card moved across lists and boards converges in Kanban, table, and Portfolio", async ({ page, signIn, uniqueName }) => {
+test("a card moved across lists and boards converges in Kanban and table", async ({ page, signIn, uniqueName }) => {
   const title = uniqueName("E2E moving card");
   await signIn(page, "amelia");
   const sourceHref = await boardHref(page, "Platform Delivery");
@@ -32,14 +32,4 @@ test("a card moved across lists and boards converges in Kanban, table, and Portf
   const movedDetail = page.getByRole("dialog", { name: `Card detail: ${title}` });
   // The destination feed records the transfer once; the earlier list move belongs to the source board.
   await expect(movedDetail.locator(".activity-item").filter({ hasText: "moved from" })).toHaveCount(1);
-
-  await page.goto("/portfolio");
-  await page.getByRole("button", { name: "Table view" }).click();
-  await page.getByRole("searchbox", { name: "Search cards" }).fill(title);
-  const portfolioRow = page.locator("k-board-table-view .tv-row").filter({ hasText: title });
-  await expect(portfolioRow).toHaveCount(1);
-  await expect(portfolioRow).toContainText("Mobile Experience");
-  await page.reload();
-  await page.getByRole("searchbox", { name: "Search cards" }).fill(title);
-  await expect(portfolioRow).toHaveCount(1);
 });

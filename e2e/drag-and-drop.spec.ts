@@ -23,8 +23,7 @@ async function renderedOrder(page: Page, listId: string, titles: string[]): Prom
  * cross the lower half of the target first would legitimately land after it.
  */
 async function dragCard(page: Page, card: Locator, target: Locator, side: "above" | "below") {
-  // Earlier specs append cards to this seeded lane. A mounted tile can still sit below its
-  // scroll viewport, and mouse coordinates do not scroll it into view like locator actions do.
+  // Mouse coordinates do not scroll a tile into view like locator actions do.
   await target.scrollIntoViewIfNeeded();
   await card.scrollIntoViewIfNeeded();
   await expect(card).toBeInViewport();
@@ -47,12 +46,12 @@ async function dragCard(page: Page, card: Locator, target: Locator, side: "above
   expect((await moved).ok()).toBe(true);
 }
 
-test("dragged cards reorder within and across lists for every viewer and after reload", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
+test("dragged cards reorder within and across lists for every viewer and after reload", async ({ page, testWorkspace, signIn, pageAs, apiAs, uniqueName }) => {
   const first = uniqueName("E2E drag first");
   const second = uniqueName("E2E drag second");
   const titles = [first, second];
   await signIn(page, "amelia");
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, testWorkspace.boardName);
 
   // Setup through the API: the subject is the drag, not card creation. Default placement is the
   // bottom of the list, so the two cards start adjacent and in creation order.
@@ -67,9 +66,12 @@ test("dragged cards reorder within and across lists for every viewer and after r
     expect(created.ok(), await created.text()).toBe(true);
   }
 
+  const target = await api.post(`/api/boards/${boardId}/lists/${wishlist}/cards`, { data: { title: uniqueName("Wishlist anchor") } });
+  expect(target.ok(), await target.text()).toBe(true);
+
   const viewer = await pageAs("marcus");
-  await openBoard(page, "Platform Delivery");
-  await openBoard(viewer, "Platform Delivery");
+  await openBoard(page, testWorkspace.boardName);
+  await openBoard(viewer, testWorkspace.boardName);
   await expect.poll(() => renderedOrder(page, backlog, titles)).toEqual([first, second]);
   await expect.poll(() => renderedOrder(viewer, backlog, titles)).toEqual([first, second]);
 
@@ -92,7 +94,7 @@ test("dragged cards reorder within and across lists for every viewer and after r
   // Positions are persisted server-side, not just held in either client's state.
   for (const p of [page, viewer]) {
     await p.reload();
-    await expectBoardLoaded(p, "Platform Delivery");
+    await expectBoardLoaded(p, testWorkspace.boardName);
     await expect.poll(() => renderedOrder(p, wishlist, titles)).toEqual([first]);
     await expect.poll(() => renderedOrder(p, backlog, titles)).toEqual([second]);
     expect((await listCards(p, wishlist).locator("k-card").allInnerTexts())[0]).toContain(first);

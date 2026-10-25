@@ -7,8 +7,8 @@ import { boardIdOf, completeCard, expectBoardLoaded, moveCardToList, openBoard, 
 
 type BoardLists = { boardId: string; lists: Map<string, string> };
 
-async function platformDelivery(page: Page, api: APIRequestContext): Promise<BoardLists> {
-  const boardId = await boardIdOf(page, "Platform Delivery");
+async function boardLists(page: Page, api: APIRequestContext, boardName: string): Promise<BoardLists> {
+  const boardId = await boardIdOf(page, boardName);
   const response = await api.get(`/api/boards/${boardId}?includeCards=false`);
   const { lists } = (await response.json()) as { lists: { id: string; name: string }[] };
   return { boardId, lists: new Map(lists.map((list) => [list.name, list.id])) };
@@ -50,37 +50,37 @@ async function showBoardView(page: Page, view: "Table view" | "Work done") {
   await expect(page.locator(view === "Table view" ? "k-board-table-view" : "k-work-done-view")).toBeVisible();
 }
 
-async function openGlobalWork(page: Page, path: "/my-cards" | "/team-cards" | "/portfolio", display: "Board view" | "Table view" | "Work done") {
+async function openGlobalWork(page: Page, path: "/my-cards" | "/team-cards", display: "Board view" | "Table view" | "Work done") {
   await page.goto(path);
   await page.getByRole("button", { name: display }).click();
   const ready = { "Board view": "section.workspace-board", "Table view": "k-board-table-view", "Work done": "k-work-done-view" }[display];
   await expect(page.locator(ready).first()).toBeVisible();
 }
 
-test("board detail, Kanban, table and work done follow another member's card edits live", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
+test("board detail, Kanban, table and work done follow another member's card edits live", async ({ page, testWorkspace, signIn, pageAs, apiAs, uniqueName }) => {
   const title = uniqueName("E2E live edit");
   const renamed = `${title} renamed`;
   const description = uniqueName("E2E live description");
   await signIn(page, "amelia");
-  const board = await platformDelivery(page, await apiAs("amelia"));
+  const board = await boardLists(page, await apiAs("amelia"), testWorkspace.boardName);
   const cardId = await createCardViaApi(await apiAs("amelia"), board, title);
   const inProgress = board.lists.get("In Progress")!;
 
   // Marcus watches the same card from three places: its open detail panel (over the Kanban), the
   // table view, and the Work done view.
   const detailPage = await pageAs("marcus");
-  await openBoard(detailPage, "Platform Delivery");
+  await openBoard(detailPage, testWorkspace.boardName);
   await openCard(detailPage, title);
   const tablePage = await pageAs("marcus");
-  await openBoard(tablePage, "Platform Delivery");
+  await openBoard(tablePage, testWorkspace.boardName);
   await showBoardView(tablePage, "Table view");
   await expect(tableRow(tablePage, cardId)).toBeVisible();
   const workDonePage = await pageAs("marcus");
-  await openBoard(workDonePage, "Platform Delivery");
+  await openBoard(workDonePage, testWorkspace.boardName);
   await showBoardView(workDonePage, "Work done");
   await expect(workDoneRow(workDonePage, title)).toBeVisible();
 
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, testWorkspace.boardName);
   const detail = await openCard(page, title);
 
   await renameCard(detail, renamed);
@@ -105,20 +105,20 @@ test("board detail, Kanban, table and work done follow another member's card edi
 
   // Nothing above reloaded; confirm the viewers converged on what the server stored.
   await tablePage.reload();
-  await expectBoardLoaded(tablePage, "Platform Delivery");
+  await expectBoardLoaded(tablePage, testWorkspace.boardName);
   await expect(tableRow(tablePage, cardId)).toHaveClass(/\bis-completed\b/);
   await expect(tableRow(tablePage, cardId).locator('[data-col="status"]')).toContainText("In Progress");
 });
 
-test("Global Work lenses follow another user's card edits live", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
+test("Global Work lenses follow another user's card edits live", async ({ page, testWorkspace, signIn, pageAs, apiAs, uniqueName }) => {
   const title = uniqueName("E2E global edit");
   const renamed = `${title} renamed`;
   await signIn(page, "amelia");
-  const board = await platformDelivery(page, await apiAs("amelia"));
+  const board = await boardLists(page, await apiAs("amelia"), testWorkspace.boardName);
   const marcusId = await userId(await apiAs("marcus"));
 
   // Every viewer page is open before the card exists, so its arrival is live too. My Cards shows
-  // cards assigned to the viewer (Marcus); Team Cards and Portfolio show them to a teammate (Priya).
+  // cards assigned to the viewer (Marcus); Team Cards shows them to a teammate (Priya).
   const myBoard = await pageAs("marcus");
   await openGlobalWork(myBoard, "/my-cards", "Board view");
   const myTable = await pageAs("marcus");
@@ -129,10 +129,13 @@ test("Global Work lenses follow another user's card edits live", async ({ page, 
   // Amelia's edits therefore appear in Priya's Team Cards history, not in Marcus's My Cards one.
   const teamWorkDone = await pageAs("priya");
   await openGlobalWork(teamWorkDone, "/team-cards", "Work done");
-  const portfolio = await pageAs("priya");
-  await openGlobalWork(portfolio, "/portfolio", "Table view");
-  // Search by the base title, which the renamed title still contains.
-  await portfolio.getByRole("searchbox", { name: "Search cards" }).fill(title);
+  const teamTable = await pageAs("priya");
+  await openGlobalWork(teamTable, "/team-cards", "Table view");
+  // Search before creating the card so background reconciliation still supplies its arrival.
+  for (const viewer of [myTable, teamTable]) {
+    await viewer.getByRole("searchbox", { name: "Search cards" }).fill(title);
+    await expect(viewer.locator(".tv-row")).toHaveCount(0);
+  }
 
   const cardId = await createCardViaApi(await apiAs("amelia"), board, title, [marcusId]);
 
@@ -140,7 +143,7 @@ test("Global Work lenses follow another user's card edits live", async ({ page, 
   await expect(tableRow(myTable, cardId)).toBeVisible();
   await expect(workDoneRow(teamWorkDone, title)).toBeVisible();
   await expect(laneOf(teamBoard, title)).toContainText("Backlog");
-  await expect(tableRow(portfolio, cardId)).toBeVisible();
+  await expect(tableRow(teamTable, cardId)).toBeVisible();
 
   // Marcus also opens the card from My Cards: Global Work hosts card detail on its own state.
   const myDetailPage = await pageAs("marcus");
@@ -148,18 +151,18 @@ test("Global Work lenses follow another user's card edits live", async ({ page, 
   await myDetailPage.locator("k-card").filter({ hasText: title }).click();
   await expect(openDetail(myDetailPage)).toBeVisible();
 
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, testWorkspace.boardName);
   const detail = await openCard(page, title);
 
   await renameCard(detail, renamed);
   for (const viewer of [myBoard, teamBoard]) await expect(viewer.locator("k-card").filter({ hasText: renamed })).toHaveCount(1);
-  for (const viewer of [myTable, portfolio]) await expect(tableRow(viewer, cardId).locator('[data-col="title"]')).toContainText(renamed);
+  for (const viewer of [myTable, teamTable]) await expect(tableRow(viewer, cardId).locator('[data-col="title"]')).toContainText(renamed);
   await expect(openDetail(myDetailPage).locator("h2.card-title")).toHaveText(renamed);
 
   await moveCardToList(detail, "In Progress");
   await expect(laneOf(myBoard, renamed)).toContainText("In Progress");
   await expect(laneOf(teamBoard, renamed)).toContainText("In Progress");
-  for (const viewer of [myTable, portfolio]) await expect(tableRow(viewer, cardId).locator('[data-col="status"]')).toContainText("In Progress");
+  for (const viewer of [myTable, teamTable]) await expect(tableRow(viewer, cardId).locator('[data-col="status"]')).toContainText("In Progress");
   await expect(openDetail(myDetailPage).locator(".move-list-btn:visible").first()).toContainText("In Progress");
   await expect(workDoneRow(teamWorkDone, renamed).locator(".wd-chip--moved, .wd-verb--moved").first()).toBeVisible();
 
@@ -167,14 +170,15 @@ test("Global Work lenses follow another user's card edits live", async ({ page, 
   for (const viewer of [myBoard, teamBoard]) {
     await expect(viewer.locator("k-card").filter({ hasText: renamed }).locator("a.card-link")).toHaveClass(/\bis-completed\b/);
   }
-  for (const viewer of [myTable, portfolio]) await expect(tableRow(viewer, cardId)).toHaveClass(/\bis-completed\b/);
+  for (const viewer of [myTable, teamTable]) await expect(tableRow(viewer, cardId)).toHaveClass(/\bis-completed\b/);
   await expect(openDetail(myDetailPage).getByRole("button", { name: "Mark incomplete" })).toBeVisible();
   await expect(workDoneRow(teamWorkDone, renamed).locator(".wd-verb--completed")).toBeVisible();
 
-  // Unassigning removes the card from Marcus's lens but not from his teammate's Portfolio.
+  // Unassigning removes the card from Marcus's lens and from his teammate's Team Cards table alike:
+  // both lenses show assigned work only.
   const unassigned = await (await apiAs("amelia")).put(`/api/cards/${cardId}/assignees`, { data: { userIds: [] } });
   expect(unassigned.ok(), await unassigned.text()).toBe(true);
   await expect(myBoard.locator("k-card").filter({ hasText: renamed })).toHaveCount(0);
   await expect(tableRow(myTable, cardId)).toHaveCount(0);
-  await expect(tableRow(portfolio, cardId)).toBeVisible();
+  await expect(tableRow(teamTable, cardId)).toHaveCount(0);
 });

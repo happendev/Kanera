@@ -129,18 +129,6 @@
       "src/app/features/shell/app-shell.component.ts"
     ]
   },
-  "9201103587777813545": "Portfolio",
-  "@9201103587777813545": {
-    "description": "Browser tab title — portfolio page",
-    "x-files": [
-      "src/app/app.routes.ts",
-      "src/app/features/account-settings/org/org.page.html",
-      "src/app/features/board/board.page.html",
-      "src/app/features/global-work/global-work.page.ts",
-      "src/app/features/shell/app-shell.component.html",
-      "src/app/features/shell/app-shell.component.ts"
-    ]
-  },
   "486412321040439108": "Workspace Settings",
   "@486412321040439108": {
     "description": "Browser tab title",
@@ -2825,7 +2813,6 @@
       "src/app/features/board/board.page.html",
       "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/dependencies/dependency-map.component.ts",
-      "src/app/features/global-work/global-work.page.ts",
       "src/app/features/home/home.page.html"
     ]
   },
@@ -5478,8 +5465,7 @@
     "x-files": [
       "src/app/features/account-settings/notifications/notifications.page.html",
       "src/app/features/board-mirrors/board-mirrors.dialog.ts",
-      "src/app/features/board/board.page.html",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/board.page.html"
     ]
   },
   "7182974689040833178": "Resume",
@@ -5815,18 +5801,6 @@
     "x-files": [
       "src/app/features/account-settings/org/org.page.html",
       "src/app/features/workspace-settings/general/general.page.html"
-    ]
-  },
-  "4912814137584164542": "Portfolio rolls up card counts and progress across every board a member can see. Turn it off to remove it from the sidebar, search and shortcuts for everyone in this organisation.",
-  "@4912814137584164542": {
-    "x-files": [
-      "src/app/features/account-settings/org/org.page.html"
-    ]
-  },
-  "5536494665625548839": "Show Portfolio",
-  "@5536494665625548839": {
-    "x-files": [
-      "src/app/features/account-settings/org/org.page.html"
     ]
   },
   "3911817769522706118": "Time in progress",
@@ -8606,7 +8580,6 @@
       "src/app/features/board/table-view/table-columns.util.ts",
       "src/app/features/board/work-done-view/work-done-grouping.ts",
       "src/app/features/completed-cards/completed-cards-panel.component.ts",
-      "src/app/features/global-work/global-work.page.ts",
       "src/app/features/workspace-settings/automations/automation-presentation.util.ts",
       "src/app/features/workspace-settings/templates/templates.page.html"
     ]
@@ -8787,8 +8760,7 @@
     "description": "Board overview count: cards whose blocker is overdue or due after them (keep it short)",
     "x-files": [
       "src/app/features/board/board.page.html",
-      "src/app/features/dependencies/dependency-map.component.ts",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
   "62814732093089536": "Show unassigned cards",
@@ -8805,7 +8777,6 @@
       "src/app/features/board/table-view/group-by.util.ts",
       "src/app/features/board/timeline-view/board-timeline-view.component.ts",
       "src/app/features/board/work-done-view/work-done-report.ts",
-      "src/app/features/global-work/global-work.page.ts",
       "src/app/features/import/trello-import.page.html"
     ]
   },
@@ -8832,7 +8803,6 @@
       "src/app/features/board/board.page.html",
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/table-view/filter-bar.component.ts",
-      "src/app/features/global-work/global-work.page.ts",
       "src/app/features/global-work/team-overview.component.html",
       "src/app/features/global-work/team-overview.component.ts",
       "src/app/features/onboarding/onboarding.page.html",
@@ -8844,8 +8814,7 @@
   "@3544567310933991969": {
     "description": "Board overview count: cards in progress past the workspace alert (keep it short)",
     "x-files": [
-      "src/app/features/board/board.page.html",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/board.page.html"
     ]
   },
   "6383359961972964021": "{VAR_PLURAL, plural, other {{INTERPOLATION} due in the next 7 days}}",
@@ -9006,7 +8975,6 @@
       "src/app/features/board/work-done-view/work-done-report.component.html",
       "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
-      "src/app/features/global-work/global-work.page.ts",
       "src/app/features/home/home.page.html",
       "src/app/features/home/home.page.ts",
       "src/app/features/import/trello-import.page.html",
@@ -13861,16 +13829,14 @@
   "@7118963917562742579": {
     "description": "Tooltip - expand every group",
     "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.ts",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/table-view/board-table-view.component.ts"
     ]
   },
   "8949980368324060194": "Collapse all",
   "@8949980368324060194": {
     "description": "Tooltip - collapse every group",
     "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.ts",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/table-view/board-table-view.component.ts"
     ]
   },
   "2689632431015509581": "Select all tasks",
@@ -13919,16 +13885,14 @@
   "@6687454206261430738": {
     "description": "Button label - expand a group by its name",
     "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.ts",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/table-view/board-table-view.component.ts"
     ]
   },
   "3242904483583506238": "Collapse {$name}",
   "@3242904483583506238": {
     "description": "Button label - collapse a group by its name",
     "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.ts",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/table-view/board-table-view.component.ts"
     ]
   },
   "5657124872247335584": "No assigned cards can be added",
@@ -14030,8 +13994,7 @@
     "description": "Spreadsheet export row label for a group's aggregate values",
     "x-files": [
       "src/app/features/board/table-view/export.util.ts",
-      "src/app/features/board/work-done-view/work-done-report.component.html",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/work-done-view/work-done-report.component.html"
     ]
   },
   "2434944824726929798": "Split",
@@ -15098,8 +15061,7 @@
     "x-files": [
       "src/app/features/board/work-done-view/work-done-day.component.ts",
       "src/app/features/board/work-done-view/work-done-report.ts",
-      "src/app/features/board/work-done-view/work-done-view.component.ts",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
     ]
   },
   "205304368934360798": "{count, plural, one {# card created} other {# cards created}}",
@@ -15476,8 +15438,7 @@
   "@921492057205148786": {
     "description": "Report attention group - cards in progress past the workspace alert",
     "x-files": [
-      "src/app/features/board/work-done-view/work-done-report.ts",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/work-done-view/work-done-report.ts"
     ]
   },
   "1814145032290720554": "Due in the next 7 days",
@@ -15765,16 +15726,14 @@
   "@9022157840356944787": {
     "description": "Activity strip series - cards moved between lists",
     "x-files": [
-      "src/app/features/board/work-done-view/work-done-view.component.ts",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
     ]
   },
   "3785160303830529075": "{count, plural, one {# completion} other {# completions}}",
   "@3785160303830529075": {
     "description": "Activity strip day tooltip",
     "x-files": [
-      "src/app/features/board/work-done-view/work-done-view.component.ts",
-      "src/app/features/global-work/global-work.page.ts"
+      "src/app/features/board/work-done-view/work-done-view.component.ts"
     ]
   },
   "5647191998667825976": "{count, plural, one {# checklist completion} other {# checklist completions}}",
@@ -16576,19 +16535,6 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "4283234362028427005": "Reset reporting period",
-  "@4283234362028427005": {
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "4053170281040411684": "Reporting period",
-  "@4053170281040411684": {
-    "description": "Picker heading",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
   "7699622144571229146": "Sort by",
   "@7699622144571229146": {
     "description": "Picker heading",
@@ -16644,26 +16590,6 @@
   },
   "2559848334566452330": "Loading your cards…",
   "@2559848334566452330": {
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "8533793576850646923": "Open work by list",
-  "@8533793576850646923": {
-    "description": "Portfolio section heading: open cards per workflow list",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "7064055694235100796": "Organisation, workspace and board",
-  "@7064055694235100796": {
-    "description": "Portfolio table heading for the row names",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "3888374188534477612": "Back to portfolio",
-  "@3888374188534477612": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -16804,38 +16730,9 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "6524778282587457933": "Next 7 days",
-  "@6524778282587457933": {
-    "description": "Portfolio table column, cards due in the next 7 days",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts",
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "4761939826310601277": "Inactive 14d",
-  "@4761939826310601277": {
-    "description": "Portfolio table column, cards untouched for 14 days (keep it short)",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "4192027873388115603": "Last {days, plural, one {# day} other {# days}}",
-  "@4192027873388115603": {
-    "description": "Portfolio reporting period",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "5314723712231181922": "Across all boards",
   "@5314723712231181922": {
-    "description": "Subtitle of My Cards, Team Cards and Portfolio",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "4351160891258728386": "Summary view",
-  "@4351160891258728386": {
-    "description": "Display option",
+    "description": "Subtitle of My Cards and Team Cards",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -16995,41 +16892,6 @@
       "src/app/features/priorities/my-priorities-panel.component.html"
     ]
   },
-  "5544251363257632928": "Due next 7 days",
-  "@5544251363257632928": {
-    "description": "Portfolio stat tile",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "5125207159492328627": "Inactive 14 days",
-  "@5125207159492328627": {
-    "description": "Portfolio stat tile, cards untouched for 14 days",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "2485229318223716979": "Overdue checklist",
-  "@2485229318223716979": {
-    "description": "Portfolio stat tile, overdue checklist items",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "6093257536241970076": "Longest window we report on",
-  "@6093257536241970076": {
-    "description": "Hint beside the longest reporting period option",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "2111781168770368227": "Period: {$period}",
-  "@2111781168770368227": {
-    "description": "Tooltip of the reporting period picker",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "4514210656713791404": "Up next is unavailable on this view",
   "@4514210656713791404": {
     "description": "Tooltip on the disabled Up next button",
@@ -17118,22 +16980,16 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
-  "3393646634871261688": "Completed ({$days}d)",
-  "@3393646634871261688": {
-    "description": "Portfolio drill-down, cards completed in the last N days (d = days, keep it short)",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "6545191847978448626": "Overdue checklist items",
-  "@6545191847978448626": {
-    "description": "Portfolio drill-down",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "6506855098610817078": "Due today",
   "@6506855098610817078": {
+    "description": "Due date group heading",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/home/home.page.html"
+    ]
+  },
+  "6524778282587457933": "Next 7 days",
+  "@6524778282587457933": {
     "description": "Due date group heading",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts",
@@ -22060,20 +21916,6 @@
   },
   "2432019503259294153": "Team work across boards",
   "@2432019503259294153": {
-    "description": "Command palette action description",
-    "x-files": [
-      "src/app/features/search/global-search-overlay.component.ts"
-    ]
-  },
-  "1769056793486175557": "Go to Portfolio",
-  "@1769056793486175557": {
-    "description": "Command palette action",
-    "x-files": [
-      "src/app/features/search/global-search-overlay.component.ts"
-    ]
-  },
-  "7504857287652481646": "Card counts and progress",
-  "@7504857287652481646": {
     "description": "Command palette action description",
     "x-files": [
       "src/app/features/search/global-search-overlay.component.ts"

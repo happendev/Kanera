@@ -227,8 +227,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
   readonly showScratchpad = computed(() => this.user()?.showScratchpad ?? true);
-  // Organisation admins can hide Portfolio; sessions cached before the setting existed keep it.
-  readonly showPortfolio = computed(() => this.user()?.portfolioEnabled ?? true);
   // String queries keep the component classes out of the eager shell import graph. The types
   // still describe their public API without preventing Angular from deferring the components.
   readonly notificationsPanel = viewChild<NotificationsPanelComponent>("notificationsPanel");
@@ -278,7 +276,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     home: $localize`:Sidebar link to the home page:Home`,
     myCards: $localize`:Sidebar link to the My Cards page:My Cards`,
     teamCards: $localize`:Sidebar link to the Team Cards page:Team Cards`,
-    portfolio: $localize`:Sidebar link to the Portfolio page:Portfolio`,
     expandSidebar: $localize`:Button — expand the sidebar:Expand sidebar`,
     collapseSidebar: $localize`:Button — collapse the sidebar:Collapse sidebar`,
     me: $localize`:Fallback name for the signed-in user's avatar:Me`,
@@ -801,7 +798,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
       { keys: "g h", label: $localize`:Keyboard shortcut description — go to the home page:Home`, run: go("/") },
       { keys: "g m", label: $localize`:Keyboard shortcut description — go to the My Cards page:My cards`, run: go("/my-cards") },
       { keys: "g t", label: $localize`:Keyboard shortcut description — go to the Team Cards page:Team cards`, run: go("/team-cards") },
-      { keys: "g p", label: $localize`:Keyboard shortcut description — go to the Portfolio page:Portfolio`, when: () => this.showPortfolio(), run: go("/portfolio") },
       { keys: "g s", label: $localize`:Keyboard shortcut description — go to account settings:Settings`, when: () => this.online(), run: go("/settings") },
     ], this.destroyRef);
   }

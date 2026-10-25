@@ -281,7 +281,7 @@
       @for (list of lists(); track $index; let index = $index) {
       <div cdkDrag class="ob-item">
         <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
-        <i [class]="'ob-icon ti ti-' + (list.icon || 'list')"></i>
+        <i [class]="'ob-icon ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
         <span>{{ list.name }}</span>
         @if (inProgressEnabled()) {
         <button

@@ -5,7 +5,9 @@ import { valueIn } from "./_value-check.js";
 import { clients } from "./client.js";
 import { users } from "./user.js";
 
-export const WORK_VIEW_LENSES = ["my", "team", "portfolio"] as const;
+// Saved views exist for the two lenses the web app shows. Card *queries* also accept "portfolio"
+// (see `WORK_QUERY_LENSES` in the work DTOs); that projection has no page of its own.
+export const WORK_VIEW_LENSES = ["my", "team"] as const;
 export type WorkViewLens = (typeof WORK_VIEW_LENSES)[number];
 
 export const WORK_VIEW_VISIBILITIES = ["private", "organisation"] as const;

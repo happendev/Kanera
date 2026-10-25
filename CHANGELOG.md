@@ -18,6 +18,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Onboarding templates:** lists now start with colors suited to their workflow stages, carried through to workspace and standalone boards.
 
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
@@ -25,6 +26,7 @@ All notable changes to Kanera are documented here.
 
 - **Scratchpad:** text you were editing could be replaced by an older copy and the cursor thrown to the end of the page when the scratchpad reloaded in the background (switching back to the tab, or the connection dropping and returning), especially on slow connections or on pages with images.
 
+- **Notifications:** deleting a comment now removes the comment, mention and reaction notifications it produced, instead of leaving an empty "commented" entry in people's inboxes.
 - **Offline use:** Timeline, Dependencies, Work done, Team overview and personal or teammate Up next queues retain their last saved data across boards, My Cards, Team Cards, Home and the drawer. Cached content stays readable, with edits, dragging, undo and online-only account/navigation actions disabled until reconnecting. Reconnecting refreshes the data and restores controls. The offline notice no longer blocks taps on the phone account menu.
 - Keyboard shortcuts respect open dialogs, Tab stays in search above a card, and E focuses the card title for editing. Navigation sequences no longer consume text after focus changes, and unavailable redo no longer falls through to undo.
 - Toolbar and header buttons keep their text labels whenever their row has room, at any screen size, instead of turning icon-only below a fixed width. Space runs out in steps: the board's member avatars compact first, then labels drop one at a time from the end of the row. On a 320px phone every board view now fits on the view switch.

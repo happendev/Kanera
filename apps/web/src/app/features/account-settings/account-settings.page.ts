@@ -455,9 +455,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly timelineEnabledDraft = signal(true);
   readonly planningFeatureSaving = signal(false);
   readonly planningFeatureError = signal<string | null>(null);
-  readonly portfolioEnabledDraft = signal(true);
-  readonly portfolioEnabledSaving = signal(false);
-  readonly portfolioEnabledError = signal<string | null>(null);
   // Hosted-only organisation cap on AI agent (MCP) credentials; the API enforces it per resource.
   readonly mcpPolicyDraft = signal<ClientMcpPolicy>("write");
   readonly mcpPolicySaving = signal(false);
@@ -745,7 +742,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
     this.pushEnabledDraft.set(c.pushEnabled);
     this.requireMfaDraft.set(c.requireMfa);
-    this.portfolioEnabledDraft.set(c.portfolioEnabled);
     this.inProgressEnabledDraft.set(c.inProgressEnabled);
     this.dependenciesEnabledDraft.set(c.dependenciesEnabled);
     this.timelineEnabledDraft.set(c.timelineEnabled);
@@ -2106,21 +2102,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     try { this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", { requireMfa: this.requireMfaDraft() })); }
     catch (err) { this.requireMfaDraft.set(current.requireMfa); this.requireMfaError.set(extractErrorMessage(err)); }
     finally { this.requireMfaSaving.set(false); }
-  }
-
-  async savePortfolioEnabled(next: boolean) {
-    const current = this.client();
-    if (!current || current.portfolioEnabled === next) return;
-    this.portfolioEnabledDraft.set(next);
-    this.portfolioEnabledSaving.set(true); this.portfolioEnabledError.set(null);
-    try {
-      const updated = await this.api.patch<PublicClientResponse>("/clients/me", { portfolioEnabled: next });
-      this.applyClient(updated);
-      // Other members pick the change up on their next session refresh.
-      this.auth.updateUser((u) => ({ ...u, portfolioEnabled: updated.portfolioEnabled }));
-    }
-    catch (err) { this.portfolioEnabledDraft.set(current.portfolioEnabled); this.portfolioEnabledError.set(extractErrorMessage(err)); }
-    finally { this.portfolioEnabledSaving.set(false); }
   }
 
   async saveInProgressEnabled(next: boolean) {

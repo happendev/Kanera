@@ -777,7 +777,6 @@ describe("AppShellComponent board search", () => {
     // the board tree during search.
     expect(text()).toContain("My Cards");
     expect(text()).toContain("Team Cards");
-    expect(text()).toContain("Portfolio");
     expect(text()).not.toContain("Notes");
   });
 
@@ -1442,7 +1441,7 @@ describe("AppShellComponent board search", () => {
       (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/w/workspace-1/notes"]');
     expect(workspaceNotesLink?.querySelector(".nav-label")?.textContent?.trim()).toBe("Notes");
 
-    for (const href of ["/my-cards", "/team-cards", "/portfolio", "/w/workspace-1/notes"]) {
+    for (const href of ["/my-cards", "/team-cards", "/w/workspace-1/notes"]) {
       const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`a[href="${href}"]`);
       link?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
       fixture.detectChanges();
