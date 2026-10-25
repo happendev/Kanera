@@ -33,6 +33,7 @@ import {
   comments,
   customFieldOptions,
   customFields,
+  externalLinks,
   internalLinks,
   lists,
   noteAttachments,
@@ -138,6 +139,7 @@ type SeedAutomation = {
 };
 
 type SeedAttachment = {
+  createdAt?: Date;
   asset: AssetKey;
   uploadedBy: SeedUserKey;
   useAsCover?: boolean;
@@ -146,6 +148,7 @@ type SeedAttachment = {
 };
 
 type SeedComment = {
+  createdAt?: Date;
   author: SeedUserKey;
   body: string;
   hoursAfterCreation: number;
@@ -185,6 +188,7 @@ type SeedChecklist = {
 type SeedFieldValue = string | number | boolean;
 
 type SeedCard = {
+  createdAt?: Date;
   title: string;
   description: string;
   list: string;
@@ -308,6 +312,14 @@ const ATTACHMENT_ASSETS = {
   accessReviewSymbol: {
     relativePath: ["images", "access-review-symbol.png"],
     mimeType: "image/png",
+  },
+  northstarRevisedExport: {
+    relativePath: ["csv", "northstar-revised-billing-export.csv"],
+    mimeType: "text/csv",
+  },
+  northstarSavedViewsAddendum: {
+    relativePath: ["markdown", "northstar-saved-views-addendum.md"],
+    mimeType: "text/markdown",
   },
   northstarExportScreenshot: {
     relativePath: ["images", "northstar-billing-export.png"],
@@ -4400,7 +4412,7 @@ async function seedBoardMirrorDemo(
     targetBoardName: string;
     listMappings: { sourceListId: string; targetListId: string }[];
   },
-): Promise<void> {
+) {
   const target = await findSeedBoard(tx, input.clientId, input.targetBoardName);
 
   const now = new Date();
@@ -4442,6 +4454,7 @@ async function seedBoardMirrorDemo(
     payload: { mirrorId: mirror!.id, sourceBoardId: input.sourceBoardId, ...visibility },
     createdAt: input.createdAt,
   });
+  return mirror!;
 }
 
 async function seedInternalLinkDemos(tx: Tx, workspaceId: string): Promise<number> {
@@ -5239,9 +5252,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           const completedAt = cardSeed.completedDaysAgo === undefined ? null : addHours(addDays(baseDate, -cardSeed.completedDaysAgo), 16);
           // Replayed boards start completed cards three weeks back, so the progress stage spans a
           // weekday (see the regular workspaces below); others keep the one-day lead.
-          const cardCreatedAt = completedAt
+          const cardCreatedAt = cardSeed.createdAt ?? (completedAt
             ? addDays(completedAt, spec.listFlow ? -21 : -1)
-            : addHours(standaloneCreatedAt, 5 + cardIndex);
+            : addHours(standaloneCreatedAt, 5 + cardIndex));
           const [card] = await tx.insert(cards).values({
             ...standaloneCardIdentities[cardIndex]!,
             listId: listRow.id,
@@ -5303,7 +5316,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           // their history through the same mirror path as a file uploaded in the application.
           for (const [attachmentIndex, attachmentSeed] of (cardSeed.attachments ?? []).entries()) {
             if (!storage) throw new Error("Storage provider was not initialized.");
-            const attachmentCreatedAt = addHours(cardCreatedAt, attachmentIndex + 2);
+            const attachmentCreatedAt = attachmentSeed.createdAt ?? addHours(cardCreatedAt, attachmentIndex + 2);
             const attachment = await createAttachmentRow({
               tx, storage, clientId: client!.id, uploadedKeys, assetCache, cardId: card!.id,
               uploadedById: userIdByKey.get(attachmentSeed.uploadedBy)!, asset: attachmentSeed.asset,
@@ -5322,13 +5335,13 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             });
           }
           for (const commentSeed of cardSeed.comments ?? []) {
-            const commentCreatedAt = addHours(cardCreatedAt, commentSeed.hoursAfterCreation);
+            const commentCreatedAt = commentSeed.createdAt ?? addHours(cardCreatedAt, commentSeed.hoursAfterCreation);
             const [comment] = await tx.insert(comments).values({ cardId: card!.id, authorId: userIdByKey.get(commentSeed.author)!, body: commentSeed.body, createdAt: commentCreatedAt }).returning();
             summary.comments += 1;
             await insertSeedActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get(commentSeed.author)!, entityType: "comment", entityId: comment!.id, action: "created", payload: { cardId: card!.id }, createdAt: commentCreatedAt });
           }
         }
-        return { standaloneWorkspace: standaloneWorkspace!, standaloneBoard: standaloneBoard!, standaloneListByName };
+        return { standaloneWorkspace: standaloneWorkspace!, standaloneBoard: standaloneBoard!, standaloneListByName, cardSeeds: spec.cards };
       };
 
       await seedStandaloneBoard({
@@ -5476,6 +5489,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         { name: "Billing", color: "orange" }, { name: "Reporting", color: "blue" },
         { name: "Mobile", color: "teal" },
       ];
+      const storyAt = (workingDaysAgo: number, hour: number, minute: number) =>
+        seedNotificationTime(calendar.instant, { workingDaysAgo, hour, minute });
+      const syncLinkedAt = storyAt(8, 10, 15);
       const northstar = await seedStandaloneBoard({
         seedKey: "northstar-feedback", name: "Northstar — Client Feedback",
         description: "Northstar's customer portal: report issues, agree improvements and review deliveries with Happen Software. Approved work flows into Northstar Internal.",
@@ -5494,11 +5510,13 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             description: "Northstar's finance team found duplicate invoice rows in the monthly billing export. The portal total is correct, but the CSV counts an invoice once for each billing contact.\n\nReproduce: open Billing → Invoices, choose Last month, export CSV for an account with two billing contacts. Expect one row per invoice. Actual: invoice NS-1048 appears twice. See the screenshot and reproduction notes attached.\n\nAcceptance: one row per invoice, unchanged tax totals and coverage for customers with multiple billing contacts.",
             list: "In delivery", createdBy: "maya", assignees: ["grace"], labels: ["Bug", "Billing"], dueOffsetDays: 1,
             fieldValues: { Client: "Northstar", "Client reference": "NS-241", Environment: "Production · Chrome" },
-            attachments: [{ asset: "northstarExportScreenshot", uploadedBy: "maya", useAsCover: true }, { asset: "northstarExportReproduction", uploadedBy: "maya" }],
+            attachments: [{ asset: "northstarExportScreenshot", uploadedBy: "maya", useAsCover: true }, { asset: "northstarExportReproduction", uploadedBy: "maya" },
+              { asset: "northstarRevisedExport", uploadedBy: "maya", createdAt: storyAt(3, 10, 12) }],
             comments: [
-              { author: "maya", hoursAfterCreation: 4, body: "Finance caught this while reconciling September. It only happens on accounts with a second billing contact; the invoice screen itself is correct." },
+              { author: "maya", hoursAfterCreation: 4, body: "Finance caught this while reconciling last month's invoices. It only happens on accounts with a second billing contact; the invoice screen itself is correct." },
               { author: "grace", hoursAfterCreation: 7, body: "Confirmed with your sample. We can reproduce it without changing any invoices. Priya has picked up the export query on our delivery board." },
-              { author: "maya", hoursAfterCreation: 28, body: "One more detail from finance: the tax column is duplicated as well. Please check the totals against the attached reproduction notes before we rerun the export." },
+              { author: "maya", hoursAfterCreation: 28, createdAt: storyAt(5, 11, 20), body: "One more detail from finance: the tax column is duplicated as well. Please check the totals against the attached reproduction notes before we rerun the export." },
+              { author: "maya", hoursAfterCreation: 0, createdAt: storyAt(3, 10, 18), body: "Finance has sent a fresh sample: the revised billing export is attached. NS-1048 is repeated for both contacts, including the tax amount. Please use this file for the final reconciliation; the account screen still shows the correct total." },
             ],
             checklists: [{ title: "Finance acceptance", preserveCompletions: true, items: [
               { text: "Reproduce with two billing contacts", completedBy: "grace", completedOffsetHours: 6 },
@@ -5510,10 +5528,12 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             description: "Operations rebuilds the same region and account-status filters every Monday. Let a signed-in user name a report view and reopen it from Reports.\n\nThe first release needs personal saved views, a visible active-view name and a reset to the default report. Shared team views can follow later. The attached brief contains the agreed scope and acceptance examples.",
             list: "Approved for development", createdBy: "maya", assignees: ["grace"], labels: ["Feature", "Reporting"], dueOffsetDays: 5,
             fieldValues: { Client: "Northstar", "Client reference": "NS-238", Environment: "Customer portal" },
-            attachments: [{ asset: "northstarSavedViewsBrief", uploadedBy: "maya" }],
+            attachments: [{ asset: "northstarSavedViewsBrief", uploadedBy: "maya" },
+              { asset: "northstarSavedViewsAddendum", uploadedBy: "maya", createdAt: storyAt(4, 14, 5) }],
             comments: [
               { author: "maya", hoursAfterCreation: 4, body: "The operations leads use different regions, so personal views are enough for this release. No need to add sharing yet." },
               { author: "grace", hoursAfterCreation: 8, body: "Scope agreed. We will preserve the selected region, account status and columns, but keep the date range relative so Monday's report is current." },
+              { author: "maya", hoursAfterCreation: 0, createdAt: storyAt(4, 14, 12), body: "We tried the Monday meeting workflow with the regional leads. The attached addendum confirms that Last week should roll forward automatically, and each saved view needs its own column order. Personal views are still enough; sharing can wait." },
             ],
           },
           {
@@ -5570,7 +5590,10 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           { name: "Backlog", icon: "list" }, { name: "In Progress", icon: "progress", inProgress: true },
           { name: "Ready for QA", icon: "checklist" }, { name: "Done", icon: "circle-check" },
         ],
-        customFields: clientSyncFields, labels: clientSyncLabels,
+        customFields: [...clientSyncFields,
+          { name: "Implementation branch", icon: "git-branch", type: "text" },
+          { name: "Engineering estimate", icon: "clock", type: "number" },
+        ], labels: clientSyncLabels,
         cards: [
           {
             title: "Add regression coverage for multi-contact billing exports",
@@ -5585,6 +5608,27 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             list: "Backlog", createdBy: "priya", assignees: ["ben"], labels: ["Feature", "Reporting"], dueOffsetDays: 4,
             fieldValues: { Client: "Northstar", "Client reference": "NS-238", Environment: "Staging" },
           },
+          // Author two historical linked copies with private work already on them. Only their
+          // card identities are mapped here; the real worker still imports the source discussion,
+          // checklists and files, including client updates dated after the private work below.
+          ...northstar.cardSeeds.slice(0, 2).map((seed, index): SeedCard => ({
+            ...seed, createdAt: syncLinkedAt, createdBy: "amelia",
+            list: index === 0 ? "In Progress" : "Backlog",
+            assignees: index === 0 ? ["omar"] : ["ben"],
+            dueOffsetDays: index === 0 ? 2 : 7,
+            checklists: [], attachments: [],
+            fieldValues: { ...seed.fieldValues,
+              "Implementation branch": index === 0 ? "fix/northstar-invoice-export" : "feat/northstar-saved-report-views",
+              "Engineering estimate": index === 0 ? 16 : 24,
+            },
+            comments: index === 0 ? [
+              { author: "priya", hoursAfterCreation: 0, createdAt: storyAt(7, 10, 30), body: "Internal engineering: the billing-contact join multiplies invoice rows. Omar owns the fix on fix/northstar-invoice-export; allow 16 hours including regression coverage. Our delivery target is separate from the client's requested date. No invoice data migration is needed." },
+              { author: "omar", hoursAfterCreation: 0, createdAt: storyAt(2, 11, 10), body: "Internal QA: the client's revised CSV now covers the two-contact case, including tax. The grouped query produces one row per invoice and the totals reconcile. Keep the regression fixture in CI; Grace can ask finance to confirm on staging after review." },
+            ] : [
+              { author: "ben", hoursAfterCreation: 0, createdAt: storyAt(6, 9, 45), body: "Internal implementation: use a versioned JSON configuration for personal report views. Branch feat/northstar-saved-report-views; estimate 24 hours. I will own delivery. Do not introduce team-sharing permissions in this release; the internal rollout target includes time for query-plan checks." },
+              { author: "priya", hoursAfterCreation: 0, createdAt: storyAt(1, 14, 20), body: "Internal handoff: Maya's addendum is now on this card. Keep Last week relative and persist column order, as agreed. Ben remains the owner and the internal delivery date stays put; sharing and its permissions remain a separate discovery request." },
+            ],
+          })),
         ],
       });
       // Ordinary users need explicit board membership; hidden workspace membership alone does
@@ -5598,7 +5642,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           addedAt: demoBoard.createdAt,
         }))).onConflictDoNothing();
       }
-      await seedBoardMirrorDemo(tx, {
+      const clientMirror = await seedBoardMirrorDemo(tx, {
         clientId: client!.id, ameliaId: userIdByKey.get("amelia")!,
         sourceBoardId: northstar.standaloneBoard.id, sourceWorkspaceId: northstar.standaloneWorkspace.id,
         targetBoardName: internalSync.standaloneBoard.name,
@@ -5611,6 +5655,49 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         ].map(([source, target]) => ({ sourceListId: northstar.standaloneListByName.get(source!)!.id,
           targetListId: internalSync.standaloneListByName.get(target!)!.id })),
       });
+
+      const internalFields = await tx.select().from(customFields).where(eq(customFields.workspaceId, internalSync.standaloneWorkspace.id));
+      const sourceStoryCards = await tx.select().from(cards).where(eq(cards.boardId, northstar.standaloneBoard.id));
+      const targetStoryCards = await tx.select().from(cards).where(eq(cards.boardId, internalSync.standaloneBoard.id));
+      for (const title of northstar.cardSeeds.slice(0, 2).map((seed) => seed.title)) {
+        const source = sourceStoryCards.find((row) => row.title === title)!;
+        const target = targetStoryCards.find((row) => row.title === title)!;
+        await tx.insert(externalLinks).values({ workspaceId: internalSync.standaloneWorkspace.id,
+          provider: `mirror:${clientMirror.id}`, externalType: "card", externalId: source.id,
+          entityType: "card", entityId: target.id, createdAt: syncLinkedAt, updatedAt: syncLinkedAt });
+        await tx.delete(activityEvents).where(and(eq(activityEvents.entityId, target.id), eq(activityEvents.action, "created")));
+        await tx.insert(activityEvents).values({ boardId: target.boardId, workspaceId: target.workspaceId,
+          actorId: userIdByKey.get("amelia")!, actorKind: "system", entityType: "card", entityId: target.id,
+          action: "created", payload: { title, listId: target.listId, mirrorId: clientMirror.id, copiedActorName: "Maya Chen" },
+          createdAt: syncLinkedAt, updatedAt: syncLinkedAt });
+        const [provenance] = await tx.insert(comments).values({ cardId: target.id,
+          authorId: userIdByKey.get("amelia")!, authorKind: "system", apiKeyName: "Board mirror",
+          body: `This card was synced from board Northstar — Client Feedback. Original card URL: [View original card](${cardPath(source.organisationKey, source.key)})`,
+          createdAt: syncLinkedAt }).returning();
+        summary.comments += 1;
+        await insertSeedActivity(tx, { boardId: target.boardId, workspaceId: target.workspaceId,
+          actorId: userIdByKey.get("amelia")!, entityType: "comment", entityId: provenance!.id,
+          action: "created", payload: { cardId: target.id, mirrorId: clientMirror.id }, createdAt: syncLinkedAt });
+        const plannedAt = title === northstar.cardSeeds[0]!.title ? storyAt(7, 10, 40) : storyAt(6, 10, 5);
+        const owner = title === northstar.cardSeeds[0]!.title ? "Omar Ibrahim" : "Ben Ortega";
+        await insertSeedActivity(tx, { boardId: target.boardId, workspaceId: target.workspaceId,
+          actorId: userIdByKey.get("priya")!, entityType: "card", entityId: target.id,
+          action: "assignees:set", payload: { addedAssigneeNames: [owner], removedAssigneeNames: ["Grace Liu"] }, createdAt: plannedAt });
+        await insertSeedActivity(tx, { boardId: target.boardId, workspaceId: target.workspaceId,
+          actorId: userIdByKey.get("priya")!, entityType: "card", entityId: target.id,
+          action: "updated", payload: { dueDateLocalDate: target.dueDateLocalDate, dueDateSlot: null,
+            dueDateTimezone: "Europe/London" }, createdAt: plannedAt });
+        for (const field of internalFields.filter((row) => ["Implementation branch", "Engineering estimate"].includes(row.name))) {
+          const [value] = await tx.select().from(cardCustomFieldValues).where(and(eq(cardCustomFieldValues.cardId, target.id), eq(cardCustomFieldValues.fieldId, field.id)));
+          await tx.update(cardCustomFieldValues).set({ updatedAt: plannedAt }).where(and(eq(cardCustomFieldValues.cardId, target.id), eq(cardCustomFieldValues.fieldId, field.id)));
+          await insertSeedActivity(tx, { boardId: target.boardId, workspaceId: target.workspaceId,
+            actorId: userIdByKey.get("priya")!, entityType: "card", entityId: target.id,
+            action: "customFieldValue:set", payload: { fieldId: field.id, fieldName: field.name,
+              fieldType: field.type, fromValue: null, toValue: value!.valueText ?? value!.valueNumber }, createdAt: plannedAt });
+        }
+        await tx.update(cardAssignees).set({ assignedAt: plannedAt }).where(eq(cardAssignees.cardId, target.id));
+        await tx.update(cards).set({ updatedAt: plannedAt }).where(eq(cards.id, target.id));
+      }
 
       const priorityCandidatesByUser = new Map<SeedUserKey, Array<{
         cardId: string;
