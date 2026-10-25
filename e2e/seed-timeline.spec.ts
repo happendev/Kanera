@@ -52,7 +52,14 @@ test("the seed demonstrates realistic timeline dates and dependency handoffs", a
     }
     if (row.completedAt && row.dueDateLocalDate) {
       expect(row.startDateLocalDate, row.title).toBeTruthy();
-      expect(row.startDateLocalDate! >= new Date(row.createdAt).toISOString().slice(0, 10), row.title).toBe(true);
+      if (row.startDateLocalDate! < new Date(row.createdAt).toISOString().slice(0, 10)) {
+        // A synced copy has a new identity/creation time but retains the source's historical
+        // schedule and completion. Require real provenance before accepting an earlier start.
+        const mirrorResponse = await api.get(`/api/cards/${row.id}/mirrors`);
+        expect(mirrorResponse.ok()).toBe(true);
+        const mirrors = await mirrorResponse.json() as { asTarget: { cardId: string }[] };
+        expect(mirrors.asTarget.length, row.title).toBeGreaterThan(0);
+      }
       expect(row.dueDateLocalDate <= new Date(row.completedAt).toISOString().slice(0, 10), row.title).toBe(true);
       historicalBars++;
     }

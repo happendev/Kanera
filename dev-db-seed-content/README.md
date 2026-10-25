@@ -40,7 +40,49 @@ Seeded workspaces:
 Seeded standalone boards (owned by Amelia):
 
 - `Launch Checklist`
+- `Northstar — Client Feedback` and `Northstar Internal`: a client-to-internal one-way sync.
 - `Customer Portal Revamp`: built from the Agent Workflow template; start actual runs through the application when demonstrating agent work.
+
+## Demonstrating one-way client board sync
+
+The seed adds **Northstar — Client Feedback** and **Northstar Internal**, leaving all
+existing boards in place. Launch Checklist and Platform Delivery remain independent, with no
+sync between them. Sign in as Amelia to see the new client/internal pair. Maya is the Northstar
+contact and can access the client board only; Grace and Nina collaborate there. Priya, Omar,
+Ben, Grace and Nina can access the internal board.
+
+Run the API, web and **worker** (`pnpm dev`). The worker performs the initial sync from the
+real seeded relationship and then follows future changes. The internal board contains six
+synced client cards plus two internal engineering tasks once the initial sync finishes.
+
+| Client list | Internal list |
+|---|---|
+| New requests | Not synced: still being scoped |
+| Approved for development | Backlog |
+| In delivery | In Progress |
+| Client review | Ready for QA |
+| Accepted | Done |
+
+For a recording:
+
+1. Open **Northstar — Client Feedback**. The billing-export bug (NS-241) has a screenshot,
+   reproduction notes, an acceptance checklist and a conversation between Maya and Grace.
+2. Open its synced copy on **Northstar Internal** to show the same discussion and files.
+   The saved-report feature (NS-238) also includes an agreed scope document.
+3. Keep the internal copy open, then add a comment or upload a new file on the source in
+   another tab. Watch it arrive on the internal copy without copying anything manually.
+4. Add an engineering comment on the internal copy. It stays internal; the relationship
+   runs from the client board to the delivery board. Source content remains authoritative
+   for synced titles, descriptions, lists and other synced content.
+5. Move the shared-report request from **New requests** to **Approved for development**
+   to bring newly approved work into the internal Backlog.
+
+The mobile-menu bug is waiting for client review, and the invoice-email improvement is
+accepted/completed on both sides. The two unsynced discovery requests and two internal-only
+engineering tasks make the boundaries visible. The client-board data uses the same demo
+organisation; no production account or guest arrangement is needed to demonstrate syncing.
+These fixtures work in self-hosted mode and in the hosted demo's Pro plan.
+The original screenshot fixture is rendered from `sources/northstar-billing-export.html`.
 
 ## Demonstrating notifications
 
@@ -81,6 +123,10 @@ After experimenting, reset the local fixtures with `pnpm dev:db:reset:seed` to r
 demonstration (this deletes the local development database).
 
 ## Repeatable delivery demo
+
+Calendar screenshot captures select the busiest week from the board's actual active due
+dates and verify at least five cards across three days. This keeps reruns focused on
+scheduled work when the current month would put the deadlines below the image crop.
 
 The demo seed uses one London reference date for the entire reset. `B+0` is the first
 weekday on or after that date; `B+n` skips weekends. `P+n` is the nth weekday strictly

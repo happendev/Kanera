@@ -309,6 +309,18 @@ const ATTACHMENT_ASSETS = {
     relativePath: ["images", "access-review-symbol.png"],
     mimeType: "image/png",
   },
+  northstarExportScreenshot: {
+    relativePath: ["images", "northstar-billing-export.png"],
+    mimeType: "image/png",
+  },
+  northstarExportReproduction: {
+    relativePath: ["markdown", "northstar-billing-export-reproduction.md"],
+    mimeType: "text/markdown",
+  },
+  northstarSavedViewsBrief: {
+    relativePath: ["markdown", "northstar-saved-views-brief.md"],
+    mimeType: "text/markdown",
+  },
   billingExportDuplicate: {
     relativePath: ["images", "billing-export-duplicate.jpg"],
     mimeType: "image/jpeg",
@@ -4382,15 +4394,14 @@ const AGENT_PROJECT_CARDS: SeedCard[] = [
 
 async function seedBoardMirrorDemo(
   tx: Tx,
-  input: { clientId: string; ameliaId: string; sourceBoardId: string; sourceWorkspaceId: string; sourceListId: string; createdAt: Date },
+  input: {
+    clientId: string; ameliaId: string; sourceBoardId: string; sourceWorkspaceId: string;
+    createdAt: Date;
+    targetBoardName: string;
+    listMappings: { sourceListId: string; targetListId: string }[];
+  },
 ): Promise<void> {
-  const target = await findSeedBoard(tx, input.clientId, "Platform Delivery");
-  const [targetList] = await tx
-    .select({ id: lists.id })
-    .from(lists)
-    .where(and(eq(lists.workspaceId, target.workspaceId), eq(lists.name, "Wishlist")))
-    .limit(1);
-  if (!targetList) throw new Error("Missing Wishlist list for the board mirror demo.");
+  const target = await findSeedBoard(tx, input.clientId, input.targetBoardName);
 
   const now = new Date();
   const [mirror] = await tx.insert(boardMirrors).values({
@@ -4404,11 +4415,11 @@ async function seedBoardMirrorDemo(
     cursorEventCreatedAt: now,
     cursorEventId: NIL_UUID,
     reconcileRequestedAt: now,
-    lastSyncAt: input.createdAt,
+    lastSyncAt: null,
     createdAt: input.createdAt,
     updatedAt: input.createdAt,
   }).returning();
-  await tx.insert(boardMirrorLists).values({ mirrorId: mirror!.id, sourceListId: input.sourceListId, targetListId: targetList.id });
+  await tx.insert(boardMirrorLists).values(input.listMappings.map((mapping) => ({ mirrorId: mirror!.id, ...mapping })));
 
   const visibility = { sourceClientId: input.clientId, targetClientId: input.clientId };
   await insertSeedActivity(tx, {
@@ -5263,7 +5274,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             }));
           }
           const movementPath = spec.listFlow ? seedMovementPath(cardSeed.list, spec.listFlow, {}) : [cardSeed.list];
-          await insertSeedActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get("amelia")!, entityType: "card", entityId: card!.id, action: "created", payload: { title: cardSeed.title, listId: standaloneListByName.get(movementPath[0]!)!.id }, createdAt: cardCreatedAt });
+          await insertSeedActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get(cardSeed.createdBy)!, entityType: "card", entityId: card!.id, action: "created", payload: { title: cardSeed.title, listId: standaloneListByName.get(movementPath[0]!)!.id }, createdAt: cardCreatedAt });
           summary.cardMoves += await insertSeedMovementHistory({
             tx, card: card!, boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id,
             actorId: userIdByKey.get("amelia")!, listByName: standaloneListByName,
@@ -5288,6 +5299,28 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             }));
             summary.checklistItems += checklistSeed.items.length;
           }
+          // Standalone client boards need real files too: the worker copies these blobs and
+          // their history through the same mirror path as a file uploaded in the application.
+          for (const [attachmentIndex, attachmentSeed] of (cardSeed.attachments ?? []).entries()) {
+            if (!storage) throw new Error("Storage provider was not initialized.");
+            const attachmentCreatedAt = addHours(cardCreatedAt, attachmentIndex + 2);
+            const attachment = await createAttachmentRow({
+              tx, storage, clientId: client!.id, uploadedKeys, assetCache, cardId: card!.id,
+              uploadedById: userIdByKey.get(attachmentSeed.uploadedBy)!, asset: attachmentSeed.asset,
+              createdAt: attachmentCreatedAt, shouldGenerateCover: attachmentSeed.useAsCover === true,
+            });
+            summary.attachments += 1;
+            if (attachment.coverImageUrl && attachmentSeed.useAsCover) {
+              await tx.update(cards).set({ coverAttachmentId: attachment.id }).where(eq(cards.id, card!.id));
+            }
+            await insertSeedActivity(tx, {
+              boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id,
+              actorId: userIdByKey.get(attachmentSeed.uploadedBy)!, entityType: "card", entityId: card!.id,
+              action: "attachment_added", payload: { cardId: card!.id, attachmentId: attachment.id,
+                fileName: attachment.fileName, mimeType: attachment.mimeType, source: attachment.source },
+              createdAt: attachmentCreatedAt,
+            });
+          }
           for (const commentSeed of cardSeed.comments ?? []) {
             const commentCreatedAt = addHours(cardCreatedAt, commentSeed.hoursAfterCreation);
             const [comment] = await tx.insert(comments).values({ cardId: card!.id, authorId: userIdByKey.get(commentSeed.author)!, body: commentSeed.body, createdAt: commentCreatedAt }).returning();
@@ -5298,7 +5331,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         return { standaloneWorkspace: standaloneWorkspace!, standaloneBoard: standaloneBoard!, standaloneListByName };
       };
 
-      const { standaloneWorkspace, standaloneBoard, standaloneListByName } = await seedStandaloneBoard({
+      await seedStandaloneBoard({
         seedKey: "standalone",
         name: "Launch Checklist",
         description: "Final launch readiness checks for the Kanera public release.",
@@ -5414,7 +5447,6 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           },
         ],
       });
-      const standaloneCreatedAt = addDays(baseDate, -2);
 
       // Keep the Agent Workflow board as a place for genuine runs started through the application.
       // A seed must not claim an agent has successfully performed work that never happened.
@@ -5430,6 +5462,154 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         customFields: agentTemplate.customFields.map((field) => ({ name: field.name, icon: field.icon, type: field.type as "url" })),
         labels: agentTemplate.labels,
         cards: AGENT_PROJECT_CARDS,
+      });
+
+      // These two additional boards tell the client-intake story without altering the existing
+      // demo boards. Lists and custom fields belong to each standalone board's hidden workspace.
+      const clientSyncFields = [
+        { name: "Client", icon: "building", type: "text" as const },
+        { name: "Client reference", icon: "hash", type: "text" as const },
+        { name: "Environment", icon: "browser", type: "text" as const },
+      ];
+      const clientSyncLabels: SeedLabel[] = [
+        { name: "Bug", color: "red" }, { name: "Feature", color: "violet" },
+        { name: "Billing", color: "orange" }, { name: "Reporting", color: "blue" },
+        { name: "Mobile", color: "teal" },
+      ];
+      const northstar = await seedStandaloneBoard({
+        seedKey: "northstar-feedback", name: "Northstar — Client Feedback",
+        description: "Northstar's customer portal: report issues, agree improvements and review deliveries with Happen Software. Approved work flows into Northstar Internal.",
+        icon: "building", color: "blue", createdAt: addDays(baseDate, -18),
+        lists: [
+          { name: "New requests", icon: "inbox" },
+          { name: "Approved for development", icon: "list-check" },
+          { name: "In delivery", icon: "progress", inProgress: true },
+          { name: "Client review", icon: "message-dots" },
+          { name: "Accepted", icon: "circle-check" },
+        ],
+        customFields: clientSyncFields, labels: clientSyncLabels,
+        cards: [
+          {
+            title: "Billing export repeats invoices when a customer has two contacts",
+            description: "Northstar's finance team found duplicate invoice rows in the monthly billing export. The portal total is correct, but the CSV counts an invoice once for each billing contact.\n\nReproduce: open Billing → Invoices, choose Last month, export CSV for an account with two billing contacts. Expect one row per invoice. Actual: invoice NS-1048 appears twice. See the screenshot and reproduction notes attached.\n\nAcceptance: one row per invoice, unchanged tax totals and coverage for customers with multiple billing contacts.",
+            list: "In delivery", createdBy: "maya", assignees: ["grace"], labels: ["Bug", "Billing"], dueOffsetDays: 1,
+            fieldValues: { Client: "Northstar", "Client reference": "NS-241", Environment: "Production · Chrome" },
+            attachments: [{ asset: "northstarExportScreenshot", uploadedBy: "maya", useAsCover: true }, { asset: "northstarExportReproduction", uploadedBy: "maya" }],
+            comments: [
+              { author: "maya", hoursAfterCreation: 4, body: "Finance caught this while reconciling September. It only happens on accounts with a second billing contact; the invoice screen itself is correct." },
+              { author: "grace", hoursAfterCreation: 7, body: "Confirmed with your sample. We can reproduce it without changing any invoices. Priya has picked up the export query on our delivery board." },
+              { author: "maya", hoursAfterCreation: 28, body: "One more detail from finance: the tax column is duplicated as well. Please check the totals against the attached reproduction notes before we rerun the export." },
+            ],
+            checklists: [{ title: "Finance acceptance", preserveCompletions: true, items: [
+              { text: "Reproduce with two billing contacts", completedBy: "grace", completedOffsetHours: 6 },
+              { text: "Export one row per invoice" }, { text: "Reconcile net, tax and gross totals" },
+            ] }],
+          },
+          {
+            title: "Save a filtered report for the Monday operations meeting",
+            description: "Operations rebuilds the same region and account-status filters every Monday. Let a signed-in user name a report view and reopen it from Reports.\n\nThe first release needs personal saved views, a visible active-view name and a reset to the default report. Shared team views can follow later. The attached brief contains the agreed scope and acceptance examples.",
+            list: "Approved for development", createdBy: "maya", assignees: ["grace"], labels: ["Feature", "Reporting"], dueOffsetDays: 5,
+            fieldValues: { Client: "Northstar", "Client reference": "NS-238", Environment: "Customer portal" },
+            attachments: [{ asset: "northstarSavedViewsBrief", uploadedBy: "maya" }],
+            comments: [
+              { author: "maya", hoursAfterCreation: 4, body: "The operations leads use different regions, so personal views are enough for this release. No need to add sharing yet." },
+              { author: "grace", hoursAfterCreation: 8, body: "Scope agreed. We will preserve the selected region, account status and columns, but keep the date range relative so Monday's report is current." },
+            ],
+          },
+          {
+            title: "Keep the selected reporting period when downloading a PDF",
+            description: "The on-screen report shows Last quarter, but Download PDF silently falls back to This month. Carry the selected date range into the PDF request and print it under the report title. Compare the PDF figures with the on-screen totals before client review.",
+            list: "Approved for development", createdBy: "maya", assignees: ["grace"], labels: ["Bug", "Reporting"], dueOffsetDays: 3,
+            fieldValues: { Client: "Northstar", "Client reference": "NS-244", Environment: "Production · Safari" },
+            comments: [{ author: "maya", hoursAfterCreation: 5, body: "This explains the mismatch in last week's board pack. Please include the actual period in the PDF heading so reviewers can spot it." }],
+          },
+          {
+            title: "Show invoice payment status on the account overview",
+            description: "Account managers currently open each invoice to see whether it has been paid. Add Paid, Due and Overdue beside the latest invoices on the account overview, with text as well as colour. The billing service remains the source of truth.",
+            list: "In delivery", createdBy: "maya", assignees: ["nina"], labels: ["Feature", "Billing"], dueOffsetDays: 4,
+            fieldValues: { Client: "Northstar", "Client reference": "NS-232", Environment: "Customer portal" },
+            comments: [{ author: "nina", hoursAfterCreation: 9, body: "The status layout is ready. We are checking long invoice references and making sure Overdue still reads clearly without colour." }],
+          },
+          {
+            title: "Stop the account menu covering the Save button on mobile",
+            description: "On a narrow phone, opening the account menu covers the Save changes button on the contact form. Keep the action reachable and close the menu after navigation. Northstar should check a real phone before accepting the fix.",
+            list: "Client review", createdBy: "maya", assignees: ["nina"], labels: ["Bug", "Mobile"], dueOffsetDays: 0,
+            fieldValues: { Client: "Northstar", "Client reference": "NS-229", Environment: "iPhone · Safari" },
+            comments: [
+              { author: "nina", hoursAfterCreation: 6, body: "Ready on staging. The menu now closes after navigation and the Save action stays in the form footer." },
+              { author: "maya", hoursAfterCreation: 25, body: "Looks right on my iPhone. I have asked our field team to check their Android phones before I sign this off." },
+            ],
+          },
+          {
+            title: "Include the account reference in invoice email subjects",
+            description: "Add Northstar's account reference to invoice email subjects so finance can route messages without opening every PDF. Keep the invoice number and customer name in the subject as well.",
+            list: "Accepted", createdBy: "maya", assignees: ["grace"], labels: ["Feature", "Billing"], completedBy: "maya", completedDaysAgo: 2,
+            fieldValues: { Client: "Northstar", "Client reference": "NS-221", Environment: "Production" },
+            comments: [{ author: "maya", hoursAfterCreation: 6, body: "Checked the sample emails with finance. Account references are present and our routing rules work. Happy to accept this." }],
+          },
+          {
+            title: "Could regional managers share a saved report view?",
+            description: "A possible follow-up to personal saved views. We still need to agree who can edit a shared view and whether recipients should see accounts outside their region. Discuss at the next account review before approving delivery.",
+            list: "New requests", createdBy: "maya", assignees: [], labels: ["Feature", "Reporting"],
+            fieldValues: { Client: "Northstar", "Client reference": "NS-247", Environment: "Discovery" },
+            comments: [{ author: "grace", hoursAfterCreation: 4, body: "Let's agree permissions before this enters development. Personal saved views remain the approved scope for now." }],
+          },
+          {
+            title: "Explore a weekly billing digest for account managers",
+            description: "Would a Monday email of unpaid invoices reduce manual chasing? Northstar is gathering examples from two regions before deciding on recipients, content and frequency.",
+            list: "New requests", createdBy: "maya", assignees: [], labels: ["Feature", "Billing"],
+            fieldValues: { Client: "Northstar", "Client reference": "NS-249", Environment: "Discovery" },
+          },
+        ],
+      });
+      const internalSync = await seedStandaloneBoard({
+        seedKey: "client-bugs-features", name: "Northstar Internal",
+        description: "Happen Software's internal delivery queue for approved client bugs and features. Northstar feedback syncs here in one direction; engineering-only tasks and discussion stay on this board.",
+        icon: "code", color: "violet", createdAt: addDays(baseDate, -21),
+        lists: [
+          { name: "Backlog", icon: "list" }, { name: "In Progress", icon: "progress", inProgress: true },
+          { name: "Ready for QA", icon: "checklist" }, { name: "Done", icon: "circle-check" },
+        ],
+        customFields: clientSyncFields, labels: clientSyncLabels,
+        cards: [
+          {
+            title: "Add regression coverage for multi-contact billing exports",
+            description: "Internal follow-up: add a fixture with two billing contacts and assert invoice IDs and tax totals stay unique in CSV exports. Keep this engineering task separate from Northstar's acceptance card.",
+            list: "In Progress", createdBy: "priya", assignees: ["omar"], labels: ["Bug", "Billing"], dueOffsetDays: 2,
+            fieldValues: { Client: "Northstar", "Client reference": "NS-241", Environment: "CI" },
+            comments: [{ author: "priya", hoursAfterCreation: 5, body: "Please include a three-contact account too. This is our regression coverage task; Grace will handle the client acceptance conversation on the synced card." }],
+          },
+          {
+            title: "Review saved-view query indexes before rollout",
+            description: "Internal implementation work for NS-238. Check the report query plan on a realistic account volume and document whether the existing region/status index is sufficient before rollout.",
+            list: "Backlog", createdBy: "priya", assignees: ["ben"], labels: ["Feature", "Reporting"], dueOffsetDays: 4,
+            fieldValues: { Client: "Northstar", "Client reference": "NS-238", Environment: "Staging" },
+          },
+        ],
+      });
+      // Ordinary users need explicit board membership; hidden workspace membership alone does
+      // not grant content access. Maya is the client contact, with access only to the source.
+      for (const [demoBoard, members] of [
+        [northstar.standaloneBoard, ["maya", "grace", "nina"]],
+        [internalSync.standaloneBoard, ["priya", "omar", "ben", "grace", "nina"]],
+      ] as const) {
+        await tx.insert(boardMembers).values(members.map((member) => ({
+          boardId: demoBoard.id, userId: userIdByKey.get(member)!, role: "editor" as const,
+          addedAt: demoBoard.createdAt,
+        }))).onConflictDoNothing();
+      }
+      await seedBoardMirrorDemo(tx, {
+        clientId: client!.id, ameliaId: userIdByKey.get("amelia")!,
+        sourceBoardId: northstar.standaloneBoard.id, sourceWorkspaceId: northstar.standaloneWorkspace.id,
+        targetBoardName: internalSync.standaloneBoard.name,
+        // Reconcile admits cards created after this relationship, including the accepted card.
+        // Seeded history bypasses the outbox, so the real worker performs the initial copy.
+        createdAt: addHours(northstar.standaloneBoard.createdAt, 1),
+        listMappings: [
+          ["Approved for development", "Backlog"], ["In delivery", "In Progress"],
+          ["Client review", "Ready for QA"], ["Accepted", "Done"],
+        ].map(([source, target]) => ({ sourceListId: northstar.standaloneListByName.get(source!)!.id,
+          targetListId: internalSync.standaloneListByName.get(target!)!.id })),
       });
 
       const priorityCandidatesByUser = new Map<SeedUserKey, Array<{
@@ -6274,15 +6454,6 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           summary.notifications += relationDemo.notifications;
         }
       }
-
-      await seedBoardMirrorDemo(tx, {
-        clientId: client!.id,
-        ameliaId: userIdByKey.get("amelia")!,
-        sourceBoardId: standaloneBoard!.id,
-        sourceWorkspaceId: standaloneWorkspace!.id,
-        sourceListId: standaloneListByName.get("To do")!.id,
-        createdAt: addHours(standaloneCreatedAt, 4),
-      });
 
       for (const [targetUser, candidates] of priorityCandidatesByUser) {
         if (candidates.length === 0) continue;

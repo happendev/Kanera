@@ -33,7 +33,8 @@ try {
   console.log(`shared password: ${DEV_SEED_SHARED_PASSWORD}`);
   console.log(`login emails: ${DEMO_SEED_LOGIN_EMAILS.slice(0, -1).join(", ")}`);
   console.log(`guest login: ${DEMO_SEED_LOGIN_EMAILS.at(-1)}`);
-  console.log("guest access: Mobile Experience (editor)");
+  console.log("guest access: Mobile Experience, Northstar — Client Feedback (editor)");
+  console.log("client sync: Northstar — Client Feedback → Northstar Internal (worker performs initial sync)");
 } finally {
   await pool.end();
 }
