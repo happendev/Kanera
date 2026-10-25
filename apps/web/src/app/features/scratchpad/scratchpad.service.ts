@@ -319,11 +319,19 @@ export class ScratchpadService {
    * A REST read is authoritative except for dirty editors and queued/in-flight body writes:
    * unsaved keystrokes outrank a body the server has not seen yet, including a page switched away
    * from during its save. Clean mounted editors adopt the same content as the service snapshot.
+   *
+   * A read is also ignored for a page unless the server's copy is strictly newer than the echo
+   * watermark. Two ways an old body otherwise reached a clean editor and rewrote it under the caret:
+   * a GET sent before a PATCH (reconnect and foregrounding both flush, then read) can be answered
+   * after that PATCH's ack, carrying the pre-save text; and an unchanged page with images comes back
+   * with freshly re-signed media URLs, so it never equals the acked body.
    */
   private applyNotes(notes: WireScratchpadNote[]): void {
     const dirtyActiveId = this.editor && this.editor.isDirty() ? this.editor.noteId : null;
     const previous = new Map(this._notes().map((note) => [note.id, note]));
     this._notes.set(notes.map((note) => {
+      const local = previous.get(note.id);
+      if (local && this.timestamp(note.updatedAt) <= (this.lastSavedAt.get(note.id) ?? 0)) return local;
       const hasLocalBodyWrite = this.pending.get(note.id)?.content !== undefined
         || this.inFlight.get(note.id)?.content !== undefined;
       if (note.id !== dirtyActiveId && !hasLocalBodyWrite) {
@@ -340,8 +348,7 @@ export class ScratchpadService {
         }
         return note;
       }
-      const local = previous.get(note.id);
-      return local ? { ...note, content: local.content } : note;
+      return local ?{ ...note, content: local.content } : note;
     }));
     for (const note of notes) {
       this.lastSavedAt.set(note.id, Math.max(this.lastSavedAt.get(note.id) ?? 0, this.timestamp(note.updatedAt)));
