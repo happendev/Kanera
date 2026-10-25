@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Northstar billing export — NS-241 sample evidence</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #183147; background: #f4f7fa; font: 16px Arial, sans-serif; }
+  header { padding: 26px 40px; background: #142f48; color: white; font-size: 22px; font-weight: bold; letter-spacing: 2px; }
+  header span { float: right; color: #c1d4e4; font-size: 14px; font-weight: normal; letter-spacing: 0; }
+  main { padding: 32px 40px; }
+  small { color: #62778a; font-size: 14px; }
+  h1 { margin: 10px 0 22px; font-size: 30px; }
+  h2 { margin: 0 0 14px; font-size: 18px; }
+  .bar { display: flex; justify-content: space-between; margin-bottom: 24px; }
+  .pill { padding: 10px 14px; border: 1px solid #ced9e2; border-radius: 8px; background: white; font-size: 14px; }
+  .file { padding: 24px; border: 1px solid #dae3eb; border-radius: 12px; background: white; }
+  .filename { margin-bottom: 22px; color: #49657c; font: 15px monospace; }
+  table { width: 100%; border-collapse: collapse; text-align: left; font-size: 15px; }
+  th { padding: 14px 16px; background: #f1f5f8; color: #49657c; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+  td { padding: 16px; border-bottom: 1px solid #e6edf2; }
+  .duplicate { background: #fff3f1; color: #9f342c; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .notice { margin-top: 24px; padding: 16px 20px; border-left: 4px solid #d7664b; border-radius: 4px; background: #fff1eb; color: #72392b; line-height: 1.65; }
+  .notice strong { display: block; }
+  footer { margin-top: 20px; color: #657e91; font-size: 13px; }
+</style>
+<header>NORTHSTAR <span>Customer portal · Billing</span></header>
+<main>
+  <small>Billing / Invoices / Export preview</small>
+  <h1>Monthly billing export</h1>
+  <div class="bar"><div class="pill">Period: Last month</div><div class="pill">Account: Northstar Retail · 2 billing contacts</div></div>
+  <section class="file">
+    <h2>CSV preview</h2>
+    <div class="filename">northstar-monthly-invoices.csv</div>
+    <table>
+      <thead><tr><th>Invoice</th><th>Billing contact</th><th class="num">Net (GBP)</th><th class="num">Tax (GBP)</th><th class="num">Gross (GBP)</th></tr></thead>
+      <tbody>
+        <tr><td>NS-1047</td><td>Accounts payable</td><td class="num">850.00</td><td class="num">170.00</td><td class="num">1,020.00</td></tr>
+        <tr class="duplicate"><td><b>NS-1048</b></td><td>Accounts payable</td><td class="num">1,200.00</td><td class="num">240.00</td><td class="num">1,440.00</td></tr>
+        <tr class="duplicate"><td><b>NS-1048</b></td><td>Regional finance</td><td class="num">1,200.00</td><td class="num">240.00</td><td class="num">1,440.00</td></tr>
+        <tr><td>NS-1049</td><td>Accounts payable</td><td class="num">620.00</td><td class="num">124.00</td><td class="num">744.00</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <aside class="notice"><strong>NS-241 · Same invoice, two contacts, two exported rows</strong>
+    Expected: NS-1048 appears once with a gross total of £1,440.00.<br>
+    Actual: both contact rows are included, doubling the exported amount to £2,880.00.
+  </aside>
+  <footer>Reproduction supplied by Maya Chen · Northstar operations · Sample data</footer>
+</main>
+</html>
