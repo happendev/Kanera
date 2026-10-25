@@ -1,3 +1,5 @@
+import { enhanceDemoSeed } from "./seed-demo-enhancements.js";
+import { seedCalendar } from "./seed-calendar.js";
 import type { ColorToken } from "@kanera/shared/colors";
 import { workingMs } from "@kanera/shared/time-in-progress";
 import { addWorkingDays, dateKeyOf, dayNumber, nextWorkingDayOnOrAfter, lastWorkingDayOnOrBefore } from "@kanera/shared/schedule";
@@ -6,7 +8,6 @@ import { DEFAULT_WORKSPACE_CUSTOM_FIELDS, DEFAULT_WORKSPACE_LABELS, WORKSPACE_TE
 import {
   ACTIVITY_ACTION,
   activityEvents,
-  agentRuns,
   automationActions,
   automations,
   boardMembers,
@@ -517,6 +518,8 @@ export type SeedDatabaseOptions = {
    * the reserved demo tenants, so it seeds alongside unrelated production tenants after purging them.
    */
   requireBlankDatabase?: boolean;
+  /** ISO London date or instant; capture once and reuse throughout this reset. */
+  referenceDate?: string | Date;
   password?: string;
   // Admin demo resets can preserve an existing credential without ever recovering its plaintext.
   passwordHash?: string;
@@ -528,6 +531,7 @@ export type SeedDatabaseResult = {
   summary: SeedSummary;
   primaryClientId: string;
   guestClientId: string;
+  demo: Awaited<ReturnType<typeof enhanceDemoSeed>>;
 };
 
 const seedUserByKey = new Map([...USER_SEEDS, GUEST_USER_SEED].map((user) => [user.key, user]));
@@ -565,24 +569,28 @@ function realisticSeedCardDescription(card: SeedCard): string {
   return card.description;
 }
 
-function seedMonth(offset = 0): Date {
-  const now = new Date();
+function seedMonth(now: Date, offset = 0): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
 }
 
-function seedMonthLabel(offset = 0): string {
-  return seedMonth(offset).toISOString().slice(0, 7);
+function seedMonthLabel(reference: Date, offset = 0): string {
+  return seedMonth(reference, offset).toISOString().slice(0, 7);
 }
 
-function seedMonthName(offset = 0): string {
-  return seedMonth(offset).toLocaleString("en", { month: "long", timeZone: "UTC" });
+function seedMonthName(reference: Date, offset = 0): string {
+  return seedMonth(reference, offset).toLocaleString("en", { month: "long", timeZone: "UTC" });
 }
 
-function buildWorkspaceSeeds(): SeedWorkspace[] {
-  const workspaceSeeds = [buildDevelopmentWorkspace(), buildMarketingWorkspace(), buildDevopsWorkspace()];
+function seedQuarter(reference: Date, offset: number): string {
+  const quarter = new Date(Date.UTC(reference.getUTCFullYear(), Math.floor(reference.getUTCMonth() / 3) * 3 + offset * 3, 1));
+  return `${quarter.getUTCFullYear()} Q${Math.floor(quarter.getUTCMonth() / 3) + 1}`;
+}
+
+function buildWorkspaceSeeds(reference: Date): SeedWorkspace[] {
+  const workspaceSeeds = [buildDevelopmentWorkspace(reference), buildMarketingWorkspace(reference), buildDevopsWorkspace(reference)];
   for (const workspace of workspaceSeeds) {
     for (const board of workspace.boards) {
-      const showcaseCards = extraCardsForBoard(board.key).map((card, index) => ({
+      const showcaseCards = extraCardsForBoard(board.key, reference).map((card, index) => ({
         ...card,
         // Keep the most screenshot-worthy conversations recent and place their cards first in
         // each matching list, while the older fixtures provide depth below the fold.
@@ -598,7 +606,7 @@ function buildWorkspaceSeeds(): SeedWorkspace[] {
   return workspaceSeeds;
 }
 
-function buildDevelopmentWorkspace(): SeedWorkspace {
+function buildDevelopmentWorkspace(reference: Date): SeedWorkspace {
   return {
     key: "development",
     name: "Development Team",
@@ -821,7 +829,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Feature / Enhancement"],
             dueOffsetDays: 4,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/kan-184-workspace-templates", "Billing Hours": 11.5, "Billing Month": seedMonthLabel(), Client: "Sprintforge" },
+            fieldValues: { Branch: "feature/kan-184-workspace-templates", "Billing Hours": 11.5, "Billing Month": seedMonthLabel(reference), Client: "Sprintforge" },
             attachments: [{ asset: "architectureRecord", uploadedBy: "priya" }],
             checklists: [
               {
@@ -891,7 +899,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Issue / Bug", "Reporting"],
             dueOffsetDays: -1,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "fix/kan-201-export-retry", "Billing Hours": 6, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+            fieldValues: { Branch: "fix/kan-201-export-retry", "Billing Hours": 6, "Billing Month": seedMonthLabel(reference), Client: "Northstar" },
             attachments: [
               { asset: "billingExportDuplicate", uploadedBy: "nina", useAsCover: true },
               { asset: "apiRolloutPlan", uploadedBy: "omar" },
@@ -923,7 +931,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Feature / Enhancement", "Reporting"],
             dueOffsetDays: 6,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Branch: "feature/kan-193-board-hydration", "Billing Hours": 13, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
+            fieldValues: { Branch: "feature/kan-193-board-hydration", "Billing Hours": 13, "Billing Month": seedMonthLabel(reference), Client: "Orbiflow" },
             comments: [
               { author: "marcus", hoursAfterCreation: 10, body: "If we change the payload shape, capture the before and after timings in the card." },
             ],
@@ -940,7 +948,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Feature / Enhancement", "Support"],
             dueOffsetDays: 12,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/kan-196-mobile-notifications", "Billing Hours": 8.5, "Billing Month": seedMonthLabel(1), Client: "Northstar" },
+            fieldValues: { Branch: "feature/kan-196-mobile-notifications", "Billing Hours": 8.5, "Billing Month": seedMonthLabel(reference, 1), Client: "Northstar" },
             comments: [
               { author: "zoe", hoursAfterCreation: 12, body: "Please expose the same settings names we use in help docs so support can point customers to them." },
             ],
@@ -957,7 +965,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Chore"],
             dueOffsetDays: 2,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "test/onboarding-no-workspace", "Billing Hours": 4, "Billing Month": seedMonthLabel(), Client: "Sprintforge" },
+            fieldValues: { Branch: "test/onboarding-no-workspace", "Billing Hours": 4, "Billing Month": seedMonthLabel(reference), Client: "Sprintforge" },
             checklists: [
               {
                 title: "QA matrix",
@@ -984,7 +992,7 @@ API reference: https://docs.kanera.app/api`,
             assignees: ["priya"],
             labels: ["Reporting", "Feature / Enhancement"],
             dueOffsetDays: 15,
-            fieldValues: { Branch: "spike/changelog-from-activity", "Billing Hours": 3, "Billing Month": seedMonthLabel(1), Client: "Orbiflow" },
+            fieldValues: { Branch: "spike/changelog-from-activity", "Billing Hours": 3, "Billing Month": seedMonthLabel(reference, 1), Client: "Orbiflow" },
             attachments: [{ asset: "retroNotes", uploadedBy: "marcus" }],
           },
           {
@@ -999,7 +1007,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Chore", "Issue / Bug"],
             dueOffsetDays: 3,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Branch: "fix/orphaned-attachment-cleanup", "Billing Hours": 7.25, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+            fieldValues: { Branch: "fix/orphaned-attachment-cleanup", "Billing Hours": 7.25, "Billing Month": seedMonthLabel(reference), Client: "Northstar" },
             attachments: [{ asset: "orphanedAttachmentCleanup", uploadedBy: "omar", useAsCover: true, reactions: ["nina", "grace"] }],
             comments: [
               { author: "nina", hoursAfterCreation: 4, quotesAttachment: 0, body: "The dry-run table is exactly what I hoped for. Could it also show the total size it would free?" },
@@ -1018,7 +1026,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Reporting"],
             dueOffsetDays: 7,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/sla-summary-widget", "Billing Hours": 5.5, "Billing Month": seedMonthLabel(), Client: "Sprintforge" },
+            fieldValues: { Branch: "feature/sla-summary-widget", "Billing Hours": 5.5, "Billing Month": seedMonthLabel(reference), Client: "Sprintforge" },
             comments: [
               { author: "marcus", hoursAfterCreation: 14, body: "I want one example based on overdue cards and one based on on-time completions." },
             ],
@@ -1036,7 +1044,7 @@ API reference: https://docs.kanera.app/api`,
             completedBy: "nina",
             completedDaysAgo: 14,
             dueOffsetDays: -4,
-            fieldValues: { Branch: "chore/comment-composer-a11y", "Billing Hours": 4.5, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
+            fieldValues: { Branch: "chore/comment-composer-a11y", "Billing Hours": 4.5, "Billing Month": seedMonthLabel(reference), Client: "Orbiflow" },
             comments: [
               { author: "nina", hoursAfterCreation: 7, body: "Retested with NVDA and VoiceOver. No regressions from the menu focus change." },
             ],
@@ -1054,7 +1062,7 @@ API reference: https://docs.kanera.app/api`,
             completedBy: "priya",
             completedDaysAgo: 42,
             dueOffsetDays: -6,
-            fieldValues: { Branch: "docs/branching-guide-refresh", "Billing Hours": 2, "Billing Month": seedMonthLabel(-1), Client: "Sprintforge" },
+            fieldValues: { Branch: "docs/branching-guide-refresh", "Billing Hours": 2, "Billing Month": seedMonthLabel(reference, -1), Client: "Sprintforge" },
             attachments: [{ asset: "onboardingChecklist", uploadedBy: "priya" }],
           },
         ],
@@ -1104,7 +1112,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Feature / Enhancement"],
             dueOffsetDays: 5,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "feature/mobile-offline-skeleton", "Billing Hours": 6.5, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
+            fieldValues: { Branch: "feature/mobile-offline-skeleton", "Billing Hours": 6.5, "Billing Month": seedMonthLabel(reference), Client: "Orbiflow" },
             attachments: [{ asset: "offlineCardSkeleton", uploadedBy: "ben", useAsCover: true, reactions: ["nina", "zoe"] }],
             checklists: [
               {
@@ -1133,7 +1141,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Issue / Bug", "Support"],
             dueOffsetDays: 1,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "fix/ios-reminder-title", "Billing Hours": 7, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+            fieldValues: { Branch: "fix/ios-reminder-title", "Billing Hours": 7, "Billing Month": seedMonthLabel(reference), Client: "Northstar" },
             attachments: [{ asset: "iosReminderMissingTitle", uploadedBy: "nina", useAsCover: true }],
             comments: [
               { author: "amelia", hoursAfterCreation: 5, body: "If the repro depends on a cold start, write that into the test notes so support can help verify." },
@@ -1151,7 +1159,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Feature / Enhancement"],
             // A booked discovery start, with the delivery estimate still to be agreed.
             startOffsetDays: 7,
-            fieldValues: { Branch: "feature/tablet-board-overview", "Billing Hours": 9, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
+            fieldValues: { Branch: "feature/tablet-board-overview", "Billing Hours": 9, "Billing Month": seedMonthLabel(reference), Client: "Orbiflow" },
             attachments: [{ asset: "tabletBoardOverview", uploadedBy: "zoe", useAsCover: true }],
           },
           {
@@ -1166,7 +1174,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Reporting", "Feature / Enhancement"],
             dueOffsetDays: 18,
             startOffsetDays: null,
-            fieldValues: { Branch: "spike/mobile-auth-telemetry", "Billing Hours": 2.5, "Billing Month": seedMonthLabel(1), Client: "Sprintforge" },
+            fieldValues: { Branch: "spike/mobile-auth-telemetry", "Billing Hours": 2.5, "Billing Month": seedMonthLabel(reference, 1), Client: "Sprintforge" },
           },
           {
             title: "QA regression pass on card attachments in mobile web",
@@ -1180,7 +1188,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Chore", "Support"],
             dueOffsetDays: 3,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Branch: "test/mobile-web-attachments", "Billing Hours": 5, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+            fieldValues: { Branch: "test/mobile-web-attachments", "Billing Hours": 5, "Billing Month": seedMonthLabel(reference), Client: "Northstar" },
             attachments: [{ asset: "mobileAttachmentQa", uploadedBy: "nina", useAsCover: true }],
             comments: [
               { author: "ben", hoursAfterCreation: 11, body: "I already fixed the stretched preview issue on Android. The iOS path still needs a pass." },
@@ -1197,7 +1205,7 @@ API reference: https://docs.kanera.app/api`,
             assignees: ["ben"],
             labels: ["Feature / Enhancement"],
             // An uncommitted idea belongs in the Timeline's Unscheduled group.
-            fieldValues: { Branch: "spike/mobile-card-swipes", "Billing Hours": 4, "Billing Month": seedMonthLabel(1), Client: "Sprintforge" },
+            fieldValues: { Branch: "spike/mobile-card-swipes", "Billing Hours": 4, "Billing Month": seedMonthLabel(reference, 1), Client: "Sprintforge" },
           },
           {
             title: "Follow up on Android font rendering difference",
@@ -1211,7 +1219,7 @@ API reference: https://docs.kanera.app/api`,
             labels: ["Issue / Bug", "Support"],
             dueOffsetDays: 8,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "fix/android-chip-line-height", "Billing Hours": 3.5, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
+            fieldValues: { Branch: "fix/android-chip-line-height", "Billing Hours": 3.5, "Billing Month": seedMonthLabel(reference), Client: "Orbiflow" },
             attachments: [{ asset: "androidLabelClipping", uploadedBy: "zoe", useAsCover: true, reactions: ["ben"] }],
             comments: [
               { author: "zoe", hoursAfterCreation: 7, body: "This shows up in screenshots from two customers using Samsung Internet." },
@@ -1230,7 +1238,7 @@ API reference: https://docs.kanera.app/api`,
             completedBy: "priya",
             completedDaysAgo: 63,
             dueOffsetDays: -2,
-            fieldValues: { Branch: "feature/mobile-build-info", "Billing Hours": 2.5, "Billing Month": seedMonthLabel(-2), Client: "Sprintforge" },
+            fieldValues: { Branch: "feature/mobile-build-info", "Billing Hours": 2.5, "Billing Month": seedMonthLabel(reference, -2), Client: "Sprintforge" },
           },
           {
             title: "Tighten upload progress copy for slow connections",
@@ -1243,7 +1251,7 @@ API reference: https://docs.kanera.app/api`,
             assignees: ["omar", "ben"],
             labels: ["Support", "Chore"],
             dueOffsetDays: 4,
-            fieldValues: { Branch: "copy/mobile-upload-progress", "Billing Hours": 1.5, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+            fieldValues: { Branch: "copy/mobile-upload-progress", "Billing Hours": 1.5, "Billing Month": seedMonthLabel(reference), Client: "Northstar" },
             comments: [
               { author: "marcus", hoursAfterCreation: 6, body: "Keep the language operational, not playful. Support wants something they can repeat to customers." },
             ],
@@ -1261,7 +1269,7 @@ API reference: https://docs.kanera.app/api`,
             completedBy: "grace",
             completedDaysAgo: 91,
             dueOffsetDays: -7,
-            fieldValues: { Branch: "docs/mobile-push-troubleshooting", "Billing Hours": 2, "Billing Month": seedMonthLabel(-3), Client: "Orbiflow" },
+            fieldValues: { Branch: "docs/mobile-push-troubleshooting", "Billing Hours": 2, "Billing Month": seedMonthLabel(reference, -3), Client: "Orbiflow" },
             attachments: [{ asset: "onboardingChecklist", uploadedBy: "grace" }],
           },
         ],
@@ -1270,7 +1278,7 @@ API reference: https://docs.kanera.app/api`,
   };
 }
 
-function buildMarketingWorkspace(): SeedWorkspace {
+function buildMarketingWorkspace(reference: Date): SeedWorkspace {
   // Reuse the existing demo identities as the marketing cast: Amelia is the director, Ben is
   // the campaign manager, then Nina/Zoe/Leo/Omar/Grace cover creative/content/web/events/coordination.
   type MarketingCardSeed = {
@@ -1546,7 +1554,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
           ],
           dueOffsetDays: 2,
           createdBy: "ben",
-          comments: [{ author: "ben", hoursAfterCreation: 12, body: "The customer proof section is strong. Please cut the second workflow example and use that space to answer the migration objection.", mentions: ["zoe"], unreadFor: ["zoe"] }],
+          comments: [{ author: "ben", hoursAfterCreation: 12, body: "The landing-page copy has a strong customer proof section. Please cut the second workflow example and use that space to answer the migration objection.", mentions: ["zoe"], unreadFor: ["zoe"] }],
         },
         {
           title: "Prepare the launch-week social schedule",
@@ -3089,7 +3097,7 @@ Name the dependency, the person who owns it, and the **next follow-up date** in 
 ## Naming
 
 \`\`\`text
-utm_campaign = autumn-launch-2026
+utm_campaign = autumn-launch-${reference.getUTCFullYear()}
 utm_source   = newsletter | linkedin | partner-<name>
 utm_medium   = email | social | referral | paid
 \`\`\`
@@ -3122,7 +3130,7 @@ utm_medium   = email | social | referral | paid
             owner: "grace",
             content: note(
               "Working sequence for autumn campaign launch week.",
-              "Monday: final copy and creative approval. Tuesday: landing-page and tracking smoke test. Wednesday: partner handoff and email suppression check. Thursday: schedule social posts and confirm support coverage. Friday: launch, monitor, and record exceptions.",
+              "Final approvals precede the change freeze and tracking/form checks. Readiness and scheduling precede launch. The reset calendar supplies the dated run of show.",
               "Ben makes the go/no-go call with Amelia. Grace keeps the schedule current; channel owners report blockers on the main launch card rather than maintaining separate status threads.",
               "If tracking, consent, or the landing-page form is not ready, pause distribution rather than launching partially.",
             ),
@@ -3244,7 +3252,7 @@ utm_medium   = email | social | referral | paid
   };
 }
 
-function buildDevopsWorkspace(): SeedWorkspace {
+function buildDevopsWorkspace(reference: Date): SeedWorkspace {
   return {
     key: "devops",
     name: "DevOps",
@@ -3349,8 +3357,8 @@ Drill notes: https://ops.kanera.test/runbooks/upload-storage-outage`,
 
 | Quarter | Reviewer | Exceptions |
 | --- | --- | --- |
-| 2026 Q2 | Henry Walsh | 1 (contractor extension) |
-| 2026 Q1 | Grace Liu | 0 |`,
+| ${seedQuarter(reference, -2)} | Henry Walsh | 1 (contractor extension) |
+| ${seedQuarter(reference, -3)} | Grace Liu | 0 |`,
       },
     ],
     boards: [
@@ -3445,7 +3453,7 @@ Drill notes: https://ops.kanera.test/runbooks/upload-storage-outage`,
             attachments: [{ asset: "architectureRecord", uploadedBy: "grace" }],
           },
           {
-            title: `Prepare ${seedMonthName(1)} database vacuum window`,
+            title: `Prepare ${seedMonthName(reference, 1)} database vacuum window`,
             description: note(
               "Demo imports have left enough attachment churn to make the development database vacuum worth scheduling.",
               "Confirm the Saturday window, expected lock time, and who will verify uploads when the maintenance completes.",
@@ -3576,7 +3584,7 @@ Drill notes: https://ops.kanera.test/runbooks/upload-storage-outage`,
               "Private evidence notes for dormant admin review.",
               "Capture the source query, reviewer, downgrade decision, and support confirmation before closing the access review card.",
               "Anything with customer impact should stay on this board until the action is complete.",
-              "Evidence folder: https://ops.kanera.test/audit/2026-q2/access-review",
+              `Evidence folder: https://ops.kanera.test/audit/${seedQuarter(reference, -2).toLowerCase().replace(" ", "-")}/access-review`,
             ),
           },
           {
@@ -3754,7 +3762,7 @@ Drill notes: https://ops.kanera.test/runbooks/upload-storage-outage`,
 // These denser conversation cards sit alongside the broader board fixtures above. Keeping them
 // grouped makes it easy to see which demo boards deliberately exercise overdue work, mentions,
 // attachment stacks, and partially completed checklists.
-function extraCardsForBoard(boardKey: string): SeedCard[] {
+function extraCardsForBoard(boardKey: string, reference: Date): SeedCard[] {
   switch (boardKey) {
     case "platform-delivery":
       return [
@@ -3767,7 +3775,7 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
           ),
           list: "In Progress", createdBy: "ben", assignees: ["ben", "nina"], watchers: ["priya", "omar"],
           labels: ["Issue / Bug", "Feature / Enhancement"], dueOffsetDays: -2, dueDateSlot: "afternoon",
-          fieldValues: { Branch: "fix/reconnect-reconciliation", "Billing Hours": 12.75, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+          fieldValues: { Branch: "fix/reconnect-reconciliation", "Billing Hours": 12.75, "Billing Month": seedMonthLabel(reference), Client: "Northstar" },
           attachments: [
             { asset: "realtimeBoardCover", uploadedBy: "nina", useAsCover: true },
             { asset: "realtimeSyncSymbol", uploadedBy: "ben", useAsCover: false },
@@ -3791,7 +3799,7 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
           title: "Write migration rollback guide for customer imports",
           description: note("Turn the import rollback notes into an operator-ready guide.", "Include partial imports, attachment cleanup, retry ownership, and the SQL evidence support should retain."),
           list: "Backlog", createdBy: "omar", assignees: ["omar", "priya"], labels: ["Chore", "Support"], dueOffsetDays: 8,
-          fieldValues: { Branch: "docs/import-rollback-guide", "Billing Hours": 4, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
+          fieldValues: { Branch: "docs/import-rollback-guide", "Billing Hours": 4, "Billing Month": seedMonthLabel(reference), Client: "Orbiflow" },
           attachments: [{ asset: "apiRolloutPlan", uploadedBy: "omar" }, { asset: "retroNotes", uploadedBy: "priya" }],
           comments: [{ author: "amelia", hoursAfterCreation: 5, body: "Add a worked example using an import that fails after attachments are stored.", mentions: ["omar"] }],
         },
@@ -3802,7 +3810,7 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
           title: "Triage notification beta feedback",
           description: note("The latest beta produced eleven notes across iOS and Android.", "Group duplicates, confirm which reports are platform-specific, and turn confirmed defects into linked follow-up cards."),
           list: "Awaiting Feedback", createdBy: "nina", assignees: ["nina", "ben"], watchers: ["marcus"], labels: ["Support", "Issue / Bug"], dueOffsetDays: -1, dueDateSlot: "endOfWorkDay",
-          fieldValues: { Branch: "chore/beta-notification-triage", "Billing Hours": 6.25, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+          fieldValues: { Branch: "chore/beta-notification-triage", "Billing Hours": 6.25, "Billing Month": seedMonthLabel(reference), Client: "Northstar" },
           attachments: [
             { asset: "mobileNotificationCover", uploadedBy: "nina", useAsCover: true },
             { asset: "northstarLogo", uploadedBy: "nina", useAsCover: false },
@@ -3825,7 +3833,7 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
           title: "Prototype compact checklist controls on small screens",
           description: note("Long checklist cards currently push ownership and due dates below the fold.", "Prototype a compact row that retains completion, assignee, and overdue status at 360px."),
           list: "Wishlist", createdBy: "ben", assignees: ["ben"], labels: ["Feature / Enhancement"], dueOffsetDays: 13,
-          fieldValues: { Branch: "spike/mobile-checklist-density", "Billing Hours": 3.5, "Billing Month": seedMonthLabel(1), Client: "Sprintforge" },
+          fieldValues: { Branch: "spike/mobile-checklist-density", "Billing Hours": 3.5, "Billing Month": seedMonthLabel(reference, 1), Client: "Sprintforge" },
           attachments: [{ asset: "compactMobileChecklist", uploadedBy: "ben", useAsCover: true }],
         },
       ];
@@ -3947,28 +3955,16 @@ function realisticChecklistItems(
   });
 }
 
-function startOfToday(): Date {
-  const now = new Date();
-  // Seed history should resemble human activity, not a scheduler firing on an hourly boundary.
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 9, 13, 27, 0));
-}
-
 function addDays(value: Date, days: number): Date {
-  return new Date(value.getTime() + days * 24 * 60 * 60 * 1000);
+  const result = new Date(value);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
 }
-
-const AUTHORED_UPCOMING_DUE_OFFSET_MAX_DAYS = 18;
-const SEED_UPCOMING_DUE_WINDOW_DAYS = 45;
 
 function seedDueDate(baseDate: Date, dueOffsetDays: number): Date {
-  if (dueOffsetDays < 0) return addDays(baseDate, dueOffsetDays);
-
-  // The authored offsets express relative urgency. Stretch that 0–18 day scale across the full
-  // demo window so seeded work is due from reset day through day 45 instead of bunching in week one.
-  const distributedOffset = Math.round(
-    dueOffsetDays / AUTHORED_UPCOMING_DUE_OFFSET_MAX_DAYS * SEED_UPCOMING_DUE_WINDOW_DAYS,
-  );
-  return addDays(baseDate, distributedOffset);
+  const calendar = seedCalendar(baseDate);
+  const date = dueOffsetDays < 0 ? calendar.previous(-dueOffsetDays) : calendar.business(Math.min(15, dueOffsetDays));
+  return new Date(`${date}T09:13:27Z`);
 }
 
 function addHours(value: Date, hours: number): Date {
@@ -3999,7 +3995,7 @@ function seedCardSchedule(input: {
   completedAt: Date | null;
   timezone: string;
 }) {
-  const { baseDate, seed, cardIndex, createdAt, completedAt, timezone } = input;
+  const { baseDate, seed, cardIndex, createdAt, completedAt } = input;
   // Completed outcomes belong beside their historical activity, rather than carrying a deadline
   // relative to today's reset that can be months after they actually shipped.
   const dueDate = completedAt ?? (seed.dueOffsetDays === undefined ? null : seedDueDate(baseDate, seed.dueOffsetDays));
@@ -4022,8 +4018,8 @@ function seedCardSchedule(input: {
   return {
     startDateLocalDate,
     dueDateLocalDate,
-    dueDateSlot: dueDate ? seed.dueDateSlot ?? "anyTime" : null,
-    dueDateTimezone: dueDate ? timezone : null,
+    dueDateSlot: null,
+    dueDateTimezone: dueDate ? "Europe/London" : null,
   };
 }
 
@@ -4320,7 +4316,6 @@ async function setSeedUserAvatar(input: {
     .where(eq(users.id, input.userId));
 }
 
-const SEED_AGENT_NAME = "Claude";
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 
 async function findSeedBoard(tx: Tx, clientId: string, name: string) {
@@ -4334,199 +4329,10 @@ async function findSeedBoard(tx: Tx, clientId: string, name: string) {
   return row.board;
 }
 
-/**
- * Agent-run demo state on Autumn Campaign Launch, written as the API would record work done by
- * Amelia's connected Claude agent (actorKind "agent", actorId Amelia). It backs the documentation
- * screenshots for the card chip, card-detail run block, "via Claude" feed badges, the drawer's
- * Agent tab, and the Work Done sparkles mark.
- *
- * Live runs are relative to seed time. The worker's stall sweep marks a live run `stalled` once its
- * heartbeat is 15 minutes old, so capture live-run screenshots soon after seeding, or PATCH the run
- * (an empty body is a heartbeat) to keep it live.
- */
-async function seedAgentRunDemos(
-  tx: Tx,
-  input: { clientId: string; userIdByKey: Map<SeedUserKey, string>; now: Date },
-): Promise<number> {
-  const { clientId, now } = input;
-  const ameliaId = input.userIdByKey.get("amelia")!;
-  const leoId = input.userIdByKey.get("leo")!;
-  const board = await findSeedBoard(tx, clientId, "Autumn Campaign Launch");
-  const cardRows = await tx.select().from(cards).where(eq(cards.boardId, board.id));
-  const cardByTitle = new Map(cardRows.map((row) => [row.title, row]));
-  const card = (title: string) => {
-    const row = cardByTitle.get(title);
-    if (!row) throw new Error(`Missing agent demo card '${title}'.`);
-    return row;
-  };
-  const trackingCard = card("Finalise the campaign tracking and UTM plan");
-  const videoCard = card("Produce the launch-day explainer video");
-  const graphicsCard = card("Design the autumn campaign graphics");
-  const agentActor = {
-    boardId: board.id,
-    workspaceId: board.workspaceId,
-    actorId: ameliaId,
-    actorKind: "agent" as const,
-    agentName: SEED_AGENT_NAME,
-  };
-
-  // Production fanout never self-suppresses agent activity (the owner did not act), so Amelia is
-  // notified as a watcher of the cards her agent worked on.
-  await tx.insert(cardWatchers).values([trackingCard, graphicsCard].map((row) => ({
-    cardId: row.id,
-    userId: ameliaId,
-    createdAt: addHours(now, -6),
-  }))).onConflictDoNothing();
-
-  const runActivity = async (run: typeof agentRuns.$inferSelect, action: ActivityAction, at: Date) => {
-    const [activity] = await tx.insert(activityEvents).values({
-      ...agentActor,
-      entityType: "card",
-      entityId: run.cardId,
-      action,
-      payload: {
-        runId: run.id,
-        title: run.title,
-        status: run.status,
-        agentName: run.agentName,
-        externalUrl: run.externalUrl,
-        summary: run.summary,
-      },
-      createdAt: at,
-      updatedAt: at,
-    }).returning();
-    return activity!;
-  };
-  const insertRun = async (values: Omit<typeof agentRuns.$inferInsert, "workspaceId" | "boardId" | "userId" | "agentName">) => {
-    const [run] = await tx.insert(agentRuns).values({
-      workspaceId: board.workspaceId,
-      boardId: board.id,
-      userId: ameliaId,
-      agentName: SEED_AGENT_NAME,
-      ...values,
-    }).returning();
-    return run!;
-  };
-  let notificationCount = 0;
-  const notify = async (userId: string, row: typeof cards.$inferSelect, activityId: string, reason: "watching" | "assigned", at: Date, readAt: Date | null) => {
-    await tx.insert(notifications).values({
-      clientId,
-      userId,
-      activityId,
-      cardId: row.id,
-      listId: row.listId,
-      boardId: board.id,
-      workspaceId: board.workspaceId,
-      reason,
-      readAt,
-      createdAt: at,
-    });
-    notificationCount += 1;
-  };
-
-  // Tracking card: a finished audit run and the agent's comment sit above Leo's earlier moves in the
-  // activity feed, while a second run is still working.
-  const auditStartedAt = addMinutes(now, -190);
-  const auditEndedAt = addMinutes(now, -170);
-  const auditRun = await insertRun({
-    cardId: trackingCard.id,
-    status: "succeeded",
-    title: "Auditing the existing campaign UTM tags",
-    summary: "Found 14 legacy tags and mapped each to the new source/medium pairs.",
-    startedAt: auditStartedAt,
-    heartbeatAt: auditEndedAt,
-    endedAt: auditEndedAt,
-    createdAt: auditStartedAt,
-    updatedAt: auditEndedAt,
-  });
-  await runActivity({ ...auditRun, status: "running", summary: null }, ACTIVITY_ACTION.AGENT_RUN_STARTED, auditStartedAt);
-  // Run start/end never notifies (see recordAgentRunActivity), so no inbox row for it here.
-  await runActivity(auditRun, ACTIVITY_ACTION.AGENT_RUN_ENDED, auditEndedAt);
-
-  const commentAt = addMinutes(auditEndedAt, 2);
-  const [agentComment] = await tx.insert(comments).values({
-    cardId: trackingCard.id,
-    authorId: ameliaId,
-    authorKind: "agent",
-    agentName: SEED_AGENT_NAME,
-    body: "Audit done. Email and partner links already follow the new pattern; paid social still uses three legacy campaign names, which I have listed in the plan for Leo to retire.",
-    createdAt: commentAt,
-  }).returning();
-  const [commentActivity] = await tx.insert(activityEvents).values({
-    ...agentActor,
-    entityType: "comment",
-    entityId: agentComment!.id,
-    action: "created",
-    payload: { cardId: trackingCard.id },
-    createdAt: commentAt,
-    updatedAt: commentAt,
-  }).returning();
-  await notify(leoId, trackingCard, commentActivity!.id, "assigned", commentAt, null);
-  // Comments reach card watchers, and agent work is never self-suppressed, so Amelia (watching)
-  // gets the agent's comment too: the unread entry on her drawer's Agent tab.
-  await notify(ameliaId, trackingCard, commentActivity!.id, "watching", commentAt, null);
-
-  const draftStartedAt = addMinutes(now, -12);
-  const draftRun = await insertRun({
-    cardId: trackingCard.id,
-    status: "running",
-    title: "Drafting the UTM naming convention",
-    summary: "Source/medium pairs drafted for email, partner, and paid social; checking landing-page event names next.",
-    startedAt: draftStartedAt,
-    heartbeatAt: addMinutes(now, -1),
-    createdAt: draftStartedAt,
-    updatedAt: addMinutes(now, -1),
-  });
-  await runActivity({ ...draftRun, summary: null }, ACTIVITY_ACTION.AGENT_RUN_STARTED, draftStartedAt);
-
-  // Explainer video: the agent is blocked waiting on a person, which renders the amber chip.
-  const scriptStartedAt = addMinutes(now, -48);
-  const scriptRun = await insertRun({
-    cardId: videoCard.id,
-    status: "blocked",
-    title: "Cutting the explainer video script",
-    summary: "60- and 45-second cuts are ready. Which voiceover take should the final cut use?",
-    startedAt: scriptStartedAt,
-    heartbeatAt: addMinutes(now, -4),
-    createdAt: scriptStartedAt,
-    updatedAt: addMinutes(now, -4),
-  });
-  await runActivity({ ...scriptRun, status: "running", summary: null }, ACTIVITY_ACTION.AGENT_RUN_STARTED, scriptStartedAt);
-
-  // Graphics: completed today by the agent, so Work Done shows the sparkles mark beside Amelia.
-  const completedAt = addMinutes(now, -95);
-  await tx.update(cards).set({
-    ...seedCardSchedule({
-      baseDate: now,
-      seed: { list: "Complete", dueDateSlot: graphicsCard.dueDateSlot ?? "anyTime" },
-      cardIndex: 0,
-      createdAt: graphicsCard.createdAt,
-      completedAt,
-      timezone: graphicsCard.dueDateTimezone ?? "UTC",
-    }),
-    completedAt,
-    updatedAt: completedAt,
-  }).where(eq(cards.id, graphicsCard.id));
-  const [completion] = await tx.insert(activityEvents).values({
-    ...agentActor,
-    entityType: "card",
-    entityId: graphicsCard.id,
-    action: ACTIVITY_ACTION.COMPLETION_SET,
-    payload: { completedAt, fromValue: false, toValue: true },
-    createdAt: completedAt,
-    updatedAt: completedAt,
-  }).returning();
-  await notify(ameliaId, graphicsCard, completion!.id, "watching", completedAt, addMinutes(completedAt, 30));
-
-  return notificationCount;
-}
-
 const AGENT_PROJECT_BOARD_NAME = "Customer Portal Revamp";
-const AGENT_PROJECT_PR = (n: number) => `https://github.com/kanera-demo/customer-portal/pull/${n}`;
 
-// Cards for the Agent Workflow demo board. Their lists match the runs seedAgentWorkflowRunDemos
-// gives them: Agent Working cards have running runs, Waiting on Me a blocked one, Review a
-// succeeded one with its pull request linked.
+// Cards for the Agent Workflow demo board. A real agent can start a run through the application;
+// the seed does not manufacture runs or successful outcomes.
 const AGENT_PROJECT_CARDS: SeedCard[] = [
   {
     title: "Add saved payment methods to checkout",
@@ -4562,81 +4368,15 @@ const AGENT_PROJECT_CARDS: SeedCard[] = [
     title: "Add pagination to the activity feed API",
     description: "Cursor pagination for /api/activity so long-lived accounts stop timing out.",
     list: "Review", createdBy: "amelia", assignees: ["amelia"], labels: ["Feature"],
-    fieldValues: { "Pull Request": AGENT_PROJECT_PR(482) },
   },
   {
     title: "Upgrade the portal to the latest framework minor",
     description: "Bump framework and router packages and fix the two deprecation warnings.",
     list: "Done", createdBy: "amelia", assignees: ["amelia"], labels: ["Chore"],
-    fieldValues: { "Pull Request": AGENT_PROJECT_PR(471) },
     completedBy: "amelia", completedDaysAgo: 1,
   },
 ];
 
-/**
- * Live runs for the Agent Workflow demo board, one per card outside Backlog and Done, in the state
- * each list stands for. Like seedAgentRunDemos, live runs stall 15 minutes after seeding.
- */
-async function seedAgentWorkflowRunDemos(tx: Tx, input: { clientId: string; ameliaId: string; now: Date }): Promise<void> {
-  const { now, ameliaId } = input;
-  const board = await findSeedBoard(tx, input.clientId, AGENT_PROJECT_BOARD_NAME);
-  const cardRows = await tx.select().from(cards).where(eq(cards.boardId, board.id));
-  const card = (title: string) => {
-    const row = cardRows.find((candidate) => candidate.title === title);
-    if (!row) throw new Error(`Missing agent workflow demo card '${title}'.`);
-    return row;
-  };
-  const runs: { title: string; run: string; status: "running" | "blocked" | "succeeded"; summary: string; startedMinutesAgo: number; externalUrl?: string }[] = [
-    { title: "Migrate auth middleware to the new session API", run: "Migrating auth middleware", status: "running", summary: "Route guards updated; 18 of 22 auth tests passing.", startedMinutesAgo: 40 },
-    { title: "Build the order history page", run: "Building order history", status: "running", summary: "List and pagination done; wiring invoice download links.", startedMinutesAgo: 25 },
-    { title: "Fix the login redirect loop after password reset", run: "Fixing the reset redirect loop", status: "blocked", summary: "Need a decision: after a reset, send people to Home or to the page they last opened?", startedMinutesAgo: 70 },
-    { title: "Add pagination to the activity feed API", run: "Adding cursor pagination", status: "succeeded", summary: "Opened PR #482 with cursor pagination and tests; ready for review.", startedMinutesAgo: 180, externalUrl: AGENT_PROJECT_PR(482) },
-  ];
-  for (const seed of runs) {
-    const row = card(seed.title);
-    const startedAt = addMinutes(now, -seed.startedMinutesAgo);
-    const ended = seed.status === "succeeded";
-    const heartbeatAt = ended ? addMinutes(startedAt, 35) : addMinutes(now, -2);
-    const [run] = await tx.insert(agentRuns).values({
-      workspaceId: board.workspaceId,
-      boardId: board.id,
-      cardId: row.id,
-      userId: ameliaId,
-      agentName: SEED_AGENT_NAME,
-      status: seed.status,
-      title: seed.run,
-      summary: seed.summary,
-      externalUrl: seed.externalUrl ?? null,
-      startedAt,
-      heartbeatAt,
-      endedAt: ended ? heartbeatAt : null,
-      createdAt: startedAt,
-      updatedAt: heartbeatAt,
-    }).returning();
-    const activity = (action: ActivityAction, at: Date, status: string, summary: string | null) => tx.insert(activityEvents).values({
-      boardId: board.id,
-      workspaceId: board.workspaceId,
-      actorId: ameliaId,
-      actorKind: "agent",
-      agentName: SEED_AGENT_NAME,
-      entityType: "card",
-      entityId: row.id,
-      action,
-      payload: { runId: run!.id, title: seed.run, status, agentName: SEED_AGENT_NAME, externalUrl: seed.externalUrl ?? null, summary },
-      createdAt: at,
-      updatedAt: at,
-    });
-    await activity(ACTIVITY_ACTION.AGENT_RUN_STARTED, startedAt, "running", null);
-    if (ended) await activity(ACTIVITY_ACTION.AGENT_RUN_ENDED, heartbeatAt, seed.status, seed.summary);
-  }
-}
-
-/**
- * An active mirror from the Launch Checklist standalone board into Platform Delivery, mapping
- * To do onto Wishlist, as the board-mirror create route writes it. lastSyncAt predates the
- * standalone cards and a reconcile is requested, so a running worker links the existing To do
- * cards into Platform Delivery on its first pass instead of waiting for a new source change.
- */
 async function seedBoardMirrorDemo(
   tx: Tx,
   input: { clientId: string; ameliaId: string; sourceBoardId: string; sourceWorkspaceId: string; sourceListId: string; createdAt: Date },
@@ -4902,124 +4642,6 @@ async function seedCardRelationDemos(tx: Tx, input: {
   return { relations, notifications: notificationCount };
 }
 
-/** Core Marketing handoff, expressed against seed identities rather than the audited live UUIDs. */
-async function seedMarketingHandoff(tx: Tx, input: {
-  clientId: string;
-  userIdByKey: Map<SeedUserKey, string>;
-  baseDate: Date;
-  now: Date;
-}): Promise<void> {
-  const board = await findSeedBoard(tx, input.clientId, "Autumn Campaign Launch");
-  const cardRows = await tx.select().from(cards).where(eq(cards.workspaceId, board.workspaceId));
-  const byTitle = new Map(cardRows.map((card) => [card.title, card]));
-  const requireCard = (title: string) => {
-    const card = byTitle.get(title);
-    if (!card) throw new Error(`Missing Marketing handoff card '${title}'.`);
-    return card;
-  };
-  const listRows = await tx.select().from(lists).where(eq(lists.workspaceId, board.workspaceId));
-  const done = listRows.find((list) => list.name === "Done")!;
-  const waiting = listRows.find((list) => list.name === "Waiting on Others")!;
-  const ameliaId = input.userIdByKey.get("amelia")!;
-  const benId = input.userIdByKey.get("ben")!;
-  const graceId = input.userIdByKey.get("grace")!;
-  const launch = requireCard("Prepare autumn campaign launch");
-  const approval = requireCard("Approve the campaign launch package");
-  await tx.update(cards).set({
-    description: launch.description!.replaceAll("{{campaignApprovalKey}}", approval.key),
-    coverAttachmentId: null,
-    updatedAt: input.now,
-  }).where(eq(cards.id, launch.id));
-
-  const checklistRows = await tx.select({ item: cardChecklistItems }).from(cardChecklistItems)
-    .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-    .where(and(eq(cardChecklists.cardId, launch.id), eq(cardChecklists.title, "Launch readiness")));
-  // These two sign-offs are recorded at seed execution, rather than inventing a past approval date.
-  // Tracking stays open, as requested; the existing graphics tick and all comments are retained.
-  for (const [text, actorId] of [["Confirm final product messaging", benId], ["Publish the launch-day schedule", graceId]] as const) {
-    const item = checklistRows.find((row) => row.item.text === text)?.item;
-    if (!item) throw new Error(`Missing Marketing handoff checklist item '${text}'.`);
-    await tx.update(cardChecklistItems).set({ completedAt: input.now, completedById: actorId, updatedAt: input.now })
-      .where(eq(cardChecklistItems.id, item.id));
-    await insertSeedActivity(tx, {
-      boardId: board.id, workspaceId: board.workspaceId, actorId, entityType: "card", entityId: launch.id,
-      action: "checklistItem:completion", payload: { checklistId: item.checklistId, itemId: item.id, text, completedAt: input.now, fromValue: false, toValue: true },
-      createdAt: input.now,
-    });
-  }
-
-  const graphics = requireCard("Design the autumn campaign graphics");
-  // The agent demo already completed this card. A list move must preserve that timestamp and run.
-  await tx.update(cards).set({ listId: done.id, updatedAt: input.now }).where(eq(cards.id, graphics.id));
-  await insertSeedActivity(tx, {
-    boardId: board.id, workspaceId: board.workspaceId, actorId: ameliaId, entityType: "card", entityId: graphics.id,
-    action: "moved", payload: { fromListId: graphics.listId, fromListName: "In Progress", toListId: done.id, toListName: done.name },
-    createdAt: input.now,
-  });
-
-  // The source audits 24 October: keep its actual day gaps, without seedDueDate's 45-day stretch.
-  // Null slots are intentional date-only deadlines in the workspace's London time zone.
-  const dueDates = [
-    ["Prepare the launch-week social schedule", -1],
-    ["Draft the autumn product-update changelog post", 4],
-    ["Assemble the webinar follow-up sequence", 6],
-    ["Finalise the campaign tracking and UTM plan", 4],
-    ["Approve the customer announcement email", 5],
-    ["Refresh the customer onboarding email sequence", 2],
-  ] as const;
-  for (const [title, offset] of dueDates) {
-    const card = requireCard(title);
-    const due = formatLocalDate(addDays(input.baseDate, offset));
-    await tx.update(cards).set({
-      dueDateLocalDate: due, dueDateSlot: null, dueDateTimezone: "Europe/London",
-      startDateLocalDate: card.startDateLocalDate && card.startDateLocalDate > due ? due : card.startDateLocalDate,
-    }).where(eq(cards.id, card.id));
-  }
-  const intake = requireCard("Refresh the customer onboarding email sequence");
-  await tx.delete(cardAssignees).where(and(eq(cardAssignees.cardId, intake.id), eq(cardAssignees.userId, input.userIdByKey.get("zoe")!)));
-
-  // The audited 120th card was added after the original 119. Allocate it last so the existing
-  // board/card references keep their numbers; no live UUID or fabricated key enters the fixture.
-  const [identity] = await allocateCardKeys(tx, board.workspaceId, 1);
-  const [email] = await tx.insert(cards).values({
-    ...identity!, boardId: board.id, listId: waiting.id,
-    title: "Schedule the launch-day customer email",
-    description: "Schedule the customer announcement after Amelia approves the email. Confirm the audience, send window and final tracking before scheduling.",
-    position: positionForIndex(cardRows.filter((card) => card.boardId === board.id && card.listId === waiting.id).length),
-    dueDateLocalDate: formatLocalDate(addDays(input.baseDate, 6)), dueDateSlot: null, dueDateTimezone: "Europe/London",
-    createdById: ameliaId, createdAt: input.now, updatedAt: input.now,
-  }).returning();
-  await tx.insert(cardAssignees).values({ cardId: email!.id, userId: ameliaId, assignedAt: input.now });
-  const labels = await tx.select().from(cardLabels).where(and(
-    eq(cardLabels.workspaceId, board.workspaceId), inArray(cardLabels.name, ["Campaign", "Email"]),
-  ));
-  await tx.insert(cardLabelAssignments).values(labels.map((label) => ({ cardId: email!.id, labelId: label.id, assignedAt: input.now })));
-  const fields = await tx.select().from(customFields).where(and(
-    eq(customFields.workspaceId, board.workspaceId), inArray(customFields.name, ["Campaign", "Approved"]),
-  ));
-  await tx.insert(cardCustomFieldValues).values(fields.map((field) => ({
-    cardId: email!.id, fieldId: field.id,
-    ...fieldValueUpdate(field.name, field.type, field.name === "Campaign" ? "Autumn launch" : false, new Map()),
-    updatedAt: input.now,
-  })));
-  const emailApproval = requireCard("Approve the customer announcement email");
-  const [relation] = await tx.insert(cardRelations).values({
-    workspaceId: board.workspaceId, sourceCardId: emailApproval.id, targetCardId: email!.id,
-    kind: "blocks", createdById: ameliaId, createdAt: input.now,
-  }).returning();
-  await insertSeedActivity(tx, {
-    boardId: board.id, workspaceId: board.workspaceId, actorId: ameliaId, entityType: "card", entityId: email!.id,
-    action: "created", payload: { title: email!.title, listId: waiting.id }, createdAt: input.now,
-  });
-  for (const [card, other, direction] of [[emailApproval, email!, "blocks"], [email!, emailApproval, "blocked_by"]] as const) {
-    await insertSeedActivity(tx, {
-      boardId: board.id, workspaceId: board.workspaceId, actorId: ameliaId, entityType: "card", entityId: card.id,
-      action: "relation:added", payload: { relationId: relation!.id, direction, otherCardId: other.id, otherCardKey: other.key },
-      createdAt: input.now,
-    });
-  }
-}
-
 function fieldValueUpdate(fieldName: string, fieldType: string, value: SeedFieldValue, optionIdByFieldAndLabel: Map<string, Map<string, string>>) {
   const base = { valueText: null, valueNumber: null, valueCheckbox: null, valueOptionIds: null } as {
     valueText: string | null;
@@ -5154,7 +4776,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
   if (options.requireBlankDatabase ?? true) await assertBlankDatabase();
 
   const passwordHash = options.passwordHash ?? await hashPassword(options.password ?? DEV_SEED_SHARED_PASSWORD);
-  const workspaceSeeds = buildWorkspaceSeeds();
+  const capturedAt = new Date();
+  const calendar = seedCalendar(options.referenceDate ?? capturedAt);
+  const workspaceSeeds = buildWorkspaceSeeds(calendar.baseDate);
   const summary: SeedSummary = {
     users: 0,
     workspaces: 0,
@@ -5176,6 +4800,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
     mentions: 0,
     notifications: 0,
   };
+  let demo: Awaited<ReturnType<typeof enhanceDemoSeed>> | undefined;
   const uploadedKeys: string[] = [];
   const inProgressListIds: string[] = [];
   const guestUploadedKeys: string[] = [];
@@ -5223,7 +4848,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
 
       const userIdByKey = new Map<SeedUserKey, string>();
       const userTimezoneByKey = new Map<SeedUserKey, string>();
-      const baseDate = startOfToday();
+      const baseDate = calendar.baseDate;
       for (const userSeed of USER_SEEDS) {
         const [user] = await tx
           .insert(users)
@@ -5450,9 +5075,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             title: cardSeed.title,
             description: cardSeed.description,
             position: positionForIndex(nextListCount),
-            ...seedCardSchedule({ baseDate, seed: cardSeed, cardIndex, createdAt: cardCreatedAt, completedAt: null, timezone: GUEST_USER_SEED.timezone }),
+            ...seedCardSchedule({ baseDate, seed: cardSeed, cardIndex, createdAt: cardCreatedAt, completedAt: cardSeed.list === "Done" ? addDays(baseDate, -1) : null, timezone: GUEST_USER_SEED.timezone }),
             createdById: guestUser!.id,
-            completedAt: null,
+            completedAt: cardSeed.list === "Done" ? addDays(baseDate, -1) : null,
             coverAttachmentId: null,
             createdAt: cardCreatedAt,
             updatedAt: cardCreatedAt,
@@ -5656,7 +5281,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             summary.checklists += 1;
             await tx.insert(cardChecklistItems).values(seededItems.map((item, itemIndex) => {
               const itemCompletedAt = item.completedBy ? addHours(cardCreatedAt, item.completedOffsetHours ?? itemIndex + 2) : null;
-              return { checklistId: checklist!.id, text: item.text, position: positionForIndex(itemIndex), assigneeId: item.assignee ? userIdByKey.get(item.assignee)! : null, dueDateLocalDate: item.dueOffsetDays === undefined ? null : formatLocalDate(seedDueDate(baseDate, item.dueOffsetDays)), dueDateSlot: item.dueDateSlot ?? null, dueDateTimezone: item.dueOffsetDays === undefined ? null : userTimezoneByKey.get("amelia")!, completedAt: itemCompletedAt, completedById: item.completedBy ? userIdByKey.get(item.completedBy)! : null, createdAt: checklistCreatedAt, updatedAt: itemCompletedAt ?? checklistCreatedAt };
+              return { checklistId: checklist!.id, text: item.text, position: positionForIndex(itemIndex), assigneeId: item.assignee ? userIdByKey.get(item.assignee)! : null, dueDateLocalDate: item.dueOffsetDays === undefined ? null : formatLocalDate(seedDueDate(baseDate, item.dueOffsetDays)), dueDateSlot: null, dueDateTimezone: item.dueOffsetDays === undefined ? null : "Europe/London", completedAt: itemCompletedAt, completedById: item.completedBy ? userIdByKey.get(item.completedBy)! : null, createdAt: checklistCreatedAt, updatedAt: itemCompletedAt ?? checklistCreatedAt };
             }));
             summary.checklistItems += checklistSeed.items.length;
           }
@@ -5788,9 +5413,8 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
       });
       const standaloneCreatedAt = addDays(baseDate, -2);
 
-      // A project board built from the Agent Workflow template, where Amelia hands work to her
-      // Claude agent. seedAgentWorkflowRunDemos adds live runs that match each card's list, so the
-      // board shows the run chips the template is designed around.
+      // Keep the Agent Workflow board as a place for genuine runs started through the application.
+      // A seed must not claim an agent has successfully performed work that never happened.
       const agentTemplate = WORKSPACE_TEMPLATES.find((template) => template.id === "agent-workflow")!;
       await seedStandaloneBoard({
         seedKey: "agent-project",
@@ -5813,7 +5437,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
 
       for (const [workspaceIndex, workspaceSeed] of workspaceSeeds.entries()) {
         const workspaceRoleByUser = new Map(workspaceSeed.members.map((member) => [member.user, member.role]));
-        const workspaceCreatedAt = addDays(baseDate, -(32 - workspaceIndex * 4));
+        const workspaceCreatedAt = addDays(baseDate, workspaceSeed.key === "marketing" ? -36 : -(32 - workspaceIndex * 4));
         const [workspace] = await tx
           .insert(workspaces)
           .values({
@@ -6096,7 +5720,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             let showcaseTickUsed = false;
             const completedAt = completedDaysAgo === undefined
               ? null
-              : completedDaysAgo === 0 ? new Date()
+              : completedDaysAgo === 0 ? calendar.instant
               : showcaseDay ? addHours(showcaseDay, 6) : addHours(addDays(baseDate, -completedDaysAgo), 16);
             // Three weeks keeps the replayed progress stage across a weekday, even
             // when the evenly spaced moves would otherwise land entirely on a weekend.
@@ -6338,11 +5962,11 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                         itemSeed.dueOffsetDays === undefined
                           ? null
                           : formatLocalDate(seedDueDate(baseDate, itemSeed.dueOffsetDays)),
-                      dueDateSlot: itemSeed.dueDateSlot ?? null,
+                      dueDateSlot: null,
                       dueDateTimezone:
                         itemSeed.dueOffsetDays === undefined
                           ? null
-                          : (userTimezoneByKey.get(itemSeed.assignee ?? cardSeed.createdBy) ?? "UTC"),
+                          : "Europe/London",
                       completedAt,
                       completedById: itemSeed.completedBy === undefined ? null : userIdByKey.get(itemSeed.completedBy)!,
                       createdAt: checklistCreatedAt,
@@ -6636,22 +6260,13 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             clientId: client!.id,
             actorId: userIdByKey.get(isMarketing ? "ben" : "priya")!,
             watcherId: userIdByKey.get(isMarketing ? "amelia" : "marcus")!,
-            now: new Date(),
+            now: baseDate,
           });
           summary.cardRelations += relationDemo.relations;
           summary.notifications += relationDemo.notifications;
         }
       }
 
-      summary.notifications += await seedAgentRunDemos(tx, {
-        clientId: client!.id,
-        userIdByKey,
-        now: new Date(),
-      });
-      await seedMarketingHandoff(tx, { clientId: client!.id, userIdByKey, baseDate, now: new Date() });
-      summary.cards += 1;
-      summary.cardRelations += 1;
-      await seedAgentWorkflowRunDemos(tx, { clientId: client!.id, ameliaId: userIdByKey.get("amelia")!, now: new Date() });
       await seedBoardMirrorDemo(tx, {
         clientId: client!.id,
         ameliaId: userIdByKey.get("amelia")!,
@@ -6686,6 +6301,21 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         summary.cardPriorities += selected.length;
       }
 
+      // Historical notifications belong to synthetic fixture history. Fresh unread notifications
+      // must come from a real application action by a demo account, not inserted inbox rows.
+      await tx.update(notifications).set({ readAt: capturedAt }).where(inArray(notifications.clientId, [client!.id, guestClient!.id]));
+
+      demo = await enhanceDemoSeed(tx, { clientId: client!.id, userIds: userIdByKey, calendar });
+      summary.cards += demo.created.length;
+      summary.separators += 15;
+      const seededWorkspaces = await tx.select({ id: workspaces.id }).from(workspaces)
+        .where(inArray(workspaces.clientId, [client!.id, guestClient!.id]));
+      const seededWorkspaceIds = seededWorkspaces.map((row) => row.id);
+      const savedCards = await tx.select({ cover: cards.coverAttachmentId }).from(cards).where(inArray(cards.workspaceId, seededWorkspaceIds));
+      summary.cardCovers = savedCards.filter((row) => row.cover).length;
+      summary.cardRelations = (await tx.select({ id: cardRelations.id }).from(cardRelations).where(inArray(cardRelations.workspaceId, seededWorkspaceIds))).length;
+      summary.cardPriorities = (await tx.select().from(cardPriorities).where(inArray(cardPriorities.targetUserId, [...userIdByKey.values()]))).length;
+
       if (summary.cardCovers === 0) {
         throw new Error("Seed data created no card cover images.");
       }
@@ -6698,8 +6328,8 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
       }
     });
 
-    if (!primaryClientId || !guestClientId) throw new Error("Seed data did not create both demo organisations.");
-    return { summary, primaryClientId, guestClientId };
+    if (!primaryClientId || !guestClientId || !demo) throw new Error("Seed data did not create both demo organisations.");
+    return { summary, primaryClientId, guestClientId, demo };
   } catch (error) {
     if (storage) {
       await Promise.allSettled(uploadedKeys.map((key) => storage!.delete(key)));

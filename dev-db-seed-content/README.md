@@ -40,7 +40,7 @@ Seeded workspaces:
 Seeded standalone boards (owned by Amelia):
 
 - `Launch Checklist`
-- `Customer Portal Revamp`: built from the Agent Workflow template, with live Claude agent runs on the cards in Agent Working, Waiting on Me, and Review. Live runs stall 15 minutes after seeding.
+- `Customer Portal Revamp`: built from the Agent Workflow template; start actual runs through the application when demonstrating agent work.
 
 ## Demonstrating Timeline and dependencies
 
@@ -50,9 +50,8 @@ the next reset. Dependency handoffs use Monday–Friday working days, including 
 seed runs on a weekend. These fixtures work in both self-hosted and hosted demo seeds.
 
 - **Platform Delivery:** the onboarding QA pass waits on reconnect fixes and attachment
-  cleanup. Cleanup is intentionally planned to finish too late: QA would need to start
-  three working days later. The Timeline shows one scheduling conflict; open the QA
-  card to see both prerequisites. Move cleanup earlier to demonstrate resolving it.
+  cleanup. QA starts at B+6 after cleanup finishes at B+5 and is due B+8. Open the QA
+  card to see both prerequisites.
 - **Autumn Campaign Launch:** explainer video → package approval → launch is a healthy
   three-card chain. Turn on **Dependencies** and **Critical path** to see the wires
   and the work with no slack. Final product messaging is completed: its relationship
@@ -70,44 +69,73 @@ seed runs on a weekend. These fixtures work in both self-hosted and hosted demo 
   and review work has already started; future work and overdue work remain visible too.
 
 After experimenting, reset the local fixtures with `pnpm dev:db:reset:seed` to restore the
-demonstration (this deletes the local development database). The read-only seed regression
-test uses its own isolated database: `pnpm test:e2e -- seed-timeline seed-time-tracking`.
+demonstration (this deletes the local development database).
 
-## Marketing content handoff
+## Repeatable delivery demo
 
-The Core changes from the 24 October 2026 handoff are permanent seed fixtures. The CSV's
-audited live UUIDs are not seed identities. The existing 119 card numbers are preserved;
-the email-scheduling card is allocated last as card 120 and placed on Autumn Campaign Launch.
+The demo seed uses one London reference date for the entire reset. `B+0` is the first
+weekday on or after that date; `B+n` skips weekends. `P+n` is the nth weekday strictly
+before it. Holidays are deliberately not modelled. All card deadlines are date-only in
+`Europe/London`. The review automation still uses **two calendar days** and its existing
+end-of-work-day slot; the business-day helper does not change that rule.
 
-- Launch readiness names the actual generated package-approval key. Messaging, graphics and
-  schedule are checked (3/4); landing-page tracking remains unchecked. Messaging is signed off,
-  and completed graphics sit in Done with their original agent completion and Nina assignment.
-- The launch attachment remains available without a card cover. Existing comments and agent
-  history are retained. Messaging and schedule checklist ticks use the seed execution timestamp.
-- The customer-onboarding email request remains in Ideas & Requests, with no assignee.
-  Grace retains 18 Marketing cards and Ben retains 17. The older audit's 18 for Ben assumed
-  he owned the explainer; the approved Timeline cast keeps Nina as its owner.
-- Marketing budgets remain sparse. Use Platform Delivery's Billing Hours for the numeric demo;
-  the existing recruitment-brochure Budget stays 2400. No rehearsal clone is seeded.
+For an **empty local development database**, run:
 
-Deadlines use the handoff's calendar-day offsets from its 24 October baseline, relative to
-the seed's UTC date. They stay fixed until the next seed. All seven are date-only
-(`dueDateSlot: null`, `dueDateTimezone: Europe/London`):
+```bash
+pnpm db:seed:local --reference-date 2026-10-25
+```
 
-| Card | Deadline from seed day |
-| --- | --- |
-| Prepare the launch-week social schedule (9) | -1 day (overdue) |
-| Draft the autumn product-update changelog post (73) | +4 days |
-| Assemble the webinar follow-up sequence (91) | +6 days |
-| Finalise the campaign tracking and UTM plan (11) | +4 days |
-| Approve the customer announcement email (13) | +5 days |
-| Schedule the launch-day customer email (120) | +6 days, blocked by card 13 |
-| Refresh the customer onboarding email sequence (102) | +2 days |
+Omit `--reference-date` for a fresh reset anchored to the run's start date. This command
+refuses a populated database. It is not a live-data migration and does not patch existing
+demo tenants. The deployed admin demo reset captures its reference date before purging
+its reserved demo tenants. No connected Kanera account is used by local validation.
 
-These are the approved Core edits; the newer Timeline schedule and its other owners/dates are
-preserved rather than replaced by the older filming snapshot. The PDF's live-account edits,
-temporary automation clone, inline-number filming actions and notification targets are not run
-by the seed. Verify the fixtures with `pnpm test:e2e -- seed-marketing seed-timeline seed-time-tracking`.
+Seed output includes actual allocated IDs/keys, the complete card-key → offset map and
+missing-asset warnings. Original Marketing numbers 1–119 retain their allocation order.
+The email-scheduling task is allocated next, followed by the three delivery tasks and the
+separate automation rehearsal. No hardcoded live UUID is used.
+
+- Twelve ideas are recoverably archived; all twelve main-organisation boards remain.
+- Permanent Marketing work has **111 unarchived cards: 82 active and 29 completed**.
+  Card 7 remains incomplete in Waiting on Others: the checked-in review-wall bitmap
+  does not supply the final desktop/mobile hero, email header, three social formats
+  and partner lockup exports. Verify those assets before completing the card. That
+  would produce the intended 81 active / 30 completed result.
+- The temporary campaign-overview automation card adds one more active card. Nina is
+  its only owner, with no due date, cover or dependencies. A later application move
+  to Review must produce Amelia's assignment, the real +2-calendar-day deadline and
+  a genuine execution. Nothing pre-seeds a successful automation execution.
+- Permanent In Progress work is 14 cards: Ben 3, Grace 2, Leo 3, Nina 2, Omar 1, Zoe 3.
+  The temporary automation card is excluded from that total. Ben owns the explainer
+  video, as required by the specified WIP and Budget example; this supersedes the
+  older fixture's Nina assignment. His three existing active launch cards (5/10/14)
+  have planned Budget allocations 600/2400/blank, totalling EUR 3000. The new publishing
+  task is separately visible in Ready to Start, with no budget. No EUR 2600 filming edit
+  is seeded. The recruitment-brochure allocation remains EUR 2400.
+- Queues, Campaign classifications, separators, note schedules and descriptions use
+  the same plan. Historical completed classifications and original comments remain;
+  editable schedule notes retain their images and links. Budget means planned
+  allocation in EUR, not actual spend.
+- Exactly eight active cards are intentionally overdue: MARKETINGC-9, LAUNCHCHEC-1/-2,
+  DEVELOPMEN-1/-4/-13 and DEVOPS-1/-13. All other dated active work uses explicit
+  B+0…B+15 offsets. Start-only and undated backlog fixtures remain undated.
+- Development Billing Hours remain DEVELOPMEN-1 = 12.75 and DEVELOPMEN-11 = 4.5.
+  Billing Month and the database-vacuum month name derive from the same reference date.
+- Launch Checklist's five open cards belong to Marcus. Its mirror configuration is
+  retained and the real worker reconciles ownership from the source; no mirror is
+  severed to suppress duplicate-looking work.
+- Fresh resets do not manufacture successful agent runs or unread inbox entries.
+  Ordinary historical human activity is synthetic fixture content. Genuine Claude
+  records are not available in the local source and are never claimed to be imported.
+  Create fresh activity and notifications through real application actions.
+
+The complete declared offset tables live in `apps/api/src/scripts/seed-calendar.ts`.
+Marketing delivery and reporting specifications live in `seed-demo-enhancements.ts`.
+Portfolio's rolling completion window and stored unarchived totals describe different
+scopes. Do not force either to the old audit's counts; read both again after reseeding.
+Marketing appears first through its authored workspace creation order; its board order
+is Launch, Website, Content, Brand, Events, Requests. Existing account-specific sidebar
+preferences can still override the default presentation.
 
 ## Layout
 
