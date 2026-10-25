@@ -11420,7 +11420,8 @@
     "description": "Button: hide completed checklist items",
     "x-files": [
       "src/app/features/board/card-detail.component.html",
-      "src/app/features/board/table-view/filter-bar.component.ts"
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
     ]
   },
   "588620993794060804": "Drag checklist",

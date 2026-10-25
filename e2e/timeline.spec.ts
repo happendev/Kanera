@@ -63,6 +63,126 @@ async function openTimeline(page: Page) {
   await expect(page).toHaveURL(/view=timeline/);
 }
 
+test("timeline Hide completed stays in sync with Filter and reacts to completion live", async ({ page, signIn, apiAs, uniqueName }) => {
+  await signIn(page, "amelia");
+  await openBoard(page, "Platform Delivery");
+  const api = await apiAs("amelia");
+  const monday = nextPlanningMonday();
+  const prefix = uniqueName("E2E timeline completion");
+  const active = await createScheduledCard(page, api, `${prefix} active`, monday, plusDays(monday, 2));
+  const done = await createScheduledCard(page, api, `${prefix} done`, monday, plusDays(monday, 2));
+  const undated = await createScheduledCard(page, api, `${prefix} undated`, monday, monday);
+  try {
+    expect((await api.patch(`/api/cards/${undated.id}`, { data: { startDateLocalDate: null, dueDateLocalDate: null } })).ok()).toBe(true);
+    for (const card of [done, undated]) {
+      expect((await api.patch(`/api/cards/${card.id}/completion`, { data: { completed: true } })).ok()).toBe(true);
+    }
+    await openTimeline(page);
+    await page.getByRole("searchbox", { name: "Search cards", exact: true }).fill(prefix);
+    const timeline = page.locator("k-board-timeline-view");
+    const toggle = timeline.getByRole("button", { name: "Hide completed", exact: true });
+    const row = (id: string) => timeline.locator(`.tl-row-card[data-card-id="${id}"]`);
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(bar(page, done)).toBeVisible();
+    await expect(row(undated.id)).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(bar(page, active)).toBeVisible();
+    await expect(row(done.id)).toHaveCount(0);
+    await expect(row(undated.id)).toHaveCount(0);
+    await page.reload();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("searchbox", { name: "Search cards", exact: true }).fill(prefix);
+    await expect(bar(page, active)).toBeVisible();
+    await expect(row(done.id)).toHaveCount(0);
+    await expect(timeline.locator(".tl-row-card")).toHaveCount(1);
+    await page.screenshot({ path: test.info().outputPath("timeline-hide-completed-desktop.png") });
+
+    // A completion elsewhere must remove its row without reloading; reopening brings it back.
+    expect((await api.patch(`/api/cards/${active.id}/completion`, { data: { completed: true } })).ok()).toBe(true);
+    await expect(row(active.id)).toHaveCount(0);
+    expect((await api.patch(`/api/cards/${active.id}/completion`, { data: { completed: false } })).ok()).toBe(true);
+    await expect(bar(page, active)).toBeVisible();
+
+    const filter = page.locator("k-filter-bar");
+    await filter.getByRole("button", { name: /^Filter/ }).click();
+    await expect(page.locator(".fb-panel").getByRole("button", { name: /Hide completed/ })).toHaveClass(/active/);
+    await page.locator(".fb-panel").getByRole("button", { name: "Clear all", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(bar(page, done)).toBeVisible();
+    await expect(row(undated.id)).toBeVisible();
+
+    // Choosing a completed range shows done work again; hiding it clears that range.
+    await toggle.click();
+    await filter.getByRole("button", { name: /^Filter/ }).click();
+    await page.locator(".fb-panel").getByRole("button", { name: /Completed/, exact: false }).filter({ has: page.locator(".fb-row-caret") }).click();
+    await page.locator(".fb-panel").getByRole("button", { name: "This week", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(bar(page, done)).toBeVisible();
+    await expect(bar(page, active)).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(bar(page, active)).toBeVisible();
+    await expect(row(done.id)).toHaveCount(0);
+    await toggle.click();
+    await expect(bar(page, done)).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 900 });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(row(done.id)).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath("timeline-hide-completed-phone.png") });
+    await toggle.click();
+    await expect(bar(page, done)).toBeVisible();
+  } finally {
+    for (const card of [active, done, undated]) {
+      expect((await api.patch(`/api/cards/${card.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
+    }
+  }
+});
+
+for (const lens of ["my", "team"] as const) {
+  test(`${lens === "my" ? "My" : "Team"} Cards timeline Hide completed shares the query filter`, async ({ page, signIn, apiAs, uniqueName }) => {
+    await signIn(page, "amelia");
+    await openBoard(page, "Platform Delivery");
+    const api = await apiAs("amelia");
+    const monday = nextPlanningMonday();
+    const card = await createScheduledCard(page, api, uniqueName(`E2E ${lens} timeline completed`), monday, plusDays(monday, 2));
+    const assigneeApi = lens === "my" ? api : await apiAs("priya");
+    const user = (await (await assigneeApi.get("/api/me")).json()) as { id: string };
+    try {
+      expect((await api.put(`/api/cards/${card.id}/assignees`, { data: { userIds: [user.id] } })).ok()).toBe(true);
+      expect((await api.patch(`/api/cards/${card.id}/completion`, { data: { completed: true } })).ok()).toBe(true);
+      await page.goto(`/${lens}-cards`);
+      await page.getByRole("button", { name: "Timeline view", exact: true }).click();
+      await page.getByRole("searchbox", { name: "Search cards", exact: true }).fill(card.title);
+      await expect(bar(page, card)).toBeVisible();
+      const toggle = page.locator("k-board-timeline-view").getByRole("button", { name: "Hide completed", exact: true });
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      await expect(bar(page, card)).toHaveCount(0);
+      const filter = page.locator("k-filter-bar");
+      await filter.getByRole("button", { name: /^Filter/ }).click();
+      const menuToggle = page.locator(".fb-panel").getByRole("button", { name: /Hide completed/ });
+      await expect(menuToggle).toHaveClass(/active/);
+      await menuToggle.click();
+      await page.keyboard.press("Escape");
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expect(bar(page, card)).toBeVisible();
+      await page.setViewportSize({ width: 390, height: 900 });
+      await toggle.click();
+      await expect(bar(page, card)).toHaveCount(0);
+      await page.screenshot({ path: test.info().outputPath(`${lens}-timeline-hide-completed-phone.png`) });
+      await toggle.click();
+      await expect(bar(page, card)).toBeVisible();
+    } finally {
+      expect((await api.patch(`/api/cards/${card.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
+    }
+  });
+}
+
 test("the timeline draws bars, reschedules by drag, flags conflicts and draws dependencies, live for a second member", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
   await openBoard(page, "Platform Delivery");

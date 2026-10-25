@@ -316,6 +316,7 @@ export class BoardPage implements OnDestroy {
   readonly showReminderSetOnly = signal(false);
   /** Only cards with at least one open blocker (`blockedByCount`, hidden blockers included). */
   readonly showBlockedOnly = signal(false);
+  readonly hideCompleted = signal(false);
   readonly showArchived = signal(false);
   readonly completedFrom = signal("");
   readonly completedTo = signal("");
@@ -483,7 +484,8 @@ export class BoardPage implements OnDestroy {
     const reminderSetOnly = this.showReminderSetOnly();
     const blockedOnly = this.state.dependenciesEnabled() && this.showBlockedOnly();
     const showArchived = this.showArchived();
-    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!inProgressOnly || showArchived) && (!prioritySetOnly || showArchived) && (!reminderSetOnly || showArchived) && (!blockedOnly || showArchived) && (!cardFilter || showArchived)) return null;
+    const hideCompleted = this.effectiveView() !== "history" && this.hideCompleted();
+    if (!hideCompleted && !q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!inProgressOnly || showArchived) && (!prioritySetOnly || showArchived) && (!reminderSetOnly || showArchived) && (!blockedOnly || showArchived) && (!cardFilter || showArchived)) return null;
     const fieldsById = conditions.length ? this.state.customFieldsById() : null;
     const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
     const listSet = new Set(listIds);
@@ -496,6 +498,7 @@ export class BoardPage implements OnDestroy {
     const matching = this.state.cards()
       .filter(c => showArchived ? !!c.archivedAt : !c.archivedAt)
       .filter(card => {
+        if (hideCompleted && card.completedAt) return false;
         if (q && !card.title.toLowerCase().includes(q) && !card.key.toLowerCase().includes(q) && card.number !== historicalKeyNumber) return false;
         if (listSet.size && !listSet.has(card.listId)) return false;
         if (unreadOnly && this.notifications.cardUnreadCount(card.id) === 0) return false;
@@ -1313,6 +1316,7 @@ export class BoardPage implements OnDestroy {
       this.showPrioritySetOnly.set(saved?.showPrioritySetOnly ?? false);
       this.showReminderSetOnly.set(saved?.showReminderSetOnly ?? false);
       this.showBlockedOnly.set(saved?.showBlockedOnly ?? false);
+      this.hideCompleted.set(!completed && (saved?.hideCompleted ?? false));
       this.showArchived.set(false);
       this.membersPopoverOpen.set(false);
       this.completedFrom.set(completed?.from ?? "");
@@ -1550,6 +1554,7 @@ export class BoardPage implements OnDestroy {
         showPrioritySetOnly: this.showPrioritySetOnly(),
         showReminderSetOnly: this.showReminderSetOnly(),
         showBlockedOnly: this.showBlockedOnly(),
+        hideCompleted: this.hideCompleted(),
       };
       writeFilters(scope, filters);
     });
@@ -2131,6 +2136,7 @@ export class BoardPage implements OnDestroy {
   async applyCompletedRange(range: { from: string; to: string }) {
     const boardId = this.boardId();
     const seq = ++this.filterLoadSeq;
+    this.hideCompleted.set(false);
     this.completedFrom.set(range.from);
     this.completedTo.set(range.to);
     writeCompletedFilter(`board:${this.boardId()}`, range);
@@ -2180,6 +2186,12 @@ export class BoardPage implements OnDestroy {
     this.ensureCustomFieldValuesLoaded();
   }
 
+  onHideCompletedChange(hide: boolean) {
+    this.hideCompleted.set(hide);
+    // A completed range asks to include done work; hiding it restores the normal cards.
+    if (hide && this.showCompleted()) void this.clearCompletedRange();
+  }
+
   /** The filter bar emits the desired archived state; `toggleArchivedCards` flips + reloads. */
   onArchivedChange(next: boolean) {
     if (next !== this.showArchived()) void this.toggleArchivedCards();
@@ -2208,6 +2220,7 @@ export class BoardPage implements OnDestroy {
     this.showPrioritySetOnly.set(false);
     this.showReminderSetOnly.set(false);
     this.showBlockedOnly.set(false);
+    this.hideCompleted.set(false);
     this.showArchived.set(false);
     this.completedFrom.set("");
     this.completedTo.set("");

@@ -166,6 +166,9 @@ export class BoardTimelineViewComponent implements OnInit {
   readonly labelsByCard = input<Map<string, CardLabelPresentation[]>>(new Map());
   readonly assigneesByCard = input<Map<string, CardAssigneePresentation[]>>(new Map());
   readonly filteredCardIds = input<Set<string> | null>(null);
+  /** The host owns completion filtering so the toolbar and shared Filter panel stay in sync. */
+  readonly hideCompleted = input(false);
+  readonly hideCompletedChange = output<boolean>();
   readonly selectedCardId = input<string | null>(null);
   readonly canEdit = input(true);
   private readonly queries = inject(CachedViewService);

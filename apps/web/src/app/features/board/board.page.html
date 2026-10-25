@@ -279,6 +279,9 @@
       [showPrioritySet]="effectiveView() !== 'history'"
       [showReminderSet]="effectiveView() !== 'history'"
       [showBlocked]="effectiveView() !== 'history' && state.dependenciesEnabled()"
+      [showHideCompleted]="effectiveView() !== 'history'"
+      [hideCompleted]="hideCompleted()"
+      (hideCompletedChange)="onHideCompletedChange($event)"
       [showCompleted]="effectiveView() !== 'history'"
       [showArchived]="effectiveView() !== 'history' && effectiveView() !== 'dependencies'"
       [completedFrom]="completedFrom()"
@@ -367,6 +370,7 @@
 <!-- Bars come from this page's cards; only the blocks edges are read by the view itself. -->
 <k-board-timeline-view [scope]="timelineScope()" [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"
   [dependenciesEnabled]="state.dependenciesEnabled()"
+  [hideCompleted]="hideCompleted()" (hideCompletedChange)="onHideCompletedChange($event)"
   [preferenceScope]="'board:' + boardId()" [groupBy]="timelineGroupByState.groupBy()" (cardOpened)="openCardDetail($event)" />
 } @else if (effectiveView() === 'dependencies') {
 <!-- The map reads its own graph (chains cross into boards this page never loaded). Search and the

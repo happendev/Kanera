@@ -28,6 +28,7 @@ export interface StoredFilters {
   showPrioritySetOnly: boolean;
   showReminderSetOnly: boolean;
   showBlockedOnly: boolean;
+  hideCompleted: boolean;
 }
 
 const CF_FILTER_OPERATORS: readonly CfFilterOperator[] = [
@@ -59,6 +60,7 @@ export function readFilters(scope: string): StoredFilters | null {
       showPrioritySetOnly: obj["showPrioritySetOnly"] === true,
       showReminderSetOnly: obj["showReminderSetOnly"] === true,
       showBlockedOnly: obj["showBlockedOnly"] === true,
+      hideCompleted: obj["hideCompleted"] === true,
     };
     return hasAnyFilter(filters) ? filters : null;
   } catch {
@@ -86,7 +88,8 @@ function hasAnyFilter(f: StoredFilters): boolean {
     f.showInProgressOnly ||
     f.showPrioritySetOnly ||
     f.showReminderSetOnly ||
-    f.showBlockedOnly
+    f.showBlockedOnly ||
+    f.hideCompleted
   );
 }
 

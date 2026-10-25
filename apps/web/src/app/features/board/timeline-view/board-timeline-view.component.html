@@ -37,6 +37,10 @@
       <span class="tl-count is-warning"><i class="ti ti-alert-triangle" aria-hidden="true"></i>{{ conflictsLabel() }}</span>
       }
       }
+      <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [class.is-set]="hideCompleted()" [attr.aria-pressed]="hideCompleted()" [disabled]="loading()" (click)="hideCompletedChange.emit(!hideCompleted())" aria-label="Hide completed" i18n-aria-label kTooltip="Hide completed" i18n-kTooltip>
+        <i class="ti ti-eye-off" aria-hidden="true"></i>
+        <span i18n="Toggle button - hide completed cards">Hide completed</span>
+      </button>
       @if (dependenciesEnabled()) {
       <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [class.is-set]="showDependencies()" [attr.aria-pressed]="showDependencies()" (click)="toggleDependencies()" kTooltip="Show the wires between cards that block each other" i18n-kTooltip>
         <i class="ti ti-git-merge" aria-hidden="true"></i>

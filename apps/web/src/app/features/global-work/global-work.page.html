@@ -918,6 +918,8 @@
             [loading]="state.loading()"
             [preferenceScope]="'globalWork:' + lens()"
             [groupBy]="timelineGroupByState.groupBy()"
+            [hideCompleted]="hideCompleted()"
+            (hideCompletedChange)="onHideCompletedChange($event)"
             (cardOpened)="openCardById($event)"
           />
         } @else {
