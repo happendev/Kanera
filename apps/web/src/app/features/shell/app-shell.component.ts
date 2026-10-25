@@ -765,16 +765,20 @@ export class AppShellComponent implements OnInit, OnDestroy {
    */
   private registerGlobalShortcuts(): void {
     const go = (url: string) => () => void this.router.navigateByUrl(url);
+    // Utility toggles belong to their own drawer once it opens, so the same key can close it
+    // without remaining active behind help, search or an unrelated dialog.
+    const prioritiesDialog = () => this.host.nativeElement.querySelector<HTMLElement>('k-my-priorities-panel [role="dialog"]') ?? undefined;
+    const notificationsDialog = () => this.host.nativeElement.querySelector<HTMLElement>('k-notifications-panel [role="dialog"]') ?? undefined;
     this.shortcuts.registerAll($localize`:Keyboard shortcuts sheet section — shortcuts that work on every page:Everywhere`, [
-      { keys: "mod+k", label: $localize`:Keyboard shortcut description:Search everything`, run: () => this.search.open() },
-      { keys: "?", label: $localize`:Keyboard shortcut description — open the shortcuts sheet:Keyboard shortcuts`, run: () => this.shortcutsOpen.set(true) },
+      { keys: "mod+k", label: $localize`:Keyboard shortcut description:Search everything`, allowInDialog: true, run: () => this.search.open() },
+      { keys: "?", label: $localize`:Keyboard shortcut description — open the shortcuts sheet:Keyboard shortcuts`, allowInDialog: true, run: () => this.shortcutsOpen.set(true) },
       // The four sidebar utility buttons, in their on-screen order, each on one letter. ⌘⇧. stays as
       // the scratchpad's original chord for anyone who learned it.
       { keys: "mod+shift+.", label: $localize`:Keyboard shortcut description:Open or close scratchpad`, when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
       { keys: ".", label: $localize`:Keyboard shortcut description:Open or close scratchpad`, when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
-      { keys: "u", label: $localize`:Keyboard shortcut description; "Up next" is the personal priority queue:Open or close Up next`, run: () => this.togglePanel("priorities") },
-      { keys: "n", label: $localize`:Keyboard shortcut description:Open or close notifications`, run: () => this.togglePanel("notifications") },
-      { keys: "shift+n", label: $localize`:Keyboard shortcut description:Mark all notifications as read`, when: () => this.canMarkAllRead(), run: () => void this.notifications.markAllRead() },
+      { keys: "u", label: $localize`:Keyboard shortcut description; "Up next" is the personal priority queue:Open or close Up next`, dialog: prioritiesDialog, run: () => this.togglePanel("priorities") },
+      { keys: "n", label: $localize`:Keyboard shortcut description:Open or close notifications`, dialog: notificationsDialog, run: () => this.togglePanel("notifications") },
+      { keys: "shift+n", label: $localize`:Keyboard shortcut description:Mark all notifications as read`, dialog: notificationsDialog, when: () => this.canMarkAllRead(), run: () => void this.notifications.markAllRead() },
       { keys: "h", label: $localize`:Keyboard shortcut description — open the documentation:Help & docs`, run: () => window.open(this.docsUrl, "_blank", "noopener") },
       { keys: "[", label: $localize`:Keyboard shortcut description:Collapse or expand sidebar`, run: () => this.toggleSidebar() },
     ], this.destroyRef);

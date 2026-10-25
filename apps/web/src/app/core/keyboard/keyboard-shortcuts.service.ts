@@ -22,6 +22,10 @@ export interface ShortcutRegistration {
    * in for keys that only make sense while typing (none today; kept for completeness).
    */
   allowInEditable?: boolean;
+  /** Run in this dialog while mounted; undefined means the page, with no dialog open. */
+  dialog?: () => HTMLElement | undefined;
+  /** Explicit app-wide entry points such as search/help may open above a dialog. */
+  allowInDialog?: boolean;
 }
 
 interface Parsed {
@@ -30,6 +34,7 @@ interface Parsed {
 
 /** Longest time between the presses of a two-key sequence before the first press is forgotten. */
 const SEQUENCE_TIMEOUT_MS = 1200;
+const DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"], dialog[open]';
 
 const IS_APPLE = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -67,9 +72,11 @@ function stepMatches(step: Parsed["steps"][number], event: KeyboardEvent): boole
   const otherMod = IS_APPLE ? event.ctrlKey : event.metaKey;
   if (otherMod) return false;
   if (mod !== step.mod || event.altKey !== step.alt) return false;
-  // Shift is only enforced when the binding names it: `?` already implies Shift on most layouts, and
-  // demanding it explicitly would break layouts where it does not.
+  // Letters and named keys require exact modifiers: unavailable Shift+Mod+Z must never fall
+  // through to Mod+Z. Literal symbols/digits may need Shift depending on the keyboard layout.
   if (step.shift && !event.shiftKey) return false;
+  const layoutCharacter = step.key.length === 1 && step.key.toUpperCase() === step.key.toLowerCase();
+  if (!step.shift && event.shiftKey && !layoutCharacter) return false;
   const key = event.key.toLowerCase();
   if (key === step.key) {
     // A bare "/" binding must not fire on Shift+/ where the layout reports "/" rather than "?":
@@ -113,7 +120,7 @@ export function formatShortcut(keys: ShortcutKeys): string[][] {
 @Injectable({ providedIn: "root" })
 export class KeyboardShortcutsService {
   private readonly registrations = signal<readonly (ShortcutRegistration & { parsed: Parsed })[]>([]);
-  private pending: { registration: ShortcutRegistration & { parsed: Parsed }; at: number }[] = [];
+  private pending: (ShortcutRegistration & { parsed: Parsed })[] = [];
   private pendingTimer: ReturnType<typeof setTimeout> | null = null;
   private attached = false;
 
@@ -123,7 +130,11 @@ export class KeyboardShortcutsService {
   register(registration: ShortcutRegistration, destroyRef?: DestroyRef): () => void {
     const entry = { ...registration, parsed: parse(registration.keys) };
     this.registrations.update((list) => [...list, entry]);
-    const unregister = () => this.registrations.update((list) => list.filter((item) => item !== entry));
+    const unregister = () => {
+      this.registrations.update((list) => list.filter((item) => item !== entry));
+      this.pending = this.pending.filter((item) => item !== entry);
+      if (!this.pending.length) this.clearPending();
+    };
     destroyRef?.onDestroy(unregister);
     return unregister;
   }
@@ -139,21 +150,50 @@ export class KeyboardShortcutsService {
     if (this.attached || typeof document === "undefined") return;
     this.attached = true;
     document.addEventListener("keydown", this.onKeydown);
+    document.addEventListener("focusin", this.onFocusChange);
   }
 
+  private visibleDialogs(): Element[] {
+    return [...document.querySelectorAll(DIALOG_SELECTOR)].filter((dialog) =>
+      dialog.getClientRects().length > 0 && getComputedStyle(dialog).visibility !== "hidden",
+    );
+  }
+
+  /** Shared by shortcut dispatch and the card's focus trap so neither can act behind another dialog. */
+  isDialogActive(dialog: HTMLElement, target: EventTarget | null): boolean {
+    // Use the nearest dialog, including nested dialogs, rather than guessing stacking from DOM
+    // order. Search, notifications and CDK overlays can all sit above an already-mounted card.
+    return target instanceof Element && target.closest(DIALOG_SELECTOR) === dialog;
+  }
+
+  private readonly onFocusChange = () => this.clearPending();
+
   private readonly onKeydown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented || event.repeat || event.isComposing) return;
+    if (event.defaultPrevented || event.isComposing) {
+      this.clearPending();
+      return;
+    }
+    if (event.repeat) return;
     // Modifier-only presses are never a step.
     if (["Shift", "Control", "Meta", "Alt"].includes(event.key)) return;
     const editable = isEditableTarget(event.target);
     const hasMod = event.metaKey || event.ctrlKey;
+    const allowed = (registration: ShortcutRegistration) => {
+      if (editable && !hasMod && !registration.allowInEditable) return false;
+      if (!(registration.when?.() ?? true)) return false;
+      if (registration.allowInDialog) return true;
+      const dialog = registration.dialog?.();
+      if (dialog) return this.isDialogActive(dialog, event.target);
+      // Page bindings stand down even during the frame before a new dialog captures focus.
+      return this.visibleDialogs().length === 0;
+    };
 
     // Second press of a pending sequence.
     if (this.pending.length) {
       const candidates = this.pending;
       this.clearPending();
-      for (const { registration } of candidates) {
-        if (stepMatches(registration.parsed.steps[1], event) && (registration.when?.() ?? true)) {
+      for (const registration of candidates) {
+        if (stepMatches(registration.parsed.steps[1], event) && allowed(registration)) {
           event.preventDefault();
           registration.run();
           return;
@@ -168,11 +208,9 @@ export class KeyboardShortcutsService {
       const registration = list[i];
       const first = registration.parsed.steps[0];
       if (!stepMatches(first, event)) continue;
-      // Bare keys stand down while typing; chords with a modifier are safe anywhere.
-      if (editable && !hasMod && !registration.allowInEditable) continue;
-      if (!(registration.when?.() ?? true)) continue;
+      if (!allowed(registration)) continue;
       if (registration.parsed.steps.length > 1) {
-        this.pending.push({ registration, at: Date.now() });
+        this.pending.push(registration);
         continue;
       }
       event.preventDefault();
@@ -195,6 +233,7 @@ export class KeyboardShortcutsService {
   detach(): void {
     if (!this.attached) return;
     document.removeEventListener("keydown", this.onKeydown);
+    document.removeEventListener("focusin", this.onFocusChange);
     this.attached = false;
     this.clearPending();
   }

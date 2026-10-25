@@ -246,6 +246,7 @@ export class CardDetailComponent {
     return $localize`:Tooltip on the reminder button; when is e.g. "Wed, 4 Mar, 09.00":Reminder: ${formatDateTime(reminder.remindAt, "weekday")}:when:`;
   });
   readonly panel = viewChild<ElementRef<HTMLElement>>("panel");
+  readonly titleInput = viewChild<ElementRef<HTMLInputElement>>("titleInput");
   readonly detailScroller = viewChild<ElementRef<HTMLElement>>("detailScroller");
   readonly descriptionEditor = viewChild<DescriptionEditorComponent>("descriptionEditor");
   readonly checklistItemDescriptionEditor = viewChild<DescriptionEditorComponent>("checklistItemDescriptionEditor");
@@ -963,7 +964,7 @@ export class CardDetailComponent {
       { keys: "mod+enter", label: $localize`:Keyboard shortcut description:Mark complete or incomplete`, when: editable, run: () => void this.toggleCompletion() },
       { keys: "s", label: $localize`:Keyboard shortcut description:Watch or unwatch card`, run: () => void this.toggleCardWatch() },
       { keys: "mod+shift+c", label: $localize`:Keyboard shortcut description:Copy card link`, run: () => void this.copyCardLink() },
-    ], this.destroyRef);
+    ].map((binding) => ({ ...binding, dialog: () => this.panel()?.nativeElement })), this.destroyRef);
     effect((onCleanup) => {
       this.unsavedWork.setDirty(this.unsavedDraftSource, this.recoveredDescriptionDraft());
       onCleanup(() => this.unsavedWork.setDirty(this.unsavedDraftSource, false));
@@ -1174,6 +1175,16 @@ export class CardDetailComponent {
         return;
       }
       this.descriptionOverflows.set(el.scrollHeight > 324);
+    });
+
+    afterRenderEffect(() => {
+      // Native autofocus is unreliable for an input mounted after the dialog already has focus.
+      // Track only the input's lifetime so updates while typing cannot reselect the title.
+      const input = this.titleInput()?.nativeElement;
+      if (input) {
+        input.focus();
+        input.select();
+      }
     });
 
     afterRenderEffect(() => {
@@ -2230,10 +2241,11 @@ export class CardDetailComponent {
       return;
     }
 
-    if (event.key !== "Tab") return;
+    if (event.key !== "Tab" || event.defaultPrevented) return;
 
     const panel = this.panel()?.nativeElement;
     if (!panel || this.closing()) return;
+    if (!this.shortcuts.isDialogActive(panel, event.target)) return;
 
     const focusable = this.focusableElements(panel);
     if (!focusable.length) {

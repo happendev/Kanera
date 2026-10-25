@@ -26,7 +26,7 @@
     </button>
     }
     @if (editingTitle()) {
-    <input type="text" class="title-input" [value]="draftTitle()" (input)="draftTitle.set($any($event.target).value)" (blur)="saveTitle()" (keydown.enter)="saveTitle()" (keydown.escape)="cancelTitle()" autofocus />
+    <input #titleInput type="text" class="title-input" [value]="draftTitle()" (input)="draftTitle.set($any($event.target).value)" (blur)="saveTitle()" (keydown.enter)="saveTitle()" (keydown.escape)="cancelTitle()" />
     } @else {
     <h2 class="card-title" [class.is-readonly]="!canEdit()" (click)="editTitle()">{{ card().title }}</h2>
     }
