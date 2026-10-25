@@ -196,6 +196,7 @@ export class DependencyMapComponent implements OnInit {
   readonly loading = signal(false);
   readonly loadFailed = signal(false);
   private loadSeq = 0;
+  private loadedRequestKey: string | null = null;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly roomLeaves = new Map<string, () => void>();
 
@@ -286,8 +287,12 @@ export class DependencyMapComponent implements OnInit {
     return packChains(chains, this.hostWidth() || contentWidth(this.host.nativeElement));
   });
 
+  // Undo can restore the map's last edge, when the current response has no editable nodes left.
+  // Gate history on connectivity; the server rechecks access to the recorded relation's cards.
+  private readonly writesEnabled = computed(() => this.sockets.online() && this.cachedAt() === null);
+
   /** Boards whose cards the viewer may add and remove dependencies on (editor access). */
-  private readonly editableBoardIds = computed(() => new Set((this.response()?.boards ?? []).filter((board) => board.canEdit).map((board) => board.id)));
+  private readonly editableBoardIds = computed(() => new Set((this.writesEnabled() ? this.response()?.boards ?? [] : []).filter((board) => board.canEdit).map((board) => board.id)));
   readonly canEditAny = computed(() => this.editableBoardIds().size > 0);
 
   /**
@@ -376,6 +381,12 @@ export class DependencyMapComponent implements OnInit {
   });
 
   constructor() {
+    effect(() => {
+      if (!this.writesEnabled()) untracked(() => {
+        this.cancelEditing();
+        if (this.historyToast !== null) this.toasts.dismiss(this.historyToast);
+      });
+    });
     // Ctrl+Z while typing, or inside a card or dialog opened over the map, belongs to that, not to
     // the map's history.
     const onMap = () => {
@@ -385,8 +396,8 @@ export class DependencyMapComponent implements OnInit {
       return !active.closest("k-card-detail, [role='dialog']");
     };
     this.shortcuts.registerAll($localize`:Keyboard shortcut group heading for the Dependencies view:Dependencies`, [
-      { keys: "mod+z", label: $localize`:Keyboard shortcut description on the Dependencies view:Undo the last dependency change`, when: () => this.undoStack().length > 0 && onMap(), run: () => void this.undo() },
-      { keys: "mod+shift+z", label: $localize`:Keyboard shortcut description on the Dependencies view:Redo the dependency change`, when: () => this.redoStack().length > 0 && onMap(), run: () => void this.redo() },
+      { keys: "mod+z", label: $localize`:Keyboard shortcut description on the Dependencies view:Undo the last dependency change`, when: () => this.writesEnabled() && this.undoStack().length > 0 && onMap(), run: () => void this.undo() },
+      { keys: "mod+shift+z", label: $localize`:Keyboard shortcut description on the Dependencies view:Redo the dependency change`, when: () => this.writesEnabled() && this.redoStack().length > 0 && onMap(), run: () => void this.redo() },
     ], this.destroyRef);
     effect(() => {
       const scope = this.preferenceScope();
@@ -416,6 +427,8 @@ export class DependencyMapComponent implements OnInit {
       untracked(() => {
         if (!key) {
           this.loadSeq++;
+          this.loadedRequestKey = null;
+          this.cachedAt.set(null);
           this.response.set({ cards: [], edges: [], boards: [], lists: [], labels: [], people: [], customFields: [], truncated: false });
           this.loading.set(false);
           this.syncRooms([]);
@@ -482,13 +495,22 @@ export class DependencyMapComponent implements OnInit {
     const request = this.request();
     if (!request) return;
     const seq = ++this.loadSeq;
+    const requestKey = this.requestKey();
+    if (this.loadedRequestKey !== requestKey) {
+      // A different scope without a saved query must not inherit the previous map's cards.
+      this.response.set(null);
+      this.cachedAt.set(null);
+      this.cancelEditing();
+    }
     this.loading.set(true);
     this.loadFailed.set(false);
     const cacheKey = this.cacheKey();
     try {
+      if (!this.sockets.online()) throw new Error("offline");
       const response = await this.api.post<DependencyGraphResponse>("/cards/dependency-graph", request);
       if (seq !== this.loadSeq) return;
       this.response.set(response);
+      this.loadedRequestKey = requestKey;
       this.cachedAt.set(null);
       this.syncRooms(response.boards.map((board) => board.id));
       void cacheKey.then((key) => key ? this.offlineCache.saveDependencyGraph(key, response) : undefined).catch(() => undefined);
@@ -500,6 +522,7 @@ export class DependencyMapComponent implements OnInit {
       if (seq !== this.loadSeq) return;
       if (cached) {
         this.response.set(cached.response);
+        this.loadedRequestKey = requestKey;
         this.cachedAt.set(cached.cachedAt);
         this.syncRooms(cached.response.boards.map((board) => board.id));
       } else if (!this.response()) {
@@ -521,7 +544,7 @@ export class DependencyMapComponent implements OnInit {
     if (!user || !requestKey || typeof crypto === "undefined" || !crypto.subtle) return null;
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(requestKey));
     const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    return `${user.clientId}:${user.id}:${hash}`;
+    return `${user.activeClientId ?? user.clientId}:${user.id}:${hash}`;
   }
 
   private scheduleRefresh(): void {
@@ -840,7 +863,7 @@ export class DependencyMapComponent implements OnInit {
 
   /** Takes back the latest change, or a given one (its toast's Undo), wherever it sits in the history. */
   async undo(edit = this.undoStack().at(-1)): Promise<void> {
-    if (!edit || !this.undoStack().includes(edit) || this.historyBusy()) return;
+    if (!this.writesEnabled() || !edit || !this.undoStack().includes(edit) || this.historyBusy()) return;
     this.undoStack.update((stack) => stack.filter((entry) => entry !== edit));
     if (!(await this.applyEdit(edit, !edit.added))) return;
     this.redoStack.update((stack) => [...stack, edit]);
@@ -848,7 +871,7 @@ export class DependencyMapComponent implements OnInit {
   }
 
   async redo(edit = this.redoStack().at(-1)): Promise<void> {
-    if (!edit || !this.redoStack().includes(edit) || this.historyBusy()) return;
+    if (!this.writesEnabled() || !edit || !this.redoStack().includes(edit) || this.historyBusy()) return;
     this.redoStack.update((stack) => stack.filter((entry) => entry !== edit));
     if (!(await this.applyEdit(edit, edit.added))) return;
     this.undoStack.update((stack) => [...stack, edit]);
@@ -857,6 +880,7 @@ export class DependencyMapComponent implements OnInit {
 
   /** Brings the relation into being (`exists`) or removes it. False, with an error toast, when refused. */
   private async applyEdit(edit: RelationEdit, exists: boolean): Promise<boolean> {
+    if (!this.writesEnabled()) return false;
     this.historyBusy.set(true);
     try {
       if (exists) {

@@ -74,6 +74,9 @@ export interface ActivitySummaryMessages {
   editedDescription: string;
   updatedDueDate: string;
   removedDueDate: string;
+  updatedStartDate: string;
+  removedStartDate: string;
+  rescheduled: string;
   updatedCard: string;
   clearedField: (fieldName: string) => string;
   /** Fallback field name when the payload has none. */
@@ -84,6 +87,8 @@ export interface ActivitySummaryMessages {
   correctedTimeInProgress: string;
   /** After the system's name ("Kanera"): the card's current stint passed its workspace alert. */
   flaggedInProgressTooLong: (days: number) => string;
+  /** After the system name: the card would start before a blocker finishes; that blocker's key follows as the chip. */
+  flaggedSchedulingConflict: string;
   addedChecklist: string;
   deletedChecklist: string;
   completedSubChecklist: string;
@@ -144,6 +149,9 @@ export const ACTIVITY_SUMMARY_SOURCE_MESSAGES: ActivitySummaryMessages = {
   editedDescription: "edited the description",
   updatedDueDate: "updated the due date",
   removedDueDate: "removed the due date",
+  updatedStartDate: "updated the start date",
+  removedStartDate: "removed the start date",
+  rescheduled: "rescheduled the card",
   updatedCard: "updated this card",
   clearedField: (fieldName) => `cleared ${fieldName}`,
   field: "field",
@@ -152,6 +160,7 @@ export const ACTIVITY_SUMMARY_SOURCE_MESSAGES: ActivitySummaryMessages = {
   removedCover: "removed the cover image",
   correctedTimeInProgress: "corrected the time in progress",
   flaggedInProgressTooLong: (days) => `flagged this card as in progress for more than ${days} ${days === 1 ? "day" : "days"}`,
+  flaggedSchedulingConflict: "flagged that this card is planned to start before its blocker finishes",
   addedChecklist: "added checklist",
   deletedChecklist: "deleted checklist",
   completedSubChecklist: "completed sub-checklist",
@@ -257,7 +266,10 @@ export function summariseActivityChange(
           const description = payload["description"];
           if (typeof title === "string") return { icon: "ti ti-pencil", text: m.renamedTo(title) };
           if (description !== undefined) return { icon: "ti ti-pencil", text: m.editedDescription };
+          // A Timeline drag moves both ends at once; one line reads better than two.
+          if (payload["dueDateLocalDate"] !== undefined && payload["startDateLocalDate"] !== undefined) return { icon: "ti ti-calendar", text: m.rescheduled };
           if (payload["dueDateLocalDate"] !== undefined) return { icon: "ti ti-calendar", text: payload["dueDateLocalDate"] ? m.updatedDueDate : m.removedDueDate };
+          if (payload["startDateLocalDate"] !== undefined) return { icon: "ti ti-calendar", text: payload["startDateLocalDate"] ? m.updatedStartDate : m.removedStartDate };
           return { icon: "ti ti-pencil", text: m.updatedCard };
         }
         case "customFieldValue:set": {
@@ -290,6 +302,9 @@ export function summariseActivityChange(
           return { icon: "ti ti-progress", text: m.correctedTimeInProgress };
         case "inProgress:tooLong":
           return { icon: "ti ti-progress-alert", text: m.flaggedInProgressTooLong(Number(payload["alertDays"]) || 0) };
+        case "schedule:conflict":
+          // Key only, like relations: the recipient may not be able to open the blocker.
+          return { icon: "ti ti-calendar-exclamation", text: m.flaggedSchedulingConflict, value: shortName(payload["otherCardKey"]) ?? undefined };
         case "checklist:created":
           return { icon: "ti ti-list-check", text: m.addedChecklist, value: shortName(payload["title"]) ?? undefined };
         case "checklist:deleted":

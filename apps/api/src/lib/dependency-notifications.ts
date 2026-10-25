@@ -2,7 +2,7 @@ import { ACTIVITY_ACTION, boards, cardAssignees, cards, cardWatchers, notificati
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db, type TxOnly } from "../db.js";
 import { emitActivityFeedItem, recordActivity } from "./activity.js";
-import { enqueueCardDependencyNotifications, enqueueDependencyHandoffNotifications } from "./assignee-email-notifications.js";
+import { enqueueCardDependencyNotifications, enqueueDependencyHandoffNotifications, enqueueScheduleConflictPush } from "./assignee-email-notifications.js";
 import { blockedByCounts, clearedDependents, type BlockedDependentsSnapshot } from "./card-relations.js";
 import type { Mailer } from "./mailer.js";
 import { enrichNotifications, notificationActorSuppressionId } from "./notifications.js";
@@ -215,6 +215,53 @@ export async function notifyDependencyHandoffs(params: {
       blocker: { key: blocker.key, title: blocker.title },
       blockerReadableBy,
     });
+  }
+}
+
+/** A card whose plan first fell behind a blocker, with the feed row recorded for it (schedule recheck sweep). */
+export interface ScheduleConflictNotice {
+  card: CardRow;
+  blocker: Pick<CardRow, "id" | "key" | "title" | "boardId">;
+  activity: ActivityEvent;
+  /** The one person whose own edits produced the conflict, if exactly one did; they are not told. */
+  suppressUserId: string | null;
+}
+
+/**
+ * Post-commit half of the schedule recheck: shows the conflict in the card's feed and tells its
+ * assignees and card watchers that it is planned to start before a blocker finishes. Board watchers
+ * are left out, as for handoffs: on a busy board a reshuffle can open several conflicts at once, and
+ * the people on the card are the ones who must move a date or chase the blocker.
+ *
+ * It fires once per conflict because the sweep reports boundaries, not states (schedule-events.ts):
+ * a card stays quiet until its conflicts all clear and a new one appears, however many edits happen
+ * in between. The person who made the conflict by dragging their own bars already sees it flagged on
+ * the Timeline, so they are not told. The inbox entry always lands; push and personal channels follow
+ * "Card dependencies". The blocker is named by key only, since a reader may not be able to open it.
+ */
+export async function notifyScheduleConflicts(params: { notices: readonly ScheduleConflictNotice[]; webOrigin: string }): Promise<void> {
+  for (const { card, activity, blocker, suppressUserId } of params.notices) {
+    await emitActivityFeedItem(card.boardId, card.id, activity, { notify: false });
+    const [current] = await db.select({ card: cards, clientId: workspaces.clientId }).from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, cards.workspaceId))
+      .where(and(eq(cards.id, card.id), isNull(boards.archivedAt)))
+      .limit(1);
+    if (!current || current.card.completedAt || current.card.archivedAt) continue;
+    const [assigneeRows, watcherRows] = await Promise.all([
+      db.select({ userId: cardAssignees.userId }).from(cardAssignees).where(eq(cardAssignees.cardId, card.id)),
+      db.select({ userId: cardWatchers.userId }).from(cardWatchers).where(eq(cardWatchers.cardId, card.id)),
+    ]);
+    const recipients: string[] = [];
+    for (const userId of new Set([...assigneeRows, ...watcherRows].map((row) => row.userId))) {
+      if (userId === suppressUserId) continue;
+      // Checked before sending: push carries the card title with no later access check.
+      if (!(await recipientCanSeeCard(userId, current.clientId, current.card.boardId, card.id))) continue;
+      recipients.push(userId);
+    }
+    if (recipients.length === 0) continue;
+    await insertDependencyNotifications(current.clientId, current.card, activity, recipients);
+    await enqueueScheduleConflictPush({ tx: db, webOrigin: params.webOrigin, cardId: card.id, recipientUserIds: recipients, blockerKey: blocker.key });
   }
 }
 

@@ -60,6 +60,7 @@ function summary(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     title: overrides.title ?? "Completed card",
     position: overrides.position ?? "1000.0000000000",
     dueDateLocalDate: overrides.dueDateLocalDate ?? null,
+    startDateLocalDate: overrides.startDateLocalDate ?? null,
     dueDateSlot: overrides.dueDateSlot ?? null,
     dueDateTimezone: overrides.dueDateTimezone ?? null,
     completedAt: overrides.completedAt ?? new Date("2026-05-20T12:00:00.000Z"),

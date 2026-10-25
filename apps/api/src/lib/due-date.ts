@@ -101,3 +101,48 @@ export function resolveDueDatePatch(
     dueDateTimezone: actorTimezone,
   };
 }
+
+/**
+ * Pull a planned start back to the due date when it would otherwise land after it. A start is
+ * date-only, so the comparison is a plain YYYY-MM-DD string compare; no due date (or no start)
+ * leaves the start untouched, because a start with no due date is a valid "point" schedule.
+ */
+export function clampStartToDue(startDateLocalDate: string | null, dueDateLocalDate: string | null): string | null {
+  if (!startDateLocalDate || !dueDateLocalDate) return startDateLocalDate;
+  return startDateLocalDate > dueDateLocalDate ? dueDateLocalDate : startDateLocalDate;
+}
+
+type StartDatePatch =
+  | { kind: "unchanged" }
+  | { kind: "rejected"; reason: string }
+  | { kind: "write"; startDateLocalDate: string | null };
+
+const START_AFTER_DUE_REASON = "startDateLocalDate must be on or before dueDateLocalDate";
+
+/**
+ * Derive the start-date column a write should leave behind, given the due date the same write
+ * results in (`resultingDueDate`: the one in the body, else the stored one).
+ *
+ * The Timeline draws a card as a bar from start to due and the scheduling engine measures the
+ * span between them, so a start may never sit after the due date:
+ * - an explicit start later than the resulting due date is the caller's mistake and is rejected;
+ * - a due date moved before the stored start pulls the start along (clamp), so a reschedule from
+ *   the calendar or an automation never leaves an inverted bar behind;
+ * - clearing the due date keeps the start, clearing the start never touches the due date.
+ * Callers run `resolveDueDatePatch` first and feed its result in here.
+ */
+export function resolveStartDatePatch(
+  body: { startDateLocalDate?: string | null },
+  current: { startDateLocalDate: string | null },
+  resultingDueDate: string | null,
+): StartDatePatch {
+  if (body.startDateLocalDate !== undefined) {
+    if (body.startDateLocalDate === null) {
+      return current.startDateLocalDate === null ? { kind: "unchanged" } : { kind: "write", startDateLocalDate: null };
+    }
+    if (resultingDueDate && body.startDateLocalDate > resultingDueDate) return { kind: "rejected", reason: START_AFTER_DUE_REASON };
+    return body.startDateLocalDate === current.startDateLocalDate ? { kind: "unchanged" } : { kind: "write", startDateLocalDate: body.startDateLocalDate };
+  }
+  const clamped = clampStartToDue(current.startDateLocalDate, resultingDueDate);
+  return clamped === current.startDateLocalDate ? { kind: "unchanged" } : { kind: "write", startDateLocalDate: clamped };
+}

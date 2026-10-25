@@ -663,6 +663,27 @@
       "src/app/core/i18n/activity-summary.messages.ts"
     ]
   },
+  "6666694013305561371": "updated the start date",
+  "@6666694013305561371": {
+    "description": "Notification line after a person's name",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "4027291761735853131": "removed the start date",
+  "@4027291761735853131": {
+    "description": "Notification line after a person's name",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "6915466518409735924": "rescheduled the card",
+  "@6915466518409735924": {
+    "description": "Notification line after a person's name - both the start and due dates changed",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
   "2669191310759086076": "updated this card",
   "@2669191310759086076": {
     "description": "Notification line after a person's name",
@@ -710,6 +731,13 @@
   "1365259782988833104": "{days, plural, one {flagged this card as in progress for more than # day} other {flagged this card as in progress for more than # days}}",
   "@1365259782988833104": {
     "description": "Notification line after the system name Kanera - the card has been in progress past the workspace alert",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "7785463360806583353": "flagged that this card is planned to start before its blocker finishes",
+  "@7785463360806583353": {
+    "description": "Notification line after the system name Kanera - the card's planned start is before the planned finish of a card blocking it; that card's key follows",
     "x-files": [
       "src/app/core/i18n/activity-summary.messages.ts"
     ]
@@ -3086,6 +3114,19 @@
       "src/app/core/priorities/my-priorities.service.ts"
     ]
   },
+  "7380438472091699995": "Offline copy from {$time}",
+  "@7380438472091699995": {
+    "description": "Toast; a relative time such as \"5 minutes ago\" follows",
+    "x-files": [
+      "src/app/core/priorities/my-priorities.service.ts",
+      "src/app/features/board/board.page.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
+      "src/app/features/board/work-done-view/work-done-view.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts",
+      "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
   "4082253113407591781": "Blue",
   "@4082253113407591781": {
     "description": "Accent colour option name",
@@ -4478,6 +4519,7 @@
       "src/app/features/board/calendar-view/board-calendar-view.component.html",
       "src/app/features/board/date-picker.popover.ts",
       "src/app/features/board/table-view/table-view.types.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/features/home/home.state.ts",
       "src/app/features/workspace-settings/workspace-settings.page.ts",
@@ -5795,8 +5837,9 @@
       "src/app/features/workspace-settings/general/general.page.html"
     ]
   },
-  "4269318564728384576": "Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Boards can also opt out individually.",
-  "@4269318564728384576": {
+  "5374765075818607246": "Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Workspaces and boards can also opt out individually.",
+  "@5374765075818607246": {
+    "description": "Help text for the organisation time in progress switch",
     "x-files": [
       "src/app/features/account-settings/org/org.page.html"
     ]
@@ -5806,6 +5849,37 @@
     "x-files": [
       "src/app/features/account-settings/org/org.page.html",
       "src/app/features/workspace-settings/boards/boards.page.html",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "4965282278806479345": "Planning features",
+  "@4965282278806479345": {
+    "description": "Section heading - optional planning features a workspace can switch off",
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "4248355455323912627": "Turn off what your teams do not use. A feature that is off is hidden in every workspace, including from agents and the API. Nothing is deleted, so turning it back on restores it. Workspaces can also opt out individually.",
+  "@4248355455323912627": {
+    "description": "Help text for the organisation planning feature switches",
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html"
+    ]
+  },
+  "3493951889964610902": "Enable dependencies",
+  "@3493951889964610902": {
+    "description": "Workspace setting - turns blocking relations between cards on or off",
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "7217375246435875424": "Enable start dates and timeline",
+  "@7217375246435875424": {
+    "description": "Workspace setting - turns card start dates and the Timeline view on or off",
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html",
       "src/app/features/workspace-settings/general/general.page.html"
     ]
   },
@@ -5934,7 +6008,8 @@
   "@6421460271971606186": {
     "description": "Slider label: zoom the avatar crop",
     "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
+      "src/app/features/account-settings/profile/profile.page.html",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
     ]
   },
   "139387769047398857": "Save picture",
@@ -8453,13 +8528,20 @@
       "src/app/features/workspace-settings/automations/automation-action-fields.component.ts"
     ]
   },
+  "888341446683346521": "Start date",
+  "@888341446683346521": {
+    "description": "Board export spreadsheet column, the card's planned start date",
+    "x-files": [
+      "src/app/features/board/board-export.util.ts",
+      "src/app/features/board/table-view/table-columns.util.ts"
+    ]
+  },
   "2413171611497962745": "Due date",
   "@2413171611497962745": {
     "description": "Board export spreadsheet column, card due date",
     "x-files": [
       "src/app/features/board/board-export.util.ts",
       "src/app/features/board/card-composer.dialog.html",
-      "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-quick-edit.popover.ts",
       "src/app/features/board/table-view/table-columns.util.ts",
       "src/app/features/board/table-view/table-view.types.ts",
@@ -8721,6 +8803,7 @@
     "x-files": [
       "src/app/features/board/board.page.html",
       "src/app/features/board/table-view/group-by.util.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
       "src/app/features/board/work-done-view/work-done-report.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/import/trello-import.page.html"
@@ -8876,6 +8959,14 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
+  "154637153146117281": "Group rows by",
+  "@154637153146117281": {
+    "description": "Label for the timeline grouping switch",
+    "x-files": [
+      "src/app/features/board/board.page.html",
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
   "1821222939222457554": "Reset to list columns",
   "@1821222939222457554": {
     "x-files": [
@@ -9000,6 +9091,14 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
+  "3166095620723862141": "Timeline view",
+  "@3166095620723862141": {
+    "description": "View switch label; the Gantt-style view with a bar per card",
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
   "7951990705316063153": "Dependencies view",
   "@7951990705316063153": {
     "description": "View switch label; the view maps which cards block which",
@@ -9024,6 +9123,15 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
+  "6814295386768519176": "Timeline",
+  "@6814295386768519176": {
+    "description": "Short view switch label for the Gantt-style view",
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/dependencies/dependency-layout.ts",
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
   "4045087308145757242": "Dependencies",
   "@4045087308145757242": {
     "description": "Short view switch label for the view that maps which cards block which",
@@ -9031,6 +9139,7 @@
       "src/app/features/board/board.page.ts",
       "src/app/features/board/card-relations-popover.component.ts",
       "src/app/features/board/card-relations.component.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html",
       "src/app/features/dependencies/dependency-map.component.ts",
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -9112,14 +9221,6 @@
     "description": "Board menu item",
     "x-files": [
       "src/app/features/board/board.page.ts"
-    ]
-  },
-  "7380438472091699995": "Offline copy from {$time}",
-  "@7380438472091699995": {
-    "description": "Toast; a relative time such as \"5 minutes ago\" follows",
-    "x-files": [
-      "src/app/features/board/board.page.ts",
-      "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
   "3756150389690952207": "{count, plural, one {# board member} other {# board members}}",
@@ -9543,6 +9644,7 @@
     "x-files": [
       "src/app/features/board/bulk-custom-fields.dialog.ts",
       "src/app/features/board/table-view/group-by.util.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
       "src/app/features/workspace-settings/guests/guests.page.html"
     ]
   },
@@ -10192,6 +10294,13 @@
   "2880617564047887221": "{days, plural, one {This card has been in progress for more than # day} other {This card has been in progress for more than # days}}",
   "@2880617564047887221": {
     "description": "Card activity shown without a person - the card passed the workspace's time in progress alert",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "5374494272971328150": "Scheduling conflict: this card is planned to start before {$card} finishes",
+  "@5374494272971328150": {
+    "description": "Card activity shown without a person - the card's planned start is before the planned finish of the named card that blocks it",
     "x-files": [
       "src/app/features/board/card-activity.component.ts"
     ]
@@ -11067,11 +11176,58 @@
       "src/app/features/workspace-settings/members/members.page.html"
     ]
   },
+  "739880801667335279": "Dates",
+  "@739880801667335279": {
+    "description": "Card detail section heading - the card's start and due dates",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "8181699201557545141": "Change start date",
+  "@8181699201557545141": {
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "5162686434580248853": "Start",
+  "@5162686434580248853": {
+    "description": "Prefix on the card's start date badge, e.g. Start 12 Oct",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "1227860913873409112": "Clear start date",
+  "@1227860913873409112": {
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "8439896775611643944": "Set start date",
+  "@8439896775611643944": {
+    "x-files": [
+      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "6094860985365525109": "Add start date",
+  "@6094860985365525109": {
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
   "4604802037090944524": "Change due date",
   "@4604802037090944524": {
     "x-files": [
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "4799153980390902924": "Due",
+  "@4799153980390902924": {
+    "description": "Prefix on the card's due date badge when a start date is also shown, e.g. Due 16 Oct",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html",
+      "src/app/features/workspace-settings/automations/automation-action-fields.component.ts"
     ]
   },
   "7059894564368583754": "Clear due date",
@@ -11151,7 +11307,8 @@
   "@8070396816726827304": {
     "description": "Accessible name of the hours input when correcting time in progress",
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail.component.html",
+      "src/app/features/workspace-settings/automations/automations.page.html"
     ]
   },
   "8398233202919865612": "h",
@@ -11263,7 +11420,8 @@
     "description": "Button: hide completed checklist items",
     "x-files": [
       "src/app/features/board/card-detail.component.html",
-      "src/app/features/board/table-view/filter-bar.component.ts"
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
     ]
   },
   "588620993794060804": "Drag checklist",
@@ -11989,6 +12147,20 @@
   "3290193501558345471": "Unassign",
   "@3290193501558345471": {
     "description": "Profile card action - remove this person from the card",
+    "x-files": [
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "8933819986044303650": "Couldn't save the start date.",
+  "@8933819986044303650": {
+    "description": "Toast when saving a card's start date fails",
+    "x-files": [
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "4837181892830591279": "{days, plural, one {# working day} other {# working days}}",
+  "@4837181892830591279": {
+    "description": "Hint beside a card's start and due dates - working-day length of the planned bar",
     "x-files": [
       "src/app/features/board/card-detail.component.ts"
     ]
@@ -12814,13 +12986,15 @@
   "944767796496567082": "Zoom out",
   "@944767796496567082": {
     "x-files": [
-      "src/app/features/board/image-lightbox.component.ts"
+      "src/app/features/board/image-lightbox.component.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
     ]
   },
   "6500061599200357251": "Zoom in",
   "@6500061599200357251": {
     "x-files": [
-      "src/app/features/board/image-lightbox.component.ts"
+      "src/app/features/board/image-lightbox.component.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
     ]
   },
   "3787205057553482493": "Reset zoom",
@@ -14327,7 +14501,8 @@
   "@9166912077349483542": {
     "description": "Group heading for cards with no label",
     "x-files": [
-      "src/app/features/board/table-view/group-by.util.ts"
+      "src/app/features/board/table-view/group-by.util.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
     ]
   },
   "430859064314356197": "Open",
@@ -14417,6 +14592,20 @@
   "7209202646285036367": "Due date (latest)",
   "@7209202646285036367": {
     "description": "Sort option",
+    "x-files": [
+      "src/app/features/board/table-view/table-view.types.ts"
+    ]
+  },
+  "4794977966909397104": "Start date (earliest)",
+  "@4794977966909397104": {
+    "description": "Sort option - by planned start date, earliest first",
+    "x-files": [
+      "src/app/features/board/table-view/table-view.types.ts"
+    ]
+  },
+  "5912324787976652982": "Start date (latest)",
+  "@5912324787976652982": {
+    "description": "Sort option - by planned start date, latest first",
     "x-files": [
       "src/app/features/board/table-view/table-view.types.ts"
     ]
@@ -14580,6 +14769,275 @@
     "description": "Tooltip on a running time-in-progress chip past the workspace alert",
     "x-files": [
       "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "1998867625770961132": "Scroll to today",
+  "@1998867625770961132": {
+    "description": "Tooltip on the Timeline view's Today button",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "3395965807309882436": "Timeline zoom",
+  "@3395965807309882436": {
+    "description": "Label for the Timeline view's zoom controls",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "4231256340112589698": "Zoom out (Ctrl + scroll)",
+  "@4231256340112589698": {
+    "description": "Tooltip on the Timeline view's zoom out button",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "6867173275876635401": "Zoom in (Ctrl + scroll)",
+  "@6867173275876635401": {
+    "description": "Tooltip on the Timeline view's zoom in button",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "5152325599963383770": "Zoom to show every scheduled card",
+  "@5152325599963383770": {
+    "description": "Tooltip on the Timeline view's Fit button",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "7721503908018861095": "Fit all",
+  "@7721503908018861095": {
+    "description": "Button - zoom the timeline so every scheduled card is on screen",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "8990188021818152568": "Show the wires between cards that block each other",
+  "@8990188021818152568": {
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "330996155370530647": "Highlight the chain of cards with no slack; everything else fades",
+  "@330996155370530647": {
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "583155944513136531": "Critical path",
+  "@583155944513136531": {
+    "description": "Toggle button - highlight the critical path on the timeline",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html",
+      "src/app/features/dependencies/dependency-map.component.html"
+    ]
+  },
+  "6482328368049401379": "Nothing to plan yet",
+  "@6482328368049401379": {
+    "description": "Empty state title on the Timeline view",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "7213243417974761103": "Cards appear here once the board has some. Give them a start and a due date and they become bars.",
+  "@7213243417974761103": {
+    "description": "Empty state text on the Timeline view",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "8448388405562307101": "Change dates from the card",
+  "@8448388405562307101": {
+    "description": "Hint in the Timeline view header on touch devices",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "6106656066852315945": "Resize the card names column",
+  "@6106656066852315945": {
+    "description": "Accessible name of the handle that resizes the Timeline view's card names column",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "7640798897121262712": "Drag to resize. Double-click to reset",
+  "@7640798897121262712": {
+    "description": "Tooltip on the handle that resizes the Timeline view's card names column",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "2122953112791978724": "Drag to another card to make it wait on this one",
+  "@2122953112791978724": {
+    "description": "Tooltip on the dependency drag handle at the end of a timeline bar",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "8837866690023811206": "Not scheduled",
+  "@8837866690023811206": {
+    "description": "Timeline lane text for an unscheduled card the viewer cannot edit",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "4191854933787496152": "Remove dependency",
+  "@4191854933787496152": {
+    "description": "Button over a selected dependency wire on the timeline",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "1808387233895341950": "Unscheduled",
+  "@1808387233895341950": {
+    "description": "Timeline view group for cards with neither a start nor a due date",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "6023654562558895737": "{scheduled, plural, one {1 of {total} cards scheduled} other {# of {total} cards scheduled}}",
+  "@6023654562558895737": {
+    "description": "Timeline view toolbar count - how many of the board's cards have a date",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "4886872732959572480": "{count, plural, one {1 scheduling conflict} other {# scheduling conflicts}}",
+  "@4886872732959572480": {
+    "description": "Timeline view toolbar count - cards whose blocker finishes after they start",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "3620176944469296756": "No dates",
+  "@3620176944469296756": {
+    "description": "Timeline view row text for a card with no dates",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "5955763993150705419": "{count, plural, one {1 working day} other {# working days}}",
+  "@5955763993150705419": {
+    "description": "Timeline view bar length in working days",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "523437109018721769": "{count, plural, one {{key} finishes 1 working day after this card starts} other {{key} finishes # working days after this card starts}}",
+  "@523437109018721769": {
+    "description": "Timeline view warning on a bar - a card it waits on is planned to finish after this one starts",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "1784732636796957027": "On the critical path",
+  "@1784732636796957027": {
+    "description": "Timeline view tooltip text - the card is on the critical path",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "5517969301769640580": "{count, plural, =0 {No slack} one {1 working day of slack} other {# working days of slack}}",
+  "@5517969301769640580": {
+    "description": "Timeline view tooltip text - how many working days a card could slip without delaying its chain",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "8311747415206366667": "{$dependent} waits on {$blocker}",
+  "@8311747415206366667": {
+    "description": "Timeline view accessible name of a dependency wire",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "7689221231460528360": "{count, plural, one {1 card} other {# cards}}",
+  "@7689221231460528360": {
+    "description": "Timeline view group heading count",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "3263394524632796585": "Couldn't reschedule the card",
+  "@3263394524632796585": {
+    "description": "Toast when dragging a bar on the Timeline view fails",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "4501820361899678764": "Place on {$date}",
+  "@4501820361899678764": {
+    "description": "Timeline view hint while hovering an unscheduled card's lane - the day it would be placed on",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "3305063521171212078": "Couldn't schedule the card",
+  "@3305063521171212078": {
+    "description": "Toast when placing a card on the Timeline view fails",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts"
+    ]
+  },
+  "6475787099629584387": "{$dependent} now waits on {$blocker}",
+  "@6475787099629584387": {
+    "description": "Toast after drawing a dependency on the Timeline view",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "4553136156424490747": "Couldn't add the dependency. Try again.",
+  "@4553136156424490747": {
+    "description": "Error toast when drawing a dependency on the Timeline view fails",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "4209938104125933255": "Couldn't remove the dependency. Try again.",
+  "@4209938104125933255": {
+    "description": "Error toast when removing a dependency on the Timeline view fails",
+    "x-files": [
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts"
+    ]
+  },
+  "7424882868774338594": "By board",
+  "@7424882868774338594": {
+    "description": "Timeline view grouping - one group per board",
+    "x-files": [
+      "src/app/features/board/timeline-view/timeline-preferences.ts"
+    ]
+  },
+  "1352730154877048650": "By list",
+  "@1352730154877048650": {
+    "description": "Timeline view grouping - one group per list",
+    "x-files": [
+      "src/app/features/board/timeline-view/timeline-preferences.ts"
+    ]
+  },
+  "8655990400019097933": "By assignee",
+  "@8655990400019097933": {
+    "description": "Timeline view grouping - one group per assignee",
+    "x-files": [
+      "src/app/features/board/timeline-view/timeline-preferences.ts"
+    ]
+  },
+  "7131178976751781585": "By label",
+  "@7131178976751781585": {
+    "description": "Timeline view grouping - one group per label",
+    "x-files": [
+      "src/app/features/board/timeline-view/timeline-preferences.ts"
+    ]
+  },
+  "1301612780139981816": "No groups",
+  "@1301612780139981816": {
+    "description": "Timeline view grouping - a flat list of cards",
+    "x-files": [
+      "src/app/features/board/timeline-view/timeline-preferences.ts"
     ]
   },
   "1894214558916114808": "Loading watchers...",
@@ -15659,13 +16117,6 @@
       "src/app/features/dependencies/dependency-layout.ts"
     ]
   },
-  "6814295386768519176": "Timeline",
-  "@6814295386768519176": {
-    "description": "Dependencies view layout - cards placed in columns by the week they are due",
-    "x-files": [
-      "src/app/features/dependencies/dependency-layout.ts"
-    ]
-  },
   "1534367694207535197": "Steps",
   "@1534367694207535197": {
     "description": "Dependencies view layout - chains listed step by step",
@@ -15706,13 +16157,6 @@
   },
   "6842868336344024219": "Highlight the longest run of open work in each chain",
   "@6842868336344024219": {
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.html"
-    ]
-  },
-  "583155944513136531": "Critical path",
-  "@583155944513136531": {
-    "description": "Dependencies view toggle: highlight each chain's critical path",
     "x-files": [
       "src/app/features/dependencies/dependency-map.component.html"
     ]
@@ -15881,27 +16325,6 @@
       "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
-  "4553136156424490747": "Couldn't add the dependency. Try again.",
-  "@4553136156424490747": {
-    "description": "Error toast when adding a dependency on the Dependencies view fails",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "4209938104125933255": "Couldn't remove the dependency. Try again.",
-  "@4209938104125933255": {
-    "description": "Error toast when removing a dependency on the Dependencies view fails",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "6475787099629584387": "{$dependent} now waits on {$blocker}",
-  "@6475787099629584387": {
-    "description": "Toast after adding a dependency on the Dependencies view",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
   "2649813765697960708": "{$dependent} no longer waits on {$blocker}",
   "@2649813765697960708": {
     "description": "Toast after removing a dependency on the Dependencies view",
@@ -16010,13 +16433,6 @@
   "8460954236322266099": "Blocks {$keys}",
   "@8460954236322266099": {
     "description": "Screen reader text on a Dependencies view card - the cards waiting on it",
-    "x-files": [
-      "src/app/features/dependencies/dependency-map.component.ts"
-    ]
-  },
-  "1784732636796957027": "On the critical path",
-  "@1784732636796957027": {
-    "description": "Screen reader text on a Dependencies view card on its chain's critical path",
     "x-files": [
       "src/app/features/dependencies/dependency-map.component.ts"
     ]
@@ -16212,27 +16628,6 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "6427325348186741511": "History will return after reconnecting.",
-  "@6427325348186741511": {
-    "description": "Offline banner",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "4662761733846597167": "The team overview will return after reconnecting.",
-  "@4662761733846597167": {
-    "description": "Offline banner",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "6610186532908963141": "The dependency map will return after reconnecting.",
-  "@6610186532908963141": {
-    "description": "Offline banner",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
   "7669586489275293002": "Connection lost. Showing the last loaded view from {$TIME}. Changes are paused.",
   "@7669586489275293002": {
     "description": "Offline banner",
@@ -16366,6 +16761,18 @@
   },
   "6310913490299838608": "The calendar only shows dated cards. Switch to the table or board view to see the rest.",
   "@6310913490299838608": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "5467495180002234399": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} The plan settles when the full set is ready.",
+  "@5467495180002234399": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "7522117111651454094": "{$START_TAG_STRONG}Showing {$LOADED} of {$TOTAL} matching cards.{$CLOSE_TAG_STRONG} Narrow the scope or filters to plan every card.",
+  "@7522117111651454094": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -16575,6 +16982,7 @@
     "description": "Tooltip, open the Up next panel",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/global-work/team-overview.component.ts",
       "src/app/features/shell/app-shell.component.ts"
     ]
   },
@@ -16753,7 +17161,8 @@
   "8341648913720161003": "We couldn’t load every card. Try refreshing the page.",
   "@8341648913720161003": {
     "x-files": [
-      "src/app/features/global-work/global-work.state.ts"
+      "src/app/features/global-work/global-work.state.ts",
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "3357377997379103082": "Share with",
@@ -17401,6 +17810,20 @@
       "src/app/features/home/getting-started.component.ts"
     ]
   },
+  "4114020677798356875": "Tables",
+  "@4114020677798356875": {
+    "description": "Getting started checklist section heading for grouping, totals and export in the Table view",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3730030262470614240": "Plan ahead",
+  "@3730030262470614240": {
+    "description": "Getting started checklist section heading for dependencies, start dates and the Timeline view",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
   "9178759481896989482": "Your team",
   "@9178759481896989482": {
     "description": "Getting started checklist section heading for the organisation admin steps",
@@ -17439,6 +17862,13 @@
   "596613040379865150": "Open a board",
   "@596613040379865150": {
     "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "578806503787502208": "Open a table",
+  "@578806503787502208": {
+    "description": "Getting started step button; Table is a view name",
     "x-files": [
       "src/app/features/home/getting-started.component.ts"
     ]
@@ -17623,6 +18053,83 @@
   "5664052109779517498": "Open notes",
   "@5664052109779517498": {
     "description": "Getting started step button",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4563570232212345159": "Group a table",
+  "@4563570232212345159": {
+    "description": "Getting started step title; Table is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3386800791608192880": "In Table view, choose Group to gather cards by assignee, label, due date or a custom field instead of by list.",
+  "@3386800791608192880": {
+    "description": "Getting started step text; Group is a toolbar button in the Table view",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "649227698357788754": "Total a column",
+  "@649227698357788754": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4442072638211614188": "In Table view, choose Calculate under a number column or time in progress, then Sum, to total it for every group.",
+  "@4442072638211614188": {
+    "description": "Getting started step text; Calculate is a button in the table footer and Sum a menu option",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "9149586889863006620": "Export to Excel",
+  "@9149586889863006620": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4402595107764520883": "In Table view, open More table actions and choose Excel workbook to download the cards in view, grouped, with a summary sheet.",
+  "@4402595107764520883": {
+    "description": "Getting started step text; More table actions is a menu and Excel workbook a menu item",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "5406964876573420184": "Set a start date",
+  "@5406964876573420184": {
+    "description": "Getting started step title",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3780590251130818371": "In a card's Dates, choose Add start date. The card then runs from its start to its due date on the Timeline.",
+  "@3780590251130818371": {
+    "description": "Getting started step text; Dates is a section and Add start date a button in card detail",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "8961079631473585107": "Open the Timeline",
+  "@8961079631473585107": {
+    "description": "Getting started step title; Timeline is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "3053553492704789347": "See each dated card as a bar across the weeks, and drag a bar to reschedule it.",
+  "@3053553492704789347": {
+    "description": "Getting started step text; Timeline is a view name",
+    "x-files": [
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
+  "4985910055454618016": "Open Timeline",
+  "@4985910055454618016": {
+    "description": "Getting started step button; Timeline is a view name",
     "x-files": [
       "src/app/features/home/getting-started.component.ts"
     ]
@@ -18096,13 +18603,6 @@
   "6753902224067608847": "{VAR_PLURAL, plural, =1 {No cards completed in the last day.} other {No cards completed in the last {INTERPOLATION} days.}}",
   "@6753902224067608847": {
     "description": "Progress empty state",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "1918814134791824614": "Up next is hidden while you’re offline, so you never follow a stale order.",
-  "@1918814134791824614": {
-    "description": "Notice on the home page while offline",
     "x-files": [
       "src/app/features/home/home.page.html"
     ]
@@ -21205,18 +21705,6 @@
       "src/app/features/priorities/my-priorities-panel.component.html"
     ]
   },
-  "4293614212085108628": "Up next unavailable",
-  "@4293614212085108628": {
-    "x-files": [
-      "src/app/features/priorities/my-priorities-panel.component.html"
-    ]
-  },
-  "3984709279158005733": "You’re offline. Up next is hidden until you reconnect, so you never follow a stale order.",
-  "@3984709279158005733": {
-    "x-files": [
-      "src/app/features/priorities/my-priorities-panel.component.html"
-    ]
-  },
   "3509785427356471244": "Loading Up next",
   "@3509785427356471244": {
     "x-files": [
@@ -22936,13 +23424,6 @@
       "src/app/features/workspace-settings/automations/automation-action-fields.component.ts"
     ]
   },
-  "4799153980390902924": "Due",
-  "@4799153980390902924": {
-    "description": "Field label: when the due date is set to",
-    "x-files": [
-      "src/app/features/workspace-settings/automations/automation-action-fields.component.ts"
-    ]
-  },
   "6373545191201438119": "Days from trigger",
   "@6373545191201438119": {
     "description": "Field label: number of days after the automation runs",
@@ -23337,6 +23818,34 @@
   "2635669371875031718": "{days, plural, one {# day before} other {# days before}}",
   "@2635669371875031718": {
     "description": "Automation trigger target",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automation-presentation.util.ts"
+    ]
+  },
+  "463310761766141446": "{count, plural, one {over # hour} other {over # hours}}",
+  "@463310761766141446": {
+    "description": "Automation trigger target - a card in progress longer than this",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automation-presentation.util.ts"
+    ]
+  },
+  "4452224896547684328": "{count, plural, one {over # day} other {over # days}}",
+  "@4452224896547684328": {
+    "description": "Automation trigger target - a card in progress longer than this",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automation-presentation.util.ts"
+    ]
+  },
+  "3715210272161270337": "over {$field}",
+  "@3715210272161270337": {
+    "description": "Automation trigger target - tracked time passed the value of the named number field, e.g. over Estimate",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automation-presentation.util.ts"
+    ]
+  },
+  "7789441713903177584": "a number field",
+  "@7789441713903177584": {
+    "description": "Unconfigured automation trigger target",
     "x-files": [
       "src/app/features/workspace-settings/automations/automation-presentation.util.ts"
     ]
@@ -24030,6 +24539,12 @@
       "src/app/features/workspace-settings/automations/automations.page.html"
     ]
   },
+  "8392799677771828503": "{VAR_SELECT, select, board {Runs once per card on the day its planned start date arrives, on this board.} other {Runs once per card on the day its planned start date arrives, on every board in this workspace.}}",
+  "@8392799677771828503": {
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
   "2737456699183416956": "Days before due date",
   "@2737456699183416956": {
     "x-files": [
@@ -24066,8 +24581,105 @@
       "src/app/features/workspace-settings/automations/automations.page.html"
     ]
   },
-  "2780699746797274359": "{VAR_PLURAL, plural, =1 {Runs once each time an open card has been in progress for more than 1 day. Leaving and re-entering In progress starts a new clock.} other {Runs once each time an open card has been in progress for more than {INTERPOLATION} days. Leaving and re-entering In progress starts a new clock.}}",
-  "@2780699746797274359": {
+  "2485969382829178841": "Limit",
+  "@2485969382829178841": {
+    "description": "Field label - where an in-progress automation takes its time limit from",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "1711981860698055961": "Workspace alert",
+  "@1711981860698055961": {
+    "description": "In-progress automation limit option - the workspace's time in progress alert",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "5209341198317295172": "Set time",
+  "@5209341198317295172": {
+    "description": "In-progress automation limit option - an amount of time set on this automation",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "7713863630957208435": "Number field, such as an estimate",
+  "@7713863630957208435": {
+    "description": "In-progress automation limit option - a number custom field on each card, such as an estimate",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "6533918067030990396": "Amount",
+  "@6533918067030990396": {
+    "description": "Field label - how many hours or days",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "8932917860978648376": "Unit",
+  "@8932917860978648376": {
+    "description": "Field label - unit of time",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "840951359074313455": "Days",
+  "@840951359074313455": {
+    "description": "Unit of time for an automation limit",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "1992731550293192431": "Counted in",
+  "@1992731550293192431": {
+    "description": "Field label - the unit a number custom field is counted in",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "7467738544803078423": "Working hours",
+  "@7467738544803078423": {
+    "description": "Unit for an estimate - hours of tracked work",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "3638174653909453813": "Working days",
+  "@3638174653909453813": {
+    "description": "Unit for an estimate - days of tracked work, 8 hours each",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "7500756737756695280": "When off, cards already past the limit when this automation is turned on, or when its limit changes, are skipped.",
+  "@7500756737756695280": {
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "337615579685735914": "Include cards already past the limit",
+  "@337615579685735914": {
+    "description": "Toggle on an in-progress automation - also run it for cards that already passed the limit",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "8873808496706447329": "Runs once per card when its current time in progress passes this limit. Moving between lists doesn't run it again.",
+  "@8873808496706447329": {
+    "description": "Help for the Card in progress too long automation trigger with its own time limit",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "4129400741123597353": "Runs once per card when its tracked time passes the field's value. Raising the value runs it again only if the card passes that too. A working day is 8 tracked hours.",
+  "@4129400741123597353": {
+    "description": "Help for the Card in progress too long automation trigger with a number field limit",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "2789183728196090226": "{VAR_PLURAL, plural, =1 {Runs once per card when its current time in progress passes the workspace alert of 1 day. Moving between lists doesn't run it again.} other {Runs once per card when its current time in progress passes the workspace alert of {INTERPOLATION} days. Moving between lists doesn't run it again.}}",
+  "@2789183728196090226": {
     "description": "Help for the Card in progress too long automation trigger",
     "x-files": [
       "src/app/features/workspace-settings/automations/automations.page.html"
@@ -24095,6 +24707,20 @@
   "2884304190489484523": "Runs when a card gains its first active blocker, including when a blocker is reopened or restored. Includes changes made by integrations and automations.",
   "@2884304190489484523": {
     "description": "Help for the Card blocked automation trigger",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "3039199418198875526": "Runs when a card it waits on is first planned to finish on or after this card's planned start, whichever card's dates changed. Includes changes made by integrations and automations.",
+  "@3039199418198875526": {
+    "description": "Help for the Scheduling conflict appears automation trigger",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "4658651776475513701": "Runs for a card on the board's critical path when it is rescheduled later and the chain's projected finish moves with it. Includes changes made by integrations and automations.",
+  "@4658651776475513701": {
+    "description": "Help for the Critical path slips automation trigger",
     "x-files": [
       "src/app/features/workspace-settings/automations/automations.page.html"
     ]
@@ -24247,6 +24873,51 @@
   },
   "5743124451889962598": "Runs a chosen number of days before",
   "@5743124451889962598": {
+    "description": "Help text under an automation event option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts"
+    ]
+  },
+  "1787654363982544271": "Start date arrives",
+  "@1787654363982544271": {
+    "description": "Automation event (trigger) option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5884393494498215126": "Runs on the card's planned start date",
+  "@5884393494498215126": {
+    "description": "Help text under an automation event option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts"
+    ]
+  },
+  "3646240886091375318": "Scheduling conflict appears",
+  "@3646240886091375318": {
+    "description": "Automation event (trigger) option - an open blocker is now planned to finish on or after this card's planned start",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "2128369782401641672": "A blocker is now planned to finish on or after this card's start",
+  "@2128369782401641672": {
+    "description": "Help text under an automation event option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts"
+    ]
+  },
+  "7950858148047003051": "Critical path slips",
+  "@7950858148047003051": {
+    "description": "Automation event (trigger) option - a card on the board's critical path was rescheduled later, so the chain's projected finish moved",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4855961570478924488": "A card on the critical path is rescheduled later",
+  "@4855961570478924488": {
     "description": "Help text under an automation event option",
     "x-files": [
       "src/app/features/workspace-settings/automations/automations.page.ts"
@@ -24929,6 +25600,47 @@
       "src/app/features/workspace-settings/general/general.page.html"
     ]
   },
+  "1369148268174468626": "Turn off what this team does not use. A feature that is off is hidden everywhere, including from agents and the API. Nothing is deleted, so turning it back on restores it.",
+  "@1369148268174468626": {
+    "description": "Help text under the Planning features heading",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "3703721809468783633": "Enable time in progress",
+  "@3703721809468783633": {
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "7895749129547738307": "Track working time cards spend in In progress lists. Turning it off pauses every clock and keeps recorded time. Boards can also opt out individually.",
+  "@7895749129547738307": {
+    "description": "Help text for the workspace time in progress switch",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "8797821425621274745": "Turned off for the whole organisation.",
+  "@8797821425621274745": {
+    "description": "Help text for a planning feature switch the organisation has turned off",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "6027476256104520668": "Cards can block other cards, with Blocked chips, the Dependencies view and blocker automations.",
+  "@6027476256104520668": {
+    "description": "Help text for the dependencies switch",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "1111461894606157636": "Cards can have a planned start, shown as bars on the Timeline view with scheduling conflicts and the critical path.",
+  "@1111461894606157636": {
+    "description": "Help text for the start dates and timeline switch",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
   "1442931951977908025": "Flag cards in progress for more than",
   "@1442931951977908025": {
     "description": "Followed by a number input and the word days",
@@ -24952,6 +25664,20 @@
   "7345613250820835450": "Working hours time zone",
   "@7345613250820835450": {
     "description": "Label for the time zone whose working hours count toward time in progress",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "3791703275736582053": "Search by city, region or UTC offset…",
+  "@3791703275736582053": {
+    "description": "Search box in the time zone picker",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "2055599442280935575": "No time zone matches",
+  "@2055599442280935575": {
+    "description": "Empty state of the time zone picker search",
     "x-files": [
       "src/app/features/workspace-settings/general/general.page.html"
     ]
@@ -25905,6 +26631,13 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
+  "6668584344316209309": "Planning",
+  "@6668584344316209309": {
+    "description": "Group heading in the example automations menu - start dates and dependencies",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
   "1685220686749149766": "Wrap-up",
   "@1685220686749149766": {
     "description": "Group heading in the example automations menu",
@@ -25912,71 +26645,57 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "7903443276095383180": "Triage new cards",
-  "@7903443276095383180": {
+  "782740425923533219": "Label work by where it lands",
+  "@782740425923533219": {
     "description": "Example automation title",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "4627403810266740844": "When a card is created in your first list, label it for triage and apply your intake checklist.",
-  "@4627403810266740844": {
+  "6550845332925669553": "When a card enters a list for one kind of work, such as bugs, add the matching label.",
+  "@6550845332925669553": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "1503311611374544365": "Needs a triage or support label, or an intake checklist template.",
-  "@1503311611374544365": {
+  "7940482114947643388": "Needs a list and a label for the same kind of work, such as a Bugs list and a Bug label.",
+  "@7940482114947643388": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "8306348902105578940": "When a card is created in {$list}, add the {$label} label and apply the {$checklist} checklist.",
-  "@8306348902105578940": {
+  "3957122228900518139": "When a card enters {$list}, add the {$label} label.",
+  "@3957122228900518139": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "5806682729104364661": "When a card is created in {$list}, add the {$label} label.",
-  "@5806682729104364661": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "2198839467159093886": "When a card is created in {$list}, apply the {$checklist} checklist.",
-  "@2198839467159093886": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "5018129656607064644": "Give new work a deadline",
-  "@5018129656607064644": {
+  "2944323796357229789": "Set a response target for requests",
+  "@2944323796357229789": {
     "description": "Example automation title",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "686976434451799336": "When a card lands in your first list, set its due date to tomorrow.",
-  "@686976434451799336": {
+  "6522330758537349686": "When a request is created in your intake or support list, set its due date to 2 days from now.",
+  "@6522330758537349686": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "5559406614057102459": "Add a list first.",
-  "@5559406614057102459": {
+  "5446031394314064456": "Needs an intake, support or requests list.",
+  "@5446031394314064456": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "5070447630181802625": "When a card lands in {$list}, set its due date to tomorrow.",
-  "@5070447630181802625": {
+  "3969979837600904424": "When a card is created in {$list}, set its due date to 2 days from now.",
+  "@3969979837600904424": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -25989,23 +26708,16 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "1023928883542796000": "When a card enters your review list, apply the review checklist and flag it as needing review.",
-  "@1023928883542796000": {
+  "3058465398456436451": "When a card enters your review list, apply your review checklist.",
+  "@3058465398456436451": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "8084501379855887786": "Needs a review or QA list, plus a matching checklist template or label.",
-  "@8084501379855887786": {
+  "7065283537409870400": "Needs a review or QA list and a review checklist template.",
+  "@7065283537409870400": {
     "description": "What an example automation needs before it can be used",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "2605003512253421180": "When a card enters {$list}, apply the {$checklist} checklist and add the {$label} label.",
-  "@2605003512253421180": {
-    "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
@@ -26017,37 +26729,23 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "3957122228900518139": "When a card enters {$list}, add the {$label} label.",
-  "@3957122228900518139": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "1506792591871466814": "Advance checklist-driven work",
-  "@1506792591871466814": {
+  "3241287137709749967": "Send finished work to review",
+  "@3241287137709749967": {
     "description": "Example automation title",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "1921215936748001249": "When every checklist item on a card is ticked, move it on and drop the review label.",
-  "@1921215936748001249": {
+  "1641882507236246046": "When every checklist item on a card is ticked, move it to your review list.",
+  "@1641882507236246046": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "2990281855939565136": "Add a second list to move finished work into.",
-  "@2990281855939565136": {
+  "8788338231230153500": "Needs a review or QA list after your in-progress list.",
+  "@8788338231230153500": {
     "description": "What an example automation needs before it can be used",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "1696315824837890058": "When every checklist item on a card is ticked, move it to the top of {$list} and remove the {$label} label.",
-  "@1696315824837890058": {
-    "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
@@ -26059,15 +26757,36 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "4348971933595685644": "Surface overdue work",
-  "@4348971933595685644": {
+  "1605461074923568695": "Escalate overdue work",
+  "@1605461074923568695": {
     "description": "Example automation title",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "796478531746525027": "When a card's due date arrives, float it to the top of its list so nobody has to go looking.",
-  "@796478531746525027": {
+  "7535617314887983397": "When a card's due date arrives, move it to your escalation list, or to the top of its own list.",
+  "@7535617314887983397": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5559406614057102459": "Add a list first.",
+  "@5559406614057102459": {
+    "description": "What an example automation needs before it can be used",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6260126437541810065": "When a card's due date arrives, move it to the top of {$list} and tick {$field}.",
+  "@6260126437541810065": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1224208110483972601": "When a card's due date arrives, move it to the top of {$list}.",
+  "@1224208110483972601": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -26087,6 +26806,90 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
+  "2806125924536139712": "Flag stalled work as at risk",
+  "@2806125924536139712": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1110286247729342076": "When a card moves into your blocked or follow-up list, add your at-risk label.",
+  "@1110286247729342076": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5120893601864912137": "Needs a blocked or follow-up list and a label like At risk.",
+  "@5120893601864912137": {
+    "description": "What an example automation needs before it can be used",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5571422608566823494": "Flag work that is dragging on",
+  "@5571422608566823494": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6186437914378228415": "When a card has been in progress longer than this workspace's limit, flag it and comment on the card.",
+  "@6186437914378228415": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5124525400203183158": "Needs a list marked In progress.",
+  "@5124525400203183158": {
+    "description": "What an example automation needs before it can be used",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "3540630765342999174": "Tracked time on this card has passed its estimate. Check whether the estimate or the scope needs to change.",
+  "@3540630765342999174": {
+    "description": "Comment an example automation posts on a card - written in the admin's language when they create the rule",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "2447777883507932318": "When tracked time on a card passes its {$field}, add the {$label} label and comment on the card.",
+  "@2447777883507932318": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "8805327126986992539": "When tracked time on a card passes its {$field}, comment on the card.",
+  "@8805327126986992539": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "3067725287680684521": "This card has been in progress longer than this workspace's limit. Check whether it is stuck or needs splitting up.",
+  "@3067725287680684521": {
+    "description": "Comment an example automation posts on a card - written in the admin's language when they create the rule",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6290339178944462636": "When a card has been in progress longer than this workspace's limit, add the {$label} label and comment on the card.",
+  "@6290339178944462636": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6694235965112282107": "When a card has been in progress longer than this workspace's limit, comment on the card.",
+  "@6694235965112282107": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
   "2059651021711399305": "Escalate consistently",
   "@2059651021711399305": {
     "description": "Example automation title",
@@ -26101,8 +26904,8 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "3349514949878128641": "Needs a label like Escalated, Blocked or Urgent.",
-  "@3349514949878128641": {
+  "571120888780872513": "Needs a label like Escalated, Urgent or Critical.",
+  "@571120888780872513": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -26122,6 +26925,97 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
+  "660827724568877544": "Surface work on its start date",
+  "@660827724568877544": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1325759832895615986": "When a card's start date arrives, move it to the top of its list so it is picked up on time.",
+  "@1325759832895615986": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6671733656155471105": "When a card's start date arrives, move it to the top of its list and add the {$label} label.",
+  "@6671733656155471105": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1286102029037556822": "When a card's start date arrives, move it to the top of its list.",
+  "@1286102029037556822": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "1572530698562774169": "Pick up unblocked work",
+  "@1572530698562774169": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "8924315437461178579": "When a card's last blocker is finished, move it to the top of its list and comment that it is ready.",
+  "@8924315437461178579": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4654628592405453633": "Everything this card was waiting on is finished, so it is ready to pick up.",
+  "@4654628592405453633": {
+    "description": "Comment an example automation posts on a card - written in the admin's language when they create the rule",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "7955438045665193994": "When a card's last blocker is finished, move it to the top of its list, remove the {$label} label and comment that it is ready.",
+  "@7955438045665193994": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6079889226925531250": "Catch scheduling conflicts",
+  "@6079889226925531250": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6259866597922208364": "When a card is planned to start before one of its blockers finishes, flag it and comment on the card.",
+  "@6259866597922208364": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "8685164768543542268": "This card is planned to start before one of its blockers finishes. Adjust the dates on the Timeline.",
+  "@8685164768543542268": {
+    "description": "Comment an example automation posts on a card - written in the admin's language when they create the rule",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4699240975076228971": "When a card is planned to start before one of its blockers finishes, add the {$label} label and comment on the card.",
+  "@4699240975076228971": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "177964634738903396": "When a card is planned to start before one of its blockers finishes, comment on the card.",
+  "@177964634738903396": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
   "7545659921374567308": "Finish work cleanly",
   "@7545659921374567308": {
     "description": "Example automation title",
@@ -26129,29 +27023,57 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "3006892802359903266": "When a card reaches your done list, mark it complete and clear the deadline it no longer needs.",
-  "@3006892802359903266": {
+  "5561173051693700446": "When a card reaches your done list, mark it complete and take off any at-risk label.",
+  "@5561173051693700446": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "8519643610154922941": "Add a second list to act as the done list.",
-  "@8519643610154922941": {
+  "7476318065245510993": "Needs a list named Done, Complete or similar.",
+  "@7476318065245510993": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "6153750226436589943": "When a card enters {$list}, mark it complete, clear its due date and remove the {$label} label.",
-  "@6153750226436589943": {
+  "7459141560951318061": "When a card enters {$list}, mark it complete and remove the {$label} label.",
+  "@7459141560951318061": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "8769540617003066484": "When a card enters {$list}, mark it complete and clear its due date.",
-  "@8769540617003066484": {
+  "2085111536126167427": "When a card enters {$list}, mark it complete.",
+  "@2085111536126167427": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5899753239714343044": "Move completed work to the done list",
+  "@5899753239714343044": {
+    "description": "Example automation title",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "265703085531634779": "When someone ticks a card complete, move it to your done list.",
+  "@265703085531634779": {
+    "description": "Example automation description",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "7768186650423274011": "Needs exactly one list where work ends, such as Done.",
+  "@7768186650423274011": {
+    "description": "What an example automation needs before it can be used",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4229723348065177271": "When someone ticks a card complete, move it to the top of {$list}.",
+  "@4229723348065177271": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -26171,8 +27093,8 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "5124525400203183158": "Needs a list marked In progress.",
-  "@5124525400203183158": {
+  "2640724493883475949": "Needs a list named In progress, Doing or similar.",
+  "@2640724493883475949": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -26192,62 +27114,6 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "1890742285632026533": "Clean up completed work",
-  "@1890742285632026533": {
-    "description": "Example automation title",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "6995230851302275964": "When a card is marked complete, clear its due date so it stops showing as due.",
-  "@6995230851302275964": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "6565193085827538305": "When a card is marked complete, clear its due date and remove the {$label} label.",
-  "@6565193085827538305": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "3722309172806786356": "When a card is marked complete, clear its due date.",
-  "@3722309172806786356": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "498905658137988718": "Carry an estimate into actuals",
-  "@498905658137988718": {
-    "description": "Example automation title",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "6403921968094925508": "When a card is finished, copy its estimate into the actuals field so the two can be compared.",
-  "@6403921968094925508": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "6295435918003569545": "Needs two number fields, one for the estimate and one for actuals.",
-  "@6295435918003569545": {
-    "description": "What an example automation needs before it can be used",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "242636415056168381": "When a card enters {$list}, copy {$sourceField} into {$targetField} if it is still empty.",
-  "@242636415056168381": {
-    "description": "Example automation description",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
   "1729719499939257215": "Stamp the month work finished",
   "@1729719499939257215": {
     "description": "Example automation title",
@@ -26255,22 +27121,22 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "3073178789108828279": "When a card is marked complete, record the month in your reporting field.",
-  "@3073178789108828279": {
+  "5870809208901989933": "When a card reaches your done list, record the month in your billing or reporting field.",
+  "@5870809208901989933": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "7313300469009893129": "Needs a text field named for a month or period.",
-  "@7313300469009893129": {
+  "2872439053006106877": "Needs a done list and a text field named for a month or period.",
+  "@2872439053006106877": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "4088957989178157285": "When a card is marked complete, fill {$field} with the current month.",
-  "@4088957989178157285": {
+  "3134033758963991664": "When a card enters {$list}, fill {$field} with the current month.",
+  "@3134033758963991664": {
     "description": "Example automation description",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -26396,6 +27262,13 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
+  "4160511060704436476": "The setting could not be updated.",
+  "@4160511060704436476": {
+    "description": "Error under the workspace planning feature switches",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
   "686260648148145094": "{count, plural, one {List \"{list}\" and # card deleted.} other {List \"{list}\" and # cards deleted.}}",
   "@686260648148145094": {
     "description": "Undo toast",
@@ -26462,6 +27335,13 @@
   "8537083668379142549": "Custom field changes to {$condition}",
   "@8537083668379142549": {
     "description": "Automation title; \"field = value\" follows",
+    "x-files": [
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "37981020602391110": "Card in progress {$limit}",
+  "@37981020602391110": {
+    "description": "Automation title - the limit follows, e.g. over 3 days or over Estimate",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]

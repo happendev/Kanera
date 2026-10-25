@@ -12,7 +12,6 @@
 // Re-exported so a page that uses this vocabulary can also read the breakpoints it is keyed on
 // (`toolbar.$bp-compact`) without a second `@use`.
 @forward "./breakpoints";
-@use "./breakpoints" as bp;
 
 // ─── Popover anchor ───────────────────────────────────────────────────────────
 
@@ -308,50 +307,35 @@
 // ─── Label drop ───────────────────────────────────────────────────────────────
 //
 // The label is the first thing to go, before any control is removed: an icon plus tooltip still
-// says which control it is, whereas a missing control says nothing at all. Applies to the whole
-// vocabulary at once, which is what stops one page going icon-only at 480 while its neighbour
-// waits until 700.
-@mixin collapsed-labels($size: 36px) {
-  .k-toolbar-btn.k-toolbar-collapsible-label {
-    justify-content: center;
-    width: $size;
-    padding: 0;
-    gap: 0;
-
-    > span {
-      display: none;
-    }
-  }
-
-  .k-toolbar-trigger.k-toolbar-collapsible-label {
-    justify-content: center;
-    max-width: none;
-    width: $size;
-    padding: 0;
-    gap: 0;
-
-    > span,
-    > .k-toolbar-caret {
-      display: none;
-    }
-  }
-}
-
-@media (max-width: bp.$bp-compact) {
-  @include collapsed-labels;
-}
-
-// The same drop, decided by the page header's own width rather than the viewport's. k-page-header
-// sets .is-tight on itself once one row can no longer hold the identity, the projected controls and
-// the fixed buttons' clearance band together (see PageHeaderComponent.measureFit).
+// says which control it is, whereas a missing control says nothing at all. And it goes only when the
+// row it sits in has no room for it — never at a viewport width. A breakpoint used to drop every
+// label below 720px, so a phone's table toolbar went icon-only with a third of its row empty.
 //
-// The viewport cannot answer that question, because the sidebar is user-collapsible: a 920px window
-// leaves a page 660px with the sidebar open and 860px with it railed, and Global Work's three
-// actions plus its five-way switch fit in one case and not the other. Without this the header wrapped
-// instead — a mostly-empty title row above a control row inset by the clearance band, while the
-// query bar below it ran to the edge.
-k-page-header.is-tight {
-  @include collapsed-labels;
+// Two things decide it, each measuring its own row:
+// - `kFitLabels` (shared/fit-labels.directive.ts) on a toolbar row sets `.is-label-dropped` per
+//   control, from the end, once the row would wrap or overflow.
+// - k-page-header sets `.is-tight` on itself once one row can no longer hold the identity, the
+//   projected controls and the fixed buttons' clearance band together (see
+//   PageHeaderComponent.measureFit). Its title ellipsises rather than the row growing, which is why
+//   it measures for itself. The viewport cannot answer that question either, because the sidebar is
+//   user-collapsible: a 920px window leaves a page 660px with the sidebar open and 860px with it
+//   railed.
+@mixin collapsed-label($size: 36px) {
+  justify-content: center;
+  max-width: none;
+  width: $size;
+  padding: 0;
+  gap: 0;
+
+  > span,
+  > .k-toolbar-caret {
+    display: none;
+  }
+}
+
+.k-toolbar-collapsible-label.is-label-dropped,
+k-page-header.is-tight .k-toolbar-collapsible-label {
+  @include collapsed-label;
 }
 
 // ─── Touch targets ───────────────────────────────────────────────────────────
@@ -377,19 +361,9 @@ k-page-header.is-tight {
     width: 36px;
   }
 
-  @media (max-width: bp.$bp-compact) {
-    .k-toolbar-btn.k-toolbar-collapsible-label,
-    .k-toolbar-trigger.k-toolbar-collapsible-label {
-      width: 44px;
-    }
-  }
-
-  // A tablet in landscape is wide enough to keep the viewport drop above from firing, so the
-  // header's own narrow state has to restate the touch size for the controls it collapses.
-  k-page-header.is-tight {
-    .k-toolbar-btn.k-toolbar-collapsible-label,
-    .k-toolbar-trigger.k-toolbar-collapsible-label {
-      width: 44px;
-    }
+  // A dropped label leaves a square icon button, which takes the same touch size.
+  .k-toolbar-collapsible-label.is-label-dropped,
+  k-page-header.is-tight .k-toolbar-collapsible-label {
+    width: 44px;
   }
 }

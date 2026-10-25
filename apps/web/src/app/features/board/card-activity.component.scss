@@ -246,10 +246,6 @@ input.comment-search-input {
   align-items: flex-start;
   min-width: 0;
 
-  &.is-system:not(.is-mirror) {
-    padding-left: 42px;
-  }
-
   &:hover .comment-actions,
   &:hover .reaction-add {
     opacity: 1;
@@ -457,10 +453,6 @@ button.xs {
   display: flex;
   gap: 10px;
   align-items: flex-start;
-
-  &.is-system:not(.is-mirror) {
-    padding-left: 42px;
-  }
 }
 
 .activity-mirror-icon {

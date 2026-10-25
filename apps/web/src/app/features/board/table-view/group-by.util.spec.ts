@@ -11,6 +11,7 @@ function card(overrides: Partial<AnyCard>): AnyCard {
     title: overrides.title ?? "Untitled",
     position: overrides.position ?? "1000.0000000000",
     dueDateLocalDate: overrides.dueDateLocalDate ?? null,
+    startDateLocalDate: overrides.startDateLocalDate ?? null,
     dueDateSlot: overrides.dueDateSlot ?? null,
     dueDateTimezone: overrides.dueDateTimezone ?? null,
     completedAt: overrides.completedAt ?? null,
@@ -395,6 +396,16 @@ describe("sortGroupCards", () => {
     expect(asc.map((c) => c.id)).toEqual(["b", "c", "a"]);
     const desc = sortGroupCards(cards, "due-desc");
     expect(desc.map((c) => c.id)).toEqual(["c", "b", "a"]);
+  });
+
+  it("sorts by planned start date and sinks cards without one", () => {
+    const cards = [
+      card({ id: "a" }),
+      card({ id: "b", startDateLocalDate: "2026-05-20" }),
+      card({ id: "c", startDateLocalDate: "2026-05-22" }),
+    ];
+    expect(sortGroupCards(cards, "start-asc").map((c) => c.id)).toEqual(["b", "c", "a"]);
+    expect(sortGroupCards(cards, "start-desc").map((c) => c.id)).toEqual(["c", "b", "a"]);
   });
 
   it("sorts by title alphabetically", () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isDueDateOverdue, localDateInTimezone, resolveDueDatePatch } from "./due-date.js";
+import { clampStartToDue, isDueDateOverdue, localDateInTimezone, resolveDueDatePatch, resolveStartDatePatch } from "./due-date.js";
 import { localDateParts } from "./local-date.js";
 import { dateTimeFormatter } from "./date-time-formatter.js";
 
@@ -87,4 +87,48 @@ test("resolveDueDatePatch sets and clears whole due dates as before", () => {
   assert.deepEqual(resolveDueDatePatch({ dueDateLocalDate: null, dueDateSlot: "morning" }, current, "UTC"), {
     kind: "write", dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null,
   });
+});
+
+// Failure modes this guards: (1) an explicit start landing after the due date it is sent with, or
+// after the stored one; (2) a due date moved before the stored start leaving an inverted span;
+// (3) clearing the due date dragging the start away, or clearing the start touching the due date;
+// (4) a no-op start write producing a spurious activity row.
+test("resolveStartDatePatch rejects a start after the resulting due date", () => {
+  const current = { startDateLocalDate: null };
+  assert.deepEqual(resolveStartDatePatch({ startDateLocalDate: "2026-10-25" }, current, "2026-10-20"), {
+    kind: "rejected", reason: "startDateLocalDate must be on or before dueDateLocalDate",
+  });
+  assert.deepEqual(resolveStartDatePatch({ startDateLocalDate: "2026-10-20" }, current, "2026-10-20"), {
+    kind: "write", startDateLocalDate: "2026-10-20",
+  });
+  assert.deepEqual(resolveStartDatePatch({ startDateLocalDate: "2026-10-18" }, current, "2026-10-20"), {
+    kind: "write", startDateLocalDate: "2026-10-18",
+  });
+  // No due date: any start is fine.
+  assert.deepEqual(resolveStartDatePatch({ startDateLocalDate: "2026-12-31" }, current, null), {
+    kind: "write", startDateLocalDate: "2026-12-31",
+  });
+});
+
+test("resolveStartDatePatch clamps the stored start when only the due date moves", () => {
+  const current = { startDateLocalDate: "2026-10-18" };
+  assert.deepEqual(resolveStartDatePatch({}, current, "2026-10-15"), { kind: "write", startDateLocalDate: "2026-10-15" });
+  assert.deepEqual(resolveStartDatePatch({}, current, "2026-10-18"), { kind: "unchanged" });
+  assert.deepEqual(resolveStartDatePatch({}, current, "2026-11-01"), { kind: "unchanged" });
+  // Clearing the due date keeps the start.
+  assert.deepEqual(resolveStartDatePatch({}, current, null), { kind: "unchanged" });
+  // No start to clamp.
+  assert.deepEqual(resolveStartDatePatch({}, { startDateLocalDate: null }, "2026-10-15"), { kind: "unchanged" });
+});
+
+test("resolveStartDatePatch clears and no-ops without touching the due date", () => {
+  assert.deepEqual(resolveStartDatePatch({ startDateLocalDate: null }, { startDateLocalDate: "2026-10-18" }, "2026-10-20"), {
+    kind: "write", startDateLocalDate: null,
+  });
+  assert.deepEqual(resolveStartDatePatch({ startDateLocalDate: null }, { startDateLocalDate: null }, "2026-10-20"), { kind: "unchanged" });
+  assert.deepEqual(resolveStartDatePatch({ startDateLocalDate: "2026-10-18" }, { startDateLocalDate: "2026-10-18" }, "2026-10-20"), { kind: "unchanged" });
+  assert.equal(clampStartToDue("2026-10-18", "2026-10-15"), "2026-10-15");
+  assert.equal(clampStartToDue("2026-10-18", "2026-10-20"), "2026-10-18");
+  assert.equal(clampStartToDue("2026-10-18", null), "2026-10-18");
+  assert.equal(clampStartToDue(null, "2026-10-20"), null);
 });

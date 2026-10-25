@@ -28,6 +28,13 @@ void test("dependency aliases read left to right and unblock removes the same re
   assert.deepEqual(applyPositionals(unblock.alias, unblock.rest), { direction: "blocks", remove: true, cardId: "API-12", otherCardIds: "WEB-40" });
 });
 
+void test("schedule takes a board positionally and leaves the workspace scope to a flag", () => {
+  const match = matchAlias(["schedule", "board-1"])!;
+  assert.equal(match.alias.tool, "work.schedule");
+  assert.deepEqual(applyPositionals(match.alias, match.rest), { boardId: "board-1" });
+  assert.deepEqual(applyPositionals(matchAlias(["schedule"])!.alias, []), {});
+});
+
 void test("extra positionals are rejected rather than silently changing only one target", () => {
   const match = matchAlias(["card", "MKT-42", "stray"])!;
   assert.throws(() => applyPositionals(match.alias, match.rest), /too many arguments/u);

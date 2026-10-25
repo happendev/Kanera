@@ -1,5 +1,6 @@
 import type { OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
+import { NgTemplateOutlet } from "@angular/common";
 import { RouterLink } from "@angular/router";
 import type { GettingStartedStep } from "@kanera/shared/dto";
 import { ApiClient } from "../../core/api/api.client";
@@ -25,6 +26,9 @@ type StepAction =
 interface StepView {
   key: GettingStartedStep;
   done: boolean;
+  /** The section's label, shown above the step in the spotlight. */
+  section: string;
+  icon: string;
   title: string;
   text: string;
   actionLabel: string;
@@ -37,6 +41,33 @@ const PALETTE_KEYS = (() => {
   return parts.join(parts[0] === "⌘" ? "" : "+");
 })();
 
+/** Tabler glyph for the spotlight, picked to read as what the step does. */
+const STEP_ICONS: Record<GettingStartedStep, string> = {
+  createCard: "square-plus",
+  assignCard: "user-plus",
+  comment: "message",
+  mention: "at",
+  completeCard: "circle-check",
+  quickEdit: "pencil-bolt",
+  useFilter: "filter",
+  commandPalette: "command",
+  viewWorkDone: "history",
+  groupTable: "layout-rows",
+  totalColumn: "sum",
+  exportExcel: "file-spreadsheet",
+  addDependency: "link",
+  setStartDate: "calendar-event",
+  viewTimeline: "timeline",
+  scratchpad: "note",
+  saveNote: "notebook",
+  inviteTeam: "users",
+  secondBoard: "layout-kanban",
+  createAutomation: "bolt",
+  enablePush: "bell-ringing",
+  connectAgent: "plug",
+  useAgent: "robot",
+};
+
 /**
  * Display groups, in the order someone meets them. The server decides which steps a viewer gets;
  * a section with none of its steps left in the payload is not drawn.
@@ -45,12 +76,22 @@ const SECTIONS: readonly { key: string; label: string; steps: readonly GettingSt
   {
     key: "basics",
     label: $localize`:Getting started checklist section heading for the core card workflow:The basics`,
-    steps: ["createCard", "assignCard", "comment", "mention", "addDependency", "completeCard"],
+    steps: ["createCard", "assignCard", "comment", "mention", "completeCard"],
   },
   {
     key: "faster",
     label: $localize`:Getting started checklist section heading for shortcuts, filters and views:Work faster`,
     steps: ["quickEdit", "useFilter", "commandPalette", "viewWorkDone"],
+  },
+  {
+    key: "tables",
+    label: $localize`:Getting started checklist section heading for grouping, totals and export in the Table view:Tables`,
+    steps: ["groupTable", "totalColumn", "exportExcel"],
+  },
+  {
+    key: "planning",
+    label: $localize`:Getting started checklist section heading for dependencies, start dates and the Timeline view:Plan ahead`,
+    steps: ["addDependency", "setStartDate", "viewTimeline"],
   },
   {
     key: "notes",
@@ -73,8 +114,8 @@ const SECTIONS: readonly { key: string; label: string; steps: readonly GettingSt
  * The "Getting started" checklist on home: the guidance between the one-time onboarding wizard and
  * a team that uses Kanera fully.
  *
- * A guided list rather than a wall of tips: one step at a time is open, with what it teaches and
- * the button that does it, and it is the first open step unless the user picked another. When a
+ * A guided list rather than a wall of tips: one step at a time is open, shown in a spotlight beside
+ * the list (or under its row on a narrow card) with what it teaches and the button that does it, and it is the first open step unless the user picked another. When a
  * step ticks, the next one opens, so the card walks people through the core loop of a card before
  * the team and setup steps.
  *
@@ -87,7 +128,7 @@ const SECTIONS: readonly { key: string; label: string; steps: readonly GettingSt
 @Component({
   selector: "k-getting-started",
   standalone: true,
-  imports: [RouterLink, TooltipDirective],
+  imports: [NgTemplateOutlet, RouterLink, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./getting-started.component.html",
   styleUrl: "./getting-started.component.scss",
@@ -123,12 +164,22 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
     const target = state.teamTarget;
     const boardId = this.boardId();
     const notesWorkspaceId = state.notesWorkspaceId;
-    return state.steps.map(({ key, done }) => ({ key, done, ...this.describe(key, target, boardId, notesWorkspaceId) }));
+    const timelineBoardId = state.timelineBoardId;
+    return state.steps.map(({ key, done }) => ({
+      key,
+      done,
+      section: SECTIONS.find((section) => section.steps.includes(key))?.label ?? "",
+      icon: STEP_ICONS[key],
+      ...this.describe(key, target, boardId, notesWorkspaceId, timelineBoardId),
+    }));
   });
   readonly sections = computed(() => {
     const byKey = new Map(this.steps().map((step) => [step.key, step]));
     return SECTIONS
-      .map((section) => ({ ...section, steps: section.steps.flatMap((key) => byKey.get(key) ?? []) }))
+      .map((section) => {
+        const steps = section.steps.flatMap((key) => byKey.get(key) ?? []);
+        return { ...section, steps, done: steps.filter((step) => step.done).length };
+      })
       .filter((section) => section.steps.length > 0);
   });
 
@@ -140,6 +191,7 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
     if (picked && !picked.done) return picked.key;
     return steps.find((step) => !step.done)?.key ?? null;
   });
+  readonly openStep = computed(() => this.steps().find((step) => step.key === this.openKey()) ?? null);
   readonly doneCount = computed(() => this.steps().filter((step) => step.done).length);
   readonly allDone = computed(() => this.steps().length > 0 && this.doneCount() === this.steps().length);
   readonly percent = computed(() => (this.steps().length ? Math.round((this.doneCount() / this.steps().length) * 100) : 0));
@@ -232,9 +284,14 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
     target: { workspaceId: string } | { boardId: string } | null,
     boardId: string | null,
     notesWorkspaceId: string | null,
-  ): Omit<StepView, "key" | "done"> {
+    timelineBoardId: string | null,
+  ): Omit<StepView, "key" | "done" | "section" | "icon"> {
     const openBoard = $localize`:Getting started step button:Open a board`;
     const boardLink: StepAction | null = boardId ? { kind: "link", commands: ["/b", boardId] } : null;
+    const openTable = $localize`:Getting started step button; Table is a view name:Open a table`;
+    const tableLink: StepAction = boardId
+      ? { kind: "link", commands: ["/b", boardId], queryParams: { view: "table" } }
+      : { kind: "link", commands: ["/my-cards"] };
     switch (key) {
       case "createCard":
         return {
@@ -311,6 +368,45 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
           text: $localize`:Getting started step text:Keep specs, meeting notes and how-tos next to the boards they are about, where the whole team can find them.`,
           actionLabel: $localize`:Getting started step button:Open notes`,
           action: notesWorkspaceId ? { kind: "link", commands: ["/w", notesWorkspaceId, "notes"] } : null,
+        };
+      // All three open the board's Table view; on a phone or before any board is open, My Cards
+      // has the same table.
+      case "groupTable":
+        return {
+          title: $localize`:Getting started step title; Table is a view name:Group a table`,
+          text: $localize`:Getting started step text; Group is a toolbar button in the Table view:In Table view, choose Group to gather cards by assignee, label, due date or a custom field instead of by list.`,
+          actionLabel: openTable,
+          action: tableLink,
+        };
+      case "totalColumn":
+        return {
+          title: $localize`:Getting started step title:Total a column`,
+          text: $localize`:Getting started step text; Calculate is a button in the table footer and Sum a menu option:In Table view, choose Calculate under a number column or time in progress, then Sum, to total it for every group.`,
+          actionLabel: openTable,
+          action: tableLink,
+        };
+      case "exportExcel":
+        return {
+          title: $localize`:Getting started step title:Export to Excel`,
+          text: $localize`:Getting started step text; More table actions is a menu and Excel workbook a menu item:In Table view, open More table actions and choose Excel workbook to download the cards in view, grouped, with a summary sheet.`,
+          actionLabel: openTable,
+          action: tableLink,
+        };
+      // Both planning steps open the board the server picked: home's recent board may sit in a
+      // workspace with start dates and the Timeline switched off.
+      case "setStartDate":
+        return {
+          title: $localize`:Getting started step title:Set a start date`,
+          text: $localize`:Getting started step text; Dates is a section and Add start date a button in card detail:In a card's Dates, choose Add start date. The card then runs from its start to its due date on the Timeline.`,
+          actionLabel: openBoard,
+          action: timelineBoardId ? { kind: "link", commands: ["/b", timelineBoardId] } : null,
+        };
+      case "viewTimeline":
+        return {
+          title: $localize`:Getting started step title; Timeline is a view name:Open the Timeline`,
+          text: $localize`:Getting started step text; Timeline is a view name:See each dated card as a bar across the weeks, and drag a bar to reschedule it.`,
+          actionLabel: $localize`:Getting started step button; Timeline is a view name:Open Timeline`,
+          action: timelineBoardId ? { kind: "link", commands: ["/b", timelineBoardId], queryParams: { view: "timeline" } } : null,
         };
       case "addDependency":
         return {

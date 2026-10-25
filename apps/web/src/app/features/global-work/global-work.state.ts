@@ -20,6 +20,7 @@ import type { CardCustomFieldValue, WorkViewLens, WorkViewVisibility } from "@ka
 import { SERVER_EVENTS, expandCardSummary, type WireCardSummary, type WireGlobalWorkSeparator } from "@kanera/shared/events";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
+import { CachedViewService } from "../../core/offline/cached-view.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
@@ -118,11 +119,12 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
 
 /**
  * Displays that are wrong on a partial card set: the board's lane order and "Next" card, the
- * overview's per-teammate counts, which would silently under-report from page one, and the
- * dependency map, which is seeded with the loaded cards and would drop every chain past page one.
+ * overview's per-teammate counts, which would silently under-report from page one, the
+ * dependency map, which is seeded with the loaded cards and would drop every chain past page one,
+ * and the timeline, whose critical path and group spans are only true over every bar.
  */
 function displayNeedsEveryCard(display: WorkDisplayMode): boolean {
-  return display === "board" || display === "overview" || display === "dependencies";
+  return display === "board" || display === "overview" || display === "dependencies" || display === "timeline";
 }
 
 /** The card fields the query projection keeps in sync, whether from a realtime echo or a local edit. */
@@ -150,6 +152,7 @@ export class GlobalWorkState {
   readonly auth = inject(AuthService);
   readonly sockets = inject(SocketService);
   private readonly offlineCache = inject(OfflineCacheService);
+  private readonly queries = inject(CachedViewService);
   private readonly cardDrag = inject(CardDragCoordinator);
   /** The viewer's own queue lives app-wide; this page reads and mutates it through the service. */
   private readonly myPriorities = inject(MyPrioritiesService);
@@ -174,7 +177,7 @@ export class GlobalWorkState {
    * and must not disable the page after ordinary realtime events such as the viewer's own drag.
    */
   readonly interactionReady = computed(() =>
-    this.sockets.displayedOnline() && !this.loading() && !this.cachedAt()
+    this.sockets.online() && !this.loading() && !this.cachedAt()
   );
   /**
    * Group and Sort away from the lens default.
@@ -248,11 +251,12 @@ export class GlobalWorkState {
    * the overview's dock curates.
    *
    * Loaded only for the overview; `setDisplay` queries it on entry. Hydrating every teammate’s
-   * queue must not hold up the ordinary board or table projection. Deliberately absent from the
-   * offline cache: like the docked panel, a stale sequence reads as an instruction, so the overview
-   * is withheld on a cached snapshot instead of showing last week's order.
+   * queue must not hold up the ordinary board or table projection. Cached queues remain readable
+   * offline, with their saved timestamp and all mutations disabled.
    */
   readonly teamPriorities = signal<WorkPriorityQueuesResponse | null>(null);
+  readonly prioritiesCachedAt = signal<string | null>(null);
+  readonly teamPrioritiesCachedAt = signal<string | null>(null);
   /**
    * The one teammate Team overview is showing, with their Up next docked beside them; null shows
    * everyone.
@@ -381,6 +385,8 @@ export class GlobalWorkState {
     this.portfolio.set(null);
     this.otherPriorities.set(null);
     this.teamPriorities.set(null);
+    this.prioritiesCachedAt.set(null);
+    this.teamPrioritiesCachedAt.set(null);
     this.overviewFocusUserId.set(null);
     this.teamPriorityCandidates.set([]);
     this.savedViews.set([]);
@@ -451,6 +457,8 @@ export class GlobalWorkState {
       });
     } catch {
       await cachedPromise;
+      // Queue snapshots have their own lifetime and timestamps, independent of card paging.
+      if (version === this.requestVersion && this.cachedAt()) await this.restorePrioritySnapshots(version);
       if (version === this.requestVersion && !this.hasUsableData()) {
         this.error.set($localize`We couldn’t load this view. Check your connection and try again.`);
       }
@@ -671,6 +679,12 @@ export class GlobalWorkState {
         : {}),
     }));
     this.persistPreference();
+    // Offline display changes are local navigation. Do not page the server or stamp the old card
+    // snapshot as newly fetched merely because the reader opened a different cached view.
+    if (!this.sockets.online() || !this.interactionReady()) {
+      void this.restorePrioritySnapshots(this.requestVersion);
+      return;
+    }
     // Summary renders only portfolio aggregates. Defer the card projection until the viewer opens
     // a row display; switching either direction queries exactly the data that display needs.
     if (this.lens() === "portfolio") {
@@ -687,7 +701,7 @@ export class GlobalWorkState {
       void Promise.all([this.refreshTeamPriorities(this.requestVersion), this.loadRemainingCards(this.requestVersion)])
         .then(() => this.persistCache())
         .catch(() => this.error.set($localize`We couldn’t load every card. Try refreshing the page.`));
-    } else if (display === "board" || display === "dependencies") {
+    } else if (display === "board" || display === "dependencies" || display === "timeline") {
       this.teamPriorityCandidates.set([]);
       void this.loadRemainingCards(this.requestVersion)
         .then(() => this.persistCache())
@@ -989,6 +1003,7 @@ export class GlobalWorkState {
    * where the ranks on screen disagree with the server's.
    */
   async addPriority(cardId: string, anchor: { afterId?: string | null; beforeId?: string | null }): Promise<void> {
+    if (!this.interactionReady() || this.prioritiesCachedAt()) return;
     const targetUserId = this.focusedTargetUserId();
     if (!targetUserId) return;
     if (this.isSelfQueue()) {
@@ -1005,6 +1020,8 @@ export class GlobalWorkState {
         `/work/priorities/${targetUserId}/cards`,
         { cardId, ...anchor },
       ));
+      const queue = this.otherPriorities();
+      if (queue) await this.rememberPriority(queue.targetUserId, queue);
     } catch (error) {
       this.otherPriorities.set(snapshot);
       throw error;
@@ -1012,6 +1029,7 @@ export class GlobalWorkState {
   }
 
   async movePriority(priorityId: string, anchor: { afterId?: string | null; beforeId?: string | null }): Promise<void> {
+    if (!this.interactionReady() || this.prioritiesCachedAt()) return;
     if (this.isSelfQueue()) {
       await this.myPriorities.movePriority(priorityId, anchor);
       return;
@@ -1023,6 +1041,8 @@ export class GlobalWorkState {
         `/card-priorities/${priorityId}/move`,
         anchor,
       ));
+      const queue = this.otherPriorities();
+      if (queue) await this.rememberPriority(queue.targetUserId, queue);
     } catch (error) {
       this.otherPriorities.set(snapshot);
       throw error;
@@ -1030,6 +1050,7 @@ export class GlobalWorkState {
   }
 
   async removePriority(priorityId: string): Promise<void> {
+    if (!this.interactionReady() || this.prioritiesCachedAt()) return;
     if (this.isSelfQueue()) {
       await this.myPriorities.removePriority(priorityId);
       return;
@@ -1042,6 +1063,8 @@ export class GlobalWorkState {
     });
     try {
       this.otherPriorities.set(await this.api.delete<WorkPrioritiesResponse>(`/card-priorities/${priorityId}`));
+      const queue = this.otherPriorities();
+      if (queue) await this.rememberPriority(queue.targetUserId, queue);
     } catch (error) {
       this.otherPriorities.set(snapshot);
       throw error;
@@ -1086,6 +1109,7 @@ export class GlobalWorkState {
     priorityId: string,
     anchor: { afterId?: string | null; beforeId?: string | null },
   ): Promise<void> {
+    if (!this.interactionReady() || this.teamPrioritiesCachedAt()) return;
     const snapshot = this.teamPriorities();
     const lane = snapshot?.queues.find((candidate) => candidate.target.userId === targetUserId);
     const moving = lane?.queue.items.find((item) => item.id === priorityId);
@@ -1099,6 +1123,8 @@ export class GlobalWorkState {
         targetUserId,
         await this.api.post<WorkPrioritiesResponse>(`/card-priorities/${priorityId}/move`, anchor),
       );
+      const queue = this.teamPriorities()?.queues.find((lane) => lane.target.userId === targetUserId)?.queue;
+      if (queue) await this.rememberPriority(targetUserId, queue);
     } catch (error) {
       this.teamPriorities.set(snapshot);
       throw error;
@@ -1111,6 +1137,7 @@ export class GlobalWorkState {
     cardId: string,
     anchor: { afterId?: string | null; beforeId?: string | null },
   ): Promise<void> {
+    if (!this.interactionReady() || this.teamPrioritiesCachedAt()) return;
     const snapshot = this.teamPriorities();
     const lane = snapshot?.queues.find((candidate) => candidate.target.userId === targetUserId);
     const card = [...this.cards(), ...this.teamPriorityCandidateCards()]
@@ -1136,6 +1163,8 @@ export class GlobalWorkState {
           ...anchor,
         }),
       );
+      const queue = this.teamPriorities()?.queues.find((lane) => lane.target.userId === targetUserId)?.queue;
+      if (queue) await this.rememberPriority(targetUserId, queue);
     } catch (error) {
       this.teamPriorities.set(snapshot);
       throw error;
@@ -1143,6 +1172,7 @@ export class GlobalWorkState {
   }
 
   async removeTeamPriority(targetUserId: string, priorityId: string): Promise<void> {
+    if (!this.interactionReady() || this.teamPrioritiesCachedAt()) return;
     const snapshot = this.teamPriorities();
     this.teamPriorities.update((all) => all && {
       queues: all.queues.map((lane) => lane.target.userId === targetUserId
@@ -1163,6 +1193,8 @@ export class GlobalWorkState {
         targetUserId,
         await this.api.delete<WorkPrioritiesResponse>(`/card-priorities/${priorityId}`),
       );
+      const queue = this.teamPriorities()?.queues.find((lane) => lane.target.userId === targetUserId)?.queue;
+      if (queue) await this.rememberPriority(targetUserId, queue);
     } catch (error) {
       this.teamPriorities.set(snapshot);
       throw error;
@@ -1441,10 +1473,16 @@ export class GlobalWorkState {
    * the portfolio — a queue belongs to one person — and for the viewer themselves, whose queue the
    * shell-wide `MyPrioritiesService` already owns and keeps live.
    */
-  private loadPriorities(): Promise<WorkPrioritiesResponse | null> {
+  private async loadPriorities(): Promise<WorkPrioritiesResponse | null> {
     const targetUserId = this.focusedTargetUserId();
-    if (!targetUserId || this.isSelfQueue()) return Promise.resolve(null);
-    return this.api.get<WorkPrioritiesResponse>(`/work/priorities/${targetUserId}`).catch((error: unknown) => {
+    if (!targetUserId || this.isSelfQueue()) {
+      this.prioritiesCachedAt.set(null);
+      return null;
+    }
+    return this.queries.read<WorkPrioritiesResponse>({ url: `/work/priorities/${targetUserId}` }).then(({ response, cachedAt }) => {
+      this.prioritiesCachedAt.set(cachedAt);
+      return response;
+    }).catch((error: unknown) => {
       // Any member can focus a teammate on Team Cards, but the queue endpoint deliberately 403s
       // viewers without admin authority over a shared workspace. That is "no queue surface for
       // you", not a page failure — this ride-along must never take the whole card query down
@@ -1459,9 +1497,30 @@ export class GlobalWorkState {
    * request. The server scopes it to the caller (a plain member simply gets their own lane back),
    * so unlike `loadPriorities` there is no cross-user 403 to absorb here.
    */
-  private loadTeamPriorities(): Promise<WorkPriorityQueuesResponse | null> {
-    if (this.lens() !== "team" || this.definition().display !== "overview") return Promise.resolve(null);
-    return this.api.get<WorkPriorityQueuesResponse>("/work/priorities");
+  private async loadTeamPriorities(): Promise<WorkPriorityQueuesResponse | null> {
+    if (this.lens() !== "team" || this.definition().display !== "overview") return null;
+    const { response, cachedAt } = await this.queries.read<WorkPriorityQueuesResponse>({ url: "/work/priorities" });
+    this.teamPrioritiesCachedAt.set(cachedAt);
+    return response;
+  }
+
+  private async restorePrioritySnapshots(version: number): Promise<void> {
+    const [priorities, team] = await Promise.all([
+      this.loadPriorities().catch(() => null),
+      this.loadTeamPriorities().catch(() => null),
+    ]);
+    if (version !== this.requestVersion) return;
+    this.otherPriorities.set(priorities);
+    this.teamPriorities.set(team);
+  }
+
+  private async rememberPriority(targetUserId: string, queue: WorkPrioritiesResponse): Promise<void> {
+    await this.queries.remember({ url: `/work/priorities/${targetUserId}` }, queue);
+    const team = this.teamPriorities();
+    if (team?.queues.some((lane) => lane.target.userId === targetUserId)) {
+      this.patchTeamQueue(targetUserId, queue);
+      await this.queries.remember({ url: "/work/priorities" }, this.teamPriorities());
+    }
   }
 
   /** Loads the queue batch alone, for entering the overview without re-querying the cards. */
@@ -1479,7 +1538,7 @@ export class GlobalWorkState {
     if (userId === this.overviewFocusUserId()) return;
     this.overviewFocusUserId.set(userId);
     this.teamPriorityCandidates.set([]);
-    if (!userId) return;
+    if (!userId || !this.interactionReady()) return;
     const version = this.requestVersion;
     void this.loadTeamPriorityCandidateCards(version, this.teamPriorities())
       .then((cards) => {
@@ -1506,7 +1565,7 @@ export class GlobalWorkState {
     version: number,
     queues: WorkPriorityQueuesResponse | null,
   ): Promise<WorkQueryResponse["cards"]> {
-    if (this.lens() !== "team" || this.definition().display !== "overview") return [];
+    if (!this.sockets.online() || this.lens() !== "team" || this.definition().display !== "overview") return [];
     const targetUserId = this.overviewFocusUserId();
     // No readable queue for the dock's person means nothing to offer, so nothing to fetch at all.
     if (!targetUserId || !queues?.queues.some((lane) => lane.target.userId === targetUserId)) return [];

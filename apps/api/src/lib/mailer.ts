@@ -16,6 +16,7 @@ import {
   cardAssignedEmail,
   cardCommentAddedEmail,
   cardDueDateChangedEmail,
+  cardDueDateChangedSubject,
   cardOverdueEmail,
   cardReminderEmail,
   checklistItemOverdueEmail,
@@ -230,7 +231,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
 
     async sendCardDueDateChanged(to, params) {
-      return queueEmail(to, mail(params.locale).cardDueDateChanged.subject, "card_due_date_changed", params);
+      return queueEmail(to, cardDueDateChangedSubject(params), "card_due_date_changed", params);
     },
 
     async sendCardOverdue(to, params) {

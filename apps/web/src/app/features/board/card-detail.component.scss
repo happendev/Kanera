@@ -2155,6 +2155,25 @@ button.checklist-hide-toggle {
   display: inline-flex;
 }
 
+/* "Start" / "Due" prefix inside a badge once both dates show, so the span reads left to right. */
+.due-badge-kind {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.due-arrow {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+/* Working-day length of the planned bar; a hint, so the lowest text tier that is still readable. */
+.due-duration-hint {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
 .due-add-btn {
   display: inline-flex;
   align-items: center;

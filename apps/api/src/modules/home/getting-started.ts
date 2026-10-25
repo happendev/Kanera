@@ -25,6 +25,7 @@ import {
 import { and, asc, eq, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
+import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { isClientAdminRole } from "../../lib/client-membership.js";
 import { getWebPushPublicConfig } from "../../lib/web-push.js";
 
@@ -40,7 +41,8 @@ const ADMIN_STEPS: ReadonlySet<GettingStartedStep> = new Set(["inviteTeam", "sec
  *
  * The basics and the "work faster" and notes steps are per user: they teach each person the core
  * loop, so a teammate's cards do not tick them off. Steps that leave no row behind (palette, filter,
- * Work done, quick edit) are stamped by the web on first use, in `user.getting_started_used`. Team steps (invite, second board, automation) are
+ * Work done, quick edit, the Timeline and the Table view's grouping, totals and Excel export) are
+ * stamped by the web on first use, in `user.getting_started_used`. Team steps (invite, second board, automation) are
  * organisation-wide on purpose: an admin who joins an organisation that already has a team, boards
  * and automations has nothing to do there, and the automation table records no creator to narrow it
  * by. Agent and push steps are per user, because each person connects their own agent and devices.
@@ -61,13 +63,13 @@ export async function loadGettingStarted(auth: AuthClaims): Promise<HomeGettingS
   // Someone who has used Kanera for over GETTING_STARTED_MAX_AGE_DAYS has found their way around;
   // the checklist retires itself for them as if closed, on home and in the account menu alike.
   const retired = user ? Date.now() - user.createdAt.getTime() > GETTING_STARTED_MAX_AGE_DAYS * 86_400_000 : false;
-  if (!user || user.dismissedAt || retired) return { dismissed: true, hidden: false, steps: [], teamTarget: null, notesWorkspaceId: null };
+  if (!user || user.dismissedAt || retired) return { dismissed: true, hidden: false, steps: [], teamTarget: null, notesWorkspaceId: null, timelineBoardId: null };
 
   const admin = isClientAdminRole(auth.role);
   const none = Promise.resolve(false);
   const [
-    createCard, assignCard, comment, mention, addDependency, completeCard, scratchpad, savedNote,
-    inviteTeam, secondBoard, createAutomation, connectAgent, useAgent, push, teamTarget, notesWorkspaceId,
+    createCard, assignCard, comment, mention, addDependency, completeCard, setStartDate, scratchpad, savedNote,
+    inviteTeam, secondBoard, createAutomation, connectAgent, useAgent, push, teamTarget, notesWorkspaceId, planning,
   ] = await Promise.all([
     hasActivity(auth, "card", eq(activityEvents.action, "created")),
     hasAssignedCard(auth),
@@ -75,6 +77,7 @@ export async function loadGettingStarted(auth: AuthClaims): Promise<HomeGettingS
     hasMentioned(auth),
     hasAddedDependency(auth),
     hasCompletedCard(auth),
+    hasSetStartDate(auth),
     user.showScratchpad ? hasUsedScratchpad(auth) : none,
     hasSavedNote(auth),
     admin ? hasInvitedTeam(auth) : none,
@@ -85,6 +88,7 @@ export async function loadGettingStarted(auth: AuthClaims): Promise<HomeGettingS
     loadPushStep(auth),
     admin ? loadTeamTarget(auth.cid) : Promise.resolve(null),
     loadNotesWorkspace(auth),
+    loadPlanningTargets(auth),
   ]);
 
   const used = (key: GettingStartedUsedStep) => Boolean(user.used[key]);
@@ -99,6 +103,11 @@ export async function loadGettingStarted(auth: AuthClaims): Promise<HomeGettingS
     useFilter: used("useFilter"),
     commandPalette: used("commandPalette"),
     viewWorkDone: used("viewWorkDone"),
+    groupTable: used("groupTable"),
+    totalColumn: used("totalColumn"),
+    exportExcel: used("exportExcel"),
+    setStartDate,
+    viewTimeline: used("viewTimeline"),
     scratchpad,
     saveNote: savedNote,
     inviteTeam,
@@ -112,16 +121,34 @@ export async function loadGettingStarted(auth: AuthClaims): Promise<HomeGettingS
   // A step the viewer cannot take is left out rather than shown undone: admin steps for members,
   // push where it cannot be delivered, the scratchpad when it is switched off in Preferences, and
   // notes when no workspace they can open has notes switched on. A note already saved still counts.
+  // Dependencies and the Timeline follow their workspace switches strictly: a feature the team has
+  // turned off everywhere the viewer works is not something to teach, done or not.
   const available: Partial<Record<GettingStartedStep, boolean>> = {
     enablePush: push.available,
     scratchpad: user.showScratchpad,
     saveNote: notesWorkspaceId !== null || savedNote,
+    addDependency: planning.dependencies,
+    setStartDate: planning.timelineBoardId !== null,
+    viewTimeline: planning.timelineBoardId !== null,
   };
   const steps = GETTING_STARTED_STEPS
     .filter((key) => (admin || !ADMIN_STEPS.has(key)) && available[key] !== false)
     .map((key) => ({ key, done: done[key] }));
   // Hidden still computes the steps: the account menu shows the same progress as home did.
-  return { dismissed: false, hidden: user.hiddenAt !== null, steps, teamTarget, notesWorkspaceId };
+  return { dismissed: false, hidden: user.hiddenAt !== null, steps, teamTarget, notesWorkspaceId, timelineBoardId: planning.timelineBoardId };
+}
+
+/**
+ * Whether the viewer can open a board in the active organisation with dependencies on, and the
+ * first such board (sidebar order) with start dates and the Timeline on, where the planning steps
+ * send them. Read from the same access list as every board read, so a board guest counts too.
+ */
+async function loadPlanningTargets(auth: AuthClaims): Promise<{ dependencies: boolean; timelineBoardId: string | null }> {
+  const boards = (await loadAccessibleBoards(auth)).filter((board) => board.clientId === auth.cid);
+  return {
+    dependencies: boards.some((board) => board.dependenciesEnabled),
+    timelineBoardId: boards.find((board) => board.timelineEnabled)?.id ?? null,
+  };
 }
 
 /** The one-way stamps keep their first timestamp on a repeated call; hidden is a plain toggle. */
@@ -275,6 +302,14 @@ function hasAssignedCard(auth: AuthClaims): Promise<boolean> {
       eq(activityEvents.action, "created"),
       sql`exists (select 1 from ${cardAssignees} where ${cardAssignees.cardId} = ${activityEvents.entityId})`,
     ),
+  ));
+}
+
+/** A start date this person set, on a new card or an existing one; clearing one does not count. */
+function hasSetStartDate(auth: AuthClaims): Promise<boolean> {
+  return hasActivity(auth, "card", and(
+    inArray(activityEvents.action, ["created", "updated"]),
+    sql`${activityEvents.payload}->>'startDateLocalDate' is not null`,
   ));
 }
 

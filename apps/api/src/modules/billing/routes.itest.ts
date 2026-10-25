@@ -393,6 +393,7 @@ void test("POST /billing/seats rejects trial capacity changes, invoices active i
     payment = undefined;
     proration = undefined;
     setStripeClientForTests({
+      subscriptions: { retrieve: async () => ({ latest_invoice: { status: "paid" } }) },
       subscriptionItems: {
         retrieve: async () => ({ id: "si_seats", quantity: 10 }),
         update: async (_id: string, params: Stripe.SubscriptionItemUpdateParams) => {
@@ -473,7 +474,7 @@ void test("Stripe checkout completion persists customer, applies subscription, q
       displayName: "Checkout Seat",
     });
     const sub = subscription("active", { clientId, customerId: "cus_checkout", itemId: "si_checkout", priceId: "price_annual", quantity: 2 });
-    const calls = setStripeSubscription(sub, 1);
+    const calls = setStripeSubscription(sub, 2);
 
     await handleStripeEvent(
       event("checkout.session.completed", {
@@ -504,8 +505,8 @@ void test("Stripe checkout completion persists customer, applies subscription, q
     assert.equal(client?.stripeSubscriptionId, "sub_test");
     assert.equal(client?.stripeSubscriptionItemId, "si_checkout");
     assert.equal(client?.billingInterval, "annual");
-    assert.equal(calls.retrieveCount(), 1);
-    assert.equal(calls.updateCount(), 1);
+    assert.equal(calls.retrieveCount(), 2);
+    assert.equal(calls.updateCount(), 0);
     assert.equal(await db.$count(stripeEvents, eq(stripeEvents.id, "evt_checkout_completed")), 1);
     assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "upgraded_to_pro")), 1);
   });
@@ -845,8 +846,8 @@ void test("Stripe late cancellation of a replaced subscription does not remove t
     assert.equal(client?.stripeSubscriptionItemId, "si_new");
     assert.equal(client?.currentPeriodEnd?.getTime(), periodEnd * 1000);
     // The mismatch is reconciled from the held subscription's live state, not the stale snapshot.
-    assert.equal(calls.retrieveCount(), 1);
-    assert.deepEqual(calls.retrievedIds(), ["sub_new"]);
+    assert.equal(calls.retrieveCount(), 2);
+    assert.deepEqual(calls.retrievedIds(), ["sub_new", "sub_new"]);
     assert.equal(await db.$count(workspaces, and(eq(workspaces.clientId, clientId), isNull(workspaces.archivedAt))), 2);
     assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_cancelled")), 0);
     assert.equal(await db.$count(stripeEvents, eq(stripeEvents.id, "evt_late_cancel_old")), 1);
@@ -1045,6 +1046,7 @@ void test("Stripe seat reconciliation failures notify system administrators", as
     const clientId = await createClient("stripe-seat-reconcile-alert@example.com", {
       plan: "paid",
       billingStatus: "active",
+      stripeSubscriptionId: "sub_reconcile_alert",
       stripeSubscriptionItemId: "si_reconcile_alert",
       seatLimit: 3,
     });
@@ -1062,7 +1064,7 @@ void test("Stripe seat reconciliation failures notify system administrators", as
       },
     });
     setStripeClientForTests({
-      subscriptionItems: {
+      subscriptions: {
         retrieve: async () => {
           throw new Error("Stripe unavailable");
         },

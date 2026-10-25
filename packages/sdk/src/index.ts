@@ -99,7 +99,7 @@ export {
   Separators,
   type CreateSeparatorInput, type MoveSeparatorInput, type SeparatorMoveResult, type UpdateSeparatorInput,
 } from "./resources/separators.js";
-export { Work, type WorkCardsInput, type WorkHistoryInput } from "./resources/work.js";
+export { Work, type ScheduleScope, type WorkCardsInput, type WorkHistoryInput } from "./resources/work.js";
 export { Automations, Workspaces, type Automation, type AutomationExecution, type WorkspaceDetail } from "./resources/workspaces.js";
 export {
   WebhookEndpoints,

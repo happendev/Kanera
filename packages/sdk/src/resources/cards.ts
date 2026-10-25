@@ -17,6 +17,11 @@ export interface CreateCardInput {
   beforeItem?: LaneItemReference | null;
   assigneeIds?: Uuid[];
   labelIds?: Uuid[];
+  /**
+   * Planned start, date-only. Must be on or before `dueDateLocalDate`; the API rejects a later
+   * start (400) and clamps the start when a due date is moved before it.
+   */
+  startDateLocalDate?: LocalDate;
   dueDateLocalDate?: LocalDate;
   /** Needs `dueDateLocalDate`. */
   dueDateSlot?: DueDateSlot;
@@ -29,6 +34,8 @@ export interface BulkCreateCardInput {
   description?: string;
   labelIds?: Uuid[];
   assigneeIds?: Uuid[];
+  /** Planned start, date-only; on or before `dueDateLocalDate`. */
+  startDateLocalDate?: LocalDate;
   dueDateLocalDate?: LocalDate;
   dueDateSlot?: DueDateSlot;
 }
@@ -42,6 +49,8 @@ export type DependencyGraphScope = { boardId: Uuid } | { workspaceId: Uuid } | {
 export interface UpdateCardInput {
   title?: string;
   description?: string | null;
+  /** Planned start, date-only; on or before `dueDateLocalDate`. `null` clears it; clearing the due date keeps it. */
+  startDateLocalDate?: LocalDate | null;
   dueDateLocalDate?: LocalDate | null;
   dueDateSlot?: DueDateSlot | null;
 }

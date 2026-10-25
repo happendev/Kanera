@@ -22,7 +22,7 @@ import { env, type Env } from "../env.js";
 import { disconnectUserRealtimeSockets } from "../realtime/io.js";
 import { emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToWorkspaceAdmins } from "../realtime/emit.js";
 import { emitActivityFeedItem } from "./activity.js";
-import { loadAutomation } from "./automations.js";
+import { armInProgressAutomation, loadAutomation } from "./automations.js";
 import { cleanupUserBoardParticipation, type BoardParticipationCleanup } from "./board-participation-cleanup.js";
 import { hasPaidPlanEntitlement } from "./entitlements.js";
 import { pendingGuestInviteCondition } from "./pending-guest-invites.js";
@@ -68,6 +68,7 @@ export async function convertClientPlan(
   target: PlanTarget,
   tx?: Tx,
   config: PlanConversionEnv = env,
+  afterCommit?: (publish: () => Promise<void>) => void,
 ): Promise<void> {
   let changes: RealtimeChanges;
   if (tx) {
@@ -76,6 +77,13 @@ export async function convertClientPlan(
     changes = await db.transaction((t) => applyConversion(clientId, target, t, config));
   }
 
+  // Billing commits the subscription metadata and event dedupe marker with the conversion. Publish
+  // only after that outer transaction succeeds, so a rolled-back webhook never leaks realtime changes.
+  if (afterCommit) afterCommit(() => publishPlanChanges(changes));
+  else await publishPlanChanges(changes);
+}
+
+async function publishPlanChanges(changes: RealtimeChanges): Promise<void> {
   for (const { workspaceId, automationId } of changes.automationsUpdated) {
     const automation = await loadAutomation(automationId);
     if (automation) await emitToWorkspaceAdmins(workspaceId, "automation:updated", { workspaceId, automation });
@@ -386,7 +394,14 @@ async function restoreFromPlanActions(clientId: string, tx: Tx): Promise<(typeof
   }
   const automationIds = idsFor("automation_disabled", "automationId");
   if (automationIds.length > 0) {
-    await tx.update(automations).set({ enabled: true, updatedAt: new Date() }).where(inArray(automations.id, automationIds));
+    const restored = await tx.update(automations).set({ enabled: true, updatedAt: new Date() }).where(inArray(automations.id, automationIds)).returning();
+    // Same as turning a rule on by hand: cards that passed an in-progress limit while the plan had
+    // it switched off are recorded as handled rather than all running at once.
+    for (const automation of restored) {
+      if (automation.triggerType === "card_in_progress_too_long") {
+        await armInProgressAutomation(tx, automation.id, { limitChanged: false, includeExisting: automation.triggerIncludeExisting });
+      }
+    }
   }
   const webhookIds = idsFor("webhook_disabled", "webhookId");
   if (webhookIds.length > 0) {

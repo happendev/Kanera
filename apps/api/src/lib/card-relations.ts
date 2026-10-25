@@ -1,7 +1,7 @@
 import type { CardRelationsResponse, CardRelationSummary } from "@kanera/shared/dto";
 import type { CardRelationDirection } from "@kanera/shared/card-relations";
 import { compactWireCard, SERVER_EVENTS } from "@kanera/shared/events";
-import { boards, cardAssignees, cardLabelAssignments, cardLabels, cardRelations, cards, eventOutbox, lists, users, type CardRelationKind } from "@kanera/shared/schema";
+import { boards, cardAssignees, cardLabelAssignments, cardLabels, cardRelations, cards, clients, eventOutbox, lists, users, workspaces, type CardRelationKind } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { AuthClaims } from "../auth/plugin.js";
@@ -12,6 +12,7 @@ import { badRequest } from "./errors.js";
 import { emitInternalLinksChanged, readableCardIds } from "./internal-links.js";
 import { signedAvatarUrl } from "./media-keys.js";
 import { toWireCard } from "./wire-card.js";
+import { featureEnabledSql, loadWorkspaceFeatures, loadWorkspaceFeaturesMap } from "./workspace-features.js";
 
 /**
  * How a stored row is stored for a relation described from `cardId`'s side. `relates_to` is
@@ -79,9 +80,13 @@ export async function blockedByCounts(database: Tx, cardIds: readonly string[]):
     .select({ cardId: cardRelations.targetCardId, count: sql<number>`count(*)::integer` })
     .from(cardRelations)
     .innerJoin(blockers, eq(blockers.id, cardRelations.sourceCardId))
+    // A workspace with dependencies switched off has no blocked cards, whatever rows it keeps.
+    .innerJoin(workspaces, eq(workspaces.id, cardRelations.workspaceId))
+    .innerJoin(clients, eq(clients.id, workspaces.clientId))
     .where(and(
       inArray(cardRelations.targetCardId, unique),
       eq(cardRelations.kind, "blocks"),
+      featureEnabledSql("dependencies"),
       isNull(blockers.completedAt),
       isNull(blockers.archivedAt),
     ))
@@ -96,9 +101,10 @@ export async function blockedByCounts(database: Tx, cardIds: readonly string[]):
  */
 export async function loadCardRelations(claims: AuthClaims, cardId: string): Promise<CardRelationsResponse> {
   const other = alias(cards, "other_card");
-  const rows = await db
+  const allRows = await db
     .select({
       id: cardRelations.id,
+      workspaceId: cardRelations.workspaceId,
       sourceCardId: cardRelations.sourceCardId,
       kind: cardRelations.kind,
       createdAt: cardRelations.createdAt,
@@ -120,6 +126,11 @@ export async function loadCardRelations(claims: AuthClaims, cardId: string): Pro
     .innerJoin(boards, eq(boards.id, other.boardId))
     .innerJoin(lists, eq(lists.id, other.listId))
     .where(or(eq(cardRelations.sourceCardId, cardId), eq(cardRelations.targetCardId, cardId)));
+  // Dependencies switched off hide `blocks` rows (kept for re-enabling); `relates_to` stays.
+  const blocksRow = allRows.find((row) => row.kind === "blocks");
+  const rows = blocksRow && !(await loadWorkspaceFeatures(blocksRow.workspaceId)).dependencies
+    ? allRows.filter((row) => row.kind !== "blocks")
+    : allRows;
 
   const readable = await readableCardIds(claims, rows.map((row) => ({ id: row.otherId, boardId: row.otherBoardId })));
   const readableIds = rows.map((row) => row.otherId).filter((id) => readable.has(id));
@@ -204,10 +215,13 @@ export async function relationCardAssignees(cardIds: readonly string[]): Promise
 export async function emitBlockedByCountChanged(cardIds: readonly string[], clientId: string): Promise<void> {
   const unique = [...new Set(cardIds)];
   if (unique.length === 0) return;
-  const [rows, counts] = await Promise.all([
+  const [allRows, counts] = await Promise.all([
     db.select().from(cards).where(inArray(cards.id, unique)),
     blockedByCounts(db, unique),
   ]);
+  // Nothing to re-announce where dependencies are switched off: those tiles show no blockers.
+  const features = await loadWorkspaceFeaturesMap(allRows.map((card) => card.workspaceId));
+  const rows = allRows.filter((card) => features.get(card.workspaceId)?.dependencies !== false);
   await emitInternalLinksChanged({ cardIds: unique, noteIds: [] });
   await Promise.all(rows.map((card) => emitToBoard(card.boardId, SERVER_EVENTS.CARD_UPDATED, {
     boardId: card.boardId,
@@ -224,6 +238,9 @@ export async function emitBlockedByCountChanged(cardIds: readonly string[], clie
 export async function captureBlockedDependents(tx: TxOnly, workspaceId: string, blockerIds: readonly string[]) {
   await lockWorkspaceRelations(tx, workspaceId);
   if (!blockerIds.length) return [];
+  // With dependencies switched off nothing is blocked, so completing a blocker hands nothing off:
+  // no blockers-cleared activity, notifications, card_unblocked automations or MCP events.
+  if (!(await loadWorkspaceFeatures(workspaceId, tx)).dependencies) return [];
   const blocker = alias(cards, "blocker");
   const dependent = alias(cards, "dependent");
   // Hosted plan archival retains card rows, but those boards cannot receive actionable handoffs.
@@ -253,6 +270,8 @@ export async function clearedDependents(tx: Tx, before: BlockedDependentsSnapsho
 /** Snapshot ready dependents under the graph lock before reopening/restoring a blocker. */
 export async function captureUnblockedDependents(tx: TxOnly, workspaceId: string, blockerIds: readonly string[]): Promise<string[]> {
   await lockWorkspaceRelations(tx, workspaceId);
+  // Reopening a blocker cannot re-block anything while dependencies are switched off.
+  if (!(await loadWorkspaceFeatures(workspaceId, tx)).dependencies) return [];
   const ids = await dependentCardIds(tx, blockerIds);
   const counts = await blockedByCounts(tx, ids);
   return ids.filter((id) => !counts.has(id));

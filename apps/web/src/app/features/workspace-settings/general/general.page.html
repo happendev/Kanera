@@ -94,6 +94,60 @@
     </label>
   </div>
 </div>
+<div class="board-settings-section">
+  <div class="guest-section-head">
+    <i class="ti ti-adjustments-horizontal"></i>
+    <span i18n="Section heading - optional planning features a workspace can switch off">Planning features</span>
+  </div>
+  <p class="board-linking-help field-help" i18n="Help text under the Planning features heading">Turn off what this team does not use. A feature that is off is hidden everywhere, including from agents and the API. Nothing is deleted, so turning it back on restores it.</p>
+  @if (!settings.isStandalone()) {
+  <label class="board-linking-toggle">
+    <input type="checkbox" aria-label="Enable time in progress" i18n-aria-label [checked]="settings.effectiveFeatures().inProgress" (change)="settings.updateFeatureEnabled('inProgress', $any($event.target).checked, $any($event.target))"
+      [disabled]="!settings.organisationFeatures().inProgress || !!settings.featureSaving()" />
+    <span class="board-linking-copy">
+      <span class="board-linking-title" i18n="Workspace setting - turns time in progress tracking on or off">Enable time in progress</span>
+      <span class="board-linking-help">
+        @if (settings.organisationFeatures().inProgress) {
+        <ng-container i18n="Help text for the workspace time in progress switch">Track working time cards spend in In progress lists. Turning it off pauses every clock and keeps recorded time. Boards can also opt out individually.</ng-container>
+        } @else {
+        <ng-container i18n="Help text for a planning feature switch the organisation has turned off">Turned off for the whole organisation.</ng-container>
+        }
+      </span>
+    </span>
+  </label>
+  }
+  <label class="board-linking-toggle">
+    <input type="checkbox" aria-label="Enable dependencies" i18n-aria-label [checked]="settings.effectiveFeatures().dependencies" (change)="settings.updateFeatureEnabled('dependencies', $any($event.target).checked, $any($event.target))"
+      [disabled]="!settings.organisationFeatures().dependencies || !!settings.featureSaving()" />
+    <span class="board-linking-copy">
+      <span class="board-linking-title" i18n="Workspace setting - turns blocking relations between cards on or off">Enable dependencies</span>
+      <span class="board-linking-help">
+        @if (settings.organisationFeatures().dependencies) {
+        <ng-container i18n="Help text for the dependencies switch">Cards can block other cards, with Blocked chips, the Dependencies view and blocker automations.</ng-container>
+        } @else {
+        <ng-container i18n="Help text for a planning feature switch the organisation has turned off">Turned off for the whole organisation.</ng-container>
+        }
+      </span>
+    </span>
+  </label>
+  <label class="board-linking-toggle">
+    <input type="checkbox" aria-label="Enable start dates and timeline" i18n-aria-label [checked]="settings.effectiveFeatures().timeline" (change)="settings.updateFeatureEnabled('timeline', $any($event.target).checked, $any($event.target))"
+      [disabled]="!settings.organisationFeatures().timeline || !!settings.featureSaving()" />
+    <span class="board-linking-copy">
+      <span class="board-linking-title" i18n="Workspace setting - turns card start dates and the Timeline view on or off">Enable start dates and timeline</span>
+      <span class="board-linking-help">
+        @if (settings.organisationFeatures().timeline) {
+        <ng-container i18n="Help text for the start dates and timeline switch">Cards can have a planned start, shown as bars on the Timeline view with scheduling conflicts and the critical path.</ng-container>
+        } @else {
+        <ng-container i18n="Help text for a planning feature switch the organisation has turned off">Turned off for the whole organisation.</ng-container>
+        }
+      </span>
+    </span>
+  </label>
+  @if (settings.featureError(); as message) {
+  <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  }
+</div>
 @if (settings.isStandalone() || settings.progressSettingsEnabled()) {
 <div class="board-settings-section">
   <div class="guest-section-head">
@@ -119,14 +173,27 @@
   </div>
   <p class="board-linking-help field-help" i18n="Help text under the time in progress alert setting">Their time in progress turns amber on boards, and "Card in progress too long" automations run. 0 turns this off.</p>
   <div class="board-form single-line-capture">
-    <label class="compact-number-field time-zone-field">
+    <div class="compact-number-field time-zone-field">
       <span i18n="Label for the time zone whose working hours count toward time in progress">Working hours time zone</span>
-      <select aria-label="Working hours time zone" i18n-aria-label [value]="settings.timeZoneDraft()" (input)="settings.updateTimeZone($any($event.target).value)" [disabled]="settings.generalSettingsSaving()">
-        @for (zone of settings.timeZoneOptions(); track zone) {
-        <option [value]="zone" [selected]="zone === settings.timeZoneDraft()">{{ zone }}</option>
-        }
-      </select>
-    </label>
+      <!-- Searchable, because ~400 zones in a native select can only be scrolled; ordered west to east
+           with the offset in each label (see time-zone-options.ts). -->
+      <k-automation-select-dropdown
+        class="time-zone-picker"
+        title="Working hours time zone"
+        i18n-title="Picker heading for the time zone whose working hours count toward time in progress"
+        ariaLabel="Working hours time zone"
+        i18n-ariaLabel
+        placeholderIcon="world"
+        searchPlaceholder="Search by city, region or UTC offset…"
+        i18n-searchPlaceholder="Search box in the time zone picker"
+        emptyLabel="No time zone matches"
+        i18n-emptyLabel="Empty state of the time zone picker search"
+        [panelWidth]="360"
+        [groups]="settings.timeZoneGroups()"
+        [value]="settings.timeZoneDraft()"
+        (valueChange)="settings.updateTimeZone($event)"
+      />
+    </div>
   </div>
   <p class="board-linking-help field-help" i18n="Help text under the working hours time zone setting">Tracked time counts working hours only: 09:00–17:00, Monday to Friday, in this time zone. Nights and weekends in progress add nothing.</p>
   }

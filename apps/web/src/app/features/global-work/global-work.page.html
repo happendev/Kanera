@@ -149,6 +149,16 @@
               i18n-ariaLabel
               (valueChange)="setWorkDoneLayout($event)"
             />
+          } @else if (effectiveDisplay() === "timeline") {
+            <k-segmented
+              class="work-done-layout-switch"
+              [options]="timelineGroupByState.options"
+              [value]="timelineGroupByState.groupBy()"
+              [autoLabels]="true"
+              ariaLabel="Group rows by"
+              i18n-ariaLabel="Label for the timeline grouping switch"
+              (valueChange)="timelineGroupByState.setGroupBy($event)"
+            />
           } @else if (effectiveDisplay() === "dependencies") {
             <k-segmented
               class="work-done-layout-switch"
@@ -274,7 +284,7 @@
           [workDoneEventType]="workDoneEventType()"
           [showActivity]="effectiveDisplay() !== 'history'"
           [showPrioritySet]="showPrioritySetFilter()"
-          [showBlocked]="effectiveDisplay() !== 'history'"
+          [showBlocked]="effectiveDisplay() !== 'history' && dependenciesEnabled()"
           [showCompleted]="effectiveDisplay() !== 'history'"
           [showArchived]="effectiveDisplay() !== 'history'"
           [showHideCompleted]="effectiveDisplay() !== 'history'"
@@ -517,9 +527,6 @@
       <i class="ti ti-cloud-off"></i>
       <span>
         <ng-container i18n="Offline banner">Showing a saved copy from {{ offlineStamp(cachedAt) // i18n(ph="time") }}. Reconnect to make changes.</ng-container>
-        @if (historyOfflineFallback()) { <ng-container i18n="Offline banner">History will return after reconnecting.</ng-container> }
-        @if (overviewOfflineFallback()) { <ng-container i18n="Offline banner">The team overview will return after reconnecting.</ng-container> }
-        @if (dependenciesOfflineFallback()) { <ng-container i18n="Offline banner">The dependency map will return after reconnecting.</ng-container> }
       </span>
     </div>
   } @else if (!state.sockets.displayedOnline()) {
@@ -705,12 +712,12 @@
           [people]="teamPeople()"
           [cards]="state.cards()"
           [queues]="overviewQueues()"
+          [canNavigate]="state.interactionReady()"
           [lists]="state.catalog().lists"
           [boards]="state.catalog().boards"
           [workspaces]="state.catalog().workspaces"
           [scope]="state.definition().scope"
           [filters]="state.definition().filters"
-          [enabled]="state.cachedAt() === null"
           [refreshVersion]="workDoneRefreshVersion() + state.reconciliationVersion()"
           [selectedCardId]="selectedCard()?.id ?? null"
           [focusedUserId]="state.overviewFocusUserId()"
@@ -881,6 +888,40 @@
           @if (!datedCardCount()) {
             <k-empty-state icon="calendar" title="No cards with a due date" i18n-title text="The calendar only shows dated cards. Switch to the table or board view to see the rest." i18n-text />
           }
+        } @else if (effectiveDisplay() === "timeline") {
+          <!-- The board Timeline over the cross-board result set, one schedule per workspace in view.
+               Group spans and the critical path are only true over every bar, so it waits for paging
+               like the board display does and says so when the load cap stopped short. -->
+          @if (state.loadingMore()) {
+            <div class="board-priority-note">
+              <span class="spinner"></span>
+              <span i18n><strong>Loading all matching cards…</strong> The plan settles when the full set is ready.</span>
+            </div>
+          } @else if (state.canLoadMore()) {
+            <div class="board-priority-note overview-partial" role="status">
+              <i class="ti ti-alert-triangle"></i>
+              <span i18n><strong>Showing {{ state.cards().length // i18n(ph="loaded") }} of {{ state.response().totals.cards // i18n(ph="total") }} matching cards.</strong> Narrow the scope or filters to plan every card.</span>
+            </div>
+          }
+          <k-board-timeline-view
+            class="work-timeline-view"
+            [scope]="timelineScope()"
+            [cards]="state.cards()"
+            [lists]="tableLists()"
+            [labelsByCard]="boardLabelsByCard()"
+            [assigneesByCard]="boardAssigneesByCard()"
+            [boardSummariesById]="boardsById()"
+            [selectedCardId]="selectedCard()?.id ?? null"
+            [canEdit]="state.interactionReady()"
+            [editableCardIds]="roleEditableCardIds()"
+            [dependenciesEnabled]="dependenciesEnabled()"
+            [loading]="state.loading()"
+            [preferenceScope]="'globalWork:' + lens()"
+            [groupBy]="timelineGroupByState.groupBy()"
+            [hideCompleted]="hideCompleted()"
+            (hideCompletedChange)="onHideCompletedChange($event)"
+            (cardOpened)="openCardById($event)"
+          />
         } @else {
           <!--
             The board Table view, over the cross-board result set. Grouping and sorting come from the
@@ -1038,13 +1079,14 @@
         [priorities]="dockPriorities()"
         [catalog]="state.catalog()"
         [boardSummariesById]="boardsById()"
-        [canDrag]="state.interactionReady()"
+        [canDrag]="dockCanEdit()"
         [targetName]="dockTargetName()"
         [error]="priorityError()"
         [selectedCardId]="selectedCard()?.id ?? null"
         [addableCards]="dockAddableCards()"
         [editableCardIds]="roleEditableCardIds()"
         [allowQuickComplete]="dockAllowQuickComplete()"
+        [offlineMessage]="dockOfflineMessage()"
         (reordered)="onPriorityReordered($event)"
         (removed)="onPriorityRemoved($event)"
         (added)="onUpNextAddFromPanel($event)"

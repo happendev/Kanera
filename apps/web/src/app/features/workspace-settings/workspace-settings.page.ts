@@ -1,3 +1,4 @@
+import { ALL_WORKSPACE_FEATURES_ENABLED, automationTriggerBlockedBy, type WorkspaceFeature, type WorkspaceFeatures } from "@kanera/shared/workspace-features";
 import { CARD_DUE_DATE_SLOTS } from "@kanera/shared/due-date-slots";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import type { OnDestroy } from "@angular/core";
@@ -8,6 +9,8 @@ import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automa
 import type { ColorToken } from "@kanera/shared/colors";
 import type { AutomationActionBody, AutomationTriggerCustomFieldValueDto, AutomationTriggerTypeDto, BoardTileSummary, CustomFieldTypeName, DeletionImpactResponse, DueDateSlot } from "@kanera/shared/dto";
 import { API_KEY_NAME_MAX_LENGTH, CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
+import { timeZonePickerGroups } from "./general/time-zone-options";
+import type { AutomationInProgressThresholdSource, AutomationInProgressThresholdUnit } from "@kanera/shared/schema";
 import type { ServerToClientEvents, WireAutomation, WireAutomationAction, WireCardLabel, WireChecklistTemplate, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kanera/shared/schema";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_IN_PROGRESS_ALERT_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
@@ -236,18 +239,18 @@ const automationDueDatePresetOffsets = new Set<number>(automationDueDatePresets.
 
 // ─── Example automations ──────────────────────────────────────────────────────
 //
-// The catalogue behind the empty state and the toolbar's Examples menu. These mirror the worked
-// examples in the automations documentation, because those are the patterns support actually
-// recommends — not invented-for-the-UI filler.
+// The catalogue behind the empty state and the toolbar's Examples menu. Each example follows a rule a
+// real team would keep switched on, and most are the automations the workspace templates
+// (`@kanera/shared/workspace-templates`) ship with, generalised to whatever the workspace named its
+// lists, labels and fields. Not invented-for-the-UI filler.
 //
 // Two rules keep an example honest, both learned from getting it wrong:
 //
-//  1. Semantic ingredients — labels, checklist templates, custom fields — are matched by name or not
-//     used at all. There is no "first label" or "first text field" fallback: pairing an arbitrary
-//     field with an arbitrary value produced sentences like "fill Branch with the current month",
-//     which is worse than offering nothing. Only list *positions* have structural meaning on a
-//     board (first = intake, last = the end of the workflow), so those are the one positional
-//     fallback allowed.
+//  1. Ingredients are matched by name or not used at all, and an example a workspace cannot build
+//     realistically is greyed out rather than built from guesses. No "first label", "first text
+//     field" or "first/last list" fallback: they produced rules such as "fill Branch with the current
+//     month" or "give every Wishlist card a deadline of tomorrow". The one structural rule is that
+//     review and done lists are looked for after the in-progress list.
 //  2. The sentence is built from the actions that actually resolved, so what the menu promises and
 //     what gets created cannot drift. An optional action that found no matching label simply drops
 //     out of both. A recipe with nothing left to do, or an unresolvable trigger, is offered greyed
@@ -257,20 +260,24 @@ type AutomationRecipeContext = {
   labels: WireCardLabel[];
   templates: WireChecklistTemplate[];
   fields: WireCustomField[];
+  features: WorkspaceFeatures;
 };
-/** Trigger + actions only. Everything else on the create DTO takes its default. */
+/** Trigger target + actions only; the trigger type is the recipe's own. Everything else on the create DTO takes its default. */
 type AutomationRecipeBody = {
-  triggerType: AutomationTriggerTypeName;
   triggerListId?: string;
   triggerLabelId?: string;
+  triggerThresholdSource?: "workspace" | "custom_field";
+  triggerCustomFieldId?: string;
+  triggerThresholdUnit?: "hours" | "days";
   applyOnCreate?: boolean;
   applyOnMove?: boolean;
   actions: AutomationActionBody[];
 };
-const automationRecipeGroups = ["intake", "progress", "wrap-up"] as const;
+const automationRecipeGroups = ["intake", "progress", "planning", "wrap-up"] as const;
 const automationRecipeGroupLabels: Record<(typeof automationRecipeGroups)[number], string> = {
   intake: $localize`:Group heading in the example automations menu:Intake`,
   progress: $localize`:Group heading in the example automations menu:In progress`,
+  planning: $localize`:Group heading in the example automations menu - start dates and dependencies:Planning`,
   "wrap-up": $localize`:Group heading in the example automations menu:Wrap-up`,
 };
 type AutomationRecipeGroup = (typeof automationRecipeGroups)[number];
@@ -279,10 +286,16 @@ type AutomationRecipe = {
   group: AutomationRecipeGroup;
   icon: string;
   title: string;
+  /**
+   * Declared up front rather than inside `resolve` so the catalogue can drop an example whose
+   * trigger needs a planning feature this workspace has switched off: the rule would never run, and
+   * greying it out would advertise a feature the admin chose not to have.
+   */
+  triggerType: AutomationTriggerTypeName;
   /** Generic wording, shown when this workspace cannot build the example yet. */
   detail: string;
   /** The missing piece, phrased as what to add. Only surfaced when `resolve` returns null. */
-  requirement: string;
+  requirement: string | ((features: WorkspaceFeatures) => string);
   resolve: (ctx: AutomationRecipeContext) => { detail: string; body: AutomationRecipeBody } | null;
 };
 /** The resolved row the templates render. */
@@ -296,14 +309,22 @@ export type AutomationRecipeOption = {
   requirement: string;
 };
 
+/** Lower-cased words separated by single spaces, with a leading space so every word starts after one. */
+function recipeMatchText(name: string): string {
+  return ` ${name.toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(" ")}`;
+}
+
 /**
- * First item whose name contains one of `hints`. Hint order is preference order, so a workspace with
- * both "Review" and "QA" lists gets the one the recipe is really about.
+ * First item with a word that starts with one of `hints`. Hint order is preference order, so a
+ * workspace with both "Review" and "QA" lists gets the one the recipe is really about.
+ *
+ * Word starts rather than substrings: "live" must not find "Delivery", nor "complete" find
+ * "Incomplete", and a wrong match here is a rule that completes or re-dates the wrong cards.
  */
 function matchNamed<T>(items: readonly T[], hints: readonly string[], nameOf: (item: T) => string): T | undefined {
-  const named = items.map((item) => ({ item, name: nameOf(item).toLocaleLowerCase() }));
+  const named = items.map((item) => ({ item, text: recipeMatchText(nameOf(item)) }));
   for (const hint of hints) {
-    const found = named.find((entry) => entry.name.includes(hint));
+    const found = named.find((entry) => entry.text.includes(` ${hint}`));
     if (found) return found.item;
   }
   return undefined;
@@ -315,70 +336,117 @@ const matchRecipeTemplate = (templates: WireChecklistTemplate[], hints: readonly
 const matchRecipeField = (fields: WireCustomField[], type: CustomFieldTypeName, hints: readonly string[]) =>
   matchNamed(fields.filter((field) => field.type === type), hints, (field) => field.name);
 
-// Vocabulary a workspace is likely to use for each workflow stage. Substrings, so "escalat" covers
-// both "Escalated" and "Escalation", and "progress" covers "In Progress" and "Progress".
-const REVIEW_LIST_HINTS = ["review", "qa", "approval", "testing", "check"];
-const DONE_LIST_HINTS = ["done", "complete", "shipped", "closed", "won", "live", "launched"];
+// Vocabulary a workspace is likely to use for each workflow stage, taken from the workspace
+// templates. Word prefixes, so "escalat" covers both "Escalated" and "Escalation". A hint that is a
+// prefix of an unrelated common word ("late" → "Later", "check" → "Check-in") is left out.
 const PROGRESS_LIST_HINTS = ["in progress", "progress", "doing", "build", "development", "working"];
-const READY_LIST_HINTS = ["ready", "ship", "release", "deploy", "launch", ...DONE_LIST_HINTS];
-const REVIEW_LABEL_HINTS = ["needs review", "review", "qa", "testing"];
-const REVIEW_TEMPLATE_HINTS = ["qa", "review", "test", "acceptance"];
-const TRIAGE_LABEL_HINTS = ["triage", "support", "incoming", "new", "unsorted"];
-const TRIAGE_TEMPLATE_HINTS = ["triage", "intake", "support", "onboard"];
+const REVIEW_LIST_HINTS = ["review", "qa", "approval", "testing", "validation"];
+// Not "live" or "launched": Marketing's Live list is followed by Reporting and Done.
+const DONE_LIST_HINTS = ["done", "complete", "finished", "shipped", "resolved", "closed", "won"];
+// Every list that ends a card's life, done or not. Ticking a card complete can only move it to the
+// done list when there is one way for work to end: Sales has Won and Lost, Recruiting Hired and
+// Rejected, and a lost deal ticked complete must not land in Won.
+const TERMINAL_LIST_HINTS = [...DONE_LIST_HINTS, "lost", "rejected", "cancel", "abandon", "archive", "won t"];
+// Queues for work that has come in from outside and owes someone a reply. Not "inbox" or "backlog":
+// a personal inbox or a backlog has no response target.
+const REQUEST_LIST_HINTS = ["intake", "support", "request", "ticket", "helpdesk", "incident"];
+// Lists for work that has stopped moving (Project Delivery's Blocked, Sales's Follow-up).
+const STALLED_LIST_HINTS = ["blocked", "on hold", "stalled", "stuck", "follow up"];
+const ESCALATION_LIST_HINTS = ["escalat", "urgent", "expedite"];
+const REVIEW_TEMPLATE_HINTS = ["review", "qa", "test", "acceptance", "sign off"];
+const RISK_LABEL_HINTS = ["at risk", "risk", "stalled", "stuck"];
+const OVERDUE_LABEL_HINTS = ["overdue", "at risk", "risk"];
+const ESCALATION_LABEL_HINTS = ["escalat", "urgent", "critical", "expedite"];
+const START_LABEL_HINTS = ["up next", "starting", "scheduled"];
+const UNBLOCKED_LABEL_HINTS = ["blocked", "waiting", "on hold"];
+const CONFLICT_LABEL_HINTS = ["conflict", "at risk", "risk"];
 const ACTIVE_LABEL_HINTS = ["active", "in progress", "wip", "working", "started"];
-const OVERDUE_LABEL_HINTS = ["overdue", "late", "urgent", "at risk", "risk", "escalat"];
-const ESCALATION_LABEL_HINTS = ["escalat", "blocked", "urgent", "critical", "issue"];
+const ESTIMATE_FIELD_HINTS = ["estimate", "planned hours", "budgeted hours"];
+
+/**
+ * The list the team works in: the one marked In progress, else one named like it. The marking only
+ * counts while time in progress is on; switched off, the admin can no longer see it.
+ */
+function recipeProgressList({ lists, features }: AutomationRecipeContext): List | undefined {
+  return (features.inProgress ? lists.find((list) => list.inProgress) : undefined) ?? matchRecipeList(lists, PROGRESS_LIST_HINTS);
+}
+
+/**
+ * Lists after the in-progress list, where review and done belong. Searching only these keeps a
+ * planning list such as "Planning / Review" from being taken for the review step that follows the
+ * work. Without an in-progress list there is no anchor, so every list is searched.
+ */
+function recipeListsAfterWork(ctx: AutomationRecipeContext): List[] {
+  const progress = recipeProgressList(ctx);
+  return progress ? ctx.lists.slice(ctx.lists.indexOf(progress) + 1) : ctx.lists;
+}
+
+const recipeReviewList = (ctx: AutomationRecipeContext) => matchRecipeList(recipeListsAfterWork(ctx), REVIEW_LIST_HINTS);
+const recipeDoneList = (ctx: AutomationRecipeContext) => matchRecipeList(recipeListsAfterWork(ctx), DONE_LIST_HINTS);
+
+/** Lower-cased words of a name with a trailing plural "s" dropped, so "Bugs" meets "Bug". */
+function recipeNameWords(name: string): string[] {
+  return recipeMatchText(name).trim().split(" ").map((word) => (word.length > 4 && word.endsWith("s") ? word.slice(0, -1) : word));
+}
+
+/**
+ * A list and a label that name the same kind of work ("Bugs / Issues / Feedback" and "Issue / Bug"),
+ * which is how the Development Team template labels everything that lands in its bug list. Short
+ * words are ignored so "to", "for" and "QA" cannot pair unrelated names, and a label named exactly
+ * like the list ("Training" in Training) is skipped: it would only repeat what the list already says.
+ */
+function matchListAndLabel(lists: List[], labels: WireCardLabel[]): { list: List; label: WireCardLabel } | undefined {
+  for (const list of lists) {
+    const words = new Set(recipeNameWords(list.name).filter((word) => word.length >= 4));
+    const label = labels.find((candidate) =>
+      recipeMatchText(candidate.name) !== recipeMatchText(list.name) && recipeNameWords(candidate.name).some((word) => words.has(word)));
+    if (label) return { list, label };
+  }
+  return undefined;
+}
 
 // Each recipe's resolved sentence is one translatable message per combination of optional actions
-// (never clauses joined in code), so a translator can reorder the whole sentence.
+// (never clauses joined in code), so a translator can reorder the whole sentence. The patterns follow
+// the automations the workspace templates ship with, which are what real boards on Kanera run.
 const automationRecipeCatalogue: readonly AutomationRecipe[] = [
   {
-    id: "triage-new-cards",
+    id: "label-by-list",
     group: "intake",
-    icon: "ti-inbox",
-    title: $localize`:Example automation title:Triage new cards`,
-    detail: $localize`:Example automation description:When a card is created in your first list, label it for triage and apply your intake checklist.`,
-    requirement: $localize`:What an example automation needs before it can be used:Needs a triage or support label, or an intake checklist template.`,
-    resolve: ({ lists, labels, templates }) => {
-      const intake = lists[0];
-      if (!intake) return null;
-      const label = matchRecipeLabel(labels, TRIAGE_LABEL_HINTS);
-      const template = matchRecipeTemplate(templates, TRIAGE_TEMPLATE_HINTS);
-      const actions: AutomationActionBody[] = [];
-      if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
-      if (template) actions.push({ type: "apply_checklists", config: { templateIds: [template.id] } });
-      if (!actions.length) return null;
-      const detail = label && template
-        ? $localize`:Example automation description:When a card is created in ${intake.name}:list:, add the ${label.name}:label: label and apply the ${template.title}:checklist: checklist.`
-        : label
-          ? $localize`:Example automation description:When a card is created in ${intake.name}:list:, add the ${label.name}:label: label.`
-          : $localize`:Example automation description:When a card is created in ${intake.name}:list:, apply the ${template!.title}:checklist: checklist.`;
+    icon: "ti-tag",
+    title: $localize`:Example automation title:Label work by where it lands`,
+    triggerType: "card_enters_list",
+    detail: $localize`:Example automation description:When a card enters a list for one kind of work, such as bugs, add the matching label.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs a list and a label for the same kind of work, such as a Bugs list and a Bug label.`,
+    resolve: ({ lists, labels }) => {
+      const pair = matchListAndLabel(lists, labels);
+      if (!pair) return null;
       return {
-        detail,
-        // Created only: a card moved back into intake has already been triaged once, and re-applying
-        // the checklist would reset the items someone has ticked.
-        body: { triggerType: "card_enters_list", triggerListId: intake.id, applyOnCreate: true, applyOnMove: false, actions },
+        detail: $localize`:Example automation description:When a card enters ${pair.list.name}:list:, add the ${pair.label.name}:label: label.`,
+        // Created and moved: the label says what the work is, however it got into the list.
+        body: { triggerListId: pair.list.id, applyOnCreate: true, applyOnMove: true, actions: [{ type: "add_labels", config: { labelIds: [pair.label.id] } }] },
       };
     },
   },
   {
-    id: "due-on-intake",
+    id: "request-response-target",
     group: "intake",
     icon: "ti-calendar-plus",
-    title: $localize`:Example automation title:Give new work a deadline`,
-    detail: $localize`:Example automation description:When a card lands in your first list, set its due date to tomorrow.`,
-    requirement: $localize`:What an example automation needs before it can be used:Add a list first.`,
+    title: $localize`:Example automation title:Set a response target for requests`,
+    triggerType: "card_enters_list",
+    detail: $localize`:Example automation description:When a request is created in your intake or support list, set its due date to 2 days from now.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs an intake, support or requests list.`,
     resolve: ({ lists }) => {
-      const intake = lists[0];
+      const intake = matchRecipeList(lists, REQUEST_LIST_HINTS);
       if (!intake) return null;
       return {
-        detail: $localize`:Example automation description:When a card lands in ${intake.name}:list:, set its due date to tomorrow.`,
+        detail: $localize`:Example automation description:When a card is created in ${intake.name}:list:, set its due date to 2 days from now.`,
         body: {
-          triggerType: "card_enters_list",
           triggerListId: intake.id,
+          // Created only: set_due_date overwrites, so a request moved back to intake would lose the
+          // deadline someone agreed with the requester.
           applyOnCreate: true,
-          applyOnMove: true,
-          actions: [{ type: "set_due_date", config: { offsetDays: 1, slot: "endOfWorkDay" } }],
+          applyOnMove: false,
+          actions: [{ type: "set_due_date", config: { offsetDays: 2, slot: "endOfWorkDay" } }],
         },
       };
     },
@@ -388,59 +456,62 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
     group: "progress",
     icon: "ti-checkup-list",
     title: $localize`:Example automation title:Start review consistently`,
-    detail: $localize`:Example automation description:When a card enters your review list, apply the review checklist and flag it as needing review.`,
-    requirement: $localize`:What an example automation needs before it can be used:Needs a review or QA list, plus a matching checklist template or label.`,
-    resolve: ({ lists, labels, templates }) => {
-      const review = matchRecipeList(lists, REVIEW_LIST_HINTS);
-      if (!review) return null;
-      const template = matchRecipeTemplate(templates, REVIEW_TEMPLATE_HINTS);
-      const label = matchRecipeLabel(labels, REVIEW_LABEL_HINTS);
-      const actions: AutomationActionBody[] = [];
-      if (template) actions.push({ type: "apply_checklists", config: { templateIds: [template.id] } });
-      if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
-      if (!actions.length) return null;
-      const detail = template && label
-        ? $localize`:Example automation description:When a card enters ${review.name}:list:, apply the ${template.title}:checklist: checklist and add the ${label.name}:label: label.`
-        : template
-          ? $localize`:Example automation description:When a card enters ${review.name}:list:, apply the ${template.title}:checklist: checklist.`
-          : $localize`:Example automation description:When a card enters ${review.name}:list:, add the ${label!.name}:label: label.`;
+    triggerType: "card_enters_list",
+    detail: $localize`:Example automation description:When a card enters your review list, apply your review checklist.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs a review or QA list and a review checklist template.`,
+    resolve: (ctx) => {
+      const review = recipeReviewList(ctx);
+      const template = matchRecipeTemplate(ctx.templates, REVIEW_TEMPLATE_HINTS);
+      if (!review || !template) return null;
       return {
-        detail,
-        body: { triggerType: "card_enters_list", triggerListId: review.id, applyOnCreate: true, applyOnMove: true, actions },
+        detail: $localize`:Example automation description:When a card enters ${review.name}:list:, apply the ${template.title}:checklist: checklist.`,
+        // Moves back into review apply nothing new: the server applies a template to a card once.
+        body: { triggerListId: review.id, applyOnCreate: true, applyOnMove: true, actions: [{ type: "apply_checklists", config: { templateIds: [template.id] } }] },
       };
     },
   },
   {
-    id: "advance-checklist-work",
+    id: "checklists-to-review",
     group: "progress",
     icon: "ti-checkbox",
-    title: $localize`:Example automation title:Advance checklist-driven work`,
-    detail: $localize`:Example automation description:When every checklist item on a card is ticked, move it on and drop the review label.`,
-    requirement: $localize`:What an example automation needs before it can be used:Add a second list to move finished work into.`,
-    resolve: ({ lists, labels }) => {
-      if (lists.length < 2) return null;
-      const target = matchRecipeList(lists, READY_LIST_HINTS) ?? lists[lists.length - 1];
-      if (!target) return null;
-      const label = matchRecipeLabel(labels, REVIEW_LABEL_HINTS);
-      const actions: AutomationActionBody[] = [{ type: "move_to_list", config: { listId: target.id, placement: "top" } }];
-      if (label) actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
+    title: $localize`:Example automation title:Send finished work to review`,
+    triggerType: "all_checklist_items_complete",
+    detail: $localize`:Example automation description:When every checklist item on a card is ticked, move it to your review list.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs a review or QA list after your in-progress list.`,
+    resolve: (ctx) => {
+      // Review, never done: ticking the last item says the work is ready to check, not accepted.
+      const review = recipeReviewList(ctx);
+      if (!review) return null;
       return {
-        detail: label
-          ? $localize`:Example automation description:When every checklist item on a card is ticked, move it to the top of ${target.name}:list: and remove the ${label.name}:label: label.`
-          : $localize`:Example automation description:When every checklist item on a card is ticked, move it to the top of ${target.name}:list:.`,
-        body: { triggerType: "all_checklist_items_complete", actions },
+        detail: $localize`:Example automation description:When every checklist item on a card is ticked, move it to the top of ${review.name}:list:.`,
+        body: { actions: [{ type: "move_to_list", config: { listId: review.id, placement: "top" } }] },
       };
     },
   },
   {
-    id: "surface-overdue",
+    id: "escalate-overdue",
     group: "progress",
     icon: "ti-alarm",
-    title: $localize`:Example automation title:Surface overdue work`,
-    detail: $localize`:Example automation description:When a card's due date arrives, float it to the top of its list so nobody has to go looking.`,
+    title: $localize`:Example automation title:Escalate overdue work`,
+    triggerType: "due_date_arrives",
+    detail: $localize`:Example automation description:When a card's due date arrives, move it to your escalation list, or to the top of its own list.`,
     requirement: $localize`:What an example automation needs before it can be used:Add a list first.`,
-    resolve: ({ lists, labels }) => {
+    resolve: ({ lists, labels, fields }) => {
       if (!lists.length) return null;
+      // The Operations / Support template's SLA rule: an Escalated lane, and a checkbox recording that
+      // it happened. Without the lane, the card is pulled to the top of the list it is in.
+      const escalation = matchRecipeList(lists, ESCALATION_LIST_HINTS);
+      if (escalation) {
+        const flag = matchRecipeField(fields, "checkbox", ["escalat"]);
+        const actions: AutomationActionBody[] = [{ type: "move_to_list", config: { listId: escalation.id, placement: "top" } }];
+        if (flag) actions.push({ type: "populate_custom_field", config: { fieldId: flag.id, onlyIfEmpty: true, value: { kind: "checkbox", checked: true } } });
+        return {
+          detail: flag
+            ? $localize`:Example automation description:When a card's due date arrives, move it to the top of ${escalation.name}:list: and tick ${flag.name}:field:.`
+            : $localize`:Example automation description:When a card's due date arrives, move it to the top of ${escalation.name}:list:.`,
+          body: { actions },
+        };
+      }
       const label = matchRecipeLabel(labels, OVERDUE_LABEL_HINTS);
       const actions: AutomationActionBody[] = [{ type: "move_to_top", config: {} }];
       if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
@@ -448,7 +519,65 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
         detail: label
           ? $localize`:Example automation description:When a card's due date arrives, move it to the top of its list and add the ${label.name}:label: label.`
           : $localize`:Example automation description:When a card's due date arrives, move it to the top of its list.`,
-        body: { triggerType: "due_date_arrives", actions },
+        body: { actions },
+      };
+    },
+  },
+  {
+    id: "flag-stalled",
+    group: "progress",
+    icon: "ti-alert-triangle",
+    title: $localize`:Example automation title:Flag stalled work as at risk`,
+    triggerType: "card_enters_list",
+    detail: $localize`:Example automation description:When a card moves into your blocked or follow-up list, add your at-risk label.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs a blocked or follow-up list and a label like At risk.`,
+    resolve: ({ lists, labels }) => {
+      // Sales flags a deal in Follow-up as At Risk, and Project Delivery flags Blocked work as Risk,
+      // so the risk shows on the card wherever it is viewed. Finish work cleanly takes it off again.
+      const stalled = matchRecipeList(lists, STALLED_LIST_HINTS);
+      const label = matchRecipeLabel(labels, RISK_LABEL_HINTS);
+      if (!stalled || !label) return null;
+      return {
+        detail: $localize`:Example automation description:When a card enters ${stalled.name}:list:, add the ${label.name}:label: label.`,
+        body: { triggerListId: stalled.id, applyOnCreate: true, applyOnMove: true, actions: [{ type: "add_labels", config: { labelIds: [label.id] } }] },
+      };
+    },
+  },
+  {
+    id: "flag-long-running",
+    group: "progress",
+    icon: "ti-hourglass-high",
+    title: $localize`:Example automation title:Flag work that is dragging on`,
+    triggerType: "card_in_progress_too_long",
+    detail: $localize`:Example automation description:When a card has been in progress longer than this workspace's limit, flag it and comment on the card.`,
+    // Time is only tracked in lists marked In progress, so without one the rule could never fire.
+    requirement: $localize`:What an example automation needs before it can be used:Needs a list marked In progress.`,
+    resolve: ({ lists, labels, fields }) => {
+      if (!lists.some((list) => list.inProgress)) return null;
+      const label = matchRecipeLabel(labels, RISK_LABEL_HINTS);
+      // With an estimate field the limit is the card's own estimate, which is the question a team with
+      // estimates actually asks. Hours unless the field says days.
+      const estimate = matchRecipeField(fields, "number", ESTIMATE_FIELD_HINTS);
+      const unit = estimate && recipeNameWords(estimate.name).some((word) => word.startsWith("day")) ? "days" : "hours";
+      const actions: AutomationActionBody[] = [];
+      if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
+      if (estimate) {
+        actions.push({ type: "post_comment", config: { template: $localize`:Comment an example automation posts on a card - written in the admin's language when they create the rule:Tracked time on this card has passed its estimate. Check whether the estimate or the scope needs to change.` } });
+        return {
+          detail: label
+            ? $localize`:Example automation description:When tracked time on a card passes its ${estimate.name}:field:, add the ${label.name}:label: label and comment on the card.`
+            : $localize`:Example automation description:When tracked time on a card passes its ${estimate.name}:field:, comment on the card.`,
+          body: { triggerThresholdSource: "custom_field", triggerCustomFieldId: estimate.id, triggerThresholdUnit: unit, actions },
+        };
+      }
+      actions.push({ type: "post_comment", config: { template: $localize`:Comment an example automation posts on a card - written in the admin's language when they create the rule:This card has been in progress longer than this workspace's limit. Check whether it is stuck or needs splitting up.` } });
+      return {
+        detail: label
+          ? $localize`:Example automation description:When a card has been in progress longer than this workspace's limit, add the ${label.name}:label: label and comment on the card.`
+          : $localize`:Example automation description:When a card has been in progress longer than this workspace's limit, comment on the card.`,
+        // The workspace's own alert limit (Settings, General), so the rule and the amber chip on the
+        // card agree; cards already past it when the rule is switched on are skipped by default.
+        body: { triggerThresholdSource: "workspace", actions },
       };
     },
   },
@@ -457,14 +586,16 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
     group: "progress",
     icon: "ti-flag",
     title: $localize`:Example automation title:Escalate consistently`,
+    triggerType: "card_label_set",
     detail: $localize`:Example automation description:When an escalation label is added, pull the card to the top of its list and stamp when it happened.`,
-    requirement: $localize`:What an example automation needs before it can be used:Needs a label like Escalated, Blocked or Urgent.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs a label like Escalated, Urgent or Critical.`,
     resolve: ({ labels, fields }) => {
+      // Not "Blocked": blocked work cannot be picked up, so pulling it to the top helps nobody.
       const label = matchRecipeLabel(labels, ESCALATION_LABEL_HINTS);
       if (!label) return null;
-      // A date field named for the escalation itself ("Blocked Since", "Escalation Date"); a generic
-      // date field would be stamped with a date that means nothing.
-      const sinceField = matchRecipeField(fields, "date", ["escalat", "blocked since", "flagged", "raised"]);
+      // A date field named for the escalation itself ("Escalation Date"); a generic date field would
+      // be stamped with a date that means nothing.
+      const sinceField = matchRecipeField(fields, "date", ["escalat", "flagged", "raised"]);
       const actions: AutomationActionBody[] = [{ type: "move_to_top", config: {} }];
       if (sinceField) {
         actions.push({ type: "populate_custom_field", config: { fieldId: sinceField.id, onlyIfEmpty: true, value: { kind: "date", source: "current" } } });
@@ -473,7 +604,77 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
         detail: sinceField
           ? $localize`:Example automation description:When the ${label.name}:label: label is added, move the card to the top of its list and set ${sinceField.name}:field: to today.`
           : $localize`:Example automation description:When the ${label.name}:label: label is added, move the card to the top of its list.`,
-        body: { triggerType: "card_label_set", triggerLabelId: label.id, actions },
+        body: { triggerLabelId: label.id, actions },
+      };
+    },
+  },
+  {
+    id: "surface-on-start-date",
+    group: "planning",
+    icon: "ti-player-play",
+    title: $localize`:Example automation title:Surface work on its start date`,
+    triggerType: "start_date_arrives",
+    detail: $localize`:Example automation description:When a card's start date arrives, move it to the top of its list so it is picked up on time.`,
+    requirement: $localize`:What an example automation needs before it can be used:Add a list first.`,
+    resolve: ({ lists, labels }) => {
+      if (!lists.length) return null;
+      // Not a move into the in-progress list: the trigger also fires for every open card whose start
+      // is already past when the rule is switched on, and a card in review would be dragged backwards.
+      const label = matchRecipeLabel(labels, START_LABEL_HINTS);
+      const actions: AutomationActionBody[] = [{ type: "move_to_top", config: {} }];
+      if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
+      return {
+        detail: label
+          ? $localize`:Example automation description:When a card's start date arrives, move it to the top of its list and add the ${label.name}:label: label.`
+          : $localize`:Example automation description:When a card's start date arrives, move it to the top of its list.`,
+        body: { actions },
+      };
+    },
+  },
+  {
+    id: "pick-up-unblocked",
+    group: "planning",
+    icon: "ti-lock-open",
+    title: $localize`:Example automation title:Pick up unblocked work`,
+    triggerType: "card_unblocked",
+    detail: $localize`:Example automation description:When a card's last blocker is finished, move it to the top of its list and comment that it is ready.`,
+    requirement: $localize`:What an example automation needs before it can be used:Add a list first.`,
+    resolve: ({ lists, labels }) => {
+      if (!lists.length) return null;
+      // A label a team uses to mark waiting work by hand goes once the wait is really over.
+      const label = matchRecipeLabel(labels, UNBLOCKED_LABEL_HINTS);
+      const actions: AutomationActionBody[] = [{ type: "move_to_top", config: {} }];
+      if (label) actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
+      actions.push({ type: "post_comment", config: { template: $localize`:Comment an example automation posts on a card - written in the admin's language when they create the rule:Everything this card was waiting on is finished, so it is ready to pick up.` } });
+      return {
+        detail: label
+          ? $localize`:Example automation description:When a card's last blocker is finished, move it to the top of its list, remove the ${label.name}:label: label and comment that it is ready.`
+          : $localize`:Example automation description:When a card's last blocker is finished, move it to the top of its list and comment that it is ready.`,
+        body: { actions },
+      };
+    },
+  },
+  {
+    id: "catch-scheduling-conflicts",
+    group: "planning",
+    icon: "ti-calendar-exclamation",
+    title: $localize`:Example automation title:Catch scheduling conflicts`,
+    triggerType: "scheduling_conflict_appears",
+    detail: $localize`:Example automation description:When a card is planned to start before one of its blockers finishes, flag it and comment on the card.`,
+    requirement: $localize`:What an example automation needs before it can be used:Add a list first.`,
+    resolve: ({ lists, labels }) => {
+      if (!lists.length) return null;
+      const label = matchRecipeLabel(labels, CONFLICT_LABEL_HINTS);
+      const actions: AutomationActionBody[] = [];
+      if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
+      // No {{schedule.blocker}}: the server blanks it when the blocker sits on another board, and
+      // the sentence has to read correctly either way.
+      actions.push({ type: "post_comment", config: { template: $localize`:Comment an example automation posts on a card - written in the admin's language when they create the rule:This card is planned to start before one of its blockers finishes. Adjust the dates on the Timeline.` } });
+      return {
+        detail: label
+          ? $localize`:Example automation description:When a card is planned to start before one of its blockers finishes, add the ${label.name}:label: label and comment on the card.`
+          : $localize`:Example automation description:When a card is planned to start before one of its blockers finishes, comment on the card.`,
+        body: { actions },
       };
     },
   },
@@ -482,23 +683,45 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
     group: "wrap-up",
     icon: "ti-circle-check",
     title: $localize`:Example automation title:Finish work cleanly`,
-    detail: $localize`:Example automation description:When a card reaches your done list, mark it complete and clear the deadline it no longer needs.`,
-    requirement: $localize`:What an example automation needs before it can be used:Add a second list to act as the done list.`,
-    resolve: ({ lists, labels }) => {
-      if (lists.length < 2) return null;
-      const done = matchRecipeList(lists, DONE_LIST_HINTS) ?? lists[lists.length - 1];
+    triggerType: "card_enters_list",
+    detail: $localize`:Example automation description:When a card reaches your done list, mark it complete and take off any at-risk label.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs a list named Done, Complete or similar.`,
+    resolve: (ctx) => {
+      // Matched by name only: the last list is as often Archive or Won't do as it is Done.
+      const done = recipeDoneList(ctx);
       if (!done) return null;
-      const label = matchRecipeLabel(labels, REVIEW_LABEL_HINTS);
-      const actions: AutomationActionBody[] = [
-        { type: "set_completion", config: { completed: true } },
-        { type: "clear_due_date", config: {} },
-      ];
+      // A finished card is no longer at risk, as Sales does for Won and Lost. The due date stays: a
+      // finished card's dates are its record on the Timeline, and completed cards never show as overdue.
+      const label = matchRecipeLabel(ctx.labels, RISK_LABEL_HINTS);
+      const actions: AutomationActionBody[] = [{ type: "set_completion", config: { completed: true } }];
       if (label) actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
       return {
         detail: label
-          ? $localize`:Example automation description:When a card enters ${done.name}:list:, mark it complete, clear its due date and remove the ${label.name}:label: label.`
-          : $localize`:Example automation description:When a card enters ${done.name}:list:, mark it complete and clear its due date.`,
-        body: { triggerType: "card_enters_list", triggerListId: done.id, applyOnCreate: true, applyOnMove: true, actions },
+          ? $localize`:Example automation description:When a card enters ${done.name}:list:, mark it complete and remove the ${label.name}:label: label.`
+          : $localize`:Example automation description:When a card enters ${done.name}:list:, mark it complete.`,
+        body: { triggerListId: done.id, applyOnCreate: true, applyOnMove: true, actions },
+      };
+    },
+  },
+  {
+    id: "complete-to-done",
+    group: "wrap-up",
+    icon: "ti-checks",
+    title: $localize`:Example automation title:Move completed work to the done list`,
+    triggerType: "card_marked_complete",
+    detail: $localize`:Example automation description:When someone ticks a card complete, move it to your done list.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs exactly one list where work ends, such as Done.`,
+    resolve: (ctx) => {
+      // Only with one way for work to end. Sales has Won and Lost, Support has Resolved and Closed: a
+      // ticked card could belong in either, and guessing would file a lost deal under Won.
+      const terminal = ctx.lists.filter((list) => matchRecipeList([list], TERMINAL_LIST_HINTS));
+      const done = recipeDoneList(ctx);
+      if (!done || terminal.length !== 1) return null;
+      return {
+        detail: $localize`:Example automation description:When someone ticks a card complete, move it to the top of ${done.name}:list:.`,
+        // "Someone": automated completions do not fire card_marked_complete, so this cannot chase
+        // Finish work cleanly in a loop.
+        body: { actions: [{ type: "move_to_list", config: { listId: done.id, placement: "top" } }] },
       };
     },
   },
@@ -507,15 +730,19 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
     group: "wrap-up",
     icon: "ti-rotate-2",
     title: $localize`:Example automation title:Reopen work that moves back`,
+    triggerType: "card_enters_list",
     detail: $localize`:Example automation description:When a completed card returns to your in-progress list, mark it incomplete again.`,
     // The list the workspace marked In progress is the answer; the name hints only cover workspaces
-    // that have not marked one yet. No positional fallback: a middle list has no structural meaning,
-    // and marking cards incomplete in the wrong one is a destructive guess.
-    requirement: $localize`:What an example automation needs before it can be used:Needs a list marked In progress.`,
-    resolve: ({ lists, labels }) => {
-      const progress = lists.find((list) => list.inProgress && !list.archivedAt) ?? matchRecipeList(lists, PROGRESS_LIST_HINTS);
+    // that have not marked one yet, or have time in progress switched off (the marking is then
+    // hidden, so neither it nor a requirement that names it means anything to the admin). No
+    // positional fallback: marking cards incomplete in the wrong list is a destructive guess.
+    requirement: (features) => features.inProgress
+      ? $localize`:What an example automation needs before it can be used:Needs a list marked In progress.`
+      : $localize`:What an example automation needs before it can be used:Needs a list named In progress, Doing or similar.`,
+    resolve: (ctx) => {
+      const progress = recipeProgressList(ctx);
       if (!progress) return null;
-      const label = matchRecipeLabel(labels, ACTIVE_LABEL_HINTS);
+      const label = matchRecipeLabel(ctx.labels, ACTIVE_LABEL_HINTS);
       const actions: AutomationActionBody[] = [{ type: "set_completion", config: { completed: false } }];
       if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
       return {
@@ -523,7 +750,6 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
           ? $localize`:Example automation description:When a card moves back into ${progress.name}:list:, mark it incomplete and add the ${label.name}:label: label.`
           : $localize`:Example automation description:When a card moves back into ${progress.name}:list:, mark it incomplete.`,
         body: {
-          triggerType: "card_enters_list",
           triggerListId: progress.id,
           // Moved only: a card created straight into the in-progress list was never complete.
           applyOnCreate: false,
@@ -534,67 +760,29 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
     },
   },
   {
-    id: "cleanup-completed",
-    group: "wrap-up",
-    icon: "ti-eraser",
-    title: $localize`:Example automation title:Clean up completed work`,
-    detail: $localize`:Example automation description:When a card is marked complete, clear its due date so it stops showing as due.`,
-    requirement: $localize`:What an example automation needs before it can be used:Add a list first.`,
-    resolve: ({ lists, labels }) => {
-      if (!lists.length) return null;
-      const label = matchRecipeLabel(labels, ACTIVE_LABEL_HINTS);
-      const actions: AutomationActionBody[] = [{ type: "clear_due_date", config: {} }];
-      if (label) actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
-      return {
-        detail: label
-          ? $localize`:Example automation description:When a card is marked complete, clear its due date and remove the ${label.name}:label: label.`
-          : $localize`:Example automation description:When a card is marked complete, clear its due date.`,
-        body: { triggerType: "card_marked_complete", actions },
-      };
-    },
-  },
-  {
-    id: "carry-estimate-into-actuals",
-    group: "wrap-up",
-    icon: "ti-arrow-bar-to-right",
-    title: $localize`:Example automation title:Carry an estimate into actuals`,
-    detail: $localize`:Example automation description:When a card is finished, copy its estimate into the actuals field so the two can be compared.`,
-    requirement: $localize`:What an example automation needs before it can be used:Needs two number fields, one for the estimate and one for actuals.`,
-    resolve: ({ lists, fields }) => {
-      const done = matchRecipeList(lists, DONE_LIST_HINTS) ?? (lists.length > 1 ? lists[lists.length - 1] : undefined);
-      const estimate = matchRecipeField(fields, "number", ["estimate", "estimated", "planned", "budget"]);
-      const actual = matchRecipeField(fields, "number", ["actual", "spent", "logged", "real"]);
-      if (!done || !estimate || !actual) return null;
-      return {
-        detail: $localize`:Example automation description:When a card enters ${done.name}:list:, copy ${estimate.name}:sourceField: into ${actual.name}:targetField: if it is still empty.`,
-        body: {
-          triggerType: "card_enters_list",
-          triggerListId: done.id,
-          applyOnCreate: true,
-          applyOnMove: true,
-          actions: [{ type: "populate_custom_field", config: { fieldId: actual.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: estimate.id } } }],
-        },
-      };
-    },
-  },
-  {
     id: "stamp-completion-month",
     group: "wrap-up",
     icon: "ti-calendar-stats",
     title: $localize`:Example automation title:Stamp the month work finished`,
-    detail: $localize`:Example automation description:When a card is marked complete, record the month in your reporting field.`,
+    triggerType: "card_enters_list",
+    detail: $localize`:Example automation description:When a card reaches your done list, record the month in your billing or reporting field.`,
     // Only a field that names a month: a text field grabbed by position gets stamped with a value
     // that means nothing to whoever reads the column later.
-    requirement: $localize`:What an example automation needs before it can be used:Needs a text field named for a month or period.`,
-    resolve: ({ fields }) => {
-      const field = matchRecipeField(fields, "text", ["month", "period", "billing"]);
-      if (!field) return null;
+    requirement: $localize`:What an example automation needs before it can be used:Needs a done list and a text field named for a month or period.`,
+    resolve: (ctx) => {
+      // The done list rather than card_marked_complete, as the Development Team template does:
+      // completions made by Finish work cleanly never fire card_marked_complete.
+      const done = recipeDoneList(ctx);
+      const field = matchRecipeField(ctx.fields, "text", ["month", "period", "billing"]);
+      if (!done || !field) return null;
       return {
-        detail: $localize`:Example automation description:When a card is marked complete, fill ${field.name}:field: with the current month.`,
+        detail: $localize`:Example automation description:When a card enters ${done.name}:list:, fill ${field.name}:field: with the current month.`,
         body: {
-          triggerType: "card_marked_complete",
-          // onlyIfEmpty: a card can be completed, reopened and completed again; the month the work
-          // first landed in is the one reporting wants.
+          triggerListId: done.id,
+          applyOnCreate: true,
+          applyOnMove: true,
+          // onlyIfEmpty: a card can be reopened and finished again; the month the work first landed
+          // in is the one billing wants.
           actions: [{ type: "populate_custom_field", config: { fieldId: field.id, onlyIfEmpty: true, value: { kind: "text_current_date", format: "month" } } }],
         },
       };
@@ -720,16 +908,25 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly completedCardsActiveDaysDraft = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
   readonly inactiveCardsDaysDraft = signal(DEFAULT_INACTIVE_CARDS_DAYS);
   readonly organisationInProgressEnabled = signal(true);
-  readonly progressSettingsEnabled = computed(() => this.organisationInProgressEnabled() && (!this.isStandalone() || this.boardList().some((board) => board.inProgressEnabled)));
+  /**
+   * Optional planning features (`@kanera/shared/workspace-features`): the organisation's master
+   * switches, this workspace's own switches, and what is in effect where the two agree.
+   */
+  readonly organisationFeatures = signal<WorkspaceFeatures>(ALL_WORKSPACE_FEATURES_ENABLED);
+  readonly featureDrafts = signal<WorkspaceFeatures>(ALL_WORKSPACE_FEATURES_ENABLED);
+  readonly effectiveFeatures = computed<WorkspaceFeatures>(() => {
+    const organisation = this.organisationFeatures();
+    const drafts = this.featureDrafts();
+    return { dependencies: organisation.dependencies && drafts.dependencies, timeline: organisation.timeline && drafts.timeline, inProgress: organisation.inProgress && drafts.inProgress };
+  });
+  readonly featureSaving = signal<WorkspaceFeature | null>(null);
+  readonly featureError = signal<string | null>(null);
+  readonly progressSettingsEnabled = computed(() => this.organisationInProgressEnabled() && this.featureDrafts().inProgress && (!this.isStandalone() || this.boardList().some((board) => board.inProgressEnabled)));
   readonly inProgressAlertDaysDraft = signal(DEFAULT_IN_PROGRESS_ALERT_DAYS);
   /** The zone whose working hours time in progress counts (09:00-17:00, Monday to Friday). */
   readonly timeZoneDraft = signal("UTC");
-  /** Every zone the browser knows, always including the saved one so it never renders blank. */
-  readonly timeZoneOptions = computed(() => {
-    const zones = supportedTimeZones();
-    const current = this.timeZoneDraft();
-    return zones.includes(current) ? zones : [current, ...zones];
-  });
+  /** Every zone the browser knows, ordered by UTC offset and always including the saved one. */
+  readonly timeZoneGroups = computed(() => timeZonePickerGroups(this.timeZoneDraft()));
   readonly isStandalone = computed(() => this.workspace()?.kind === "board");
   /** "board" for a standalone board, else "workspace". An ICU select key in templates, never shown as text. */
   readonly entityKind = computed(() => this.isStandalone() ? "board" : "workspace");
@@ -819,6 +1016,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (field.type === "user") return this.automationMembers().length > 0;
     return true;
   }));
+  /** The fields an "over the estimate" limit can read: only numbers carry an amount. */
+  readonly automationNumberFields = computed(() => this.fields().filter((field) => field.type === "number"));
   readonly enabledAutomationCount = computed(() => this.automations().filter((automation) => automation.enabled).length);
   readonly automationRecipeGroups = automationRecipeGroups;
   readonly automationRecipeGroupLabels = automationRecipeGroupLabels;
@@ -829,8 +1028,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
    * still leads with the examples it can actually use, rather than three dimmed rows.
    */
   readonly automationRecipes = computed<AutomationRecipeOption[]>(() => {
-    const ctx: AutomationRecipeContext = { lists: this.lists(), labels: this.labels(), templates: this.templates(), fields: this.fields() };
-    const options = automationRecipeCatalogue.map((recipe) => {
+    const ctx = this.automationRecipeContext();
+    const options = this.offeredAutomationRecipes(ctx.features).map((recipe) => {
       const resolved = recipe.resolve(ctx);
       return {
         id: recipe.id,
@@ -839,7 +1038,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
         title: recipe.title,
         detail: resolved?.detail ?? recipe.detail,
         available: resolved !== null,
-        requirement: recipe.requirement,
+        requirement: typeof recipe.requirement === "string" ? recipe.requirement : recipe.requirement(ctx.features),
       } satisfies AutomationRecipeOption;
     });
     return automationRecipeGroups.flatMap((group) => {
@@ -847,6 +1046,15 @@ export class WorkspaceSettingsPage implements OnDestroy {
       return [...inGroup.filter((option) => option.available), ...inGroup.filter((option) => !option.available)];
     });
   });
+  private automationRecipeContext(): AutomationRecipeContext {
+    return { lists: this.lists(), labels: this.labels(), templates: this.templates(), fields: this.fields(), features: this.effectiveFeatures() };
+  }
+
+  /** The catalogue minus examples whose trigger needs a planning feature this workspace has switched off. */
+  private offeredAutomationRecipes(features: WorkspaceFeatures): readonly AutomationRecipe[] {
+    return automationRecipeCatalogue.filter((recipe) => !automationTriggerBlockedBy(recipe.triggerType, features));
+  }
+
   readonly availableAutomationRecipeCount = computed(() => this.automationRecipes().filter((recipe) => recipe.available).length);
   readonly creatingAutomation = signal(false);
   private readonly pendingAutomationSaves = new Map<string, number>();
@@ -1196,7 +1404,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async reload(workspaceId = this.workspaceId()) {
-    const detail = await this.api.get<{ organisationInProgressEnabled?: boolean; workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[]; automationExecutionsRemaining: number | null }>(`/workspaces/${workspaceId}`);
+    const detail = await this.api.get<{ organisationInProgressEnabled?: boolean; organisationFeatures?: WorkspaceFeatures; workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[]; automationExecutionsRemaining: number | null }>(`/workspaces/${workspaceId}`);
     const ws = { ...detail.workspace, role: detail.role } as Workspace & { role: WorkspaceRole };
     const canManageApi = detail.role === "admin" || this.auth.isOrgAdmin();
     // Both groups need the workspace role, but neither needs the other group.
@@ -1218,6 +1426,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     ]);
     if (workspaceId !== this.workspaceId()) return;
     this.organisationInProgressEnabled.set(detail.organisationInProgressEnabled !== false);
+    this.organisationFeatures.set(detail.organisationFeatures ?? { ...ALL_WORKSPACE_FEATURES_ENABLED, inProgress: detail.organisationInProgressEnabled !== false });
     this.applyWorkspace(ws, true);
     this.lists.set([...detail.lists].sort(byPosition));
     this.fields.set([...detail.customFields].sort(byPosition));
@@ -1400,9 +1609,20 @@ export class WorkspaceSettingsPage implements OnDestroy {
         this.boardList.update((bs) => bs.some((b) => b.id === board.id) ? bs : sortBoards([...bs, board as unknown as Board]));
         this.upsertGuestBoard(board as unknown as Board);
       },
-      "board:updated": ({ board, organisationInProgressEnabled }) => {
+      "board:updated": ({ board, organisationInProgressEnabled, features }) => {
         if (!matchWs(board.workspaceId)) return;
         if (organisationInProgressEnabled !== undefined) this.organisationInProgressEnabled.set(organisationInProgressEnabled);
+        // A planning feature was switched. The event carries the effective value, which equals the
+        // organisation's wherever this workspace's own switch is on; where it is off, the
+        // organisation's choice is not visible here and the last known one stands.
+        if (features) {
+          const drafts = this.featureDrafts();
+          this.organisationFeatures.update((current) => ({
+            dependencies: drafts.dependencies ? features.dependencies : current.dependencies,
+            timeline: drafts.timeline ? features.timeline : current.timeline,
+            inProgress: organisationInProgressEnabled ?? current.inProgress,
+          }));
+        }
         const updated = board as unknown as Board;
         if (updated.archivedAt) {
           this.boardList.update((bs) => bs.filter((b) => b.id !== updated.id));
@@ -1466,6 +1686,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.workspace.set(ws);
     this.boardLinkingEnabledDraft.set(ws?.boardLinkingEnabled !== false);
     this.notesEnabledDraft.set(ws?.notesEnabled !== false);
+    if (!this.featureSaving()) {
+      this.featureDrafts.set({ dependencies: ws?.dependenciesEnabled !== false, timeline: ws?.timelineEnabled !== false, inProgress: ws?.inProgressEnabled !== false });
+    }
     // Keep locally queued values visible if an unrelated workspace mutation or realtime echo lands
     // during the debounce window. The defaults save response synchronizes them after the timer clears.
     if (!this.generalSettingsSaveTimer) {
@@ -1504,7 +1727,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.nameSaveTimer = null;
   }
 
-  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; inProgressAlertDays?: number; timeZone?: string; boardLinkingEnabled?: boolean; notesEnabled?: boolean }) {
+  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; inProgressAlertDays?: number; timeZone?: string; boardLinkingEnabled?: boolean; notesEnabled?: boolean; dependenciesEnabled?: boolean; timelineEnabled?: boolean; inProgressEnabled?: boolean }) {
     const ws = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch));
     this.applyWorkspace(ws);
   }
@@ -1573,7 +1796,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   updateTimeZone(value: string) {
-    if (!value) return;
+    if (!value || this.generalSettingsSaving()) return;
     this.timeZoneDraft.set(value);
     // A select is one deliberate choice, not typing: save it without the debounce.
     this.queueGeneralSettingsSave();
@@ -1698,6 +1921,36 @@ export class WorkspaceSettingsPage implements OnDestroy {
       this.notesError.set($localize`Notes could not be updated.`);
     } finally {
       this.notesSaving.set(false);
+    }
+  }
+
+  /**
+   * Like notes, switching a planning feature off hides it and closes its API but keeps its data, so
+   * there is nothing destructive to confirm. In progress banks running clocks and starts fresh
+   * stints when it comes back, exactly as the organisation and board switches do.
+   */
+  async updateFeatureEnabled(feature: WorkspaceFeature, enabled: boolean, control?: HTMLInputElement) {
+    const workspace = this.workspace();
+    if (!workspace || this.featureSaving()) return;
+    const previous = this.featureDrafts()[feature];
+    const restorePrevious = () => {
+      this.featureDrafts.update((drafts) => ({ ...drafts, [feature]: previous }));
+      if (control) control.checked = previous;
+    };
+    if (previous === enabled) {
+      restorePrevious();
+      return;
+    }
+    this.featureDrafts.update((drafts) => ({ ...drafts, [feature]: enabled }));
+    this.featureSaving.set(feature);
+    this.featureError.set(null);
+    try {
+      await this.patchWorkspace({ [`${feature}Enabled`]: enabled });
+    } catch {
+      restorePrevious();
+      this.featureError.set($localize`:Error under the workspace planning feature switches:The setting could not be updated.`);
+    } finally {
+      this.featureSaving.set(null);
     }
   }
 
@@ -2182,7 +2435,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   automationTriggerTypeValue(automation: WireAutomation): AutomationTriggerTypeName {
-    return automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list";
+    return automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "start_date_arrives" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked" || automation.triggerType === "scheduling_conflict_appears" || automation.triggerType === "critical_path_slips" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list";
   }
 
   automationTriggerListValue(automation: WireAutomation): string {
@@ -2196,6 +2449,55 @@ export class WorkspaceSettingsPage implements OnDestroy {
   automationTriggerLabelMissing(automation: WireAutomation): boolean { return automationTriggerLabelMissing(automation, this.automationLookups()); }
 
   automationTriggerDaysBefore(automation: WireAutomation): number { return automation.triggerDaysBefore ?? 3; }
+
+  automationThresholdSource(automation: WireAutomation): AutomationInProgressThresholdSource { return automation.triggerThresholdSource ?? "workspace"; }
+
+  automationThresholdUnit(automation: WireAutomation): AutomationInProgressThresholdUnit { return automation.triggerThresholdUnit ?? "days"; }
+
+  automationThresholdFieldMissing(automation: WireAutomation): boolean {
+    return Boolean(automation.triggerCustomFieldId) && !this.automationNumberFields().some((field) => field.id === automation.triggerCustomFieldId);
+  }
+
+  async updateAutomationThresholdSource(id: string, source: AutomationInProgressThresholdSource) {
+    const current = this.automations().find((automation) => automation.id === id);
+    if (!current) return;
+    let body: Record<string, unknown> = { triggerThresholdSource: source };
+    if (source === "fixed") {
+      // Start from the workspace alert so switching over keeps the rule's meaning until edited.
+      body = { ...body, triggerThresholdAmount: current.triggerThresholdAmount ?? Math.max(1, this.inProgressAlertDaysDraft() || 3), triggerThresholdUnit: current.triggerThresholdUnit ?? "days" };
+    } else if (source === "custom_field") {
+      const field = this.automationNumberFields().find((item) => item.id === current.triggerCustomFieldId) ?? this.automationNumberFields()[0];
+      if (!field) return;
+      body = { ...body, triggerCustomFieldId: field.id, triggerThresholdUnit: current.triggerThresholdUnit ?? "days" };
+    }
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, body);
+    this.replaceAutomation(updated);
+  }
+
+  async updateAutomationThresholdAmount(id: string, value: number) {
+    if (!Number.isFinite(value)) return;
+    const triggerThresholdAmount = Math.min(87600, Math.max(1, Math.trunc(value)));
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerThresholdAmount });
+    this.replaceAutomation(updated);
+  }
+
+  async updateAutomationThresholdUnit(id: string, triggerThresholdUnit: AutomationInProgressThresholdUnit) {
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerThresholdUnit });
+    this.replaceAutomation(updated);
+  }
+
+  async updateAutomationThresholdField(id: string, triggerCustomFieldId: string) {
+    if (!this.automationNumberFields().some((field) => field.id === triggerCustomFieldId)) return;
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerCustomFieldId });
+    this.replaceAutomation(updated);
+  }
+
+  async toggleAutomationIncludeExisting(id: string) {
+    const current = this.automations().find((automation) => automation.id === id);
+    if (!current) return;
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerIncludeExisting: !current.triggerIncludeExisting });
+    this.replaceAutomation(updated);
+  }
 
   automationTriggerCustomField(automation: WireAutomation): WireCustomField | null {
     return this.fields().find((field) => field.id === automation.triggerCustomFieldId) ?? null;
@@ -2321,6 +2623,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       case "card_assigned_to_user": return $localize`:Automation title; member names follow:Card assigned to ${target}:members:`;
       case "card_label_set": return $localize`:Automation title; a label name follows:Label set to ${target}:label:`;
       case "custom_field_value_changed": return $localize`:Automation title; "field = value" follows:Custom field changes to ${target}:condition:`;
+      case "card_in_progress_too_long": return $localize`:Automation title - the limit follows, e.g. over 3 days or over Estimate:Card in progress ${target}:limit:`;
       default: break;
     }
     if (automation.applyOnCreate && automation.applyOnMove) return $localize`:Automation title; a list name follows:Card created or moved into ${target}:list:`;
@@ -2333,6 +2636,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (automation.triggerType === "card_leaves_list") return $localize`:Automation trigger, followed by a list name:Card leaves`;
     if (automation.triggerType === "due_date_arrives") return $localize`:Automation trigger:Due date arrives`;
     if (automation.triggerType === "due_date_approaching") return $localize`:Automation trigger:Due date approaches`;
+    if (automation.triggerType === "start_date_arrives") return $localize`:Automation trigger:Start date arrives`;
     if (automation.triggerType === "card_becomes_inactive") return $localize`:Automation trigger:Card becomes inactive`;
     if (automation.triggerType === "card_in_progress_too_long") return $localize`:Automation trigger:Card in progress too long`;
     if (automation.triggerType === "all_checklist_items_complete") return $localize`:Automation trigger:All checklist items complete`;
@@ -2340,6 +2644,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (automation.triggerType === "card_marked_complete") return $localize`:Automation trigger:Card marked complete`;
     if (automation.triggerType === "card_blocked") return $localize`:Automation trigger - the card gains its first open blocker:Card blocked`;
     if (automation.triggerType === "card_unblocked") return $localize`:Automation trigger - the card no longer waits on any open card:Card unblocked`;
+    if (automation.triggerType === "scheduling_conflict_appears") return $localize`:Automation trigger - an open blocker is now planned to finish on or after this card's planned start:Scheduling conflict appears`;
+    if (automation.triggerType === "critical_path_slips") return $localize`:Automation trigger - a card on the board's critical path was rescheduled later:Critical path slips`;
     if (automation.triggerType === "card_label_set") return $localize`:Automation trigger, followed by a label name:Label set to`;
     if (automation.triggerType === "custom_field_value_changed") return $localize`:Automation trigger, followed by field = value:Custom field changes to`;
     if (automation.applyOnCreate && automation.applyOnMove) return $localize`:Automation trigger, followed by a list name:Card created or moved into`;
@@ -2416,13 +2722,17 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private normalizeAutomation(automation: WireAutomation): WireAutomation {
     return {
       ...automation,
-      triggerType: automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list",
+      triggerType: automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "start_date_arrives" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_unblocked" || automation.triggerType === "card_blocked" || automation.triggerType === "scheduling_conflict_appears" || automation.triggerType === "critical_path_slips" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list",
       triggerListId: automation.triggerType === "card_enters_list" || automation.triggerType === "card_leaves_list" ? automation.triggerListId : null,
       triggerUserIds: automation.triggerType === "card_assigned_to_user" ? this.stringList(automation.triggerUserIds) : null,
       triggerLabelId: automation.triggerType === "card_label_set" ? automation.triggerLabelId : null,
-      triggerCustomFieldId: automation.triggerType === "custom_field_value_changed" ? automation.triggerCustomFieldId : null,
+      triggerCustomFieldId: automation.triggerType === "custom_field_value_changed" || (automation.triggerType === "card_in_progress_too_long" && automation.triggerThresholdSource === "custom_field") ? automation.triggerCustomFieldId : null,
       triggerCustomFieldValue: automation.triggerType === "custom_field_value_changed" ? automation.triggerCustomFieldValue : null,
       triggerDaysBefore: automation.triggerType === "due_date_approaching" ? automation.triggerDaysBefore : null,
+      triggerThresholdSource: automation.triggerType === "card_in_progress_too_long" ? automation.triggerThresholdSource ?? null : null,
+      triggerThresholdAmount: automation.triggerType === "card_in_progress_too_long" ? automation.triggerThresholdAmount ?? null : null,
+      triggerThresholdUnit: automation.triggerType === "card_in_progress_too_long" ? automation.triggerThresholdUnit ?? null : null,
+      triggerIncludeExisting: automation.triggerType === "card_in_progress_too_long" && automation.triggerIncludeExisting === true,
       actions: automation.actions.map((action) => {
         const body = this.automationActionBody(action);
         return { ...action, ...body };
@@ -2569,10 +2879,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
    */
   async applyAutomationRecipe(id: string) {
     if (!this.canDuplicateAutomation()) return;
-    const recipe = automationRecipeCatalogue.find((candidate) => candidate.id === id);
-    const resolved = recipe?.resolve({ lists: this.lists(), labels: this.labels(), templates: this.templates(), fields: this.fields() });
-    if (!resolved) return;
-    await this.createAutomation(resolved.body);
+    const ctx = this.automationRecipeContext();
+    const recipe = this.offeredAutomationRecipes(ctx.features).find((candidate) => candidate.id === id);
+    const resolved = recipe?.resolve(ctx);
+    if (!recipe || !resolved) return;
+    await this.createAutomation({ triggerType: recipe.triggerType, ...resolved.body });
   }
 
   /** Copy an existing rule, including its actions. Lands disabled so it cannot fire before review. */
@@ -2590,6 +2901,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
       triggerCustomFieldId: source.triggerCustomFieldId,
       triggerCustomFieldValue: source.triggerCustomFieldValue,
       triggerDaysBefore: source.triggerDaysBefore,
+      triggerThresholdSource: source.triggerThresholdSource,
+      triggerThresholdAmount: source.triggerThresholdAmount,
+      triggerThresholdUnit: source.triggerThresholdUnit,
+      triggerIncludeExisting: source.triggerIncludeExisting,
       applyOnCreate: source.applyOnCreate,
       applyOnMove: source.applyOnMove,
       actions,
@@ -3901,16 +4216,4 @@ export class WorkspaceSettingsPage implements OnDestroy {
     }
   }
 
-}
-
-let timeZoneList: string[] | null = null;
-
-/** IANA zones for the workspace time zone picker, computed once per session. */
-function supportedTimeZones(): string[] {
-  if (!timeZoneList) {
-    const intl = Intl as typeof Intl & { supportedValuesOf?: (key: "timeZone") => string[] };
-    const zones = intl.supportedValuesOf?.("timeZone") ?? [];
-    timeZoneList = zones.includes("UTC") ? zones : ["UTC", ...zones];
-  }
-  return timeZoneList;
 }

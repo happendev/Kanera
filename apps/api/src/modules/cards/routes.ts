@@ -1,6 +1,7 @@
 import { dto } from "@kanera/shared";
 import { inProgressClockOf, SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
 import { ACTIVITY_ACTION, activityEvents, boards, clients, workspaces, automationInProgressRuns, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardInProgressAlerts, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { assertWorkspaceFeature, featureDisabledError, loadWorkspaceFeatures } from "../../lib/workspace-features.js";
 import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -26,8 +27,8 @@ import { loadChecklistsForCard, loadChecklistsForCards } from "../../lib/checkli
 import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
-import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
-import { resolveDueDatePatch } from "../../lib/due-date.js";
+import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { clampStartToDue, resolveDueDatePatch, resolveStartDatePatch } from "../../lib/due-date.js";
 import { allocateCardKeys, resolveCardKey } from "../../lib/card-keys.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
@@ -52,6 +53,7 @@ import { EMPTY_LINK_FANOUT, emitInternalLinksChanged, linkNeighbours, mergeLinkF
 import { assertGlobalWorkSeparatorContext, positionForGlobalWorkLaneInsert } from "../global-work-separators/routes.js";
 import { duplicateCardInto, emitDuplicatedCardIntoBoard, resolveDuplicateTargetList } from "./duplicate-card.js";
 import { absoluteCardUrl, toWireCard } from "../../lib/wire-card.js";
+import { requestScheduleRecheckForBoards, requestScheduleRecheckForCards } from "../../lib/schedule-events.js";
 import { assertCardActive, assertIntegrationEmbeddedMediaStoredLocally } from "../../lib/card-guards.js";
 import { attachmentRowBaseColumns } from "../../lib/attachment-rows.js";
 import { fetchReactionsByAttachment } from "../../lib/comment-reactions.js";
@@ -615,6 +617,8 @@ async function applyCardCompletion(
     .set({ completedAt, updatedAt: new Date() })
     .where(eq(cards.id, current.id))
     .returning();
+  // A completed card leaves the schedule and releases its dependents; reopening holds them again.
+  await requestScheduleRecheckForCards(tx, [current.id]);
   const activity = await recordCoalescedActivity(tx, {
     boardId: current.boardId,
     workspaceId: opts.workspaceId,
@@ -721,7 +725,7 @@ export async function cardRoutes(
       .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
       .where(eq(cardAttachments.cardId, id))
       .orderBy(desc(cardAttachments.createdAt));
-    const [customFieldValues, labelAssignments, assignees, [attachments, attachmentReactions], checklists, appliedTemplateRows, linkedNotes, relations] = await Promise.all([
+    const [customFieldValues, labelAssignments, assignees, [attachments, attachmentReactions], checklists, appliedTemplateRows, linkedNotes, relations, features] = await Promise.all([
       db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, id)),
       db
         .select({ labelId: cardLabelAssignments.labelId })
@@ -741,6 +745,7 @@ export async function cardRoutes(
         .where(eq(cardChecklistTemplateApplications.cardId, id)),
       loadLinkedNotesForCard(req.auth, id, ctx.workspaceId),
       loadCardRelations(req.auth, id),
+      loadWorkspaceFeatures(ctx.workspaceId),
     ]);
     // Healing with the viewer's claims can reveal links the author could not record, but its
     // workspace-wide note scan must not block this read; the next open can consume the repair. It
@@ -750,7 +755,8 @@ export async function cardRoutes(
     );
 
     return {
-      card: toWireCard(card, req.auth.cid),
+      // A start date is kept, unreported, while the workspace has the timeline switched off.
+      card: toWireCard(features.timeline ? card : { ...card, startDateLocalDate: null }, req.auth.cid),
       customFieldValues,
       labelIds: labelAssignments.map((assignment) => assignment.labelId),
       assigneeIds: assignees.map((assignee) => assignee.userId),
@@ -879,6 +885,7 @@ export async function cardRoutes(
     assigneeIds: string[];
     labelIds: string[];
     dueDate: { dueDateLocalDate: string; dueDateSlot: dto.DueDateSlot; dueDateTimezone: string } | null;
+    startDateLocalDate: string | null;
   }
 
   /**
@@ -951,12 +958,16 @@ export async function cardRoutes(
     const dueDate = body.dueDateLocalDate
       ? { dueDateLocalDate: body.dueDateLocalDate, dueDateSlot: body.dueDateSlot ?? "anyTime" as const, dueDateTimezone: await actorTimezone(auth.sub) }
       : null;
+    // A start set at creation was already checked against the due date in the same body by the
+    // DTO; a card has no stored due date yet, so there is nothing else it could be after.
+    const startDateLocalDate = body.startDateLocalDate ?? null;
+    if (startDateLocalDate) await assertWorkspaceFeature(ctx.workspaceId, "timeline");
 
-    return { kind: "ready", plan: { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate } };
+    return { kind: "ready", plan: { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate, startDateLocalDate } };
   }
 
   async function commitCardCreate(auth: AuthClaims, plan: CardCreatePlan): Promise<WireCard> {
-    const { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate } = plan;
+    const { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate, startDateLocalDate } = plan;
     const result = await db.transaction(async (tx) => {
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
@@ -1011,6 +1022,7 @@ export async function cardRoutes(
           title: body.title,
           description,
           ...dueDate,
+          startDateLocalDate,
           position,
           createdById: auth.sub,
         })
@@ -1027,6 +1039,8 @@ export async function cardRoutes(
         // back the allocated counter range if an out-of-band writer races the client token.
         throw new Error("card create identity conflicted after allocation");
       }
+      // A dated card is a new bar on the board's schedule; an undated one takes no part in it yet.
+      if (card.dueDateLocalDate || card.startDateLocalDate) await requestScheduleRecheckForBoards(tx, [boardId]);
 
       if (assigneeIds.length > 0) {
         await tx.insert(cardAssignees).values(assigneeIds.map((userId) => ({ cardId: card.id, userId })));
@@ -1072,6 +1086,7 @@ export async function cardRoutes(
           // records no separate label or due-date change for them.
           ...(labelIds.length > 0 && { labelIds }),
           ...(dueDate && dueDate),
+          ...(startDateLocalDate && { startDateLocalDate }),
         },
       });
       // App and public API card creation share this route; keep list-entry
@@ -1278,19 +1293,26 @@ export async function cardRoutes(
     const dueDateTimezone = dueDateLocalDate
       ? ((await db.select({ timezone: users.timezone }).from(users).where(eq(users.id, req.auth.sub)).limit(1))[0]?.timezone ?? "UTC")
       : null;
-    const changingCards = targetCards.filter((card) =>
-      card.dueDateLocalDate !== dueDateLocalDate ||
-      card.dueDateSlot !== dueDateSlot ||
-      card.dueDateTimezone !== dueDateTimezone
-    );
-    if (changingCards.length === 0) return { updated: 0, cards: [], skippedCardIds };
-
+    if (targetCards.length === 0) return { updated: 0, cards: [], skippedCardIds };
     const updates = await db.transaction(async (tx) => {
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
+      const locked = await tx.select().from(cards)
+        .where(and(eq(cards.boardId, boardId), inArray(cards.id, targetCards.map((card) => card.id))))
+        .orderBy(cards.id).for("update");
+      const active = activeBulkCards(locked);
+      skippedCardIds.push(...active.skippedCardIds);
+      const changingCards = active.cards.filter((card) => card.dueDateLocalDate !== dueDateLocalDate
+        || card.dueDateSlot !== dueDateSlot || card.dueDateTimezone !== dueDateTimezone);
       const rows: { previous: typeof cards.$inferSelect; card: typeof cards.$inferSelect; activity: ActivityEvent }[] = [];
       for (const current of changingCards) {
+        // A start may never sit after the due date: a bulk due date set before a card's planned
+        // start pulls that start along, and the history row records both so the card's bar on the
+        // Timeline can be explained from its activity alone (see lib/due-date.ts).
+        const startDateLocalDate = clampStartToDue(current.startDateLocalDate, dueDateLocalDate);
+        const startClamped = startDateLocalDate !== current.startDateLocalDate;
         const [card] = await tx
           .update(cards)
-          .set({ dueDateLocalDate, dueDateSlot, dueDateTimezone, updatedAt: new Date() })
+          .set({ dueDateLocalDate, dueDateSlot, dueDateTimezone, ...(startClamped && { startDateLocalDate }), updatedAt: new Date() })
           .where(eq(cards.id, current.id))
           .returning();
         const activity = await recordActivity(tx, {
@@ -1300,10 +1322,11 @@ export async function cardRoutes(
           entityType: "card",
           entityId: current.id,
           action: ACTIVITY_ACTION.UPDATED,
-          payload: { dueDateLocalDate, dueDateSlot, dueDateTimezone },
+          payload: { dueDateLocalDate, dueDateSlot, dueDateTimezone, ...(startClamped && { startDateLocalDate }) },
         });
         rows.push({ previous: current, card: card!, activity });
       }
+      await requestScheduleRecheckForCards(tx, rows.map(({ card }) => card.id));
       return rows;
     });
 
@@ -1324,6 +1347,8 @@ export async function cardRoutes(
           dueDateSlot: card.dueDateSlot,
           dueDateTimezone: card.dueDateTimezone,
         },
+        previousStart: previous.startDateLocalDate,
+        nextStart: card.startDateLocalDate,
       });
       await emitCardActivityFeedItem(boardId, card.id, activity);
       await emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: toWireCard(card, req.auth.cid) });
@@ -1524,6 +1549,7 @@ export async function cardRoutes(
           .set({ archivedAt, updatedAt: archivedAt })
           .where(eq(cards.id, current.id))
           .returning();
+        await requestScheduleRecheckForCards(tx, [current.id]);
         const activity = await recordActivity(tx, {
           boardId,
           workspaceId: ctx.workspaceId,
@@ -1610,10 +1636,10 @@ export async function cardRoutes(
     const { card, activity } = await db.transaction(async (tx) => {
       const [locked] = await tx.select({ boardId: cards.boardId }).from(cards).where(eq(cards.id, id)).for("update");
       if (!locked) throw notFound();
-      const [progress] = await tx.select({ enabled: sql<boolean>`${boards.inProgressEnabled} and ${clients.inProgressEnabled}` })
+      const [progress] = await tx.select({ enabled: sql<boolean>`${boards.inProgressEnabled} and ${workspaces.inProgressEnabled} and ${clients.inProgressEnabled}` })
         .from(boards).innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
         .innerJoin(clients, eq(clients.id, workspaces.clientId)).where(eq(boards.id, locked.boardId));
-      if (!progress?.enabled) throw forbidden();
+      if (!progress?.enabled) throw featureDisabledError("inProgress");
       const [clock] = await tx.execute<{ banked: number; running: number; alertDays: number }>(sql`
         select c.in_progress_seconds as banked, w.in_progress_alert_days as "alertDays",
                in_progress_working_seconds(c.in_progress_since, now(), w.time_zone) as running
@@ -1663,47 +1689,72 @@ export async function cardRoutes(
     const { id } = req.params as { id: string };
     const body = dto.updateCardBody.parse(req.body);
 
-    const { card: current, ctx } = await loadEditableCard(req.auth, id);
-    assertCardActive(current);
+    const { card: loaded, ctx } = await loadEditableCard(req.auth, id);
+    assertCardActive(loaded);
+    // Setting a start needs the timeline; clearing one is always allowed (a due date moved before a
+    // hidden start still drags it along, so the stored range stays valid for re-enabling).
+    if (body.startDateLocalDate) await assertWorkspaceFeature(ctx.workspaceId, "timeline");
     assertIntegrationEmbeddedMediaStoredLocally(body.description, req.auth.cid, req.auth.authKind);
     const description = body.description === undefined
       ? undefined
       : stripSignedEmbeddedMediaUrls(body.description, req.auth.cid);
     const hasDueDateUpdate = body.dueDateLocalDate !== undefined || body.dueDateSlot !== undefined;
-    // Slot-only patches keep the stored date (see resolveDueDatePatch); the zone read is skipped when
-    // the stored one is reused or nothing due-date related changes.
-    const dueDatePatch = hasDueDateUpdate
-      ? resolveDueDatePatch(body, current, body.dueDateLocalDate || !current.dueDateTimezone ? await actorTimezone(req.auth.sub) : "UTC")
-      : { kind: "unchanged" as const };
-    if (dueDatePatch.kind === "rejected") throw badRequest(dueDatePatch.reason);
-    const dueDateLocalDate = dueDatePatch.kind === "write" ? dueDatePatch.dueDateLocalDate : undefined;
-    const dueDateSlot = dueDatePatch.kind === "write" ? dueDatePatch.dueDateSlot : undefined;
-    const dueDateTimezone = dueDatePatch.kind === "write" ? dueDatePatch.dueDateTimezone : undefined;
+    const timezone = hasDueDateUpdate ? await actorTimezone(req.auth.sub) : "UTC";
+    const { card, previous: current, activity, linkFanout } = await db.transaction(async (tx) => {
+      // Match the worker's graph-before-card lock order. Validate against the locked row: another
+      // editor may have moved either date since access was checked, including a bulk/automation edit.
+      await lockWorkspaceRelations(tx, ctx.workspaceId);
+      const [current] = await tx.select().from(cards).where(eq(cards.id, id)).for("update");
+      if (!current || current.boardId !== loaded.boardId) throw notFound();
+      assertCardActive(current);
+      // Slot-only patches keep the locked stored date and timezone (see resolveDueDatePatch).
+      const dueDatePatch = hasDueDateUpdate
+        ? resolveDueDatePatch(body, current, timezone)
+        : { kind: "unchanged" as const };
+      if (dueDatePatch.kind === "rejected") throw badRequest(dueDatePatch.reason);
+      const dueDateLocalDate = dueDatePatch.kind === "write" ? dueDatePatch.dueDateLocalDate : undefined;
+      const dueDateSlot = dueDatePatch.kind === "write" ? dueDatePatch.dueDateSlot : undefined;
+      const dueDateTimezone = dueDatePatch.kind === "write" ? dueDatePatch.dueDateTimezone : undefined;
+      // A start may never sit after the due date (see resolveStartDatePatch): an explicit later start
+      // is the caller's error, while a due date moved before the stored start drags the start with it
+      // so a Timeline bar can never be drawn backwards. Clearing the due date leaves the start alone.
+      const startDatePatch = resolveStartDatePatch(
+        body,
+        current,
+        dueDatePatch.kind === "write" ? dueDatePatch.dueDateLocalDate : current.dueDateLocalDate,
+      );
+      if (startDatePatch.kind === "rejected") throw badRequest(startDatePatch.reason);
+      const startDateLocalDate = startDatePatch.kind === "write" ? startDatePatch.startDateLocalDate : undefined;
+      const hasStartDateUpdate = body.startDateLocalDate !== undefined || startDateLocalDate !== undefined;
 
-    const activityPayload = {
-      ...body,
-      ...(description !== undefined && { description }),
-      ...(description !== undefined && {
-        // Description history is audit-facing: keep the raw markdown before and
-        // after the edit so clients can show an exact diff for any update shape.
-        fromValue: current.description,
-        toValue: description,
-      }),
-      ...(dueDateLocalDate !== undefined && {
-        dueDateLocalDate,
-        dueDateSlot,
-        dueDateTimezone,
-      }),
-    };
-    // Description saves and card renames are often repeated while someone is drafting.
-    // Keep each field in its own burst so mixed edits and due date history stay precise.
-    const isDescriptionOnlyUpdate = body.description !== undefined
-      && body.title === undefined
-      && !hasDueDateUpdate;
-    const isTitleOnlyUpdate = body.title !== undefined
-      && body.description === undefined
-      && !hasDueDateUpdate;
-    const { card, activity, linkFanout } = await db.transaction(async (tx) => {
+      const activityPayload = {
+        ...body,
+        ...(description !== undefined && { description }),
+        ...(description !== undefined && {
+          // Description history is audit-facing: keep the raw markdown before and
+          // after the edit so clients can show an exact diff for any update shape.
+          fromValue: current.description,
+          toValue: description,
+        }),
+        ...(dueDateLocalDate !== undefined && {
+          dueDateLocalDate,
+          dueDateSlot,
+          dueDateTimezone,
+        }),
+        // A clamped start was not in the body, yet it did change; the history must say so. A drag on
+        // the Timeline sends both dates and lands here as one "rescheduled" row, not two.
+        ...(startDateLocalDate !== undefined && { startDateLocalDate }),
+      };
+      // Description saves and card renames are often repeated while someone is drafting.
+      // Keep each field in its own burst so mixed edits and date history stay precise.
+      const isDescriptionOnlyUpdate = body.description !== undefined
+        && body.title === undefined
+        && !hasDueDateUpdate
+        && !hasStartDateUpdate;
+      const isTitleOnlyUpdate = body.title !== undefined
+        && body.description === undefined
+        && !hasDueDateUpdate
+        && !hasStartDateUpdate;
       const [card] = await tx
         .update(cards)
         .set({
@@ -1712,10 +1763,13 @@ export async function cardRoutes(
           ...(dueDateLocalDate !== undefined && { dueDateLocalDate }),
           ...(dueDateSlot !== undefined && { dueDateSlot }),
           ...(dueDateTimezone !== undefined && { dueDateTimezone }),
+          ...(startDateLocalDate !== undefined && { startDateLocalDate }),
           updatedAt: new Date(),
         })
         .where(eq(cards.id, id))
         .returning();
+      // Only a moved bar can change the schedule; a title or description edit never does.
+      if (dueDateLocalDate !== undefined || startDateLocalDate !== undefined) await requestScheduleRecheckForCards(tx, [id]);
 
       let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
       if (body.description !== undefined) {
@@ -1762,9 +1816,9 @@ export async function cardRoutes(
             toValue: body.title,
           })
         : await recordActivity(tx, activityInput);
-      return { card: card!, activity, linkFanout };
+      return { card: card!, previous: current, activity, linkFanout };
     });
-    if (hasDueDateUpdate) {
+    if (hasDueDateUpdate || card.startDateLocalDate !== current.startDateLocalDate) {
       await enqueueDueDateChangedEmails({
         tx: db,
         mailer: app.mailer,
@@ -1781,6 +1835,8 @@ export async function cardRoutes(
           dueDateSlot: card.dueDateSlot,
           dueDateTimezone: card.dueDateTimezone,
         },
+        previousStart: current.startDateLocalDate,
+        nextStart: card.startDateLocalDate,
       });
     }
     const wireCard = toWireCard(card, req.auth.cid);
@@ -2149,6 +2205,9 @@ export async function cardRoutes(
         .set({ boardId: body.boardId, listId: targetListId, position, updatedAt: new Date() })
         .where(eq(cards.id, id))
         .returning();
+      // The bar leaves one board's schedule and joins another's; both must re-evaluate.
+      await requestScheduleRecheckForBoards(tx, [source.boardId]);
+      await requestScheduleRecheckForCards(tx, [id]);
       // Worker heartbeats and stall events must follow the card into its new board room, not
       // expose run summaries to members of the board the card just left.
       await tx.update(agentRuns).set({ boardId: body.boardId, workspaceId: dstCtx.workspaceId })
@@ -3792,6 +3851,7 @@ export async function cardRoutes(
         .set({ archivedAt, updatedAt: new Date() })
         .where(eq(cards.id, id))
         .returning();
+      await requestScheduleRecheckForCards(tx, [id]);
 
       const activity = await recordActivity(tx, {
         boardId: card.boardId,

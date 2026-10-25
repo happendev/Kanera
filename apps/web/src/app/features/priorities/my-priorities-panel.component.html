@@ -46,8 +46,8 @@
        top is what you do next. The right response to "overdue at rank 12" is to move it up, and
        static text is what says that.
 
-       `showRows()` is already `online() && items().length > 0`, so this one condition also excludes
-       the offline, skeleton, error and both empty states. Kept out of `.drawer-header`, which is
+       `showRows()` is already `items().length > 0`, so this one condition also excludes
+       the initial skeleton and empty states. Kept out of `.drawer-header`, which is
        already four elements at 56px in a drawer that goes full-width under 520px. -->
   @if (showRows() && duePressure(); as pressure) {
     <p class="drawer-due-pressure">
@@ -68,24 +68,24 @@
   }
 
   <div class="drawer-body">
-    @if (!online()) {
-      <!-- Never a cached order. A stale sequence reads as an instruction, and the reader has no way
-           to tell it is last week's — so offline shows nothing rather than something wrong. -->
-      <k-empty-state class="drawer-empty" plain icon="wifi-off" title="Up next unavailable" i18n-title text="You’re offline. Up next is hidden until you reconnect, so you never follow a stale order." i18n-text />
-    } @else if (showInitialLoading()) {
+    @if (!online() && queue()) {
+      <p class="drawer-due-pressure"><i class="ti ti-wifi-off"></i>{{ offlineMessage() }}</p>
+    }
+    @if (showInitialLoading()) {
       <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading Up next" i18n-aria-label></i></div>
-    } @else if (loadError(); as message) {
+    } @else if (!queue() && loadError(); as message) {
       <k-empty-state class="drawer-empty" plain icon="alert-circle" title="Couldn’t load Up next" i18n-title [text]="message">
-        <button type="button" class="ghost empty-all-btn" (click)="retry()" i18n="Button: retry loading">Try again</button>
+        <button type="button" class="ghost empty-all-btn" [disabled]="!online()" (click)="retry()" i18n="Button: retry loading">Try again</button>
       </k-empty-state>
     } @else if (showRows()) {
       <!-- A drop-list id of its own: the drawer can be open over the My Cards dock, and CDK resolves
            connected lists by id, so two mounted surfaces must never share one. -->
       <k-priority-queue
         [priorities]="queue()"
-        [canDrag]="true"
+        [canDrag]="canEdit()"
+        [readOnly]="!canEdit()"
         [addableCards]="addableCards()"
-        [allowQuickComplete]="true"
+        [allowQuickComplete]="canEdit()"
         [dueReferenceTime]="dueReferenceTime()"
         [showEmptyState]="false"
         [showDragHint]="false"
@@ -97,11 +97,11 @@
         (completed)="onCompleted($event)"
         (cardOpened)="openCard($event)"
       />
-    } @else if (addCandidatesLoading()) {
+    } @else if (online() && addCandidatesLoading()) {
       <!-- The queue can finish before its larger, paged candidate pool. Do not briefly claim there
            is no assigned work while production is still answering those requests. -->
       <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading cards for Up next" i18n-aria-label></i></div>
-    } @else if (addCandidatesLoadError(); as message) {
+    } @else if (online() && addCandidatesLoadError(); as message) {
       <k-empty-state class="drawer-empty" plain icon="alert-circle" title="Couldn’t load cards" i18n-title [text]="message">
         <button type="button" class="ghost empty-all-btn" (click)="retryCandidates()" i18n="Button: retry loading">Try again</button>
       </k-empty-state>
@@ -115,7 +115,8 @@
           <k-priority-queue
             class="empty-add"
             [priorities]="queue()"
-            [canDrag]="true"
+            [canDrag]="canEdit()"
+            [readOnly]="!canEdit()"
             [addableCards]="addableCards()"
             [showEmptyState]="false"
             [showDragHint]="false"

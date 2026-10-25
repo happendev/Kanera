@@ -31,10 +31,11 @@ import {
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
 import { cardPath } from "@kanera/shared/card-links";
+import { barDurationDays, plannedBar } from "@kanera/shared/schedule";
 import type { CardLinkedItemsResponse, CardMirrorStatus, CardRelationCard, CardRelationsResponse, LinkedInternalSummary } from "@kanera/shared/dto";
 import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type WireAgentRun, type ServerToClientEvents, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CardLabel } from "@kanera/shared/schema";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
@@ -245,6 +246,7 @@ export class CardDetailComponent {
     return $localize`:Tooltip on the reminder button; when is e.g. "Wed, 4 Mar, 09.00":Reminder: ${formatDateTime(reminder.remindAt, "weekday")}:when:`;
   });
   readonly panel = viewChild<ElementRef<HTMLElement>>("panel");
+  readonly titleInput = viewChild<ElementRef<HTMLInputElement>>("titleInput");
   readonly detailScroller = viewChild<ElementRef<HTMLElement>>("detailScroller");
   readonly descriptionEditor = viewChild<DescriptionEditorComponent>("descriptionEditor");
   readonly checklistItemDescriptionEditor = viewChild<DescriptionEditorComponent>("checklistItemDescriptionEditor");
@@ -611,6 +613,7 @@ export class CardDetailComponent {
   readonly bulkChecklistDueDatePickerId = signal<string | null>(null);
   readonly labelPickerOpen = signal(false);
   readonly dueDatePickerOpen = signal(false);
+  readonly startDatePickerOpen = signal(false);
   // Id of the custom field whose select/user/date picker is currently open (one at a time).
   readonly cfPickerFieldId = signal<string | null>(null);
   readonly moveToListOpen = signal(false);
@@ -955,11 +958,13 @@ export class CardDetailComponent {
       { keys: "a", label: $localize`:Keyboard shortcut description:Assign members`, when: editable, run: () => this.memberPickerOpen.update((v) => !v) },
       { keys: "l", label: $localize`:Keyboard shortcut description:Edit labels`, when: editable, run: () => this.labelPickerOpen.update((v) => !v) },
       { keys: "d", label: $localize`:Keyboard shortcut description:Set due date`, when: editable, run: () => this.dueDatePickerOpen.update((v) => !v) },
+      // "s" is taken by watch, so the planned start sits on the shifted due-date key.
+      { keys: "shift+d", label: $localize`:Keyboard shortcut description:Set start date`, when: () => editable() && this.timelineEnabled(), run: () => this.startDatePickerOpen.update((v) => !v) },
       { keys: "m", label: $localize`:Keyboard shortcut description:Move to list`, when: editable, run: () => this.openMoveToListFromKeyboard() },
       { keys: "mod+enter", label: $localize`:Keyboard shortcut description:Mark complete or incomplete`, when: editable, run: () => void this.toggleCompletion() },
       { keys: "s", label: $localize`:Keyboard shortcut description:Watch or unwatch card`, run: () => void this.toggleCardWatch() },
       { keys: "mod+shift+c", label: $localize`:Keyboard shortcut description:Copy card link`, run: () => void this.copyCardLink() },
-    ], this.destroyRef);
+    ].map((binding) => ({ ...binding, dialog: () => this.panel()?.nativeElement })), this.destroyRef);
     effect((onCleanup) => {
       this.unsavedWork.setDirty(this.unsavedDraftSource, this.recoveredDescriptionDraft());
       onCleanup(() => this.unsavedWork.setDirty(this.unsavedDraftSource, false));
@@ -1170,6 +1175,16 @@ export class CardDetailComponent {
         return;
       }
       this.descriptionOverflows.set(el.scrollHeight > 324);
+    });
+
+    afterRenderEffect(() => {
+      // Native autofocus is unreliable for an input mounted after the dialog already has focus.
+      // Track only the input's lifetime so updates while typing cannot reselect the title.
+      const input = this.titleInput()?.nativeElement;
+      if (input) {
+        input.focus();
+        input.select();
+      }
     });
 
     afterRenderEffect(() => {
@@ -2187,7 +2202,9 @@ export class CardDetailComponent {
       this.bulkChecklistDueDatePickerId.set(null);
     }
     if (!target?.closest(".label-picker-wrap")) this.labelPickerOpen.set(false);
-    if (!target?.closest(".due-picker-wrap")) this.dueDatePickerOpen.set(false);
+    // The start and due pickers share badge styling but close independently of each other.
+    if (!target?.closest(".due-picker-wrap:not(.start-picker-wrap)")) this.dueDatePickerOpen.set(false);
+    if (!target?.closest(".start-picker-wrap")) this.startDatePickerOpen.set(false);
     if (!target?.closest(".cf-picker-wrap")) this.cfPickerFieldId.set(null);
   }
 
@@ -2200,7 +2217,7 @@ export class CardDetailComponent {
       // moved into the dialog, so this does not depend on where the keypress originated.
       if (event.defaultPrevented) return;
       const anyPopoverOpen = this.moveToListOpen() || this.memberPickerOpen() || this.checklistTemplatePickerOpen() || this.checklistItemAssigneePickerId() || this.checklistItemDueDatePickerId() || this.bulkChecklistAssigneePickerId() || this.bulkChecklistDueDatePickerId() || this.labelPickerOpen() ||
-        this.dueDatePickerOpen() || this.cfPickerFieldId() || this.actionsMenuOpen() || this.copyToBoardOpen() || this.moveToBoardOpen();
+        this.dueDatePickerOpen() || this.startDatePickerOpen() || this.cfPickerFieldId() || this.actionsMenuOpen() || this.copyToBoardOpen() || this.moveToBoardOpen();
       if (anyPopoverOpen) {
         this.moveToListOpen.set(false);
         this.memberPickerOpen.set(false);
@@ -2211,6 +2228,7 @@ export class CardDetailComponent {
         this.bulkChecklistDueDatePickerId.set(null);
         this.labelPickerOpen.set(false);
         this.dueDatePickerOpen.set(false);
+        this.startDatePickerOpen.set(false);
         this.cfPickerFieldId.set(null);
         this.actionsMenuOpen.set(false);
         this.copyToBoardOpen.set(false);
@@ -2223,10 +2241,11 @@ export class CardDetailComponent {
       return;
     }
 
-    if (event.key !== "Tab") return;
+    if (event.key !== "Tab" || event.defaultPrevented) return;
 
     const panel = this.panel()?.nativeElement;
     if (!panel || this.closing()) return;
+    if (!this.shortcuts.isDialogActive(panel, event.target)) return;
 
     const focusable = this.focusableElements(panel);
     if (!focusable.length) {
@@ -2371,6 +2390,54 @@ export class CardDetailComponent {
   dueDateDueSoon(): boolean {
     const card = this.card();
     return !card.archivedAt && !card.completedAt && isDueSoon(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
+  }
+
+  toggleStartDatePicker(e: MouseEvent) {
+    e.stopPropagation();
+    this.startDatePickerOpen.update((v) => !v);
+  }
+
+  /**
+   * The planned start is date-only (no slot): it marks where the card's Timeline bar begins. The API
+   * rejects a start after the due date with a 400 and clamps the start when the due date moves
+   * before it, so the due-date path needs no guard of its own.
+   */
+  async setStartDate(dateStr: string) {
+    if (!this.canEdit()) return;
+    const startDateLocalDate = dateStr || null;
+    try {
+      const card = await this.api.patch<WireCard>(`/cards/${this.card().id}`, { startDateLocalDate });
+      this.state.updateCard(card);
+    } catch (error) {
+      const message = error instanceof ApiError ? (error.body as { message?: unknown } | null)?.message : null;
+      this.toasts.error(typeof message === "string" && message.trim() ? message : $localize`:Toast when saving a card's start date fails:Couldn't save the start date.`);
+      return;
+    }
+    if (!startDateLocalDate) this.startDatePickerOpen.set(false);
+  }
+
+  startDateInputValue(): string {
+    return dueDateInputValue(this.card().startDateLocalDate);
+  }
+
+  /** Start dates belong to the Timeline, which the workspace can switch off. */
+  readonly timelineEnabled = computed(() => this.state.timelineEnabled());
+
+  hasStartDate(): boolean {
+    return Boolean(this.card().startDateLocalDate);
+  }
+
+  startDateText(): string {
+    const start = this.card().startDateLocalDate;
+    return start ? formatDate(start, "short") : "";
+  }
+
+  /** "5 working days" once both ends of the planned bar exist; the Timeline measures bars the same way. */
+  durationHint(): string {
+    const card = this.card();
+    if (!card.startDateLocalDate || !card.dueDateLocalDate) return "";
+    const days = barDurationDays(plannedBar(card));
+    return icu($localize`:Hint beside a card's start and due dates - working-day length of the planned bar:{days, plural, one {# working day} other {# working days}}`, { days });
   }
 
   async toggleAssignee(userId: string) {

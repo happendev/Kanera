@@ -26,6 +26,7 @@ function card(overrides: Partial<WireCardSummary> & { id: string }): WireCardSum
     boardId: "board-1",
     position: "1",
     dueDateLocalDate: null,
+    startDateLocalDate: null,
     dueDateSlot: null,
     dueDateTimezone: null,
     completedAt: null,

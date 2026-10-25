@@ -7,12 +7,13 @@ import { AutosaveStatusComponent } from "../../../shared/autosave-status.compone
 import { ColorPickerComponent } from "../../../shared/color-picker.component";
 import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { IconPickerComponent } from "../../../shared/icon-picker.component";
+import { AutomationSelectDropdownComponent } from "../automations/automation-select-dropdown.component";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
 
 @Component({
   selector: "k-workspace-settings-general",
   standalone: true,
-  imports: [AnchoredPanelDirective, AutosaveStatusComponent, ColorPickerComponent, DocsLinkComponent, IconPickerComponent],
+  imports: [AnchoredPanelDirective, AutomationSelectDropdownComponent, AutosaveStatusComponent, ColorPickerComponent, DocsLinkComponent, IconPickerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./general.page.html",
   styleUrl: "./general.page.scss",

@@ -1,4 +1,4 @@
-import { MCP_MY_DAY_EVENT_NAME, MCP_PRIORITY_EVENT_NAME, isMcpUserEventName, mcpEventData, type McpMyDayEventOccurrence, type McpCardEventOccurrence, type McpEventArguments, type McpEventName, type McpPriorityEventOccurrence, type McpStoredEventArguments } from "@kanera/shared/dto";
+import { MCP_MY_DAY_EVENT_NAME, MCP_PRIORITY_EVENT_NAME, isMcpUserEventName, mcpEventData, type McpEventData, type McpMyDayEventOccurrence, type McpCardEventOccurrence, type McpEventArguments, type McpEventName, type McpPriorityEventOccurrence, type McpStoredEventArguments, type ScheduleTransition } from "@kanera/shared/dto";
 import { cards, clientMembers, lists, mcpEventDeliveries, mcpEventSubscriptions, oauthClients, oauthGrants, users, workspaceApiKeys, type EventOutbox, type EventOutboxActor, type McpDeliveryError, type McpEventSubscription } from "@kanera/shared/schema";
 import { and, asc, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
@@ -143,7 +143,7 @@ export async function enqueueMcpEventDeliveries(event: EventOutbox, preloadedSub
     // Different catalog events need distinct IDs even when they share an outbox row: a receiver
     // subscribed to both card.updated and card.blocked may deduplicate globally by webhook-id.
     const eventId = name === occurrence.name ? occurrence.eventId : `${occurrence.eventId}_${name}`;
-    await enqueueOccurrence(event, subscriptions, { ...occurrence, name, eventId });
+    await enqueueOccurrence(event, subscriptions, { ...occurrence, name, eventId, data: { ...occurrence.data, ...scheduleFieldsFor(event, name) } });
   }
 }
 
@@ -151,11 +151,20 @@ export async function enqueueMcpEventDeliveries(event: EventOutbox, preloadedSub
 // Only the transaction-stamped marker creates the specialized event; count refreshes never do.
 function eventNamesFor(event: EventOutbox): McpCardEventOccurrence["name"][] {
   const names = [event.eventType.replace(":", ".") as McpCardEventOccurrence["name"]];
-  const payload = event.payload as { dependencyTransition?: string };
+  const payload = event.payload as { dependencyTransition?: string; scheduleTransition?: ScheduleTransition };
   if (event.eventType === "card:updated" && (payload.dependencyTransition === "blocked" || payload.dependencyTransition === "unblocked")) {
     names.push(`card.${payload.dependencyTransition}`);
   }
+  // Schedule boundaries ride the same row shape (see schedule-events.ts); the stamp names the event.
+  if (event.eventType === "card:updated" && payload.scheduleTransition) names.push(payload.scheduleTransition.name);
   return names;
+}
+
+/** The schedule.* payload fields, present only on the schedule occurrence, not on the generic card.updated it shares a row with. */
+function scheduleFieldsFor(event: EventOutbox, name: McpCardEventOccurrence["name"]): Partial<McpEventData> {
+  if (!name.startsWith("schedule.")) return {};
+  const { name: _name, ...fields } = (event.payload as { scheduleTransition: ScheduleTransition }).scheduleTransition;
+  return fields;
 }
 
 async function enqueueOccurrence(event: EventOutbox, subscriptions: McpEventSubscription[], occurrence: BaseOccurrence) {

@@ -144,40 +144,21 @@
 
 .work-search {
   display: flex;
-  flex: 1 1 auto;
   align-items: center;
+  gap: 8px;
   width: 100%;
   min-width: 0;
-  // The layout switch reveals its labels from this box's width (see `sg-room` in k-segmented).
-  // Safe here despite the toolbar's no-containment rule: nothing in the search slot opens a fixed
-  // picker, and the switch's tooltips render in the CDK overlay.
-  container: sg-room / inline-size;
 
+  // The field keeps the toolbar's fixed width; the switch sizes itself beside it. On a phone the
+  // field is 100% of the slot and is the one that gives way, so the switch stays on screen.
   k-search-field {
-    flex: 1 1 200px;
-    width: 100%;
-    max-width: 340px;
-    min-width: 160px;
+    flex: 0 1 auto;
+    min-width: 0;
   }
 }
 
 .work-done-layout-switch {
   flex: none;
-  margin-left: 8px;
-}
-
-// A layout switch shares the search slot, so widen the slot by the switch rather than clipping it,
-// and keep room for search beside the icon-only switch.
-k-page-toolbar:has(.work-done-layout-switch) {
-  --pt-search-max-width: 580px;
-  --pt-search-min-width: 260px;
-}
-
-// Beside a switch the field takes whatever the widened slot leaves (the slot's own cap bounds it),
-// so no gap opens between the switch and the next control; it gives way down to the slot's floor.
-.work-search:has(.work-done-layout-switch) k-search-field {
-  min-width: 0;
-  max-width: none;
 }
 
 /* ── Up next dock ──────────────────────────────────────────────────────────────
@@ -360,9 +341,17 @@ k-page-toolbar:has(.work-done-layout-switch) {
 
   // Keeps the 420px floor from the base rule: on a short window the sheet overflows the frame and the
   // shell scrolls to it, which is better than collapsing to a couple of rows.
-  .work-table-view {
+  .work-table-view,
+  .work-timeline-view {
     flex: 1 1 auto;
   }
+}
+
+// The Timeline shares the table's frame: its scroller owns the chart's scrollport, so it needs the
+// space that is actually left, and the same floor keeps a short window from flattening the chart.
+.work-timeline-view {
+  min-height: 420px;
+  margin-inline: calc(var(--work-gutter) * -1);
 }
 
 // Below the split point the sidebar becomes a bottom sheet: full width, its own layer, thumb-sized
@@ -1240,12 +1229,6 @@ k-work-done-view {
     // Still no top padding: the pinned chrome is the first thing on the page and a gutter above it
     // read as the page having slipped down.
     padding: 0 var(--work-gutter) 24px;
-  }
-
-  // The Work done layout switch (icons only here) shares the row with search; the field
-  // gives way rather than pushing the switch past the edge.
-  .work-search k-search-field {
-    min-width: 0;
   }
 }
 

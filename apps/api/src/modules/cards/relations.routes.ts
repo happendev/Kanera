@@ -4,6 +4,7 @@ import { ACTIVITY_ACTION, boards, cardRelations, cards, lists } from "@kanera/sh
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
+import { assertWorkspaceFeature } from "../../lib/workspace-features.js";
 import { assertBoardAccess, assertCardAccess, assignedCardVisibility } from "../../lib/access.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { assertCardActive } from "../../lib/card-guards.js";
@@ -24,6 +25,7 @@ import { emitInternalLinksChanged } from "../../lib/internal-links.js";
 import { EMPTY_EFFECTS, emitAutomationEffects, runCardBlockedAutomations, runCardUnblockedAutomations } from "../../lib/automations.js";
 import { notifyDependencyHandoffs, recordBlockersCleared, notifyDependencyAdded } from "../../lib/dependency-notifications.js";
 import { env } from "../../env.js";
+import { requestScheduleRecheckForCards } from "../../lib/schedule-events.js";
 import type { CardRelationDirection } from "@kanera/shared/card-relations";
 
 function oppositeDirection(direction: CardRelationDirection): CardRelationDirection {
@@ -90,6 +92,7 @@ export function cardRelationRoutes(app: FastifyInstance) {
     if (otherCard.workspaceId !== pathCard.workspaceId) throw badRequest("cards must be in the same workspace to be related");
 
     const stored = storedRelation(id, otherCard.id, body.direction);
+    if (stored.kind === "blocks") await assertWorkspaceFeature(pathCard.workspaceId, "dependencies");
     if (stored.kind === "blocks" && stored.targetCardId === otherCard.id) await assertCardAccess(req.auth, otherCard, "editor");
     const result = await db.transaction(async (tx) => {
       await lockWorkspaceRelations(tx, pathCard.workspaceId);
@@ -122,6 +125,8 @@ export function cardRelationRoutes(app: FastifyInstance) {
         ...stored,
         createdById: req.auth.sub,
       }).returning();
+      // A new blocks edge chains two bars; the engine must re-place both boards' schedules.
+      if (stored.kind === "blocks") await requestScheduleRecheckForCards(tx, [card.id, other.id]);
       // Recorded on both cards, each from its own side, and naming the other card by key rather
       // than title: a card's feed is readable by people who may not be able to open the other card.
       const record = (subject: typeof card, otherCard: typeof card, direction: CardRelationDirection) => recordActivity(tx, {
@@ -207,9 +212,13 @@ export function cardRelationRoutes(app: FastifyInstance) {
         or(eq(cardRelations.sourceCardId, id), eq(cardRelations.targetCardId, id)),
       )).limit(1);
       if (!relation) throw notFound("relation not found");
+      // Hidden `blocks` rows stay exactly as they were while dependencies are switched off.
+      if (relation.kind === "blocks") await assertWorkspaceFeature(card.workspaceId, "dependencies", tx);
       const before = relation.kind === "blocks"
         ? (await captureBlockedDependents(tx, card.workspaceId, [relation.sourceCardId])).filter((row) => row.dependentId === relation.targetCardId)
         : [];
+      // Requested before the delete so the neighbour lookup still sees the edge being removed.
+      if (relation.kind === "blocks") await requestScheduleRecheckForCards(tx, [relation.sourceCardId, relation.targetCardId]);
       await tx.delete(cardRelations).where(eq(cardRelations.id, relation.id));
       const otherCardId = relation.sourceCardId === id ? relation.targetCardId : relation.sourceCardId;
       const [other] = await tx.select().from(cards).where(eq(cards.id, otherCardId)).limit(1);

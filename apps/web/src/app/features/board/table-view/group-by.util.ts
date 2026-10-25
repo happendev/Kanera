@@ -616,6 +616,10 @@ export function sortGroupCards(cards: AnyCard[], mode: SortBy): AnyCard[] {
       return arr.sort(byNullableString((c) => c.dueDateLocalDate, "asc"));
     case "due-desc":
       return arr.sort(byNullableString((c) => c.dueDateLocalDate, "desc"));
+    case "start-asc":
+      return arr.sort(byNullableString((c) => c.startDateLocalDate, "asc"));
+    case "start-desc":
+      return arr.sort(byNullableString((c) => c.startDateLocalDate, "desc"));
     case "created-desc":
       return arr.sort(byDate((c) => c.createdAt as unknown as string | Date, "desc"));
     case "created-asc":

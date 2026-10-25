@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from "@angular/core";
+import { afterNextRender, ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, output, signal } from "@angular/core";
 import { PANEL_INPUT_STYLES } from "./anchored-panel";
 import { AutofocusDirective } from "./autofocus.directive";
 import { AvatarComponent } from "./avatar.component";
@@ -475,6 +475,20 @@ export class PickerListComponent {
   );
 
   readonly nav = new ListboxNav(this.navItems);
+
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  constructor() {
+    // Open on the current choice. A long list (every time zone, every board) would otherwise open at
+    // its top with the selected row hundreds of rows away. Scrolls the list only, never the page.
+    afterNextRender(() => {
+      const list = this.host.nativeElement.querySelector<HTMLElement>(".pl-list");
+      const row = list?.querySelector<HTMLElement>(".pl-row.is-selected");
+      if (!list || !row || list.scrollHeight <= list.clientHeight) return;
+      const offset = row.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
+      list.scrollTop = offset - (list.clientHeight - row.offsetHeight) / 2;
+    });
+  }
 
   readonly showSearch = computed(() =>
     this.groups().reduce((total, group) => total + group.options.length, 0) >= this.searchThreshold()

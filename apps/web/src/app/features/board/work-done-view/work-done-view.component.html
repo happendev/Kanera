@@ -1,4 +1,5 @@
 <section class="work-done-view">
+  @if (offlineCopyLabel()) { <div class="offline-banner" role="status"><i class="ti ti-cloud-off"></i>{{ offlineCopyLabel() }}</div> }
   <div class="wd-toolbar" (click)="$event.stopPropagation()">
     <div class="wd-toolbar-left">
       <!-- Presets cover the common reads; the range picker handles anything else. -->

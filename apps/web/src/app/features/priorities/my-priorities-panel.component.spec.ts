@@ -67,6 +67,8 @@ function setup(options: {
     loading: signal(options.loading ?? false),
     loadError: signal<string | null>(options.loadError ?? null),
     online,
+    canEdit: online,
+    offlineMessage: signal("Offline copy from just now"),
     addableCards: signal<{ id: string }[]>([]),
     addCandidatesLoading: signal(options.addCandidatesLoading ?? false),
     addCandidatesLoadError: signal<string | null>(options.addCandidatesLoadError ?? null),
@@ -152,16 +154,14 @@ describe("MyPrioritiesPanelComponent", () => {
     expect(f.fixture.componentInstance.closing()).toBe(true);
   });
 
-  it("shows an offline state instead of a stale order", () => {
+  it("keeps the saved order visible without editing controls offline", () => {
     const f = setup({ online: false });
     f.fixture.componentInstance.toggle();
     f.fixture.detectChanges();
 
-    const state = host(f.fixture).querySelector(".drawer-empty");
-    expect(state?.textContent).toContain("offline");
-    expect(state?.querySelector(".es-icon.ti-wifi-off")).not.toBeNull();
-    // Rows are withheld entirely — this is the whole reason the queue is never cached.
-    expect(host(f.fixture).querySelector(".panel-row")).toBeNull();
+    expect(host(f.fixture).textContent).toContain("Offline copy from just now");
+    expect(host(f.fixture).querySelectorAll(".panel-row.cdk-drag-disabled")).toHaveLength(2);
+    expect(host(f.fixture).querySelector(".row-tools")).toBeNull();
   });
 
   it("offers a retry when the load failed", () => {
@@ -350,7 +350,7 @@ describe("MyPrioritiesPanelComponent", () => {
     }
   });
 
-  it("hides the due-pressure strip when nothing is under pressure, and when offline", () => {
+  it("shows cached due pressure offline but hides the strip for undated rows", () => {
     // Undated rows: the queue is still an order, and there is no pressure to report about it.
     const f = setup();
     f.fixture.componentInstance.toggle();
@@ -358,12 +358,12 @@ describe("MyPrioritiesPanelComponent", () => {
     expect(f.fixture.componentInstance.duePressure()).toBeNull();
     expect(host(f.fixture).querySelector(".drawer-due-pressure")).toBeNull();
 
-    // Offline withholds the rows entirely, so a summary of them would describe nothing on screen.
+    // The same cached dates remain visible offline.
     f.queueSignal.set(queue([entry("p1", 1, { dueDateLocalDate: "2020-01-01", dueDateSlot: "anyTime", dueDateTimezone: "UTC" })]));
     f.online.set(false);
     f.fixture.detectChanges();
     expect(f.fixture.componentInstance.duePressure()).not.toBeNull();
-    expect(host(f.fixture).querySelector(".drawer-due-pressure")).toBeNull();
+    expect(host(f.fixture).querySelector(".drawer-due-pressure")).not.toBeNull();
   });
 
   it("surfaces a failed gesture in the drawer rather than silently reverting", async () => {

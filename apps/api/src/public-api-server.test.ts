@@ -52,6 +52,7 @@ interface PublicOpenApiTestDocument {
     "/search": { get: object; post: object };
     "/work/history/query": { post: object };
     "/cards/dependency-graph": { post: { description?: string } };
+    "/cards/schedule": { post: { description?: string } };
     "/me/work-history": { post: object };
     "/me/current-work": { post: object };
     "/work/priority-targets": { get: { description?: string } };
@@ -280,6 +281,12 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.equal(app.hasRoute({ method: "POST", url: "/api/v1/cards/dependency-graph" }), true);
   assert.match(spec.paths["/cards/dependency-graph"].post.description ?? "", /never returned or walked through/i);
   assert.ok(spec.components.schemas.DependencyGraph?.properties?.edges);
+  // The schedule engine's verdict ships with its documentation on both servers too.
+  assert.equal(app.hasRoute({ method: "POST", url: "/api/v1/cards/schedule" }), true);
+  assert.equal(app.hasRoute({ method: "POST", url: "/api/v1/work/schedule-attention/query" }), true);
+  assert.match(spec.paths["/cards/schedule"].post.description ?? "", /critical path/i);
+  assert.ok(spec.components.schemas.Schedule?.properties?.summary);
+  assert.ok(spec.components.schemas.ScheduleAttention?.properties?.conflicts);
   assert.equal(spec.paths["/workspaces"].get.security[0]?.BearerAuth.length, 0);
   assert.match(spec.tags.find((tag) => tag.name === "Webhooks")?.description ?? "", /HMAC-SHA256/);
   assert.ok(spec.components.schemas.Checklist?.properties?.parentItemId);

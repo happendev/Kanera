@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { EVENT_OUTBOX_ACTOR_KINDS } from "../schema/event-outbox.js";
 
-export const MCP_CARD_EVENT_NAMES = ["card.created", "card.updated", "card.moved", "comment.created", "card.blocked", "card.unblocked"] as const;
+// The schedule events come from the server-side schedule engine, not from a single write: after a
+// date, relation, completion or archive change on a board the engine runs again and reports what
+// changed against its last verdict, so a chain of edits yields one event per card, not one per edit.
+export const MCP_CARD_EVENT_NAMES = ["card.created", "card.updated", "card.moved", "comment.created", "card.blocked", "card.unblocked", "schedule.conflict_detected", "schedule.conflict_resolved", "schedule.critical_path_slipped"] as const;
 export const MCP_PRIORITY_EVENT_NAME = "priorities.changed";
 export const MCP_MY_DAY_EVENT_NAME = "my_day.ready";
 export const MCP_REMINDER_EVENT_NAME = "reminder.due";
@@ -74,6 +77,12 @@ export const mcpEventData = z.strictObject({
   workspaceId: z.uuid(), boardId: z.uuid(), cardId: z.uuid(), actor: mcpEventActor,
   title: z.string().optional(), text: z.string().optional(), commentId: z.uuid().optional(),
   listId: z.uuid().optional(), fromListId: z.uuid().optional(), prevPosition: z.string().optional(), url: z.url().optional(),
+  // schedule.* only.
+  blockerCardId: z.uuid().optional().describe("schedule.conflict_*: the open blocker planned to finish on or after this card's start."),
+  days: z.number().int().optional().describe("schedule.conflict_detected: working days the card would have to move right; schedule.critical_path_slipped: working days the projected finish moved."),
+  projectedFinish: z.iso.date().optional().describe("schedule.critical_path_slipped: the chain's new projected finish."),
+  previousProjectedFinish: z.iso.date().optional(),
+  slipDays: z.number().int().optional().describe("schedule.critical_path_slipped: working days the projected finish lands after the latest due date."),
 });
 // Deliberately content-free, like the web app's `cardPriority:invalidated` ping: the queue is a
 // per-viewer redacted projection (entries the reader cannot see keep their rank as card: null), so
@@ -124,6 +133,9 @@ const descriptions: Record<McpEventName, string> = {
   "card.updated": "A card changed, including its title, description, completion or archive state. Read cards.get for the current full record.",
   "card.blocked": "An active card gained its first open blocker, including a blocker being reopened or restored. Additional blockers do not repeat this event. Includes people, integrations, automations and mirrors; independent of configured automation rules.",
   "card.unblocked": "An active card lost its last open blocker through completion, archive or unlinking, or the blocker's board or list being deleted. Includes people, integrations, automations and mirrors; independent of configured automation rules.",
+  "schedule.conflict_detected": "An open card gained its first scheduling conflict: an open blocker is now planned to finish on or after the card's planned start. Includes blockerCardId and the working days (days) the card would have to move. Computed by the same engine as the Timeline view; independent of configured automation rules.",
+  "schedule.conflict_resolved": "An open card lost its last scheduling conflict, through a date change, the blocker completing or the dependency being removed.",
+  "schedule.critical_path_slipped": "A card on its board's critical path was rescheduled so the chain's projected finish moved later. Includes the previous and new projectedFinish and slipDays against the latest due date. Fires for the card whose dates moved.",
   "card.moved": "A card moved within or between lists or boards. Includes its source and destination lists and previous position.",
   "comment.created": "A new comment was posted on a card. Includes a bounded text excerpt; use comments.list for the full comment.",
   "priorities.changed": "The connected user's own \"Up next\" priority queue may have changed: an entry was added, moved or removed, or a queued card was completed, archived, restored or reassigned. Carries no queue content; call priorities.list for the current ranking.",

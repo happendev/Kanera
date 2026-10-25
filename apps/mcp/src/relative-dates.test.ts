@@ -71,3 +71,14 @@ void test("reminder phrases resolve to an instant in the user's zone, defaulting
   assert.deepEqual(resolveRelativeDates({ remindAt: "2026-10-12T07:30:00Z" }, context), { remindAt: "2026-10-12T07:30:00Z" });
   assert.deepEqual(resolveRelativeDates({ completedFrom: "tomorrow" }, context), { completedFrom: "2026-10-09T23:00:00.000Z" });
 });
+
+// A start date is date-only: a phrase resolves like a due date, but its time never fills a due slot.
+void test("start-date phrases resolve to a local date without touching the due slot", () => {
+  const context = { timeZone: "Europe/London", today: TODAY };
+  assert.deepEqual(
+    resolveRelativeDates({ changes: { startDateLocalDate: "next monday", dueDateLocalDate: "friday 3pm" } }, context),
+    { changes: { startDateLocalDate: "2026-10-19", dueDateLocalDate: TODAY, dueDateSlot: "endOfWorkDay" } },
+  );
+  assert.deepEqual(resolveRelativeDates({ startDateLocalDate: "tomorrow 9am" }, context), { startDateLocalDate: "2026-10-10" });
+  assert.deepEqual(resolveRelativeDates({ startDateLocalDate: "2026-11-02", dueDateLocalDate: null }, context), { startDateLocalDate: "2026-11-02", dueDateLocalDate: null });
+});

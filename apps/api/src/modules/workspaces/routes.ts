@@ -35,6 +35,8 @@ import { ANALYTICS_EVENT_VERSION, analyticsPlanCode, capturePremiumFeatureUsed, 
 import { newOpaqueToken } from "../../lib/tokens.js";
 import { assertBoardLimit, assertGuestsAllowed, getAutomationExecutionsRemaining, shouldEnableSeededAutomations } from "../../lib/tier-limits.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
+import { emitWorkspaceFeaturesChanged } from "../../lib/workspace-features.js";
+import { resetScheduleLatches } from "../../lib/schedule-events.js";
 import { emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 import { positionAtIndex } from "../../lib/position.js";
@@ -94,6 +96,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           timeZone: workspaces.timeZone,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
           notesEnabled: workspaces.notesEnabled,
+          dependenciesEnabled: workspaces.dependenciesEnabled,
+          timelineEnabled: workspaces.timelineEnabled,
+          inProgressEnabled: workspaces.inProgressEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
           clientRole: clientMembers.clientRole,
@@ -147,6 +152,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           timeZone: workspaces.timeZone,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
           notesEnabled: workspaces.notesEnabled,
+          dependenciesEnabled: workspaces.dependenciesEnabled,
+          timelineEnabled: workspaces.timelineEnabled,
+          inProgressEnabled: workspaces.inProgressEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
           role: sql<"admin" | "member">`${req.auth.apiKeyScope === "admin" ? "admin" : "member"}::text`.as("role"),
@@ -171,6 +179,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           timeZone: workspaces.timeZone,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
           notesEnabled: workspaces.notesEnabled,
+          dependenciesEnabled: workspaces.dependenciesEnabled,
+          timelineEnabled: workspaces.timelineEnabled,
+          inProgressEnabled: workspaces.inProgressEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
           role: sql<"admin">`'admin'::text`.as("role"),
@@ -195,6 +206,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         timeZone: workspaces.timeZone,
         boardLinkingEnabled: workspaces.boardLinkingEnabled,
         notesEnabled: workspaces.notesEnabled,
+        dependenciesEnabled: workspaces.dependenciesEnabled,
+        timelineEnabled: workspaces.timelineEnabled,
+        inProgressEnabled: workspaces.inProgressEnabled,
         createdAt: workspaces.createdAt,
         updatedAt: workspaces.updatedAt,
         role: workspaceMembers.role,
@@ -621,7 +635,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     const [workspaceLists, workspaceLabels, [organisation]] = await Promise.all([
       db.select().from(lists).where(and(eq(lists.workspaceId, id), isNull(lists.archivedAt))).orderBy(asc(lists.position)),
       db.select().from(cardLabels).where(eq(cardLabels.workspaceId, id)).orderBy(asc(cardLabels.position)),
-      db.select({ inProgressEnabled: clients.inProgressEnabled }).from(clients).where(eq(clients.id, workspace.clientId)),
+      db.select({ inProgressEnabled: clients.inProgressEnabled, dependenciesEnabled: clients.dependenciesEnabled, timelineEnabled: clients.timelineEnabled }).from(clients).where(eq(clients.id, workspace.clientId)),
     ]);
     const [workspaceFields, checklistTemplates, automations] = await Promise.all([
       loadWorkspaceCustomFields(id),
@@ -632,14 +646,21 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     // the small organisation-wide usage value here so that surface does not load the much heavier
     // home agenda endpoint merely to decide whether its allowance callout should be shown.
     const automationExecutionsRemaining = role === "admin" ? await getAutomationExecutionsRemaining(req.auth.cid) : null;
-    return { organisationInProgressEnabled: organisation!.inProgressEnabled, workspace: toWireWorkspace(workspace), role, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations, automationExecutionsRemaining };
+    // Settings show a workspace switch as off and locked while its organisation has the feature off.
+    const organisationFeatures = { dependencies: organisation!.dependenciesEnabled, timeline: organisation!.timelineEnabled, inProgress: organisation!.inProgressEnabled };
+    return { organisationInProgressEnabled: organisation!.inProgressEnabled, organisationFeatures, workspace: toWireWorkspace(workspace), role, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations, automationExecutionsRemaining };
   });
 
   app.patch("/workspaces/:id", async (req) => {
     const { id } = req.params as { id: string };
     await assertWorkspaceAccess(req.auth, id, "admin");
     const body = dto.updateWorkspaceBody.parse(req.body);
-    const { workspace, mirroredBoard, deletedMirrors } = await db.transaction(async (tx) => {
+    const { workspace, mirroredBoard, deletedMirrors, featuresChanged } = await db.transaction(async (tx) => {
+      const [previous] = await tx.select({ dependenciesEnabled: workspaces.dependenciesEnabled, timelineEnabled: workspaces.timelineEnabled, inProgressEnabled: workspaces.inProgressEnabled })
+        .from(workspaces).where(eq(workspaces.id, id)).for("update");
+      if (!previous) throw notFound();
+      const featuresChanged = (["dependenciesEnabled", "timelineEnabled", "inProgressEnabled"] as const)
+        .some((key) => body[key] !== undefined && body[key] !== previous[key]);
       const mirrorsToDelete = body.boardLinkingEnabled === false
         ? await tx.select().from(boardMirrors).where(or(eq(boardMirrors.sourceWorkspaceId, id), eq(boardMirrors.targetWorkspaceId, id)))
         : [];
@@ -666,6 +687,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           ...(body.timeZone !== undefined && { timeZone: body.timeZone }),
           ...(body.boardLinkingEnabled !== undefined && { boardLinkingEnabled: body.boardLinkingEnabled }),
           ...(body.notesEnabled !== undefined && { notesEnabled: body.notesEnabled }),
+          ...(body.dependenciesEnabled !== undefined && { dependenciesEnabled: body.dependenciesEnabled }),
+          ...(body.timelineEnabled !== undefined && { timelineEnabled: body.timelineEnabled }),
+          ...(body.inProgressEnabled !== undefined && { inProgressEnabled: body.inProgressEnabled }),
           updatedAt: new Date(),
         })
         .where(eq(workspaces.id, id))
@@ -697,10 +721,14 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         action: "updated",
         payload: { ...body, ...(mirrorsToDelete.length > 0 && { deletedBoardLinkCount: mirrorsToDelete.length }) },
       });
-      return { workspace: workspace!, mirroredBoard, deletedMirrors: mirrorsToDelete };
+      if ((["dependenciesEnabled", "timelineEnabled"] as const).some((key) => body[key] !== undefined && body[key] !== previous[key])) {
+        await resetScheduleLatches(tx, { workspaceId: id });
+      }
+      return { workspace: workspace!, mirroredBoard, deletedMirrors: mirrorsToDelete, featuresChanged };
     });
     const publicWorkspace = toWireWorkspace(workspace);
     await emitToWorkspace(id, "workspace:updated", { workspace: publicWorkspace });
+    if (featuresChanged) await emitWorkspaceFeaturesChanged({ workspaceId: id });
     if (mirroredBoard) await emitToBoardAudience(mirroredBoard.id, "board:updated", { board: mirroredBoard }, { workspaceId: id });
     // Disabling linking can remove cross-workspace relationships. Notify both board rooms for every
     // deleted mirror so the other workspace also drops stale link counts and management rows.

@@ -1,3 +1,4 @@
+import type { WorkspaceFeatures } from "@kanera/shared/workspace-features";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
 import type { WorkCard, WorkCatalog } from "@kanera/shared/dto";
@@ -14,6 +15,7 @@ import { CardDetailComponent } from "../board/card-detail.component";
 
 type SourceBoardPayload = {
   organisationInProgressEnabled?: boolean;
+  features?: WorkspaceFeatures;
   board: Board;
   workspaceClientId?: string | null;
   workspaceKind?: "standard" | "board";
@@ -187,6 +189,8 @@ export class GlobalCardDetailHostComponent implements OnInit, OnDestroy {
     if (!workspace) return false;
     const timestamp = new Date(0);
     this.state.hydrate({
+      // The catalog's in-progress flag is already the effective one, so it stays on the board row.
+      features: { dependencies: board.dependenciesEnabled, timeline: board.timelineEnabled, inProgress: true },
       board: {
         id: board.id,
         workspaceId: board.workspaceId,

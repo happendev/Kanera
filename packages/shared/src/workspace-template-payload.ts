@@ -45,12 +45,15 @@ export function describeWorkspaceTemplateAutomation(automation: WorkspaceTemplat
   const trigger = automation.trigger;
   const when = trigger.type === "card_enters_list" ? `When a card enters ${trigger.listName}`
     : trigger.type === "due_date_arrives" ? "When a card's due date arrives"
+    : trigger.type === "start_date_arrives" ? "When a card's start date arrives"
     : trigger.type === "card_becomes_inactive" ? "When a card becomes inactive"
     : trigger.type === "card_in_progress_too_long" ? "When a card has been in progress too long"
     : trigger.type === "all_checklist_items_complete" ? "When every checklist item is complete"
     : trigger.type === "card_marked_complete" ? "When a card is marked complete"
     : trigger.type === "card_unblocked" ? "When a card's last blocker is cleared"
     : trigger.type === "card_blocked" ? "When a card gains its first open blocker"
+    : trigger.type === "scheduling_conflict_appears" ? "When a card gains a scheduling conflict (a blocker planned to finish after it starts)"
+    : trigger.type === "critical_path_slips" ? "When a critical-path card slips and the board's projected finish moves later"
     : `When the ${trigger.labelName} label is set`;
   return `${when}: ${automation.actions.map(describeAutomationAction).join("; ")}`;
 }

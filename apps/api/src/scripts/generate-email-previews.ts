@@ -173,6 +173,14 @@ const templates = [
           dueLabel: digestDue("2026-05-22"),
         },
       ],
+      lateStarts: [
+        {
+          title: "Migrate image pipeline",
+          boardName: "Website Refresh",
+          cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-51",
+          dueLabel: m.email.dailyDigest.itemPlannedStart({ date: formatLocalDate(locale, "2026-05-21", { month: "short", day: "numeric" }) }),
+        },
+      ],
       priorities: [
         {
           rank: 1,
@@ -295,6 +303,24 @@ const templates = [
       cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
       previousDueLabel: shortDate("2026-05-24"),
       nextDueLabel: m.common.dueDateWithSlot({ date: shortDate("2026-05-27"), slot: m.common.dueSlots.endOfWorkDay }),
+      previousStartLabel: shortDate("2026-05-20"),
+      nextStartLabel: shortDate("2026-05-22"),
+    }),
+  },
+  {
+    name: "card-start-date-changed",
+    html: cardDueDateChangedEmail({
+      locale,
+      displayName: "Amelia Hart",
+      actorName: "Jordan Lee",
+      cardTitle: "Confirm production checklist",
+      boardName: "Website Refresh",
+      cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
+      previousDueLabel: shortDate("2026-05-27"),
+      nextDueLabel: shortDate("2026-05-27"),
+      dueChanged: false,
+      previousStartLabel: shortDate("2026-05-20"),
+      nextStartLabel: shortDate("2026-05-22"),
     }),
   },
   {

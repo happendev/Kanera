@@ -14,6 +14,10 @@ import type { createNoteBody, updateNoteBody } from "@kanera/shared/dto";
 import type { createSeparatorBody, moveSeparatorBody, updateSeparatorBody } from "@kanera/shared/dto";
 import type { agentSearchQueryBody } from "@kanera/shared/dto";
 import type { workFiltersSchema, workScopeSchema, WorkSort as SharedWorkSort } from "@kanera/shared/dto";
+import type {
+  scheduleAttentionBody, scheduleBody,
+  ScheduleAttentionResponse as SharedScheduleAttention, ScheduleResponse as SharedSchedule,
+} from "@kanera/shared/dto";
 import type { createBoardBody, createWorkspaceBody } from "@kanera/shared/dto";
 import type { createWebhookEndpointBody, updateWebhookEndpointBody } from "@kanera/shared/dto";
 import type { WorkspaceTemplateId as SharedWorkspaceTemplateId } from "@kanera/shared/workspace-templates";
@@ -24,9 +28,12 @@ import type {
 import type { CreateNoteInput, UpdateNoteInput } from "./resources/notes.js";
 import type { StartRunInput, UpdateRunInput } from "./resources/runs.js";
 import type { SearchInput } from "./resources/search.js";
+import type { ScheduleScope } from "./resources/work.js";
 import type { UpdateSeparatorInput } from "./resources/separators.js";
 import type { CreateWebhookEndpointInput, UpdateWebhookEndpointInput } from "./resources/webhook-endpoints.js";
-import type { CardRelationDirection, CreateBoardInput, CreateWorkspaceInput, WorkFilters, WorkScope, WorkSort, WorkspaceTemplateId } from "./types.js";
+import type {
+  CardRelationDirection, CreateBoardInput, CreateWorkspaceInput, Schedule, ScheduleAttention, WorkFilters, WorkScope, WorkSort, WorkspaceTemplateId,
+} from "./types.js";
 
 /**
  * Compile-time drift guard.
@@ -122,6 +129,14 @@ type _WorkScope = AssertAssignable<WorkScope, z.input<typeof workScopeSchema>>;
 type _WorkFilters = AssertAssignable<WorkFilters, z.input<typeof workFiltersSchema>>;
 type _WorkSortForward = AssertAssignable<WorkSort, SharedWorkSort>;
 type _WorkSortBackward = AssertAssignable<SharedWorkSort, WorkSort>;
+// Schedules. The responses are hand-copied interfaces, so both directions are asserted: a field the
+// engine adds or renames in packages/shared shows up here before an integrator reads undefined.
+type _ScheduleScope = AssertAssignable<ScheduleScope, z.input<typeof scheduleBody>>;
+type _ScheduleAttentionInput = AssertAssignable<{ limit?: number; timeZone?: string }, z.input<typeof scheduleAttentionBody>>;
+type _ScheduleForward = AssertAssignable<Schedule, SharedSchedule>;
+type _ScheduleBackward = AssertAssignable<SharedSchedule, Schedule>;
+type _ScheduleAttentionForward = AssertAssignable<ScheduleAttention, SharedScheduleAttention>;
+type _ScheduleAttentionBackward = AssertAssignable<SharedScheduleAttention, ScheduleAttention>;
 
 // Agent runs.
 type _StartRun = AssertAssignable<StartRunInput, z.input<typeof startAgentRunBody>>;

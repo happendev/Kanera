@@ -8,8 +8,8 @@ import { ChangeDetectionStrategy, Component, computed, input, signal, viewChild 
 const BAR_GAP = 8;
 
 /**
- * How much of the title the header protects before it gives up the controls' labels (and, through
- * `is-tight`, a page's avatar stack). The identity group's 72px CSS floor counts the lead icon and
+ * How much of the title the header protects before it gives up a page's avatar stack (`is-crowded`)
+ * and then the controls' labels (`is-tight`). The identity group's 72px CSS floor counts the lead icon and
  * the avatars too, so judging fit by that floor let a board with five avatars and a labelled
  * "New card" button shrink its title to a single letter at tablet widths before anything collapsed.
  * Capped by the title's own width: a short title needs no more than itself.
@@ -61,9 +61,9 @@ export type PageHeaderVariant = "chrome" | "page";
  *   header that genuinely cannot fit gets a second row instead of a vanished title and a tail
  *   spilling through the reserved band.
  * - **Fit.** Before it comes to that wrap, the header measures its own row and drops its controls'
- *   labels (`is-tight`, see toolbar-styles.scss). One icon-only row is a better answer than two
- *   rows, and the viewport breakpoint that normally drops labels cannot see this case at all — the
- *   sidebar is user-collapsible, so the same window gives a page 200px more or less to work with.
+ *   labels (`is-tight`, see toolbar-styles.scss), at every width and only when they do not fit. One
+ *   icon-only row is a better answer than two rows, and no viewport breakpoint could make the call —
+ *   the sidebar is user-collapsible, so the same window gives a page 200px more or less to work with.
  */
 @Component({
   selector: "k-page-header",
@@ -72,6 +72,7 @@ export type PageHeaderVariant = "chrome" | "page";
   host: {
     "[class.is-chrome]": "variant() === 'chrome'",
     "[class.is-page]": "variant() === 'page'",
+    "[class.is-crowded]": "crowded()",
     "[class.is-tight]": "tight()",
     "[class.is-roomy]": "roomy()",
   },
@@ -134,8 +135,18 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
   private readonly identityRef = viewChild.required<ElementRef<HTMLElement>>("identity");
 
   /**
-   * The row is out of space: the projected controls drop their labels (toolbar-styles.scss) rather
-   * than letting the bar wrap.
+   * The row is short of space: decoration that has a compact form (the board's avatar stack, styled
+   * by the page on `k-page-header.is-crowded`) takes it, and the controls keep their labels.
+   */
+  protected readonly crowded = signal(false);
+
+  /**
+   * The row is out of space even crowded: the projected controls drop their labels
+   * (toolbar-styles.scss) rather than letting the bar wrap. Always also `crowded`.
+   *
+   * Two steps rather than one, because labels are what tell people which control is which and five
+   * avatars are not: collapsing both together left a 1100px board header with a bare "+" for New
+   * card while its label would have fitted in the space the faces gave back.
    */
   protected readonly tight = signal(false);
 
@@ -147,21 +158,28 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
 
   /**
    * Everything on the row except the title — lead icon, avatars, gaps and the tail — measured with
-   * labels showing, and held while they are hidden.
+   * nothing collapsed, and held while anything is.
    *
-   * This is what keeps the decision from oscillating. Collapsing the labels (and the avatar stack)
-   * shrinks the very measurement that caused the collapse, so re-measuring live would immediately
-   * find that the row fits again, expand, no longer fit, and flip forever at one viewport width.
-   * Freezing it means the expand and collapse thresholds are the same number. The title is kept out
-   * of the frozen part and measured live, because it does not change with `is-tight` and does change
-   * when a reused page swaps to another board.
+   * This is what keeps the decision from oscillating. Collapsing (labels, the avatar stack) shrinks
+   * the very measurement that caused the collapse, so re-measuring live would immediately find that
+   * the row fits again, expand, no longer fit, and flip forever at one viewport width. Freezing it
+   * means the expand and collapse thresholds are the same number. The title is kept out of the frozen
+   * part and measured live, because it does not change with collapsing and does change when a reused
+   * page swaps to another board.
    */
-  private labelledChromeWidth = 0;
+  private fullChromeWidth = 0;
+  /**
+   * The same with the row crowded (decoration compact, labels showing), held while tight. Null until
+   * the crowded row has rendered once, since its width cannot be known before.
+   */
+  private crowdedChromeWidth: number | null = null;
+  /** Which layout the frozen widths were measured in; null before the first measurement. */
+  private lastCompact: boolean | null = null;
   private observer: ResizeObserver | null = null;
 
   ngAfterViewInit(): void {
     // Absent under the unit-test DOM, where layout is not real anyway; the header then simply keeps
-    // the labelled row the CSS breakpoints give it. Matches anchored-panel.directive.ts.
+    // its labelled row. Matches anchored-panel.directive.ts.
     if (typeof ResizeObserver === "undefined") return;
 
     // Both boxes matter: the bar changes with the window *and* with the sidebar, and the tail
@@ -169,6 +187,9 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
     this.observer = new ResizeObserver(() => this.measureFit());
     this.observer.observe(this.barRef().nativeElement);
     this.observer.observe(this.tailRef().nativeElement);
+    // The compact layout's tail has no box of its own, so its controls group is observed directly.
+    const controls = this.tailRef().nativeElement.querySelector(".ph-controls");
+    if (controls) this.observer.observe(controls);
     // A title arriving after load, or changing on a reused page, changes what the row needs.
     const titles = this.identityRef().nativeElement.querySelector(".ph-titles");
     if (titles) this.observer.observe(titles);
@@ -181,9 +202,9 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * Decides `is-tight` from the space the bar actually has, which no media query can know: the
-   * clearance band is already the bar's own padding, so what is left inside it is exactly what one
-   * row has to spend on the title and the controls.
+   * Decides `is-crowded` and `is-tight` from the space the bar actually has, which no media query
+   * can know: the clearance band is already the bar's own padding, so what is left inside it is
+   * exactly what one row has to spend on the title and the controls.
    */
   private measureFit(): void {
     const bar = this.barRef().nativeElement;
@@ -207,33 +228,65 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
     for (const label of tail.querySelectorAll<HTMLElement>(".sg-auto-label")) {
       autoLabelsWidth += label.scrollWidth + AUTO_LABEL_CHROME;
     }
-    const tailWidth = Math.max(0, tail.offsetWidth - (this.roomy() ? autoLabelsWidth : 0));
+    // Compact, the tail is display: contents and the view switch has a row of its own, so what shares
+    // the title's row is the controls group alone. Its labels are still this row's to decide: a
+    // viewport breakpoint used to drop them below 720px, so a phone showed a bare "+" for New card
+    // beside a short title with half the row empty.
+    const compact = getComputedStyle(tail).display === "contents";
+    // The frozen widths belong to the layout they were measured in: the compact title row holds only
+    // the controls group, the desktop row the whole tail. Crossing the breakpoint while collapsed
+    // would judge one layout by the other's numbers, so everything comes back for a frame and is
+    // measured afresh.
+    if (this.lastCompact !== null && compact !== this.lastCompact && this.crowded()) {
+      this.lastCompact = compact;
+      this.crowdedChromeWidth = null;
+      this.crowded.set(false);
+      this.tight.set(false);
+      requestAnimationFrame(() => this.measureFit());
+      return;
+    }
+    this.lastCompact = compact;
+    const rowTail = compact ? tail.querySelector<HTMLElement>(".ph-controls") : tail;
+    const tailWidth = Math.max(0, (rowTail?.offsetWidth ?? 0) - (this.roomy() ? autoLabelsWidth : 0));
 
-    let identityChrome = 0;
     if (!this.tight()) {
       const children = [...identity.children] as HTMLElement[];
+      let identityChrome = 0;
       for (const child of children) {
         if (!child.classList.contains("ph-titles")) identityChrome += child.offsetWidth;
       }
       identityChrome += px(getComputedStyle(identity).columnGap) * Math.max(0, children.length - 1);
-      // A box-less tail (display: contents in the compact layout) reads as zero: there the controls
-      // already have a row of their own to go to, and the viewport breakpoint owns the labels.
-      this.labelledChromeWidth = identityChrome + (tailWidth > 0 ? BAR_GAP + tailWidth : 0);
+      const chrome = identityChrome + (tailWidth > 0 ? BAR_GAP + tailWidth : 0);
+      if (this.crowded()) this.crowdedChromeWidth = chrome;
+      else this.fullChromeWidth = chrome;
     }
 
-    const tight = available < titleNeed + this.labelledChromeWidth;
+    const wasCrowded = this.crowded();
+    const wasTight = this.tight();
+    const crowded = available < titleNeed + this.fullChromeWidth;
+    if (!crowded) this.crowdedChromeWidth = null;
+    // Unknown until the crowded row has rendered: labels stay meanwhile, and the pass scheduled
+    // below decides once it has.
+    const tight = crowded && this.crowdedChromeWidth !== null && available < titleNeed + this.crowdedChromeWidth;
+    this.crowded.set(crowded);
     this.tight.set(tight);
+    // A step changes boxes this component may not observe (the avatar stack lives in the page's
+    // projected meta), and leaving one decides from widths frozen in a narrower window: a 1920px
+    // header once kept its view switch icon-only with 800px to spare. One more pass after the new
+    // state has rendered measures it for real; it schedules nothing further once the state holds.
+    if (crowded !== wasCrowded || tight !== wasTight) requestAnimationFrame(() => this.measureFit());
 
     // Roomy needs the *whole* title and subtitle, not the protected floor: labels are a nicety, and
-    // must never be the reason a title ellipsises. Never in the compact layout, where the tail has
-    // no box (tailWidth 0) and the switch has a full-width row of its own.
+    // must never be the reason a title ellipsises. Never in the compact layout, where the switch has
+    // a full-width row of its own and decides its labels from that row (segmented.component.ts).
     const subtitle = identity.querySelector<HTMLElement>(".ph-subtitle");
     const fullTitle = (title?.scrollWidth ?? 0) + (subtitle ? BAR_GAP + subtitle.scrollWidth : 0);
     this.roomy.set(
-      !tight
+      !crowded
+      && !compact
       && tailWidth > 0
       && autoLabelsWidth > 0
-      && available >= fullTitle + this.labelledChromeWidth + autoLabelsWidth + ROOMY_SLACK,
+      && available >= fullTitle + this.fullChromeWidth + autoLabelsWidth + ROOMY_SLACK,
     );
   }
 

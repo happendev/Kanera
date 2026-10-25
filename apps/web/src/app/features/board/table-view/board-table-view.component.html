@@ -14,7 +14,7 @@
        second, differently-scoped pair here would be two ways to narrow the same rows. The inputs stay
        so an embedding without a toolbar of its own can still turn them on. What is unconditional is
        table-specific — columns, collapse, breakdown, export. -->
-  <div class="tv-toolbar">
+  <div class="tv-toolbar" kFitLabels>
     @if (showSearch()) {
       <div class="tv-search">
         <i class="ti ti-search"></i>
@@ -598,6 +598,22 @@
                         [allowClear]="true"
                         (toggle)="toggleAssignee(card, $event)"
                         (clear)="clearAssignees(card)"
+                        (close)="closePickers()"
+                      />
+                    }
+                  }
+                  @case ('start') {
+                    <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)">
+                      @if (card.startDateLocalDate) { <i class="ti ti-calendar-time"></i><span>{{ formattedStart(card) }}</span> }
+                      @else { <span class="tv-muted">—</span> }
+                    </button>
+                    @if (pickerIsOpen(card.id, col)) {
+                      <k-date-picker
+                        [value]="card.startDateLocalDate ?? ''"
+                        [showSlots]="false"
+                        [max]="card.dueDateLocalDate"
+                        (applyDate)="setStartDate(card, $event.value)"
+                        (clear)="setStartDate(card, '')"
                         (close)="closePickers()"
                       />
                     }

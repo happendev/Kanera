@@ -44,10 +44,13 @@ export type WorkspaceTemplateCard = {
 export type WorkspaceTemplateAutomationTrigger =
   | { type: "card_enters_list"; listName: string; applyOnCreate?: boolean; applyOnMove?: boolean }
   | { type: "due_date_arrives" }
+  | { type: "start_date_arrives" }
   | { type: "all_checklist_items_complete" }
   | { type: "card_marked_complete" }
   | { type: "card_unblocked" }
   | { type: "card_blocked" }
+  | { type: "scheduling_conflict_appears" }
+  | { type: "critical_path_slips" }
   | { type: "card_label_set"; labelName: string }
   | { type: "card_becomes_inactive" }
   | { type: "card_in_progress_too_long" };

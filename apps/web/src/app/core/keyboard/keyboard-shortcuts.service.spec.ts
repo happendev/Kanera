@@ -90,6 +90,56 @@ describe("KeyboardShortcutsService", () => {
     expect(board).toHaveBeenCalledOnce();
   });
 
+  // Modifier/layout combinations and sequence teardown are dispatcher edge cases: exercise the
+  // exact KeyboardEvent shapes here without depending on the browser host's keyboard layout/timing.
+  it("does not turn unavailable redo into undo or accept extra Shift on other commands", () => {
+    const undo = vi.fn();
+    const redo = vi.fn();
+    const title = vi.fn();
+    const complete = vi.fn();
+    const mod = formatShortcut("mod")[0][0] === "⌘" ? { metaKey: true } : { ctrlKey: true };
+    service.register({ keys: "mod+z", label: "Undo", group: "Map", run: undo });
+    service.register({ keys: "mod+shift+z", label: "Redo", group: "Map", when: () => false, run: redo });
+    service.register({ keys: "e", label: "Title", group: "Card", run: title });
+    service.register({ keys: "mod+enter", label: "Complete", group: "Card", run: complete });
+
+    expect(press("Z", { ...mod, shiftKey: true }).defaultPrevented).toBe(false);
+    press("E", { shiftKey: true });
+    press("Enter", { ...mod, shiftKey: true });
+    expect(undo).not.toHaveBeenCalled();
+    expect(redo).not.toHaveBeenCalled();
+    expect(title).not.toHaveBeenCalled();
+    expect(complete).not.toHaveBeenCalled();
+    press("z", mod);
+    expect(undo).toHaveBeenCalledOnce();
+  });
+
+  it("preserves literal symbols and digits that require Shift on a keyboard layout", () => {
+    const help = vi.fn();
+    const view = vi.fn();
+    const scratchpad = vi.fn();
+    const mod = formatShortcut("mod")[0][0] === "⌘" ? { metaKey: true } : { ctrlKey: true };
+    service.register({ keys: "?", label: "Help", group: "Global", run: help });
+    service.register({ keys: "1", label: "Board", group: "Board", run: view });
+    service.register({ keys: "mod+shift+.", label: "Scratchpad", group: "Global", run: scratchpad });
+    press("?");
+    press("1", { shiftKey: true });
+    press(">", { ...mod, shiftKey: true });
+    press(".", { ...mod, shiftKey: true });
+    expect(help).toHaveBeenCalledOnce();
+    expect(view).toHaveBeenCalledOnce();
+    expect(scratchpad).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops pending sequences when their registration goes away", () => {
+    const run = vi.fn();
+    const off = service.register({ keys: "g h", label: "Home", group: "Go to", run });
+    press("g");
+    off();
+    press("h");
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("formats chords and sequences for display", () => {
     expect(formatShortcut("g h")).toEqual([["G"], ["H"]]);
     expect(formatShortcut("?")).toEqual([["?"]]);

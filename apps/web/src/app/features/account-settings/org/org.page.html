@@ -72,12 +72,26 @@
 
 <div class="settings-section">
   <h3 class="settings-section-title"><i class="ti ti-progress"></i><span i18n>Time in progress</span></h3>
-  <p class="settings-section-help" i18n>Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Boards can also opt out individually.</p>
+  <p class="settings-section-help" i18n="Help text for the organisation time in progress switch">Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Workspaces and boards can also opt out individually.</p>
   <label class="push-toggle-row">
     <input type="checkbox" [checked]="settings.inProgressEnabledDraft()" (change)="settings.saveInProgressEnabled($any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.inProgressEnabledSaving()" />
     <span class="push-toggle-copy"><span class="push-toggle-title" i18n>Enable in progress</span></span>
   </label>
   @if (settings.inProgressEnabledError()) { <p class="form-error">{{ settings.inProgressEnabledError() }}</p> }
+</div>
+
+<div class="settings-section">
+  <h3 class="settings-section-title"><i class="ti ti-adjustments-horizontal"></i><span i18n="Section heading - optional planning features a workspace can switch off">Planning features</span></h3>
+  <p class="settings-section-help" i18n="Help text for the organisation planning feature switches">Turn off what your teams do not use. A feature that is off is hidden in every workspace, including from agents and the API. Nothing is deleted, so turning it back on restores it. Workspaces can also opt out individually.</p>
+  <label class="push-toggle-row">
+    <input type="checkbox" [checked]="settings.dependenciesEnabledDraft()" (change)="settings.savePlanningFeature('dependenciesEnabled', $any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.planningFeatureSaving()" />
+    <span class="push-toggle-copy"><span class="push-toggle-title" i18n="Workspace setting - turns blocking relations between cards on or off">Enable dependencies</span></span>
+  </label>
+  <label class="push-toggle-row">
+    <input type="checkbox" [checked]="settings.timelineEnabledDraft()" (change)="settings.savePlanningFeature('timelineEnabled', $any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.planningFeatureSaving()" />
+    <span class="push-toggle-copy"><span class="push-toggle-title" i18n="Workspace setting - turns card start dates and the Timeline view on or off">Enable start dates and timeline</span></span>
+  </label>
+  @if (settings.planningFeatureError()) { <p class="form-error">{{ settings.planningFeatureError() }}</p> }
 </div>
 
 @if (settings.isOrgOwner()) {

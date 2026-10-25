@@ -50,20 +50,17 @@
 .pt-search {
   display: flex;
   align-items: center;
-  // Takes whatever the controls on its row leave, instead of sitting at a fixed width with dead
-  // space beside it — a search box is the one control that is never too wide. Capped so it does not
-  // dominate a bar on a large monitor.
-  flex: 1 1 200px;
-  // Dense overview pages can opt into a wider search slot when it also carries lightweight inline
-  // controls that must remain outside the phone filter drawer.
-  max-width: var(--pt-search-max-width, 340px);
-  // A page whose search slot also carries a switch sets a floor, so the controls beside it wrap
-  // onto a second line before search is squeezed under the switch.
-  min-width: var(--pt-search-min-width, 0);
-  --search-field-width: 100%;
+  // The same width in every view. The slot used to flex between the controls on its row, and widen
+  // further for a view whose switch shares it, so the field measured 167px on one view and 416px on
+  // the next. Now the field is fixed and the slot is only as wide as what it holds; a switch beside
+  // it sizes itself (and drops its labels via `is-roomy`) instead of eating into search.
+  flex: 0 1 auto;
+  min-width: 0;
+  // Mirrored as SEARCH_WIDTH in page-toolbar.component.ts, which counts it in the room check.
+  --search-field-width: var(--pt-search-width, 340px);
 
   // A page can omit search entirely (the portfolio summary lists counts, not cards); without this
-  // the flex basis above would hold open a 200px gap where the field would have been.
+  // the gap after it would still be held open.
   &:empty {
     display: none;
   }
@@ -131,11 +128,38 @@
 
   // Search takes the rest of the bar rather than collapsing with the others: it is the one control
   // people reach for on a phone, and hiding it behind the trigger was the original complaint. The
-  // desktop cap goes: with everything else behind the ⚙ there is nothing to share the row with.
+  // desktop width goes: with everything else behind the ⚙ there is nothing to share the row with.
   .pt-search {
     flex: 1 1 160px;
-    max-width: none;
-    min-width: 0;
+    --search-field-width: 100%;
+  }
+
+  // A view whose switch shares the search slot puts the switch on a full-width row of its own
+  // rather than beside the field. Side by side, the field was what gave way, down to 41px beside
+  // the timeline's four-way switch, and a different width again in every other view. The switch
+  // fills its row like the page header's compact view row, and names its segments whenever that
+  // row has room for all of them (k-segmented measures it in fill mode).
+  //
+  // ::ng-deep because the wrapper is projected and carries the host page's scoping attribute.
+  // The ⚙ and tail stay level with the field instead of centring on the two rows.
+  .pt-bar:has(.pt-search k-segmented) {
+    align-items: start;
+  }
+
+  :host ::ng-deep .pt-search > :has(> k-segmented) {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+
+    > k-search-field {
+      flex: 1 1 100%;
+    }
+
+    > k-segmented {
+      flex: 1 1 100%;
+      margin: 0;
+      --sg-fill-width: 100%;
+      --sg-fill-flex: 1 1 0;
+    }
   }
 
   // Collapsed, the search field is the only thing left in .pt-main. A page without one (the portfolio
@@ -208,19 +232,6 @@
     .k-toolbar-trigger,
     .k-toolbar-btn {
       justify-content: flex-start;
-    }
-
-    // Inside the panel there is room for the label again, so undo the icon-only drop.
-    .k-toolbar-trigger.k-toolbar-collapsible-label,
-    .k-toolbar-btn.k-toolbar-collapsible-label {
-      width: 100%;
-      padding: 0 9px;
-      gap: 7px;
-
-      > span,
-      > .k-toolbar-caret {
-        display: inline;
-      }
     }
   }
 }

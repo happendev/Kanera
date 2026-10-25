@@ -280,6 +280,8 @@ export const fr: ErrorCatalog = {
     "La valeur du déclencheur de champ personnalisé ne correspond pas au type du champ.",
   "delivery not found":
     "Envoi introuvable.",
+  "dependencies are disabled for this workspace":
+    "Les dépendances sont désactivées pour cet espace de travail.",
   "destination credentials are required":
     "Les identifiants de la destination sont requis.",
   "email already registered":
@@ -586,6 +588,8 @@ export const fr: ErrorCatalog = {
     "Cible d'import du tableau autonome introuvable.",
   "standalone boards cannot contain another board":
     "Un tableau autonome ne peut pas contenir d'autre tableau.",
+  "start dates and the timeline are disabled for this workspace":
+    "Les dates de début et la chronologie sont désactivées pour cet espace de travail.",
   "storage is configured by environment variables":
     "Le stockage est configuré par des variables d'environnement.",
   "storage is configured by the hosted deployment":
@@ -652,12 +656,22 @@ export const fr: ErrorCatalog = {
     "Cet invité doit suivre une carte assignée.",
   "this invitation was sent to a different email address":
     "Cette invitation a été envoyée à une autre adresse e-mail.",
+  "time in progress is disabled for this workspace":
+    "Le temps en cours est désactivé pour cet espace de travail.",
   "too many attempts; request a new code":
     "Trop de tentatives\u00a0; demandez un nouveau code.",
   "triggerCustomFieldId and triggerCustomFieldValue are required":
     "triggerCustomFieldId et triggerCustomFieldValue sont requis.",
   "triggerDaysBefore is required":
     "triggerDaysBefore est requis.",
+  "in-progress limit field must be a number field":
+    "Le champ de limite du temps en cours doit être un champ numérique.",
+  "triggerCustomFieldId is required":
+    "triggerCustomFieldId est requis.",
+  "triggerThresholdAmount is required":
+    "triggerThresholdAmount est requis.",
+  "triggerThresholdUnit is required":
+    "triggerThresholdUnit est requis.",
   "triggerLabelId is required":
     "triggerLabelId est requis.",
   "triggerListId is required":

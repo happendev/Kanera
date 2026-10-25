@@ -108,7 +108,7 @@ Read more about [agent runs, attribution, and the Agent Workflow template](https
 | **TypeScript SDK** | Your own applications and integrations | `npm install @kanera/sdk` · [SDK docs](packages/sdk/README.md) |
 | **REST API and webhooks** | Any language, sync jobs, and event-driven integrations | [API docs](https://www.kanera.app/docs/api) |
 
-The CLI and the MCP server expose the same tool layer, so anything an agent can do over MCP it can also do with `kanera` from a shell. Try the CLI without installing it:
+The CLI and the MCP server expose the same tool layer, so anything an agent can do over MCP it can also do with `kanera` from a shell. That includes the Timeline view's schedule: `work.schedule` (CLI `kanera schedule <boardId>`, SDK `kanera.work.schedule()`) returns the critical path, slack in working days, scheduling conflicts and the projected finish for a board or workspace, so an agent can answer "when will this finish" and "what slips if this moves" with the same numbers the chart shows, and the `schedule.conflict_detected` and `schedule.critical_path_slipped` events, or `scheduling_conflict_appears` / `critical_path_slips` automations, tell it when a plan needs attention. Try the CLI without installing it:
 
 ```bash
 npx -y @kanera/cli commands
@@ -150,6 +150,10 @@ Group and sort cards by list, assignee, due date, label, status, or custom field
 
 Export the filtered result to Excel as a multi-sheet workbook containing card rows, spreadsheet-friendly summaries, and a readable report when aggregates are enabled.
 
+### Timeline view plans the work ahead
+
+Give a card a start date next to its due date and the board's **Timeline** view draws it as a bar on a Gantt-style chart, grouped by list, assignee or label. Drag a bar to reschedule it (its working-day length is kept), pull an end to change its length, click an empty lane to place an unscheduled card, and drag from one bar's end to another to make the second wait on the first. **Critical path** runs a working-day schedule over the board's blocking links, highlights the chain with no slack, fades the rest and shows how far each other card could slip. Cards whose prerequisite is planned to finish after they start are flagged as scheduling conflicts.
+
 ![Kanera Platform Delivery Table view showing grouped card rows, configurable columns, and export controls](docs/readme-assets/table-view.jpg?v=20261021design)
 
 ### Notifications keep important changes together
@@ -184,7 +188,7 @@ Pick one teammate to see just their panel with their Up next queue docked beside
 
 ### Automations keep routine work moving
 
-Build automations from a **When** trigger and ordered **Do** actions. Triggers can respond when cards enter or leave lists, a custom field changes to a selected value, a due date approaches or arrives, assignments and labels change, checklists or cards complete, or a card reaches the configured inactivity period. Kanera can then add labels, assign people, apply checklist templates, set due dates and custom fields, move cards, or mark work complete. Automations can belong to one standalone board or run across every board in a workspace.
+Build automations from a **When** trigger and ordered **Do** actions. Triggers can respond when cards enter or leave lists, a custom field changes to a selected value, a due date approaches or arrives, a start date arrives, assignments and labels change, checklists or cards complete, or a card reaches the configured inactivity period. Kanera can then add labels, assign people, apply checklist templates, set due dates and custom fields, move cards, or mark work complete. Automations can belong to one standalone board or run across every board in a workspace.
 
 ![Kanera automation builder showing a trigger and ordered card actions](docs/readme-assets/automations.jpg?v=20261021design)
 

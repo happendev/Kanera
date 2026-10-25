@@ -6,7 +6,11 @@ import {
 } from "./seed-data.js";
 
 try {
-  const { summary } = await seedDatabase();
+  const referenceIndex = process.argv.indexOf("--reference-date");
+  const referenceDate = referenceIndex < 0 ? undefined : process.argv[referenceIndex + 1];
+  if (referenceIndex >= 0 && !referenceDate) throw new Error("--reference-date requires an ISO date.");
+  const { summary, demo } = await seedDatabase({ referenceDate });
+  console.log(JSON.stringify({ demo }, null, 2));
   console.log("dev seed complete");
   console.log("organisation: Happen Software Demo");
   console.log(`users: ${summary.users}`);

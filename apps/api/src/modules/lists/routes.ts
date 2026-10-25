@@ -21,6 +21,7 @@ import { rebalanceLists } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { emitToBoard, emitToWorkspace } from "../../realtime/emit.js";
 import { captureBlockedDependents, emitBlockedByCountChanged, emitDependentsChanged, emitRelationNeighboursChanged, lockWorkspaceRelations, relationNeighbourIds } from "../../lib/card-relations.js";
+import { requestScheduleRecheckForCards } from "../../lib/schedule-events.js";
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full list scan.
@@ -145,6 +146,8 @@ export async function listRoutes(app: FastifyInstance) {
       const survivingDependents = [...new Set(before.map((row) => row.dependentId))].filter((cardId) => !listCardIds.has(cardId));
       // Every surviving related card loses a row from its Dependencies section.
       const neighbours = await relationNeighbourIds(tx, [...listCardIds]);
+      // The cascade removes these cards and their edges; the boards they chained into re-place.
+      await requestScheduleRecheckForCards(tx, [...listCardIds]);
       await tx.delete(lists).where(eq(lists.id, id));
       const handoffs = await recordBlockersCleared(tx, { before, actorId: req.auth.sub });
       const effects = await runCardUnblockedAutomations(tx, { handoffs, workspaceId: current.workspaceId, clientId: req.auth.cid, triggerActorId: req.auth.sub });
@@ -339,6 +342,7 @@ export async function listRoutes(app: FastifyInstance) {
         .set({ archivedAt, updatedAt: archivedAt })
         .where(inArray(cards.id, cardIds))
         .returning();
+      await requestScheduleRecheckForCards(tx, cardIds);
 
       await recordActivity(tx, {
         boardId: body.boardId ?? null,

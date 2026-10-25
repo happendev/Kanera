@@ -1,3 +1,4 @@
+import { GettingStartedService } from "../../core/getting-started/getting-started.service";
 import { DragScrollDirective } from "../../shared/drag-scroll.directive";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { ToastService } from "../../shared/toast.service";
@@ -80,10 +81,12 @@ import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
 import { SaveViewPopover } from "./save-view.popover";
 import { TeamOverviewComponent } from "./team-overview.component";
 import { DependencyMapComponent } from "../dependencies/dependency-map.component";
+import { BoardTimelineViewComponent, type TimelineScheduleScope } from "../board/timeline-view/board-timeline-view.component";
+import { timelineGroupByState } from "../board/timeline-view/timeline-preferences";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
-import { formatDate, formatDateTime, formatTime } from "../../shared/date-format";
+import { formatDate, formatDateTime, formatTime, formatRelativeTime } from "../../shared/date-format";
 import { icu } from "../../core/i18n/icu";
 import { appLocale } from "../../core/i18n/locale";
 import { localDateKey } from "../../shared/day-key.util";
@@ -175,7 +178,7 @@ const MAX_UP_NEXT_ENTRIES = 50;
 @Component({
   selector: "k-global-work",
   standalone: true,
-  imports: [EmptyStateComponent, 
+  imports: [BoardTimelineViewComponent, EmptyStateComponent, 
     ActivityStripComponent,
     AnchoredPanelDirective,
     AnchoredPickerPopover,
@@ -239,6 +242,7 @@ const MAX_UP_NEXT_ENTRIES = 50;
 })
 export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly toasts = inject(ToastService);
+  private readonly gettingStarted = inject(GettingStartedService);
   readonly state = inject(GlobalWorkState);
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
@@ -286,13 +290,28 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
   /** Map/Timeline/Steps, remembered per lens like the rest of the Dependencies view's choices. */
   readonly dependencyLayoutState = dependencyLayoutState(() => `globalWork:${this.lens()}`);
+  /** The Timeline's row grouping, per lens; the chart spans boards, so it opens grouped by board. */
+  readonly timelineGroupByState = timelineGroupByState(() => `globalWork:${this.lens()}`, "multiBoard");
+  /**
+   * The Timeline reads one schedule per workspace in view. Dependencies never cross a workspace, so
+   * the workspaces of the loaded cards hold every chain those cards sit in.
+   */
+  readonly timelineScope = computed<TimelineScheduleScope>(() => {
+    const boards = this.boardsById();
+    const workspaceIds = new Set<string>();
+    for (const card of this.state.cards()) {
+      const workspaceId = boards.get(card.boardId)?.workspaceId;
+      if (workspaceId) workspaceIds.add(workspaceId);
+    }
+    return { workspaceIds: [...workspaceIds].sort() };
+  });
   /**
    * Every display that renders `k-board-table-view` full-height, which is what `.is-table-frame`
    * sizes with flexbox. The sheet owns a scrollport and raises its incremental row cap from that
    * element's scroll position, so a display that lands here without the frame would leave the sheet at
    * auto height and strand every row past the first page.
    */
-  readonly usesTableFrame = computed(() => this.effectiveDisplay() === "table");
+  readonly usesTableFrame = computed(() => this.effectiveDisplay() === "table" || this.effectiveDisplay() === "timeline");
   readonly collapsedOrganisationIds = computed(() =>
     new Set(this.state.definition().collapsedOrganisationIds)
   );
@@ -337,14 +356,15 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * drill-down lands. It has no calendar — the rollups are counts rather than dated cards, and the
    * drill-down already carries its own date filter, so a month grid added nothing.
    *
-   * A display stays enabled while it is the current one even when the page is not interaction-ready,
-   * so a reader on a cached copy can still see which display they are on.
+   * Cached cards and per-view snapshots remain browsable offline. Portfolio switches query
+   * different projections, so those stay gated.
    */
   readonly displayOptions = computed<SegmentedOption<WorkDisplayMode>[]>(() => {
     const current = this.effectiveDisplay();
     const busy = !this.state.interactionReady();
+    const canBrowseSaved = !this.state.loading() && this.state.lastSyncedAt() !== null;
     const option = (id: WorkDisplayMode, icon: string, label: string, shortLabel?: string): SegmentedOption<WorkDisplayMode> =>
-      ({ id, icon, label, shortLabel, disabled: busy && current !== id });
+      ({ id, icon, label, shortLabel, disabled: busy && current !== id && (!canBrowseSaved || this.lens() === "portfolio") });
     if (this.lens() === "portfolio") {
       return [
         option("summary", "chart-bar", $localize`:Display option:Summary view`, $localize`:Short display option:Summary`),
@@ -361,6 +381,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
         : []),
       option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),
       option("calendar", "calendar", $localize`:Display option:Calendar view`, $localize`:Short display option:Calendar`),
+      // Only while some board in reach has start dates and the Timeline on; the preference
+      // normaliser drops a remembered timeline display on the same condition.
+      ...(this.timelineEnabled()
+        ? [option("timeline", "chart-arrows", $localize`:Display option; the Gantt-style view with a bar per card:Timeline view`, $localize`:Short display option for the Gantt-style view:Timeline`)]
+        : []),
       option("dependencies", "git-merge", $localize`:Display option; the view maps which cards block which:Dependencies view`, $localize`:Short display option for the view that maps which cards block which:Dependencies`),
       option("history", "history", $localize`:Display option:Work done`),
     ];
@@ -372,23 +397,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     // since the label describes a table the reader is no longer looking at.
     if (display === "summary") this.drilldownLabel.set(null);
   }
-  // History has no offline query, and the team's queues are deliberately not cached (a stale
-  // sequence reads as an instruction). The overview is built from both, so it falls back to the
-  // table over a cached snapshot. The dependency map reads its graph live, so it falls back too.
-  readonly effectiveDisplay = computed<WorkDisplayMode>(() =>
-    this.state.cachedAt() && ["history", "overview", "dependencies"].includes(this.state.definition().display)
-      ? "table"
-      : this.state.definition().display
-  );
-  readonly historyOfflineFallback = computed(() =>
-    this.state.cachedAt() !== null && this.state.definition().display === "history"
-  );
-  readonly overviewOfflineFallback = computed(() =>
-    this.state.cachedAt() !== null && this.state.definition().display === "overview"
-  );
-  readonly dependenciesOfflineFallback = computed(() =>
-    this.state.cachedAt() !== null && this.state.definition().display === "dependencies"
-  );
+  readonly effectiveDisplay = computed<WorkDisplayMode>(() => this.state.definition().display);
   /**
    * The dependency map's seeds: the lens's open loaded cards, after scope, search and filters. The
    * map walks out from them across boards, so a teammate's blocked card brings its blocker along
@@ -854,8 +863,13 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       icon: board.icon,
       iconColor: board.iconColor,
       inProgressEnabled: board.inProgressEnabled,
+      timelineEnabled: board.timelineEnabled,
     }))
   );
+  /** Some board in view has dependencies on; otherwise the Blocked filter could never match. */
+  readonly dependenciesEnabled = computed(() => this.state.catalog().boards.some((board) => board.dependenciesEnabled));
+  /** Some board in view has start dates and the Timeline on; otherwise there is no Timeline display. */
+  readonly timelineEnabled = computed(() => this.state.catalog().boards.some((board) => board.timelineEnabled));
   readonly tableSourceWorkspaces = computed<SourceWorkspaceRef[]>(() =>
     this.state.catalog().workspaces.map((workspace) => ({
       id: workspace.id,
@@ -1590,6 +1604,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   selectGrouping(groupBy: WorkGroupBy): void {
     this.closeMenu("group");
     this.state.setGrouping(groupBy);
+    // Here the page owns the table's grouping, so this is where the Getting started step ticks.
+    if (this.effectiveDisplay() === "table" && this.state.groupByIsSet()) this.gettingStarted.noteUsed("groupTable");
   }
 
   selectSort(sort: WorkSort): void {
@@ -1784,14 +1800,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     return queue?.targetUserId === targetUserId ? queue : null;
   });
 
-  /**
-   * The whole feature is withheld on an offline snapshot: a stale sequence reads as an instruction,
-   * and someone following "do this first" from a cached queue can be reading last week's order with
-   * no way to tell. Rank pills and the panel disappear together, from this one gate.
-   */
+  /** Cached personal queues remain readable; interactionReady gates editing separately. */
   readonly upNextAvailable = computed(() =>
     this.currentPriorities() !== null
-    && this.state.cachedAt() === null
     && this.effectiveDisplay() !== "history"
     && this.effectiveDisplay() !== "summary"
     // The overview has no person in focus; its dock follows `overviewDockQueue` instead.
@@ -1890,7 +1901,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   );
   /** Every queue this viewer may read, self first. */
   readonly overviewQueues = computed(() =>
-    this.overviewDock() && this.state.cachedAt() === null ? this.state.teamPriorities()?.queues ?? [] : []
+    this.overviewDock() ? this.state.teamPriorities()?.queues ?? [] : []
   );
   /**
    * Whether the focused person's dock is showing. Separate from the focus so closing the dock (on a
@@ -1931,7 +1942,15 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   });
   readonly dockAddableCards = computed(() => this.overviewDock() ? this.overviewDockAddableCards() : this.upNextAddableCards());
   // Quick complete goes through the shell's own-queue service, which the overview's batch copy is not.
-  readonly dockAllowQuickComplete = computed(() => !this.overviewDock() && this.isSelfUpNextTarget());
+  readonly dockCanEdit = computed(() => this.state.interactionReady() && (this.overviewDock()
+    ? this.state.teamPrioritiesCachedAt() === null
+    : this.isSelfUpNextTarget() ? this.myPriorities.canEdit() : this.state.prioritiesCachedAt() === null));
+  readonly dockOfflineMessage = computed(() => {
+    if (!this.overviewDock() && this.isSelfUpNextTarget()) return this.myPriorities.offlineMessage();
+    const time = this.overviewDock() ? this.state.teamPrioritiesCachedAt() : this.state.prioritiesCachedAt();
+    return time ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(time)}:time:` : "";
+  });
+  readonly dockAllowQuickComplete = computed(() => this.state.interactionReady() && this.myPriorities.canEdit() && !this.overviewDock() && this.isSelfUpNextTarget());
 
   /** The person strip and avatars: show one person with their Up next docked, or everyone again. */
   setOverviewFocus(userId: string | null): void {
@@ -2082,6 +2101,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * where the pointer released it). Failures render inside the panel, where the gesture ended.
    */
   onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null }): void {
+    if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
     const { cardId, ...anchor } = event;
     const target = this.overviewDockQueue()?.target.userId;
@@ -2101,6 +2121,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly upNextDropTargets = computed<string[]>(() => this.upNextOpen() ? ["up-next-drop"] : []);
 
   onPriorityReordered(event: { priorityId: string; afterId?: string | null; beforeId?: string | null }): void {
+    if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
     const { priorityId, ...anchor } = event;
     const target = this.overviewDockQueue()?.target.userId;
@@ -2113,6 +2134,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   onPriorityRemoved(event: { priorityId: string }): void {
+    if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
     const target = this.overviewDockQueue()?.target.userId;
     const removed = this.overviewDock() && target

@@ -15,6 +15,7 @@ import { enqueueMcpEventDeliveries, enqueueMyDayMcpEvents, processMcpEventDelive
 import { localDateInTimezone } from "../../lib/due-date.js";
 import { McpCallbackError, postMcpWebhook, verifyMcpCallback, type McpWebhookRequest } from "../../lib/mcp-event-webhooks.js";
 import { processRealtimeOutbox } from "../../realtime/outbox.js";
+import { runScheduleRecheckSweep } from "../../lib/automations.js";
 import { createMcpHttpHandler } from "../../../../mcp/src/http.js";
 
 const secret = () => `whsec_${randomBytes(32).toString("base64")}`;
@@ -599,5 +600,71 @@ void test("dependency MCP events persist exact boundaries without rules and pres
     for (const event of await db.select().from(eventOutbox)) await enqueueMcpEventDeliveries(event);
     await drain();
     assert.equal(delivered.length, 6);
+  } finally { await publicApi.close(); await f.app.close(); }
+});
+
+// Failure modes: the first recheck spams every existing conflict; a conflict is delivered on each
+// edit rather than once; the slip payload names the wrong finish; a no-change edit delivers
+// anything; the schedule fields leak onto the generic card.updated occurrence. 3 June 2030 is a Monday.
+void test("schedule MCP events fire once per boundary from the recheck sweep with a system actor", async () => {
+  const f = await fixture();
+  const signingSecret = secret();
+  const delivered: Array<{ name: string; data: Record<string, unknown> & { cardId: string; actor: typeof actor } }> = [];
+  const send: McpWebhookRequest = async (_url, body, headers) => {
+    checkSignature(headers, body, signingSecret);
+    const payload = JSON.parse(body) as { type: string; challenge: string } | (typeof delivered)[number];
+    if ("type" in payload) return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+    delivered.push(payload);
+    return { status: 204, body: "" };
+  };
+  const publicApi = await buildPublicApiServer({ logger: false, enableWebhookDeliveryScheduler: false, rateLimit: { enabled: false }, mcpWebhookRequest: send });
+  const headers = { authorization: `Bearer ${f.key.secret}` };
+  const write = async (method: "POST" | "PATCH", path: string, payload?: Record<string, unknown>) => {
+    const response = await publicApi.inject({ method, url: `/api/v1/${path}`, headers, payload });
+    assert.ok(response.statusCode < 300, response.body);
+    return response;
+  };
+  const drain = async () => {
+    while ((await processRealtimeOutbox({ limit: 100 })).processed) { /* drain all outbox rows */ }
+    while (await processMcpEventDeliveries(send)) { /* drain all deliveries */ }
+  };
+  try {
+    const blocker = (await write("POST", `boards/${f.workspace.boardId}/lists/${f.workspace.listId}/cards`, { title: "Blocker", startDateLocalDate: "2030-06-03", dueDateLocalDate: "2030-06-05" })).json<{ id: string }>().id;
+    const waiting = (await write("POST", `boards/${f.workspace.boardId}/lists/${f.workspace.listId}/cards`, { title: "Waiting", startDateLocalDate: "2030-06-06", dueDateLocalDate: "2030-06-07" })).json<{ id: string }>().id;
+    await write("POST", `cards/${blocker}/relations`, { targetCardId: waiting, direction: "blocks" });
+    for (const name of ["schedule.conflict_detected", "schedule.conflict_resolved", "schedule.critical_path_slipped", "card.updated"]) {
+      await write("POST", "mcp-events/subscribe", { name, arguments: { workspaceId: f.workspace.id, boardId: f.workspace.boardId }, delivery: { mode: "webhook", url: "https://receiver.example/schedule", secret: signingSecret } });
+    }
+    await runScheduleRecheckSweep();
+    await drain();
+    const scheduleEvents = () => delivered.filter((event) => event.name.startsWith("schedule."));
+    assert.deepEqual(scheduleEvents(), [], "seeding the latch announces nothing");
+
+    await write("PATCH", `cards/${blocker}`, { dueDateLocalDate: "2030-06-06" });
+    await runScheduleRecheckSweep();
+    await drain();
+    assert.deepEqual(scheduleEvents().map((event) => event.name).sort(), ["schedule.conflict_detected", "schedule.critical_path_slipped"]);
+    const conflict = scheduleEvents().find((event) => event.name === "schedule.conflict_detected")!;
+    assert.deepEqual([conflict.data.cardId, conflict.data.blockerCardId, conflict.data.days, conflict.data.actor], [waiting, blocker, 1, actor]);
+    const slip = scheduleEvents().find((event) => event.name === "schedule.critical_path_slipped")!;
+    assert.deepEqual([slip.data.cardId, slip.data.previousProjectedFinish, slip.data.projectedFinish, slip.data.days, slip.data.slipDays], [blocker, "2030-06-07", "2030-06-10", 1, 1]);
+    const genericForBoundary = delivered.filter((event) => event.name === "card.updated" && event.data.cardId === waiting && "blockerCardId" in event.data);
+    assert.deepEqual(genericForBoundary, [], "schedule fields stay off the generic card.updated occurrence");
+
+    await write("PATCH", `cards/${blocker}`, { startDateLocalDate: "2030-06-04" });
+    await runScheduleRecheckSweep();
+    await drain();
+    assert.equal(scheduleEvents().length, 2, "a still-conflicting edit that moves no finish repeats nothing");
+
+    await write("PATCH", `cards/${blocker}`, { dueDateLocalDate: "2030-06-05" });
+    await runScheduleRecheckSweep();
+    await drain();
+    assert.deepEqual(scheduleEvents().map((event) => event.name).sort(), ["schedule.conflict_detected", "schedule.conflict_resolved", "schedule.critical_path_slipped"]);
+    assert.equal(scheduleEvents().find((event) => event.name === "schedule.conflict_resolved")!.data.cardId, waiting);
+
+    await write("PATCH", `cards/${blocker}`, { dueDateLocalDate: "2030-06-05" });
+    await runScheduleRecheckSweep();
+    await drain();
+    assert.equal(scheduleEvents().length, 3, "an edit without a schedule change delivers nothing");
   } finally { await publicApi.close(); await f.app.close(); }
 });

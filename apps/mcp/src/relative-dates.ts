@@ -202,8 +202,11 @@ function zonedInstant(date: string, time: LocalTime, timeZone: string): string {
 
 export type DateContext = { timeZone: string; today: string };
 
-/** Local-date keys: values are stored as dates, so a phrase's time only selects a due slot. */
-const LOCAL_DATE_KEYS = new Set(["dueDateLocalDate", "dueFrom", "dueTo", "valueDate"]);
+/**
+ * Local-date keys: values are stored as dates, so a phrase's time only selects a due slot. A card's
+ * planned start has no slot at all, so a time given with startDateLocalDate is dropped.
+ */
+const LOCAL_DATE_KEYS = new Set(["dueDateLocalDate", "startDateLocalDate", "dueFrom", "dueTo", "valueDate"]);
 /** Instant keys: a phrase without a time means the start of that day in the user's zone. */
 const INSTANT_KEYS = new Set(["completedFrom", "completedTo", "lastActivityBefore", "lastMovedBefore", "from", "to", "remindAt"]);
 /**

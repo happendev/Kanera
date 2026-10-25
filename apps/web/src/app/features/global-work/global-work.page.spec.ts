@@ -23,6 +23,7 @@ const card = {
   title: "Ship it",
   position: "1000.0000000000",
   dueDateLocalDate: null,
+  startDateLocalDate: null,
   dueDateSlot: null,
   dueDateTimezone: null,
   completedAt: null,
@@ -140,6 +141,7 @@ describe("GlobalWorkPage card routing", () => {
         iconColor: null,
         viewerRole: "observer" as "editor" | "observer",
         assignedItemsOnly: false,
+        timelineEnabled: true,
       }],
       lists: [],
       labels: [],
@@ -416,7 +418,7 @@ describe("GlobalWorkPage card routing", () => {
         { provide: ApiClient, useValue: { get: vi.fn() } },
         { provide: Dialog, useValue: {} },
         { provide: Router, useValue: { navigate: vi.fn(() => Promise.resolve(true)) } },
-        { provide: MyPrioritiesService, useValue: { changedSinceSeen, markSeen, setCardCompleted: vi.fn() } },
+        { provide: MyPrioritiesService, useValue: { changedSinceSeen, markSeen, canEdit: signal(true), offlineMessage: signal(""), setCardCompleted: vi.fn() } },
       ],
     })
       .overrideComponent(GlobalWorkPage, {
@@ -903,7 +905,7 @@ describe("GlobalWorkPage display preferences", () => {
 });
 
 describe("GlobalWorkPage offline display", () => {
-  it("falls back from uncached History to the saved card table until reconciliation succeeds", async () => {
+  it("keeps History and Dependencies selected over saved cards", async () => {
     const cachedAt = signal<string | null>("2026-07-24T12:00:00.000Z");
     const state = {
       auth: { user: () => null },
@@ -940,13 +942,16 @@ describe("GlobalWorkPage offline display", () => {
     fixture.componentRef.setInput("lens", "my");
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.effectiveDisplay()).toBe("table");
-    expect(fixture.componentInstance.historyOfflineFallback()).toBe(true);
+    expect(fixture.componentInstance.effectiveDisplay()).toBe("history");
+    state.definition.set({ display: "dependencies" });
+    TestBed.tick();
+    expect(fixture.componentInstance.effectiveDisplay()).toBe("dependencies");
+    state.definition.set({ display: "history" });
 
     cachedAt.set(null);
     TestBed.tick();
     expect(fixture.componentInstance.effectiveDisplay()).toBe("history");
-    expect(fixture.componentInstance.historyOfflineFallback()).toBe(false);
+
   });
 });
 
@@ -1229,6 +1234,8 @@ describe("GlobalWorkPage toolbar state", () => {
       focusedTargetUserId: () => null,
       canLoadMore: signal(false),
       loadingMore: signal(false),
+      loading: signal(false),
+      lastSyncedAt: signal<string | null>(null),
       cards: signal([card, prioritySecondCard]),
       catalog: signal({
         organisations: [],
@@ -1241,6 +1248,7 @@ describe("GlobalWorkPage toolbar state", () => {
           iconColor: null,
           viewerRole: "editor" as const,
           assignedItemsOnly: false,
+          timelineEnabled: true,
         }],
         lists: [],
         labels: [],
@@ -1315,6 +1323,8 @@ describe("GlobalWorkPage toolbar state", () => {
       addTeamPriority,
       removeTeamPriority,
       overviewFocusUserId,
+      teamPrioritiesCachedAt: signal<string | null>(null),
+      prioritiesCachedAt: signal<string | null>(null),
       setOverviewFocus,
     };
 
@@ -1419,7 +1429,7 @@ describe("GlobalWorkPage toolbar state", () => {
       TestBed.tick();
 
       expect(fixture.componentInstance.displayOptions().map((option) => option.id))
-        .toEqual(["board", "overview", "table", "calendar", "dependencies", "history"]);
+        .toEqual(["board", "overview", "table", "calendar", "timeline", "dependencies", "history"]);
       expect(fixture.componentInstance.showTeammateFilter()).toBe(true);
       expect(fixture.componentInstance.showUpNextControl()).toBe(true);
 

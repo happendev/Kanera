@@ -280,6 +280,8 @@ export const es: ErrorCatalog = {
     "El valor del activador del campo personalizado no coincide con el tipo de campo.",
   "delivery not found":
     "No se encontró el envío.",
+  "dependencies are disabled for this workspace":
+    "Las dependencias están desactivadas en este espacio de trabajo.",
   "destination credentials are required":
     "Se requieren las credenciales del destino.",
   "email already registered":
@@ -586,6 +588,8 @@ export const es: ErrorCatalog = {
     "No se encontró el destino de importación del tablero independiente.",
   "standalone boards cannot contain another board":
     "Los tableros independientes no pueden contener otro tablero.",
+  "start dates and the timeline are disabled for this workspace":
+    "Las fechas de inicio y el cronograma están desactivados en este espacio de trabajo.",
   "storage is configured by environment variables":
     "El almacenamiento se configura mediante variables de entorno.",
   "storage is configured by the hosted deployment":
@@ -652,12 +656,22 @@ export const es: ErrorCatalog = {
     "Este invitado debe seguir una tarjeta asignada.",
   "this invitation was sent to a different email address":
     "Esta invitación se envió a otra dirección de correo electrónico.",
+  "time in progress is disabled for this workspace":
+    "El tiempo en curso está desactivado en este espacio de trabajo.",
   "too many attempts; request a new code":
     "Demasiados intentos. Solicita un código nuevo.",
   "triggerCustomFieldId and triggerCustomFieldValue are required":
     "Se requieren triggerCustomFieldId y triggerCustomFieldValue.",
   "triggerDaysBefore is required":
     "Se requiere triggerDaysBefore.",
+  "in-progress limit field must be a number field":
+    "El campo del límite de tiempo en curso debe ser un campo numérico.",
+  "triggerCustomFieldId is required":
+    "Se requiere triggerCustomFieldId.",
+  "triggerThresholdAmount is required":
+    "Se requiere triggerThresholdAmount.",
+  "triggerThresholdUnit is required":
+    "Se requiere triggerThresholdUnit.",
   "triggerLabelId is required":
     "Se requiere triggerLabelId.",
   "triggerListId is required":

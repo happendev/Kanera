@@ -140,6 +140,8 @@ export const nl: ErrorCatalog = {
   "custom field trigger user is not a workspace member": "De gebruiker van de aangepaste veldtrigger is geen lid van de werkruimte",
   "custom field trigger value does not match field type": "aangepaste veldtriggerwaarde komt niet overeen met het veldtype",
   "delivery not found": "levering niet gevonden",
+  "dependencies are disabled for this workspace":
+    "Afhankelijkheden zijn uitgeschakeld voor deze werkruimte",
   "destination credentials are required": "bestemmingsreferenties zijn vereist",
   "email already registered": "e-mailadres al geregistreerd",
   "email not found": "e-mail niet gevonden",
@@ -293,6 +295,8 @@ export const nl: ErrorCatalog = {
   "standalone board configuration must contain exactly one board": "standalone bordconfiguratie moet precies één bord bevatten",
   "standalone board import target not found": "importdoel voor zelfstandig bord niet gevonden",
   "standalone boards cannot contain another board": "Op zichzelf staande borden kunnen geen ander bord bevatten",
+  "start dates and the timeline are disabled for this workspace":
+    "Startdatums en de tijdlijn zijn uitgeschakeld voor deze werkruimte",
   "storage is configured by environment variables": "opslag wordt geconfigureerd door omgevingsvariabelen",
   "storage is configured by the hosted deployment": "opslag wordt geconfigureerd door de gehoste implementatie",
   "storageConfig required": "storageConfig vereist",
@@ -326,9 +330,15 @@ export const nl: ErrorCatalog = {
   "this board mirror already exists": "deze bordspiegel bestaat al",
   "this guest must subscribe to an assigned card": "deze gast moet zich abonneren op een toegewezen kaart",
   "this invitation was sent to a different email address": "deze uitnodiging is naar een ander e-mailadres verzonden",
+  "time in progress is disabled for this workspace":
+    "Tijd in uitvoering is uitgeschakeld voor deze werkruimte",
   "too many attempts; request a new code": "te veel pogingen; nieuwe code aanvragen",
   "triggerCustomFieldId and triggerCustomFieldValue are required": "triggerCustomFieldId en triggerCustomFieldValue zijn vereist",
   "triggerDaysBefore is required": "triggerDaysBefore is vereist",
+  "in-progress limit field must be a number field": "Het limietveld voor tijd in uitvoering moet een getalveld zijn",
+  "triggerCustomFieldId is required": "triggerCustomFieldId is vereist",
+  "triggerThresholdAmount is required": "triggerThresholdAmount is vereist",
+  "triggerThresholdUnit is required": "triggerThresholdUnit is vereist",
   "triggerLabelId is required": "triggerLabelId is vereist",
   "triggerListId is required": "triggerListId is vereist",
   "triggerUserIds is required": "triggerUserIds is vereist",

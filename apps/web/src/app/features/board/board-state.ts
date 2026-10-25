@@ -1,3 +1,4 @@
+import { ALL_WORKSPACE_FEATURES_ENABLED, type WorkspaceFeatures } from "@kanera/shared/workspace-features";
 import { Injectable, computed, inject, signal } from "@angular/core";
 import { resolveInProgressClock, sameInProgressClock, type ReportedInProgressClock } from "./time-in-progress.util";
 import type {
@@ -65,7 +66,15 @@ export class BoardState {
   readonly workspaceKind = signal<"standard" | "board" | null>(null);
   readonly inactiveCardsDays = signal(DEFAULT_INACTIVE_CARDS_DAYS);
   readonly organisationInProgressEnabled = signal(true);
-  readonly inProgressEnabled = computed(() => this.organisationInProgressEnabled() && this.board()?.inProgressEnabled !== false);
+  /**
+   * The workspace's optional planning features, already combined with its organisation's switches
+   * by the server (`@kanera/shared/workspace-features`). The server also stops reporting a disabled
+   * feature's data, so these only decide which controls and views to offer.
+   */
+  readonly features = signal<WorkspaceFeatures>(ALL_WORKSPACE_FEATURES_ENABLED);
+  readonly dependenciesEnabled = computed(() => this.features().dependencies);
+  readonly timelineEnabled = computed(() => this.features().timeline);
+  readonly inProgressEnabled = computed(() => this.organisationInProgressEnabled() && this.features().inProgress && this.board()?.inProgressEnabled !== false);
   /** Days in progress after which a card's clock is flagged; 0 turns the flag off. */
   readonly inProgressAlertDays = signal(DEFAULT_IN_PROGRESS_ALERT_DAYS);
   /** The workspace's IANA zone: time in progress counts its working hours (09:00-17:00 weekdays). */
@@ -521,6 +530,7 @@ export class BoardState {
     workspaceKind?: "standard" | "board";
     workspaceInactiveCardsDays?: number;
     organisationInProgressEnabled?: boolean;
+    features?: WorkspaceFeatures;
     workspaceInProgressAlertDays?: number;
     workspaceTimeZone?: string;
     workspaceCardKeyPrefixes?: string[];
@@ -558,6 +568,7 @@ export class BoardState {
     this.workspaceKind.set(payload.workspaceKind ?? null);
     this.inactiveCardsDays.set(payload.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
     this.organisationInProgressEnabled.set(payload.organisationInProgressEnabled !== false);
+    this.features.set(payload.features ?? ALL_WORKSPACE_FEATURES_ENABLED);
     this.inProgressAlertDays.set(payload.workspaceInProgressAlertDays ?? DEFAULT_IN_PROGRESS_ALERT_DAYS);
     this.workspaceTimeZone.set(payload.workspaceTimeZone ?? "UTC");
     this.workspaceCardKeyPrefixes.set(payload.workspaceCardKeyPrefixes ?? []);
@@ -715,6 +726,7 @@ export class BoardState {
     this.workspaceKind.set(null);
     this.inactiveCardsDays.set(DEFAULT_INACTIVE_CARDS_DAYS);
     this.organisationInProgressEnabled.set(true);
+    this.features.set(ALL_WORKSPACE_FEATURES_ENABLED);
     this.inProgressAlertDays.set(DEFAULT_IN_PROGRESS_ALERT_DAYS);
     this.workspaceTimeZone.set("UTC");
     this.workspaceCardKeyPrefixes.set([]);
@@ -1232,6 +1244,7 @@ export class BoardState {
       dueDateLocalDate: card.dueDateLocalDate,
       dueDateSlot: card.dueDateSlot,
       dueDateTimezone: card.dueDateTimezone,
+      startDateLocalDate: card.startDateLocalDate,
       completedAt: card.completedAt,
       archivedAt: card.archivedAt,
       coverAttachmentId: card.coverAttachmentId,
@@ -1298,6 +1311,7 @@ export class BoardState {
       workspaceKind: this.workspaceKind() ?? undefined,
       workspaceInactiveCardsDays: this.inactiveCardsDays(),
       organisationInProgressEnabled: this.organisationInProgressEnabled(),
+      features: this.features(),
       workspaceInProgressAlertDays: this.inProgressAlertDays(),
       workspaceTimeZone: this.workspaceTimeZone(),
       workspaceCardKeyPrefixes: this.workspaceCardKeyPrefixes(),
@@ -1338,6 +1352,7 @@ export class BoardState {
     this.workspaceKind.set(snapshot.workspaceKind ?? null);
     this.inactiveCardsDays.set(snapshot.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
     this.organisationInProgressEnabled.set(snapshot.organisationInProgressEnabled !== false);
+    this.features.set(snapshot.features ?? ALL_WORKSPACE_FEATURES_ENABLED);
     this.inProgressAlertDays.set(snapshot.workspaceInProgressAlertDays ?? DEFAULT_IN_PROGRESS_ALERT_DAYS);
     this.workspaceTimeZone.set(snapshot.workspaceTimeZone ?? "UTC");
     this.workspaceCardKeyPrefixes.set(snapshot.workspaceCardKeyPrefixes ?? []);

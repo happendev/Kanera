@@ -6,8 +6,10 @@ import type { HomeActivityItem, HomeGettingStartedResponse, HomeItem, HomeTodayR
 
 /** Mirrors GETTING_STARTED_STEPS in @kanera/shared/dto; the web may import only types from it. */
 const GETTING_STARTED_STEPS = [
-  "createCard", "assignCard", "comment", "mention", "addDependency", "completeCard",
-  "quickEdit", "useFilter", "commandPalette", "viewWorkDone", "scratchpad", "saveNote",
+  "createCard", "assignCard", "comment", "mention", "completeCard",
+  "quickEdit", "useFilter", "commandPalette", "viewWorkDone",
+  "groupTable", "totalColumn", "exportExcel", "addDependency", "setStartDate", "viewTimeline",
+  "scratchpad", "saveNote",
   "inviteTeam", "secondBoard", "createAutomation", "enablePush", "connectAgent", "useAgent",
 ] as const;
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -105,7 +107,7 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
 }
 
 /** What home receives once the checklist is closed; the default so other tests never see it. */
-const CLOSED_CHECKLIST: HomeGettingStartedResponse = { dismissed: true, hidden: false, steps: [], teamTarget: null, notesWorkspaceId: null };
+const CLOSED_CHECKLIST: HomeGettingStartedResponse = { dismissed: true, hidden: false, steps: [], teamTarget: null, notesWorkspaceId: null, timelineBoardId: null };
 
 const BOARD_SUMMARIES: Record<string, { name: string; icon: string | null; iconColor: string | null }> = {
   "board-1": { name: "Roadmap", icon: null, iconColor: null },
@@ -194,6 +196,8 @@ describe("HomePage", () => {
         {
           provide: OfflineCacheService,
           useValue: {
+            savePriorityQueue: vi.fn(async () => undefined),
+            loadPriorityQueue: vi.fn(async () => null),
             saveHomeToday: vi.fn(async () => undefined),
             loadHomeToday: vi.fn(async () => options.cached ?? null),
           },
@@ -205,6 +209,7 @@ describe("HomePage", () => {
             connect: vi.fn(() => socket.asSocket()),
             joinBoard: vi.fn(() => vi.fn()),
             joinWorkspace: vi.fn(() => vi.fn()),
+            online: signal(true),
             displayedOnline: signal(true),
             reconnecting: signal(false),
             accessRefreshing: signal(false),
@@ -831,6 +836,7 @@ describe("HomePage", () => {
       steps: GETTING_STARTED_STEPS.map((key) => ({ key, done: done[key] ?? false })),
       teamTarget: { workspaceId: "ws-1" },
       notesWorkspaceId: "ws-1",
+      timelineBoardId: "board-1",
     };
   }
 
@@ -844,14 +850,14 @@ describe("HomePage", () => {
       gettingStarted: checklist({ inviteTeam: true, secondBoard: true }),
       registeredBoards: [{ id: "board-1", name: "Roadmap", icon: null, iconColor: null }],
     });
-    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("2/18");
+    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("2/23");
     expect(host().querySelectorAll(".gs-step.is-done")).toHaveLength(2);
-    expect([...host().querySelectorAll(".gs-section-label")].map((label) => label.textContent?.trim())).toEqual(["The basics", "Work faster", "Notes", "Your team", "Your setup"]);
+    expect([...host().querySelectorAll(".gs-section-label > span:first-child")].map((label) => label.textContent?.trim())).toEqual(["The basics", "Work faster", "Tables", "Plan ahead", "Notes", "Your team", "Your setup"]);
     // One step open at a time: the first one not done, with its action pointing at a real board.
-    expect(host().querySelectorAll(".gs-detail")).toHaveLength(1);
+    expect(host().querySelectorAll(".gs-inline")).toHaveLength(1);
     expect(row("Create your first card").classList).toContain("is-open");
     expect(row("Create your first card").querySelector("a.gs-action")?.getAttribute("href")).toBe("/b/board-1");
-    expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 18, percent: 11 });
+    expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 23, percent: 9 });
 
     row("Create an automation").querySelector<HTMLButtonElement>("button.gs-row")!.click();
     fixture.detectChanges();
@@ -864,7 +870,7 @@ describe("HomePage", () => {
     expect(host().querySelector(".getting-started")).toBeNull();
     expect(patch).toHaveBeenCalledWith("/home/getting-started", { hidden: true });
     // The account menu shows it either way; hiding only takes it off home.
-    expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 18, percent: 11 });
+    expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 23, percent: 9 });
   });
 
   it("does not show a checklist hidden on another device", async () => {
@@ -884,7 +890,7 @@ describe("HomePage", () => {
     TestBed.inject(GettingStartedService).noteUsed("commandPalette");
     TestBed.inject(GettingStartedService).noteUsed("commandPalette");
     fixture.detectChanges();
-    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("1/18");
+    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("1/23");
     expect(row("Try the command palette").classList).toContain("is-done");
     // The picked step let go once done; the guide falls back to the first open step.
     expect(row("Create your first card").classList).toContain("is-open");
@@ -958,7 +964,7 @@ describe("HomePage", () => {
     expect(text()).not.toContain("Nothing has been added to your Up next yet");
   });
 
-  it("withholds the queue offline rather than showing a stale order", async () => {
+  it("keeps the queue visible and read-only offline", async () => {
     await render();
     const priorities = TestBed.inject(MyPrioritiesService);
     priorities.queue.set({
@@ -990,12 +996,11 @@ describe("HomePage", () => {
     fixture.detectChanges();
     expect(host().querySelector(".priorities-section")).not.toBeNull();
 
-    // A stale sequence reads as an instruction the reader cannot date, so it is hidden outright —
-    // unlike the rest of the agenda, which keeps its cached snapshot behind the offline banner.
     (priorities.online as ReturnType<typeof signal<boolean>>).set(false);
     fixture.detectChanges();
-    expect(host().querySelector(".priorities-section")).toBeNull();
-    expect(text()).toContain("hidden while you’re offline");
+    expect(host().querySelector(".priorities-section")).not.toBeNull();
+    expect(host().querySelector(".panel-row.cdk-drag-disabled")).not.toBeNull();
+    expect(host().querySelector(".priorities-section .row-tools")).toBeNull();
   });
 
   it("blocks standalone board creation and explains the board limit", async () => {

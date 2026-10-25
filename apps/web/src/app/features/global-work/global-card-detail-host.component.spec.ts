@@ -44,7 +44,7 @@ const catalog: WorkCatalog = {
     icon: "layout-kanban",
     iconColor: "blue",
     viewerRole: "editor",
-    assignedItemsOnly: false, inProgressEnabled: true,
+    assignedItemsOnly: false, inProgressEnabled: true, dependenciesEnabled: true, timelineEnabled: true,
   }],
   lists: [{
     id: card.listId,

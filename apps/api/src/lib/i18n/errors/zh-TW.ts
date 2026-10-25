@@ -140,6 +140,8 @@ export const zhTW: ErrorCatalog = {
   "custom field trigger user is not a workspace member": "自訂欄位觸發器使用者不是工作區成員",
   "custom field trigger value does not match field type": "自訂欄位觸發器值與欄位類型不匹配",
   "delivery not found": "未找到交貨",
+  "dependencies are disabled for this workspace":
+    "此工作區已停用相依關係",
   "destination credentials are required": "需要目的地憑據",
   "email already registered": "電子郵件已註冊",
   "email not found": "找不到電子郵件",
@@ -293,6 +295,8 @@ export const zhTW: ErrorCatalog = {
   "standalone board configuration must contain exactly one board": "獨立看板配置必須僅包含一塊看板",
   "standalone board import target not found": "找不到獨立看板匯入目標",
   "standalone boards cannot contain another board": "獨立看板不能包含另一個看板",
+  "start dates and the timeline are disabled for this workspace":
+    "此工作區已停用開始日期和時間軸",
   "storage is configured by environment variables": "儲存由環境變量配置",
   "storage is configured by the hosted deployment": "儲存由托管部署配置",
   "storageConfig required": "需要儲存配置",
@@ -326,9 +330,15 @@ export const zhTW: ErrorCatalog = {
   "this board mirror already exists": "該看板鏡像像已存在",
   "this guest must subscribe to an assigned card": "該訪客必須訂閱指定的卡片",
   "this invitation was sent to a different email address": "此邀請已發送至其他電子郵件地址",
+  "time in progress is disabled for this workspace":
+    "此工作區已停用進行中時長",
   "too many attempts; request a new code": "嘗試次數過多；請求新代碼",
   "triggerCustomFieldId and triggerCustomFieldValue are required": "觸發器自訂欄位 ID 和觸發器自訂欄位值 是必需的",
   "triggerDaysBefore is required": "需要觸發DaysBefore",
+  "in-progress limit field must be a number field": "進行中時長的上限欄位必須是數字欄位",
+  "triggerCustomFieldId is required": "triggerCustomFieldId 為必填項",
+  "triggerThresholdAmount is required": "triggerThresholdAmount 為必填項",
+  "triggerThresholdUnit is required": "triggerThresholdUnit 為必填項",
   "triggerLabelId is required": "觸發器標籤 ID 為必填項",
   "triggerListId is required": "觸發器列表 ID 為必填項",
   "triggerUserIds is required": "觸發使用者 ID 為必填項",

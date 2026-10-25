@@ -6,7 +6,7 @@ import type { AggregateConfig, AggregateMetric, ColumnVisibility, GroupBy, SortB
 
 // Global Work also has a read-only "table" display mode. It is a separate product surface and
 // deliberately keeps its own union rather than coupling board navigation to that preference.
-export type ViewMode = "board" | "table" | "notes" | "calendar" | "history" | "dependencies";
+export type ViewMode = "board" | "table" | "notes" | "calendar" | "timeline" | "history" | "dependencies";
 export type ColumnWidths = Record<string, number>;
 export type CompletedFilter = { from: string; to: string };
 
@@ -28,6 +28,7 @@ export interface StoredFilters {
   showPrioritySetOnly: boolean;
   showReminderSetOnly: boolean;
   showBlockedOnly: boolean;
+  hideCompleted: boolean;
 }
 
 const CF_FILTER_OPERATORS: readonly CfFilterOperator[] = [
@@ -59,6 +60,7 @@ export function readFilters(scope: string): StoredFilters | null {
       showPrioritySetOnly: obj["showPrioritySetOnly"] === true,
       showReminderSetOnly: obj["showReminderSetOnly"] === true,
       showBlockedOnly: obj["showBlockedOnly"] === true,
+      hideCompleted: obj["hideCompleted"] === true,
     };
     return hasAnyFilter(filters) ? filters : null;
   } catch {
@@ -86,7 +88,8 @@ function hasAnyFilter(f: StoredFilters): boolean {
     f.showInProgressOnly ||
     f.showPrioritySetOnly ||
     f.showReminderSetOnly ||
-    f.showBlockedOnly
+    f.showBlockedOnly ||
+    f.hideCompleted
   );
 }
 

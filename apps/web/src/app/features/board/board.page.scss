@@ -139,12 +139,13 @@ k-empty-state.board-empty {
 
 .board-overview-metrics {
   display: grid;
-  // Six counts in two rows of three, or eight in two rows of four with in-progress tracking, so
-  // every row is full and every label still reads in full.
+  // Two full rows whatever the workspace turned off: six counts in rows of three, eight in rows of
+  // four with both in-progress tracking and dependencies, four in rows of two with neither.
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 
   &.has-progress { grid-template-columns: repeat(4, 1fr); }
+  &.is-compact { grid-template-columns: repeat(2, 1fr); }
 
   // The global button reset pins every <button> to 36px with nowrap, which crushed the count and
   // label against the tile's top and bottom borders. These tiles are containers, so they size to
@@ -567,11 +568,11 @@ k-empty-state.board-empty {
   @include compact-members;
 }
 
-// The header's own out-of-room state (see PageHeaderComponent.measureFit), which a tablet in
+// The header's first out-of-room step (see PageHeaderComponent.measureFit), which a tablet in
 // landscape with the sidebar open reaches well above the viewport breakpoint. The avatar stack
-// collapses together with the controls' labels: five faces were what had squeezed the board's
-// title to a single letter.
-k-page-header.is-tight {
+// collapses before any control loses its label: five faces were what had squeezed the board's
+// title to a single letter, and they are worth less than the words on New card.
+k-page-header.is-crowded {
   @include compact-members;
 }
 
@@ -644,24 +645,15 @@ k-page-header.is-tight {
   gap: 8px;
   width: 100%;
   min-width: 0;
-  // The layout switch reveals its labels from this box's width (see `sg-room` in k-segmented).
-  // Safe here despite the toolbar's no-containment rule: nothing in the search slot opens a fixed
-  // picker, and the switch's tooltips render in the CDK overlay.
-  container: sg-room / inline-size;
 
+  // The field keeps the toolbar's fixed width; the switch sizes itself beside it. On a phone the
+  // field is 100% of the slot and is the one that gives way, so the switch stays on screen.
   k-search-field {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
   }
 
   k-segmented {
     flex: none;
   }
-}
-
-// A layout switch shares the search slot, so widen the slot by the switch rather than shrinking
-// search to make room for it, and keep room for search beside the icon-only switch.
-k-page-toolbar:has(.work-done-search k-segmented) {
-  --pt-search-max-width: 580px;
-  --pt-search-min-width: 260px;
 }

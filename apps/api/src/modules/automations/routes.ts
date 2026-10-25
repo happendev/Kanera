@@ -5,9 +5,11 @@ import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db, type Tx } from "../../db.js";
 import { env } from "../../env.js";
+import { automationTriggerBlockedBy } from "@kanera/shared/workspace-features";
+import { featureDisabledError, loadWorkspaceFeatures } from "../../lib/workspace-features.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
-import { loadAutomation, loadAutomations } from "../../lib/automations.js";
+import { armInProgressAutomation, loadAutomation, loadAutomations } from "../../lib/automations.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { between, positionAtIndex, workspaceNeighbourPositions } from "../../lib/position.js";
@@ -92,6 +94,18 @@ async function validateCustomFieldTrigger(
       .limit(1);
     if (!member) throw badRequest("custom field trigger user is not a workspace member");
   }
+}
+
+// An "over the estimate" limit reads a number field on each card; any other type has no amount.
+async function assertThresholdFieldInWorkspace(workspaceId: string, fieldId: string | null | undefined, tx: Tx = db) {
+  if (!fieldId) return;
+  const [field] = await tx
+    .select({ type: customFields.type })
+    .from(customFields)
+    .where(and(eq(customFields.id, fieldId), eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt)))
+    .limit(1);
+  if (!field) throw badRequest("custom field trigger field is invalid");
+  if (field.type !== "number") throw badRequest("in-progress limit field must be a number field");
 }
 
 async function validateActionTargets(workspaceId: string, actions: dto.AutomationActionBody[], tx: Tx = db) {
@@ -303,10 +317,14 @@ export async function automationRoutes(app: FastifyInstance) {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createAutomationBody.parse(req.body);
+    await assertTriggerFeatureEnabled(workspaceId, body.triggerType);
     await assertListInWorkspace(workspaceId, body.triggerType === "card_enters_list" || body.triggerType === "card_leaves_list" ? body.triggerListId : null);
     await validateTriggerUsers(workspaceId, body.triggerType === "card_assigned_to_user" ? body.triggerUserIds : null);
     await assertLabelInWorkspace(workspaceId, body.triggerType === "card_label_set" ? body.triggerLabelId : null);
     await validateCustomFieldTrigger(workspaceId, body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldId : null, body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldValue : null);
+    const inProgress = body.triggerType === "card_in_progress_too_long";
+    const thresholdSource = inProgress ? body.triggerThresholdSource ?? "workspace" : null;
+    await assertThresholdFieldInWorkspace(workspaceId, thresholdSource === "custom_field" ? body.triggerCustomFieldId : null);
     await validateActionTargets(workspaceId, body.actions);
     assertEnabledAutomationHasActions(body.enabled, body.actions.length);
     const [first] = await db
@@ -335,14 +353,19 @@ export async function automationRoutes(app: FastifyInstance) {
           triggerListId: body.triggerType === "card_enters_list" || body.triggerType === "card_leaves_list" ? body.triggerListId! : null,
           triggerUserIds: body.triggerType === "card_assigned_to_user" ? Array.from(new Set(body.triggerUserIds ?? [])) : null,
           triggerLabelId: body.triggerType === "card_label_set" ? body.triggerLabelId! : null,
-          triggerCustomFieldId: body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldId! : null,
+          triggerCustomFieldId: body.triggerType === "custom_field_value_changed" || thresholdSource === "custom_field" ? body.triggerCustomFieldId! : null,
           triggerCustomFieldValue: body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldValue! : null,
           triggerDaysBefore: body.triggerType === "due_date_approaching" ? body.triggerDaysBefore! : null,
+          triggerThresholdSource: thresholdSource,
+          triggerThresholdAmount: thresholdSource === "fixed" ? body.triggerThresholdAmount! : null,
+          triggerThresholdUnit: thresholdSource === "fixed" || thresholdSource === "custom_field" ? body.triggerThresholdUnit! : null,
+          triggerIncludeExisting: inProgress && body.triggerIncludeExisting,
           applyOnCreate: body.applyOnCreate,
           applyOnMove: body.applyOnMove,
         })
         .returning();
       await replaceActions(tx, automation!.id, body.actions);
+      if (inProgress && body.enabled) await armInProgressAutomation(tx, automation!.id, { limitChanged: false, includeExisting: body.triggerIncludeExisting });
       await recordActivity(tx, {
         boardId: null,
         workspaceId,
@@ -372,6 +395,9 @@ export async function automationRoutes(app: FastifyInstance) {
     if (!current) throw notFound();
     const { clientId } = await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     const triggerType = body.triggerType ?? current.triggerType;
+    // A rule kept from before a feature was switched off can still be edited or turned off, but not
+    // switched onto, or back on for, a trigger that cannot fire.
+    if (body.triggerType !== undefined || body.enabled === true) await assertTriggerFeatureEnabled(current.workspaceId, triggerType);
     const triggerListId = triggerType === "card_enters_list" || triggerType === "card_leaves_list"
       ? body.triggerListId !== undefined ? body.triggerListId : current.triggerListId
       : null;
@@ -381,9 +407,20 @@ export async function automationRoutes(app: FastifyInstance) {
     const triggerLabelId = triggerType === "card_label_set"
       ? body.triggerLabelId !== undefined ? body.triggerLabelId : current.triggerLabelId
       : null;
-    const triggerCustomFieldId = triggerType === "custom_field_value_changed"
+    const inProgress = triggerType === "card_in_progress_too_long";
+    const thresholdSource = inProgress
+      ? (body.triggerThresholdSource !== undefined ? body.triggerThresholdSource : current.triggerThresholdSource) ?? "workspace"
+      : null;
+    const triggerCustomFieldId = triggerType === "custom_field_value_changed" || thresholdSource === "custom_field"
       ? body.triggerCustomFieldId !== undefined ? body.triggerCustomFieldId : current.triggerCustomFieldId
       : null;
+    const triggerThresholdAmount = thresholdSource === "fixed"
+      ? body.triggerThresholdAmount !== undefined ? body.triggerThresholdAmount : current.triggerThresholdAmount
+      : null;
+    const triggerThresholdUnit = thresholdSource === "fixed" || thresholdSource === "custom_field"
+      ? (body.triggerThresholdUnit !== undefined ? body.triggerThresholdUnit : current.triggerThresholdUnit)
+      : null;
+    const triggerIncludeExisting = inProgress && (body.triggerIncludeExisting ?? current.triggerIncludeExisting);
     const triggerCustomFieldValue = triggerType === "custom_field_value_changed"
       ? body.triggerCustomFieldValue !== undefined ? body.triggerCustomFieldValue : current.triggerCustomFieldValue
       : null;
@@ -395,6 +432,19 @@ export async function automationRoutes(app: FastifyInstance) {
     if (triggerType === "card_label_set" && !triggerLabelId) throw badRequest("triggerLabelId is required");
     if (triggerType === "due_date_approaching" && !triggerDaysBefore) throw badRequest("triggerDaysBefore is required");
     if (triggerType === "custom_field_value_changed" && (!triggerCustomFieldId || !triggerCustomFieldValue)) throw badRequest("triggerCustomFieldId and triggerCustomFieldValue are required");
+    if (inProgress) {
+      const issue = dto.inProgressThresholdIssue({ triggerThresholdSource: thresholdSource, triggerThresholdAmount, triggerThresholdUnit, triggerCustomFieldId });
+      if (issue) throw badRequest(issue.message);
+    }
+    await assertThresholdFieldInWorkspace(current.workspaceId, thresholdSource === "custom_field" ? triggerCustomFieldId : null);
+    // Which cards a rule has handled only means something against the limit they were handled at.
+    const limitChanged = inProgress && (
+      current.triggerType !== triggerType
+      || (current.triggerThresholdSource ?? "workspace") !== thresholdSource
+      || current.triggerThresholdAmount !== triggerThresholdAmount
+      || current.triggerThresholdUnit !== triggerThresholdUnit
+      || (thresholdSource === "custom_field" && current.triggerCustomFieldId !== triggerCustomFieldId)
+    );
     await assertListInWorkspace(current.workspaceId, triggerListId);
     await validateTriggerUsers(current.workspaceId, triggerUserIds);
     await assertLabelInWorkspace(current.workspaceId, triggerLabelId);
@@ -431,11 +481,21 @@ export async function automationRoutes(app: FastifyInstance) {
           triggerCustomFieldId,
           triggerCustomFieldValue,
           triggerDaysBefore,
+          triggerThresholdSource: thresholdSource,
+          triggerThresholdAmount,
+          triggerThresholdUnit,
+          triggerIncludeExisting,
           ...(body.applyOnCreate !== undefined && { applyOnCreate: body.applyOnCreate }),
           ...(body.applyOnMove !== undefined && { applyOnMove: body.applyOnMove }),
           updatedAt: new Date(),
         })
         .where(eq(automations.id, id));
+      // A rule that is off records nothing yet: cards keep crossing while it is off, and the moment it
+      // is turned on is the one that decides which of them count as existing.
+      const turningOn = nextEnabled && !locked.enabled;
+      if (inProgress && (limitChanged || turningOn)) {
+        await armInProgressAutomation(tx, id, { limitChanged, includeExisting: triggerIncludeExisting || !nextEnabled });
+      }
       await recordActivity(tx, {
         boardId: null,
         workspaceId: current.workspaceId,
@@ -538,4 +598,9 @@ export async function automationRoutes(app: FastifyInstance) {
     await emitToWorkspaceAdmins(current.workspaceId, "automation:deleted", { workspaceId: current.workspaceId, automationId: id });
     return reply.status(204).send();
   });
+}
+
+async function assertTriggerFeatureEnabled(workspaceId: string, triggerType: string): Promise<void> {
+  const blockedBy = automationTriggerBlockedBy(triggerType, await loadWorkspaceFeatures(workspaceId));
+  if (blockedBy) throw featureDisabledError(blockedBy);
 }

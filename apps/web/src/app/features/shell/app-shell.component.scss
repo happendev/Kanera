@@ -259,7 +259,7 @@ k-support-session-banner {
   text-align: left;
   transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background var(--motion-fast);
 
-  &:hover {
+  &:hover:not(:disabled) {
     color: var(--text);
     background: var(--surface-2);
     border-color: var(--border-strong);
@@ -384,7 +384,7 @@ k-support-session-banner {
   font-size: var(--text-md);
   transition: background-color var(--motion-fast), color var(--motion-fast);
 
-  &:hover {
+  &:hover:not([aria-disabled="true"]) {
     background: var(--surface-2);
     color: var(--text);
     text-decoration: none;
@@ -1425,7 +1425,7 @@ k-support-session-banner {
       color: var(--accent);
     }
 
-    &:hover {
+    &:hover:not([aria-disabled="true"]) {
       background: var(--surface-2);
       text-decoration: none;
     }
@@ -1682,4 +1682,12 @@ k-support-session-banner {
       padding-bottom: 6px;
     }
   }
+}
+
+// Keep unavailable navigation visible, including the normally hover-only settings gears.
+.sidebar .ws-settings[aria-disabled="true"],
+.sidebar .ws-icon-link[aria-disabled="true"],
+.sidebar button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
