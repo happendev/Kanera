@@ -285,7 +285,16 @@ test("the timeline draws bars, reschedules by drag, flags conflicts and draws de
     await expect(wires).toHaveCount(baselineWires + 1);
 
     // Selecting a wire offers to remove it; the other member's wire goes with it.
-    await newWire.click();
+    await newWire.scrollIntoViewIfNeeded();
+    // An elbow wire's bounding-box centre need not touch its stroke. Click the actual path.
+    // Leave the bar first so its tooltip cannot cover the wire.
+    await page.mouse.move(0, 0);
+    const point = await newWire.evaluate((element) => {
+      const path = element as SVGPathElement;
+      const point = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM()!);
+      return { x: point.x, y: point.y };
+    });
+    await page.mouse.click(point.x, point.y);
     await page.getByRole("button", { name: "Remove dependency", exact: true }).click();
     await expect(newWire).toHaveCount(0);
     await expect(wires).toHaveCount(baselineWires);
