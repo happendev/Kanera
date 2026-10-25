@@ -111,10 +111,23 @@ export async function expectCardTileMounted(page: Page, title: string, listId?: 
 }
 
 export async function openCard(page: Page, title: string): Promise<Locator> {
+  await expectCardTileMounted(page, title);
   await cardTile(page, title).click();
   const detail = page.getByRole("dialog", { name: `Card detail: ${title}` });
   await expect(detail).toBeVisible();
   return detail;
+}
+
+/** Incremental table mounting must not turn an off-screen retained row into a false failure. */
+export async function expectTableRowMounted(page: Page, cardId: string) {
+  const row = page.locator(`.tv-row[data-card-id="${cardId}"]`);
+  await expect.poll(async () => {
+    if (await row.count() === 0) {
+      await page.locator(".tv-scroll").evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+    }
+    return row.count();
+  }).toBe(1);
+  return row;
 }
 
 /** Workspace lists append on the right; scroll so newly added columns are in view. */

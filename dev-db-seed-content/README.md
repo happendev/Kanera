@@ -42,6 +42,15 @@ Seeded standalone boards (owned by Amelia):
 - `Launch Checklist`
 - `Customer Portal Revamp`: built from the Agent Workflow template; start actual runs through the application when demonstrating agent work.
 
+## Demonstrating notifications
+
+Every seed/reset leaves Amelia's inbox with two overdue cards and the **Build the launch
+measurement sheet** conversation: Ben's complete comment, a Campaign field change, and an
+assignment. The comment and card changes share the second previous working day, at separate
+London clock times. Overdue notices belong to the previous working day. Other fixture history
+stays read, so the opening inbox is useful without a burst of new actions or “just now” timestamps.
+The dates follow the seed reference date automatically, including weekend and daylight-saving resets.
+
 ## Demonstrating Timeline and dependencies
 
 Sign in as Amelia (`amelia@kanera.test`) to see all boards, then choose **Timeline**
@@ -116,6 +125,13 @@ separate automation rehearsal. No hardcoded live UUID is used.
   the same plan. Historical completed classifications and original comments remain;
   editable schedule notes retain their images and links. Budget means planned
   allocation in EUR, not actual spend.
+- Separators divide cards between groups; they do not head lists. Marketing has six
+  boundaries between groups, and single-group lists have none. Development retains
+  its two separators between implementation cards and completed work.
+- Work Done's campaign delivery example uses the previous calendar week's Monday–Friday,
+  with five completed cards, moves and checklist sign-offs. Screenshot helpers read the
+  actual completion dates to select that week, rather than assuming the latest week is
+  the example. Move steps are spaced beyond timestamp jitter so their workflow stays ordered.
 - Exactly eight active cards are intentionally overdue: MARKETINGC-9, LAUNCHCHEC-1/-2,
   DEVELOPMEN-1/-4/-13 and DEVOPS-1/-13. All other dated active work uses explicit
   B+0…B+15 offsets. Start-only and undated backlog fixtures remain undated.

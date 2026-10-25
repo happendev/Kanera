@@ -1,11 +1,31 @@
-import { addWorkingDays, dateKeyOf, dayNumber, nextWorkingDayOnOrAfter } from "@kanera/shared/schedule";
+import { addWorkingDays, dateKeyOf, dayNumber, lastWorkingDayOnOrBefore, nextWorkingDayOnOrAfter } from "@kanera/shared/schedule";
+
+const londonDate = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
+});
+const londonHour = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London", hour: "numeric", hourCycle: "h23",
+});
+
+/** Backfilled work stops on Friday, rather than appearing as weekend work after a reset.
+ * Clamp evenings too so projecting Saturday back to Friday cannot put it before a Friday event.
+ */
+export function seedActivityTime(value: Date): Date {
+  const date = londonDate.format(value);
+  const day = dayNumber(date);
+  const workDate = dateKeyOf(lastWorkingDayOnOrBefore(day));
+  const noon = new Date(`${workDate}T12:00:00Z`);
+  const offsetHours = Number(londonHour.format(noon)) - 12;
+  const end = new Date(`${workDate}T17:00:00Z`);
+  end.setUTCHours(end.getUTCHours() - offsetHours);
+  return new Date(Math.min(value.getTime(), end.getTime()));
+}
 
 /** One immutable London date per reset. Day numbers represent calendar dates, never DST durations. */
 export function seedCalendar(reference: Date | string) {
   const date = typeof reference === "string" && /^\d{4}-\d{2}-\d{2}$/.test(reference)
     ? reference
-    : new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" })
-      .format(typeof reference === "string" ? new Date(reference) : reference);
+    : londonDate.format(typeof reference === "string" ? new Date(reference) : reference);
   const day = dayNumber(date);
   if (!Number.isFinite(day) || dateKeyOf(day) !== date) throw new Error("Seed reference date must be a valid ISO date or instant.");
   const first = nextWorkingDayOnOrAfter(day);
@@ -17,7 +37,7 @@ export function seedCalendar(reference: Date | string) {
   const baseDate = new Date(`${date}T09:13:27Z`);
   const instant = typeof reference === "string" && /^\d{4}-\d{2}-\d{2}$/.test(reference)
     ? baseDate : new Date(reference);
-  return { date, business, previous, label, baseDate, instant };
+  return { date, business, previous, label, baseDate, instant, activityInstant: seedActivityTime(instant) };
 }
 
 // Explicit authored offsets: these must never be inferred from previously rebased database dates.
@@ -34,3 +54,15 @@ export const OTHER_DEADLINES: Readonly<Record<string, Readonly<Record<number, nu
   DevOps: { 1: -3, 2: 4, 3: 5, 4: 2, 5: 3, 6: 10, 7: 1, 8: 12, 9: 3, 12: 9, 13: -3, 14: 5, 15: 8, 16: 6, 17: 7, 18: 11, 19: 4, 21: 5, 23: 9, 24: 8 },
   "Launch Checklist": { 1: -1, 2: -1, 3: 1, 4: 1, 5: 2 },
 };
+
+export type SeedNotificationTime = { workingDaysAgo: number; hour: number; minute: number };
+
+/** A prior working day's London clock keeps seeded inboxes historical on weekday and weekend resets. */
+export function seedNotificationTime(reference: Date | string, time: SeedNotificationTime): Date {
+  const date = seedCalendar(reference).previous(time.workingDaysAgo);
+  const noon = new Date(`${date}T12:00:00Z`);
+  const offsetHours = Number(londonHour.format(noon)) - 12;
+  const at = new Date(`${date}T00:00:00Z`);
+  at.setUTCHours(time.hour - offsetHours, time.minute, 0, 0);
+  return at;
+}

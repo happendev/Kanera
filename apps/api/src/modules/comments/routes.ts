@@ -22,7 +22,7 @@ import { notifyReactionAdded, withdrawReactionNotification } from "../../lib/rea
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
-import { queueNotificationFanout } from "../../lib/notifications.js";
+import { clearNotificationsForComments, queueNotificationFanout } from "../../lib/notifications.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { assertCardActive, assertIntegrationEmbeddedMediaStoredLocally } from "../../lib/card-guards.js";
 import { cardFeedSortPriority, compareCardFeedItems, feedAfterCursor } from "../../lib/card-feed.js";
@@ -661,7 +661,10 @@ export async function commentRoutes(app: FastifyInstance) {
       .set({ commentId: null })
       .where(eq(cardAttachments.commentId, id));
 
-    await db.delete(comments).where(eq(comments.id, id));
+    await db.transaction(async (tx) => {
+      await tx.delete(comments).where(eq(comments.id, id));
+      await clearNotificationsForComments(tx, [id]);
+    });
     await touchCardActivity(card.id, req.auth.cid);
     await recordActivity(db, {
       boardId: card.boardId,
@@ -731,6 +734,7 @@ export async function commentRoutes(app: FastifyInstance) {
       if (deleted.length !== body.commentIds.length) {
         throw badRequest("a comment changed while applying the batch; retry with a fresh comment list");
       }
+      await clearNotificationsForComments(tx, body.commentIds);
       for (const commentId of body.commentIds) {
         const row = byId.get(commentId)!;
         await recordActivity(tx, {

@@ -38,8 +38,15 @@ test("the seed demonstrates realistic timeline dates and dependency handoffs", a
   expect(unscheduled.startDateLocalDate ?? null).toBeNull();
   expect(unscheduled.dueDateLocalDate ?? null).toBeNull();
 
+  const isWeekday = (value: string | Date) => {
+    const date = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(value));
+    return ![0, 6].includes(new Date(`${date}T12:00:00Z`).getUTCDay());
+  };
   let historicalBars = 0;
   for (const row of cards) {
+    if (row.completedAt) expect(isWeekday(row.completedAt), `${row.title}: completed`).toBe(true);
     if (row.startDateLocalDate && row.dueDateLocalDate) {
       expect(row.startDateLocalDate <= row.dueDateLocalDate, row.title).toBe(true);
     }
@@ -96,6 +103,11 @@ test("the seed demonstrates realistic timeline dates and dependency handoffs", a
   await page.screenshot({ path: testInfo.outputPath("seed-timeline-handoff-desktop.png") });
 
   const launch = card("Prepare autumn campaign launch");
+  const launchFeed = await api.get(`/api/cards/${launch.id}/feed?limit=100`);
+  expect(launchFeed.ok()).toBe(true);
+  const feed = await launchFeed.json() as { items: { data: { createdAt: string } }[] };
+  expect(feed.items.length).toBeGreaterThan(0);
+  for (const item of feed.items) expect(isWeekday(item.data.createdAt), item.data.createdAt).toBe(true);
   await page.goto(`/b/${launch.boardId}?view=timeline`);
   await page.getByRole("button", { name: "Critical path", exact: true }).click();
   await expect(page.locator(`.tl-row-card[data-card-id="${launch.id}"] .tl-bar`)).toHaveClass(/is-critical/);

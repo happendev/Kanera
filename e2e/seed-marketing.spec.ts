@@ -1,5 +1,6 @@
 import { expandCardSummary, type CompactCardSummary, type WireCardDetail } from "../packages/shared/src/events";
 import { expect, test } from "./support/fixtures";
+import { addWorkingDays, dateKeyOf, dayNumber } from "../packages/shared/src/lib/schedule";
 import { seedCalendar } from "../apps/api/src/scripts/seed-calendar";
 
 // Verify Marketing's handoff against the real seed. These checks catch reordered identities,
@@ -35,7 +36,9 @@ test("the Marketing seed applies the approved content repairs and date-only dead
   const email = card("Schedule the launch-day customer email");
   expect(email.number).toBe(120);
   expect(email.boardId).toBe(launchBoard.id);
-  const calendar = seedCalendar(new Date(email.createdAt));
+  // Creation can be Friday on a weekend reset; derive the planning anchor from the authored
+  // six-working-day email deadline instead of treating historical work as today's calendar.
+  const calendar = seedCalendar(dateKeyOf(addWorkingDays(dayNumber(email.dueDateLocalDate!), -6)));
   const dateAt = (offset: number) => offset < 0 ? calendar.previous(-offset) : calendar.business(offset);
   const expectedDates = [
     ["Prepare the launch-week social schedule", 9, -1],
@@ -91,7 +94,7 @@ test("the Marketing seed applies the approved content repairs and date-only dead
   expect(feedResponse.ok()).toBe(true);
   const feed = await feedResponse.json() as { items: { type: string; data: { action?: string; createdAt?: string; payload?: { itemId?: string } } }[] };
   const signedOff = checklist.items.find((item) => item.text === "Confirm final product messaging")!;
-  expect(new Date(signedOff.completedAt!).toISOString().slice(0, 10)).toBe(calendar.date);
+  expect(new Date(signedOff.completedAt!).getTime()).toBe(new Date(messaging.completedAt!).getTime());
   // The recording fixture sets the current sign-off without inventing a historical execution.
   expect(feed.items.filter((item) => item.type === "activity" && item.data.action === "checklistItem:completion")).toEqual([]);
   expect(feed.items.some((item) => item.type === "comment")).toBe(true);
@@ -134,4 +137,17 @@ test("the Marketing seed applies the approved content repairs and date-only dead
   await page.setViewportSize({ width: 540, height: 960 });
   await expect(dialog.locator(".panel-cover")).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("marketing-launch-phone.png") });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/b/${launchBoard.id}?view=history`);
+  await expect(page.locator("k-work-done-view")).toBeVisible();
+  await page.getByRole("button", { name: "7d", exact: true }).click();
+  await expect(page.locator(".wd-row").filter({ has: page.locator(".wd-verb--completed") }).locator(".wd-card-title", { hasText: messaging.title })).toBeVisible();
+  for (const heading of await page.locator(".wd-day-date").allTextContents()) {
+    expect(heading).not.toMatch(/Saturday|Sunday/);
+  }
+  await page.screenshot({ path: testInfo.outputPath("marketing-work-done-weekdays-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect(page.locator(".wd-row").filter({ has: page.locator(".wd-verb--completed") }).locator(".wd-card-title", { hasText: messaging.title })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("marketing-work-done-weekdays-phone.png") });
 });

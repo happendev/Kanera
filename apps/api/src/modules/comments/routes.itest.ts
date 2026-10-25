@@ -1,11 +1,12 @@
 import "../../test/setup.integration.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
-import { activityEvents, boardMembers, boards, cards, commentReactions, comments, eventOutbox, lists, users, workspaceMembers } from "@kanera/shared/schema";
+import { activityEvents, boardMembers, boards, cardAssignees, cards, commentReactions, comments, directRealtimeOutbox, eventOutbox, lists, notifications, users, workspaceMembers } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { db } from "../../db.js";
+import { waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { getUserDisplay } from "../../lib/user-display-cache.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
@@ -542,6 +543,59 @@ void test("board administrators can delete other authors' comments but editors c
   assert.equal(editorDelete.statusCode, 403);
   assert.equal(await db.$count(comments, inArray(comments.id, [ownerModerated.id, adminModerated.id])), 0);
   assert.equal(await db.$count(comments, eq(comments.id, editorRejected.id)), 1);
+
+  await app.close();
+});
+
+void test("deleting a comment removes the notifications it produced", async () => {
+  const app = await buildIntegrationServer();
+  const { accessToken: ownerToken, user: owner } = await signupOwner(app, { orgName: "Acme Deleted Comment", email: "owner-deleted-comment@example.com", displayName: "Owner" });
+  const workspaceCreated = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { name: "Delivery" },
+  });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(list);
+  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" }).returning();
+  assert.ok(board);
+  const [card] = await db.insert(cards).values({ listId: list.id, boardId: board.id, title: "Tracking plan", position: "1000.0000000000", createdById: owner.id }).returning();
+  assert.ok(card);
+  const [assignee] = await insertTestUsers(db, [
+    { clientId: owner.clientId, email: "assignee-deleted-comment@example.com", passwordHash: "x", displayName: "Assignee" },
+  ]).returning();
+  assert.ok(assignee);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: assignee.id, role: "member" });
+  await db.insert(boardMembers).values({ boardId: board.id, userId: assignee.id, role: "editor" });
+  await db.insert(cardAssignees).values({ cardId: card.id, userId: assignee.id });
+
+  const post = async (body: string) => {
+    const res = await app.inject({ method: "POST", url: `/cards/${card.id}/comments`, headers: { authorization: `Bearer ${ownerToken}` }, payload: { body } });
+    assert.equal(res.statusCode, 201, res.body);
+    return res.json<{ id: string }>().id;
+  };
+  const removedId = await post("Temporary note");
+  const keptId = await post("Kept note");
+  await waitForNotificationFanoutForTests();
+  const inbox = () => db
+    .select({ id: notifications.id, commentId: activityEvents.entityId })
+    .from(notifications)
+    .innerJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
+    .where(eq(notifications.userId, assignee.id));
+  const before = await inbox();
+  assert.deepEqual(before.map((row) => row.commentId).sort(), [removedId, keptId].sort());
+
+  const deleted = await app.inject({ method: "DELETE", url: `/comments/${removedId}`, headers: { authorization: `Bearer ${ownerToken}` } });
+  assert.equal(deleted.statusCode, 204);
+  assert.deepEqual((await inbox()).map((row) => row.commentId), [keptId]);
+  const [event] = await db.select().from(directRealtimeOutbox).where(and(
+    eq(directRealtimeOutbox.userId, assignee.id),
+    eq(directRealtimeOutbox.eventType, "notification:deleted"),
+  ));
+  assert.deepEqual(event?.payload, { notificationIds: [before.find((row) => row.commentId === removedId)!.id] });
 
   await app.close();
 });

@@ -2,6 +2,12 @@ import { defineConfig } from "@playwright/test";
 import path from "node:path";
 import ports from "./ports.json";
 import { contextDefaults, webOrigin } from "./support/env";
+import { balancedFiles } from "./support/shards";
+
+const balancedShard = process.env.KANERA_E2E_SHARD;
+if (balancedShard && process.argv.some((arg) => arg === "--shard" || arg.startsWith("--shard="))) {
+  throw new Error("Use either KANERA_E2E_SHARD or Playwright --shard, never both");
+}
 
 const artifactDir = process.env.KANERA_E2E_ARTIFACT_DIR ?? path.join(__dirname, "artifacts", "manual");
 
@@ -41,7 +47,16 @@ function apiProcess(script: string, logName: string, port: number) {
 export default defineConfig({
   testDir: __dirname,
   testMatch: "*.spec.ts",
-  // CI parallelizes isolated stacks with --shard. Within one stack tests share seeded users and
+  projects: [
+    // Exact authored-data checks need the freshly seeded database. Run them as a dependency on
+    // every shard, before any behavior spec can add cards or change shared list configuration.
+    { name: "seed", testMatch: "seed-*.spec.ts" },
+    {
+      name: "behavior", testIgnore: "seed-*.spec.ts", dependencies: ["seed"],
+      ...(balancedShard ? { testMatch: balancedFiles(__dirname, balancedShard) } : {}),
+    },
+  ],
+  // CI parallelizes isolated stacks with KANERA_E2E_SHARD. Within one stack tests share seeded users and
   // boards, so keep file/test execution sequential rather than racing on those fixtures.
   fullyParallel: false,
   workers: 1,

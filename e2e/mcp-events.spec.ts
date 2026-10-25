@@ -5,10 +5,10 @@ import { boardIdOf, createWorkspaceApiKey, expectCardTileMounted, openBoard, wor
 
 const mcpUrl = `http://localhost:${ports.mcp}/mcp`;
 
-test("MCP 2 discovers events, executes tools, rejects private callbacks and respects revoked credentials", async ({ page, signIn, playwright, apiAs, uniqueName }, testInfo) => {
+test("MCP 2 discovers events, executes tools, rejects private callbacks and respects revoked credentials", async ({ page, testWorkspace, signIn, playwright, apiAs, uniqueName }, testInfo) => {
   await signIn(page, "amelia");
-  const boardId = await boardIdOf(page, "Platform Delivery");
-  const settings = await workspaceSettingsHref(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, testWorkspace.boardName);
+  const settings = await workspaceSettingsHref(page, testWorkspace.boardName);
   const keyName = uniqueName("MCP events key");
   const key = await createWorkspaceApiKey(page, settings, keyName);
   const client = await playwright.request.newContext({ extraHTTPHeaders: { authorization: `Bearer ${key}`, "MCP-Protocol-Version": "2026-07-28" } });
@@ -80,15 +80,19 @@ test("MCP 2 discovers events, executes tools, rejects private callbacks and resp
     const invalidList = await rpc("events/subscribe", { name: "card.moved", arguments: { workspaceId, boardId, listId: randomUUID() }, delivery: { mode: "webhook", url: "https://receiver.example/list", secret: `whsec_${randomBytes(32).toString("base64")}` } });
     expect(invalidList.body.error!.code).toBe(-32602);
     const title = uniqueName("MCP 2 card");
+    // Stay in this document: initial board loading must not stand in for live delivery.
+    await openBoard(page, testWorkspace.boardName);
+    await expect(page.locator("k-card").filter({ hasText: title })).toHaveCount(0);
+    const documentStartedAt = await page.evaluate(() => performance.timeOrigin);
     const write = { name: "cards.create", arguments: { boardId, listId, title, idempotencyKey: randomUUID() } };
     const created = await rpc<{ isError?: boolean }>("tools/call", write);
     const duplicate = await rpc<{ isError?: boolean }>("tools/call", write);
     expect(duplicate.body.result.isError).not.toBe(true);
     expect(created.body.result.isError).not.toBe(true);
-    await openBoard(page, "Platform Delivery");
-    // Full-suite runs fill the seeded lane beyond its initial render window.
+    // Mount the live tile without navigating or reloading the observer.
     await expectCardTileMounted(page, title, listId);
     await expect(page.locator("k-card").filter({ hasText: title })).toHaveCount(1);
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStartedAt);
     const callback = await rpc("events/subscribe", { name: "comment.created", arguments: { workspaceId, boardId }, delivery: { mode: "webhook", url: "https://127.0.0.1/callback", secret: `whsec_${randomBytes(32).toString("base64")}` } });
     expect(callback.body.error).toMatchObject({ code: -32015, data: { reason: "challenge_failed" } });
     const invalid = await rpc("events/subscribe", { name: "comment.created", arguments: { workspaceId, boardId }, delivery: { mode: "webhook", url: "http://localhost/callback", secret: "whsec_bad" } });

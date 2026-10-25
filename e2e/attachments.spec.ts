@@ -11,6 +11,8 @@ const seedContent = path.join(__dirname, "..", "dev-db-seed-content", "attachmen
 const fixtures = {
   image: { file: "images/access-review-symbol.png", mimeType: "image/png", ext: "png", opens: "image" },
   pdf: { file: "pdfs/api-rollout-plan.pdf", mimeType: "application/pdf", ext: "pdf", opens: "pdf" },
+  audio: { file: path.join(__dirname, "fixtures/preview.wav"), mimeType: "audio/wav", ext: "wav", opens: "audio" },
+  video: { file: path.join(__dirname, "fixtures/preview.webm"), mimeType: "video/webm", ext: "webm", opens: "video" },
   docx: {
     file: "docx/release-readiness-template.docx",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -26,16 +28,32 @@ function upload(kind: Kind, surface: string) {
   return {
     name: `e2e-${surface}-${kind}.${fixture.ext}`,
     mimeType: fixture.mimeType,
-    buffer: readFileSync(path.join(seedContent, fixture.file)),
+    buffer: readFileSync(path.resolve(seedContent, fixture.file)),
   };
 }
 
-async function expectLightbox(detail: Locator, kind: "image" | "pdf", open: () => Promise<void>) {
+async function expectLightbox(detail: Locator, kind: "image" | "pdf" | "audio" | "video", open: () => Promise<void>) {
   const page = detail.page();
   await open();
   const lightbox = page.locator("k-image-lightbox");
   await expect(lightbox).toBeVisible();
-  await expect(lightbox.locator(kind === "image" ? ".lb-img" : ".lb-pdf")).toBeVisible();
+  const preview = lightbox.locator({ image: ".lb-img", pdf: ".lb-pdf", audio: "audio", video: "video" }[kind]);
+  await expect(preview).toBeVisible();
+  if (kind === "image") {
+    await expect.poll(() => lightbox.locator(".lb-img").evaluate((image: HTMLImageElement) =>
+      image.complete && image.naturalWidth > 0 && image.naturalHeight > 0)).toBe(true);
+  } else if (kind === "pdf") {
+    // An iframe can be visible while displaying a corrupt PDF. Check the actual blob handed to
+    // Chromium's PDF viewer against the uploaded fixture, including its complete byte sequence.
+    const bytes = await lightbox.locator(".lb-pdf").evaluate(async (frame: HTMLIFrameElement) =>
+      Array.from(new Uint8Array(await (await fetch(frame.src)).arrayBuffer())));
+    expect(Buffer.from(bytes)).toEqual(readFileSync(path.join(seedContent, fixtures.pdf.file)));
+  } else {
+    // A mounted player is not proof its source loaded or decoded. Both fixtures are half a second
+    // long; a decoded frame plus advancing playback catches bad URLs, MIME handling and bad bytes.
+    await expect.poll(() => preview.evaluate((media: HTMLMediaElement) =>
+      media.error === null && media.readyState >= 2 && media.duration > 0 && media.currentTime > 0)).toBe(true);
+  }
   // Escape belongs to the lightbox: it must not also close the card detail underneath it.
   await page.keyboard.press("Escape");
   await expect(lightbox).toHaveCount(0);
@@ -62,6 +80,10 @@ async function expectDownload(page: Page, fileName: string, trigger: () => Promi
     }),
   ]);
   expect(result.suggestedFilename()).toBe(fileName);
+  expect(await result.failure()).toBeNull();
+  const downloaded = await result.path();
+  expect(downloaded).not.toBeNull();
+  expect(readFileSync(downloaded!)).toEqual(readFileSync(path.join(seedContent, fixtures.docx.file)));
   await expect(page.locator("k-image-lightbox")).toHaveCount(0);
 }
 
@@ -81,10 +103,10 @@ async function insertIntoEditor(editor: Locator, files: { kind: Kind; name: stri
   }
 }
 
-test("attachment list and activity rows preview or download by file type", async ({ page, signIn, uniqueName }) => {
+test("attachment list and activity rows preview or download by file type", async ({ page, testWorkspace, signIn, uniqueName }) => {
   const title = uniqueName("E2E attachment card");
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, testWorkspace.boardName);
   await createCard(page, title);
   const detail = await openCard(page, title);
 
@@ -112,10 +134,10 @@ test("attachment list and activity rows preview or download by file type", async
   for (const file of files) await expect(reopened.locator("li.attach-row").filter({ hasText: file.name })).toHaveCount(1);
 });
 
-test("description and comment attachments preview or download by file type", async ({ page, signIn, uniqueName }) => {
+test("description and comment attachments preview or download by file type", async ({ page, testWorkspace, signIn, uniqueName }) => {
   const title = uniqueName("E2E inline attachment card");
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, testWorkspace.boardName);
   await createCard(page, title);
   const detail = await openCard(page, title);
 
@@ -138,7 +160,7 @@ test("description and comment attachments preview or download by file type", asy
   const commentEditor = detail.locator(".comment-form k-description-editor");
   await insertIntoEditor(commentEditor, commentFiles);
   await commentEditor.getByRole("button", { name: "Send", exact: true }).click();
-  const comment = detail.locator(".comment").filter({ hasText: commentFiles[2]!.name });
+  const comment = detail.locator(".comment").filter({ hasText: commentFiles.find((file) => file.kind === "docx")!.name });
   await expect(comment).toHaveCount(1);
   for (const file of commentFiles) {
     const target = file.kind === "image" ? comment.locator("k-description-viewer img") : comment.locator("a").filter({ hasText: file.name });

@@ -37,7 +37,7 @@ import { deleteExternalLinks, findExternalLink, findExternalLinks, listExternalL
 import { withSignedMedia } from "../media-keys.js";
 import { cardAttachmentUrlMap, rewriteCopiedMediaUrls } from "../copied-media-urls.js";
 import { replaceCardMentions } from "../mentions.js";
-import { clearNotificationsForCards, emitDeletedNotifications, type DeletedNotificationRef } from "../notifications.js";
+import { clearNotificationsForCards, clearNotificationsForComments, emitDeletedNotifications, type DeletedNotificationRef } from "../notifications.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { getStorageForClient, isStorageObjectMissing } from "../storage/index.js";
 import {
@@ -636,7 +636,10 @@ async function convergeComments(mirror: BoardMirror, sourceCardId: string, targe
   const mediaUrls = await mirroredMediaUrls(mirror, sourceCardId, targetCardId);
   for (const link of links) {
     if (sourceIds.has(link.externalId)) continue;
-    await db.delete(comments).where(and(eq(comments.id, link.entityId), eq(comments.cardId, targetCardId)));
+    await db.transaction(async (tx) => {
+      await tx.delete(comments).where(and(eq(comments.id, link.entityId), eq(comments.cardId, targetCardId)));
+      await clearNotificationsForComments(tx, [link.entityId]);
+    });
     await deleteExternalLinks({ workspaceId: mirror.targetWorkspaceId, provider, externalType: "comment", externalId: link.externalId });
     await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.COMMENT_DELETED, { boardId: mirror.targetBoardId, cardId: targetCardId, commentId: link.entityId });
     await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_FEED_ITEM_DELETED, { boardId: mirror.targetBoardId, cardId: targetCardId, type: "comment", itemId: link.entityId });

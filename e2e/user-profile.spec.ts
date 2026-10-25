@@ -52,8 +52,9 @@ test("a card-tile avatar opens the person's profile instead of the card, and Vie
   await expect(page.getByRole("dialog", { name: `Card detail: ${title}` })).toHaveCount(0);
 
   const amelia = await apiAs("amelia");
-  const { members } = await workspaceMembers(page, amelia);
+  const { workspaceId, members } = await workspaceMembers(page, amelia);
   const marcusId = memberId(members, users.marcus.name);
+  const before = await json<Profile>(await amelia.get(`/api/users/${marcusId}/profile?workspaceId=${workspaceId}`));
   await json(await amelia.put(`/api/cards/${cardId}/assignees`, { data: { userIds: [marcusId] } }));
   // Marcus's own comment puts the card under "Recently worked on"; a second card he completes lights
   // today's cell, since the grid plots completions exactly as Work done's Completed strip does. The
@@ -104,9 +105,9 @@ test("a card-tile avatar opens the person's profile instead of the card, and Vie
   await expect(avatar).toHaveAttribute("aria-expanded", "true");
 
   await expect(profile.getByRole("link", { name: users.marcus.email })).toBeVisible();
-  await expect(profile.locator(".up-stat").filter({ hasText: "Open cards" }).locator("strong")).not.toHaveText("0");
+  await expect(profile.locator(".up-stat").filter({ hasText: "Open cards" }).locator("strong")).toHaveText(String(before.stats.openCards + 1));
   await expect(profile.locator(".up-card").filter({ hasText: title })).toBeVisible();
-  await expect(profile.locator(".up-stat").filter({ hasText: "Done" }).locator("strong")).not.toHaveText("0");
+  await expect(profile.locator(".up-stat").filter({ hasText: "Done" }).locator("strong")).toHaveText(String(before.stats.completedCards + 1));
 
   // 18 Monday-first week columns of 7 days, ending on the running week; today is the last day that
   // is not in the future and must carry Marcus's completion.
