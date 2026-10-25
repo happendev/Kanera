@@ -131,7 +131,7 @@ export interface CreateWorkspaceInput {
   icon?: string | null;
   initialBoard?: { name: string; icon?: string | null; iconColor?: ColorToken | null };
   /** Ordered workflow lists. Empty or at least two entries. `inProgress` marks active-work lists. */
-  lists?: { name: string; icon?: string | null; inProgress?: boolean }[];
+  lists?: { name: string; icon?: string | null; color?: ColorToken | null; inProgress?: boolean }[];
   /** Plain list names; an alternative to `lists`. */
   listNames?: string[];
   customFields?: {

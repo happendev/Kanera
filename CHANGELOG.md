@@ -18,6 +18,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Onboarding templates:** lists now start with colors suited to their workflow stages, carried through to workspace and standalone boards.
 
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 

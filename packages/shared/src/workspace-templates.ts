@@ -92,7 +92,7 @@ export type WorkspaceTemplate = {
    * `inProgress` marks the lists where someone is actively doing the work — not queues, waiting or
    * review hand-offs. Those drive "working on" and the time-in-progress clock across the product.
    */
-  lists: { name: string; icon: string; inProgress?: boolean }[];
+  lists: { name: string; icon: string; color: ColorToken; inProgress?: boolean }[];
   customFields: WorkspaceTemplateCustomField[];
   labels: WorkspaceTemplateLabel[];
   checklistTemplates?: WorkspaceTemplateChecklist[];
@@ -109,14 +109,14 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Development",
     initialBoardName: "Engineering",
     lists: [
-      { name: "Wishlist", icon: "star" },
-      { name: "Planning / Review", icon: "clipboard-list" },
-      { name: "Backlog", icon: "list" },
-      { name: "Bugs / Issues / Feedback", icon: "bug" },
-      { name: "Awaiting Feedback", icon: "message-dots" },
-      { name: "In Progress", icon: "progress", inProgress: true },
-      { name: "Ready for QA", icon: "checklist" },
-      { name: "Complete", icon: "circle-check" },
+      { name: "Wishlist", color: "purple", icon: "star" },
+      { name: "Planning / Review", color: "violet", icon: "clipboard-list" },
+      { name: "Backlog", color: "gray", icon: "list" },
+      { name: "Bugs / Issues / Feedback", color: "red", icon: "bug" },
+      { name: "Awaiting Feedback", color: "amber", icon: "message-dots" },
+      { name: "In Progress", color: "blue", icon: "progress", inProgress: true },
+      { name: "Ready for QA", color: "teal", icon: "checklist" },
+      { name: "Complete", color: "green", icon: "circle-check" },
     ],
     customFields: [
       { name: "Branch", icon: "git-branch", type: "text" },
@@ -161,11 +161,11 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Agents",
     initialBoardName: "Agent Work",
     lists: [
-      { name: "Backlog", icon: "inbox" },
-      { name: "Agent Working", icon: "robot" },
-      { name: "Waiting on Me", icon: "user-question" },
-      { name: "Review", icon: "eye" },
-      { name: "Done", icon: "circle-check" },
+      { name: "Backlog", color: "gray", icon: "inbox" },
+      { name: "Agent Working", color: "blue", icon: "robot" },
+      { name: "Waiting on Me", color: "amber", icon: "user-question" },
+      { name: "Review", color: "violet", icon: "eye" },
+      { name: "Done", color: "green", icon: "circle-check" },
     ],
     customFields: [
       { name: "Pull Request", icon: "git-pull-request", type: "url" },
@@ -199,14 +199,14 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Marketing",
     initialBoardName: "Campaigns",
     lists: [
-      { name: "Ideas", icon: "bulb" },
-      { name: "Briefing", icon: "clipboard" },
-      { name: "Copy / Creative", icon: "pencil", inProgress: true },
-      { name: "Review", icon: "eye" },
-      { name: "Scheduled", icon: "calendar-event" },
-      { name: "Live", icon: "broadcast" },
-      { name: "Reporting", icon: "chart-bar" },
-      { name: "Done", icon: "circle-check" },
+      { name: "Ideas", color: "purple", icon: "bulb" },
+      { name: "Briefing", color: "sky", icon: "clipboard" },
+      { name: "Copy / Creative", color: "blue", icon: "pencil", inProgress: true },
+      { name: "Review", color: "violet", icon: "eye" },
+      { name: "Scheduled", color: "cyan", icon: "calendar-event" },
+      { name: "Live", color: "emerald", icon: "broadcast" },
+      { name: "Reporting", color: "teal", icon: "chart-bar" },
+      { name: "Done", color: "green", icon: "circle-check" },
     ],
     customFields: [
       {
@@ -258,10 +258,10 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Todo",
     initialBoardName: "My Tasks",
     lists: [
-      { name: "To Do", icon: "circle" },
-      { name: "Doing", icon: "progress", inProgress: true },
-      { name: "Waiting", icon: "clock-pause" },
-      { name: "Done", icon: "circle-check" },
+      { name: "To Do", color: "gray", icon: "circle" },
+      { name: "Doing", color: "blue", icon: "progress", inProgress: true },
+      { name: "Waiting", color: "amber", icon: "clock-pause" },
+      { name: "Done", color: "green", icon: "circle-check" },
     ],
     customFields: [
       {
@@ -299,13 +299,13 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Product",
     initialBoardName: "Roadmap",
     lists: [
-      { name: "Ideas", icon: "bulb" },
-      { name: "Discovery", icon: "compass", inProgress: true },
-      { name: "Spec Ready", icon: "file-check" },
-      { name: "Design", icon: "palette", inProgress: true },
-      { name: "Build", icon: "hammer", inProgress: true },
-      { name: "Validation", icon: "circle-check" },
-      { name: "Shipped", icon: "rocket" },
+      { name: "Ideas", color: "purple", icon: "bulb" },
+      { name: "Discovery", color: "sky", icon: "compass", inProgress: true },
+      { name: "Spec Ready", color: "cyan", icon: "file-check" },
+      { name: "Design", color: "violet", icon: "palette", inProgress: true },
+      { name: "Build", color: "blue", icon: "hammer", inProgress: true },
+      { name: "Validation", color: "teal", icon: "circle-check" },
+      { name: "Shipped", color: "green", icon: "rocket" },
     ],
     customFields: [
       {
@@ -354,13 +354,13 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Sales",
     initialBoardName: "Pipeline",
     lists: [
-      { name: "Leads", icon: "user-plus" },
-      { name: "Qualified", icon: "user-check", inProgress: true },
-      { name: "Proposal", icon: "file-description" },
-      { name: "Negotiation", icon: "message-dollar", inProgress: true },
-      { name: "Won", icon: "trophy" },
-      { name: "Lost", icon: "circle-x" },
-      { name: "Follow-up", icon: "refresh" },
+      { name: "Leads", color: "gray", icon: "user-plus" },
+      { name: "Qualified", color: "sky", icon: "user-check", inProgress: true },
+      { name: "Proposal", color: "blue", icon: "file-description" },
+      { name: "Negotiation", color: "violet", icon: "message-dollar", inProgress: true },
+      { name: "Won", color: "green", icon: "trophy" },
+      { name: "Lost", color: "red", icon: "circle-x" },
+      { name: "Follow-up", color: "amber", icon: "refresh" },
     ],
     customFields: [
       { name: "Deal Value", icon: "currency-dollar", type: "number" },
@@ -426,13 +426,13 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Operations",
     initialBoardName: "Support Queue",
     lists: [
-      { name: "Intake", icon: "inbox" },
-      { name: "Triage", icon: "route" },
-      { name: "Assigned", icon: "user-check", inProgress: true },
-      { name: "Waiting", icon: "clock-pause" },
-      { name: "Escalated", icon: "urgent", inProgress: true },
-      { name: "Resolved", icon: "circle-check" },
-      { name: "Closed", icon: "archive" },
+      { name: "Intake", color: "gray", icon: "inbox" },
+      { name: "Triage", color: "orange", icon: "route" },
+      { name: "Assigned", color: "blue", icon: "user-check", inProgress: true },
+      { name: "Waiting", color: "amber", icon: "clock-pause" },
+      { name: "Escalated", color: "red", icon: "urgent", inProgress: true },
+      { name: "Resolved", color: "green", icon: "circle-check" },
+      { name: "Closed", color: "gray", icon: "archive" },
     ],
     customFields: [
       {
@@ -497,12 +497,12 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Project Delivery",
     initialBoardName: "Delivery Plan",
     lists: [
-      { name: "Backlog", icon: "list" },
-      { name: "Planned", icon: "calendar-event" },
-      { name: "In Progress", icon: "progress", inProgress: true },
-      { name: "Blocked", icon: "alert-triangle" },
-      { name: "Review", icon: "eye" },
-      { name: "Done", icon: "circle-check" },
+      { name: "Backlog", color: "gray", icon: "list" },
+      { name: "Planned", color: "sky", icon: "calendar-event" },
+      { name: "In Progress", color: "blue", icon: "progress", inProgress: true },
+      { name: "Blocked", color: "red", icon: "alert-triangle" },
+      { name: "Review", color: "violet", icon: "eye" },
+      { name: "Done", color: "green", icon: "circle-check" },
     ],
     customFields: [
       { name: "Project Lead", icon: "user", type: "user" },
@@ -597,13 +597,13 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Events",
     initialBoardName: "Event Plan",
     lists: [
-      { name: "Ideas", icon: "bulb" },
-      { name: "Planning", icon: "clipboard-list" },
-      { name: "Booked", icon: "building-store" },
-      { name: "In Progress", icon: "progress", inProgress: true },
-      { name: "Ready", icon: "checklist" },
-      { name: "Event Day", icon: "calendar-event" },
-      { name: "Complete", icon: "circle-check" },
+      { name: "Ideas", color: "purple", icon: "bulb" },
+      { name: "Planning", color: "sky", icon: "clipboard-list" },
+      { name: "Booked", color: "cyan", icon: "building-store" },
+      { name: "In Progress", color: "blue", icon: "progress", inProgress: true },
+      { name: "Ready", color: "teal", icon: "checklist" },
+      { name: "Event Day", color: "orange", icon: "calendar-event" },
+      { name: "Complete", color: "green", icon: "circle-check" },
     ],
     customFields: [
       { name: "Event Date", icon: "calendar-event", type: "date" },
@@ -698,13 +698,13 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Client Onboarding",
     initialBoardName: "Onboarding",
     lists: [
-      { name: "Internal Prep", icon: "clipboard" },
-      { name: "Kickoff", icon: "presentation" },
-      { name: "Setup", icon: "settings", inProgress: true },
-      { name: "Training", icon: "school", inProgress: true },
-      { name: "Go Live", icon: "rocket" },
-      { name: "Follow-up", icon: "message-circle" },
-      { name: "Complete", icon: "circle-check" },
+      { name: "Internal Prep", color: "gray", icon: "clipboard" },
+      { name: "Kickoff", color: "sky", icon: "presentation" },
+      { name: "Setup", color: "blue", icon: "settings", inProgress: true },
+      { name: "Training", color: "violet", icon: "school", inProgress: true },
+      { name: "Go Live", color: "emerald", icon: "rocket" },
+      { name: "Follow-up", color: "amber", icon: "message-circle" },
+      { name: "Complete", color: "green", icon: "circle-check" },
     ],
     customFields: [
       { name: "Client", icon: "building", type: "text" },
@@ -801,13 +801,13 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     workspaceName: "Hiring",
     initialBoardName: "Candidates",
     lists: [
-      { name: "Applied", icon: "inbox" },
-      { name: "Screening", icon: "phone", inProgress: true },
-      { name: "Interview", icon: "calendar-event", inProgress: true },
-      { name: "Decision", icon: "scale" },
-      { name: "Offer", icon: "file-description" },
-      { name: "Hired", icon: "user-check" },
-      { name: "Rejected", icon: "user-x" },
+      { name: "Applied", color: "gray", icon: "inbox" },
+      { name: "Screening", color: "sky", icon: "phone", inProgress: true },
+      { name: "Interview", color: "blue", icon: "calendar-event", inProgress: true },
+      { name: "Decision", color: "amber", icon: "scale" },
+      { name: "Offer", color: "violet", icon: "file-description" },
+      { name: "Hired", color: "green", icon: "user-check" },
+      { name: "Rejected", color: "red", icon: "user-x" },
     ],
     customFields: [
       { name: "Role", icon: "briefcase", type: "text" },

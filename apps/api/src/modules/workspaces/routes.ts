@@ -1,4 +1,5 @@
 import { dto } from "@kanera/shared";
+import type { ColorToken } from "@kanera/shared/colors";
 import { isKnownTimeZone } from "@kanera/shared/time-in-progress";
 import type { PendingBoardInvitationSummary } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
@@ -279,7 +280,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
 
       // Bare `listNames` carry no classification, so only the default workflow (and explicit
       // `lists`) arrive with in-progress flags; admins can flag lists later in settings.
-      const initialLists: { name: string; icon?: string | null; inProgress?: boolean }[] =
+      const initialLists: { name: string; icon?: string | null; color?: ColorToken | null; inProgress?: boolean }[] =
         body.lists ?? (body.listNames ? body.listNames.map((name) => ({ name })) : [...DEFAULT_WORKSPACE_LISTS]);
       // Blank onboarding intentionally sends an explicit empty list array so users can configure
       // workspace lists later. Omitted lists still seed the default workflow above.
@@ -289,6 +290,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
             workspaceId: workspace!.id,
             name: list.name,
             icon: "icon" in list ? list.icon ?? null : null,
+            color: list.color ?? null,
             inProgress: list.inProgress ?? false,
             position: positionAtIndex(index),
           })),

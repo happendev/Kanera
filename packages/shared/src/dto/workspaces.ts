@@ -136,6 +136,7 @@ export const createWorkspaceBody = z
     lists: z.array(z.object({
       name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
       icon: createIconSchema(DEFAULT_LIST_ICON),
+      color: colorTokenSchema.nullable().optional(),
       inProgress: z.boolean().optional(),
     }))
       .max(32)
