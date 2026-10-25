@@ -153,7 +153,7 @@ test("bulk and cross-board moves return the final card after list automations", 
   await expect(row).toHaveClass(/is-completed/);
 });
 
-test("deleting a workspace list removes its cards from open board and Portfolio tables", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
+test("deleting a workspace list removes its cards from the open board table", async ({ page, signIn, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
   const api = await apiAs("amelia");
   const { board } = await workspace(page, api);
@@ -167,16 +167,9 @@ test("deleting a workspace list removes its cards from open board and Portfolio 
   await page.getByRole("button", { name: "Table view" }).click();
   const row = page.locator(`k-board-table-view .tv-row[data-card-id="${card.id}"]`);
   await expect(row).toBeVisible();
-  const portfolio = await pageAs("marcus");
-  await portfolio.goto("/portfolio");
-  await portfolio.getByRole("button", { name: "Table view" }).click();
-  await portfolio.getByRole("searchbox", { name: "Search cards" }).fill(title);
-  const portfolioRow = portfolio.locator(`k-board-table-view .tv-row[data-card-id="${card.id}"]`);
-  await expect(portfolioRow).toBeVisible();
   const deleted = await api.delete(`/api/lists/${list.id}`);
   expect(deleted.status(), await deleted.text()).toBe(204);
   await expect(row).toHaveCount(0);
-  await expect(portfolioRow).toHaveCount(0);
   await page.reload();
   await expectBoardLoaded(page, name);
   await expect(row).toHaveCount(0);

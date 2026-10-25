@@ -7,7 +7,7 @@ export type StatTileTone = "neutral" | "danger" | "warning" | "success";
 /**
  * A label-over-number stat tile, optionally acting as a jump target.
  *
- * Shared by the portfolio summary and home's focus tiles so the product has one visual language for
+ * Home's focus tiles, kept as a shared component so the product has one visual language for
  * "a number worth clicking". Set `interactive` to false when a tile has nothing to activate — it
  * then renders as plain content with no hover arrow and no pointer, because a tile that invites a
  * click and does nothing is worse than one that never invited it.

@@ -13,7 +13,7 @@ export interface StatusBarSegment {
 /**
  * One bar split by list colour, with a legend of list icon, name and count.
  *
- * Shared by the board overview, the Portfolio summary and the Work done report so "where the open
+ * Shared by the board overview and the Work done report so "where the open
  * work sits" has one shape everywhere: a single proportional bar for the gestalt, the legend for the
  * numbers. Lists without a colour step through a neutral ramp (one tone per uncoloured list, in
  * list order) rather than borrowing a palette hue: the segments stay tellable apart, but the bar

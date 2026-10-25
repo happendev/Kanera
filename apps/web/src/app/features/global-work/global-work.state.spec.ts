@@ -1,7 +1,6 @@
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type {
-  PortfolioSummary,
   SavedWorkView,
   WorkCatalog,
   WorkPrioritiesResponse,
@@ -247,8 +246,6 @@ const cachedDefinition: WorkViewDefinition = {
     aggregateSplitBy: "none",
     collapsedGroupKeys: [],
   },
-  portfolioDays: 30,
-  collapsedOrganisationIds: [],
   collapsedWorkspaceIds: [],
   collapsedSectionIds: [],
 };
@@ -259,7 +256,6 @@ type CachedGlobalWork = {
   definition: WorkViewDefinition;
   catalog: WorkCatalog;
   response: WorkQueryResponse;
-  portfolio: PortfolioSummary | null;
   savedViews: SavedWorkView[];
 };
 
@@ -303,17 +299,10 @@ function setup(options: {
     if (path === "/work/cards/query") {
       return options.cardsQuery?.((payload ?? {}) as { cursor?: string }) ?? response;
     }
-    if (path === "/work/portfolio/query") {
-      return {
-        days: 30,
-        totals: { cards: 1, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0 },
-        buckets: [],
-      };
-    }
     if (path === "/work-views") {
       const body = payload as {
         name: string;
-        lens: "my" | "team" | "portfolio";
+        lens: "my" | "team";
         visibility: "private" | "organisation";
         definition: WorkViewDefinition;
       };
@@ -472,12 +461,6 @@ describe("GlobalWorkState", () => {
     state.resetTablePresentation();
     expect(state.groupByIsSet()).toBe(false);
     expect(state.sortIsSet()).toBe(false);
-
-    // The default is lens-dependent, which is why this comparison lives beside `defaultDefinition`
-    // rather than in the page: portfolio groups by board, so `board` is *not* set there.
-    state.lens.set("portfolio");
-    state.setGrouping("board");
-    expect(state.groupByIsSet()).toBe(false);
   });
 
   it("clears stale-card timestamps immediately for moves and checklist activity", async () => {
@@ -883,7 +866,6 @@ describe("GlobalWorkState", () => {
         definition: cachedDefinition,
         catalog,
         response,
-        portfolio: null,
         savedViews: [],
       },
     });
@@ -909,7 +891,6 @@ describe("GlobalWorkState", () => {
         definition: cachedDefinition,
         catalog,
         response: emptyResponse,
-        portfolio: null,
         savedViews: [],
       },
     });
@@ -926,7 +907,6 @@ describe("GlobalWorkState", () => {
     const workspaceId = "20000000-0000-4000-8000-000000000001";
     writeGlobalWorkPreference(userId, "my", {
       selectedViewId: null,
-      drilldownLabel: null,
       definition: {
         ...cachedDefinition,
         display: "history",
@@ -943,7 +923,6 @@ describe("GlobalWorkState", () => {
         definition: cachedDefinition,
         catalog,
         response,
-        portfolio: null,
         savedViews: [],
       },
     });
@@ -970,7 +949,6 @@ describe("GlobalWorkState", () => {
     };
     writeGlobalWorkPreference(userId, "my", {
       selectedViewId: null,
-      drilldownLabel: null,
       definition: {
         ...cachedDefinition,
         groupBy: "assignee",
@@ -986,7 +964,6 @@ describe("GlobalWorkState", () => {
         definition: cachedDefinition,
         catalog,
         response,
-        portfolio: null,
         savedViews: [],
       },
     });
@@ -1004,38 +981,6 @@ describe("GlobalWorkState", () => {
     });
   });
 
-  it("keeps an empty cached Portfolio summary visible offline", async () => {
-    const portfolio: PortfolioSummary = {
-      days: 30,
-      totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0, inProgress: 0, inProgressTooLong: 0, blocked: 0, atRisk: 0 },
-      buckets: [],
-      activityDays: 60,
-      activity: [],
-    };
-    const { state } = setup({
-      apiFails: true,
-      cached: {
-        key: "10000000-0000-4000-8000-000000000001:60000000-0000-4000-8000-000000000001:portfolio",
-        cachedAt: "2026-07-24T12:00:00.000Z",
-        definition: { ...cachedDefinition, groupBy: "board", display: "summary" },
-        catalog,
-        response: {
-          ...response,
-          cards: [],
-          totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
-        },
-        portfolio,
-        savedViews: [],
-      },
-    });
-
-    await state.initialize("portfolio");
-
-    expect(state.portfolio()).toEqual(portfolio);
-    expect(state.error()).toBeNull();
-    expect(state.interactionReady()).toBe(false);
-  });
-
   it("recovers a cache-only startup when the socket later reconnects", async () => {
     vi.useFakeTimers();
     try {
@@ -1047,8 +992,7 @@ describe("GlobalWorkState", () => {
           definition: cachedDefinition,
           catalog,
           response,
-          portfolio: null,
-          savedViews: [],
+            savedViews: [],
         },
       });
       await f.state.initialize("my");
@@ -1068,7 +1012,6 @@ describe("GlobalWorkState", () => {
         expect.any(Object),
         catalog,
         response,
-        null,
         [],
         // No queue in the snapshot: priority order is never served from cache, because a stale
         // sequence reads as an instruction the reader cannot date.
@@ -1153,7 +1096,6 @@ describe("GlobalWorkState", () => {
         ...response,
         cards: response.cards.map((card) => ({ ...card, title: "Stale cached title" })),
       },
-      portfolio: null,
       savedViews: [],
     });
     await Promise.resolve();
@@ -1162,7 +1104,7 @@ describe("GlobalWorkState", () => {
     expect(f.state.cachedAt()).toBeNull();
   });
 
-  it("restores and keeps preferences isolated for My Cards, Team Cards, and Portfolio", async () => {
+  it("restores and keeps preferences isolated for My Cards and Team Cards", async () => {
     const userId = "60000000-0000-4000-8000-000000000001";
     const teammateId = "60000000-0000-4000-8000-000000000002";
     const definition = (patch: Partial<WorkViewDefinition>): WorkViewDefinition => ({
@@ -1196,8 +1138,6 @@ describe("GlobalWorkState", () => {
       sort: "dueAsc",
       display: "table",
       columns: ["source", "list"],
-      portfolioDays: 30,
-      collapsedOrganisationIds: [],
       collapsedWorkspaceIds: [],
       collapsedSectionIds: [],
       ...patch,
@@ -1212,7 +1152,6 @@ describe("GlobalWorkState", () => {
     });
     writeGlobalWorkPreference(userId, "my", {
       selectedViewId: null,
-      drilldownLabel: null,
       definition: definition({
         groupBy: "completion",
         sort: "titleAsc",
@@ -1227,7 +1166,6 @@ describe("GlobalWorkState", () => {
     });
     writeGlobalWorkPreference(userId, "team", {
       selectedViewId: null,
-      drilldownLabel: null,
       definition: definition({
         groupBy: "board",
         display: "calendar",
@@ -1237,20 +1175,6 @@ describe("GlobalWorkState", () => {
         },
       }),
     });
-    writeGlobalWorkPreference(userId, "portfolio", {
-      selectedViewId: null,
-      drilldownLabel: "All boards · Unassigned",
-      definition: definition({
-        groupBy: "workspace",
-        display: "table",
-        portfolioDays: 60,
-        filters: {
-          ...definition({}).filters,
-          unassignedOnly: true,
-        },
-      }),
-    });
-
     const { state } = setup();
     await state.initialize("my");
     expect(state.definition()).toMatchObject({
@@ -1269,34 +1193,23 @@ describe("GlobalWorkState", () => {
       filters: { assigneeIds: [teammateId] },
     });
 
-    await state.initialize("portfolio");
-    expect(state.definition()).toMatchObject({
-      groupBy: "workspace",
-      display: "table",
-      portfolioDays: 60,
-      filters: { unassignedOnly: true },
-    });
-    expect(state.drilldownLabel()).toBe("All boards · Unassigned");
-
     state.setGrouping("organisation");
     state.setSearch("temporary search");
     state.setArchived(true);
     TestBed.tick();
-    expect(readGlobalWorkPreference(userId, "portfolio")?.definition).toMatchObject({
+    expect(readGlobalWorkPreference(userId, "team")?.definition).toMatchObject({
       groupBy: "organisation",
-      filters: { q: "", archived: false, unassignedOnly: true },
+      filters: { q: "", archived: false, assigneeIds: [teammateId] },
     });
     expect(readGlobalWorkPreference(userId, "my")?.definition.groupBy).toBe("completion");
-    expect(readGlobalWorkPreference(userId, "team")?.definition.groupBy).toBe("board");
 
     state.clearSavedView();
     await vi.waitFor(() => expect(state.loading()).toBe(false));
     TestBed.tick();
-    expect(readGlobalWorkPreference(userId, "portfolio")?.definition).toMatchObject({
-      groupBy: "board",
-      display: "summary",
-      portfolioDays: 30,
-      filters: { unassignedOnly: false },
+    expect(readGlobalWorkPreference(userId, "team")?.definition).toMatchObject({
+      groupBy: "dueDate",
+      display: "board",
+      filters: { assigneeIds: [] },
     });
   });
 
@@ -1392,32 +1305,6 @@ describe("GlobalWorkState", () => {
     expect(state.collapsedTableGroupKeys()).toEqual(presentation.collapsedGroupKeys);
   });
 
-  it("drops the portfolio title search when returning to the summary", async () => {
-    const { state } = setup();
-    await state.initialize("portfolio");
-
-    state.setDisplay("table");
-    state.setSearch("migration");
-    expect(state.definition().filters.q).toBe("migration");
-
-    // The summary hides the search box, so a leftover query would narrow every metric and heatmap
-    // with nothing on screen to explain it.
-    state.setDisplay("summary");
-    expect(state.definition().filters.q).toBe("");
-  });
-
-  it("defers portfolio cards until a row display is opened", async () => {
-    const { state, post } = setup();
-    await state.initialize("portfolio");
-    const cardQueries = () => post.mock.calls.filter(([path]) => path === "/work/cards/query");
-    expect(cardQueries()).toHaveLength(0);
-    expect(post.mock.calls.filter(([path]) => path === "/work/portfolio/query")).toHaveLength(1);
-
-    state.setDisplay("table");
-    await vi.waitFor(() => expect(state.loading()).toBe(false));
-    expect(cardQueries()).toHaveLength(1);
-  });
-
   it("keeps the search query when other lenses change display", async () => {
     const { state } = setup();
     await state.initialize("my");
@@ -1483,7 +1370,7 @@ describe("GlobalWorkState priority queue", () => {
   it.each(["table", "overview"] as const)("loads only the queues needed by the saved %s display", async (display) => {
     const { state, get } = setup();
     writeGlobalWorkPreference(VIEWER_ID, "team", {
-      definition: { ...cachedDefinition, display }, selectedViewId: null, drilldownLabel: null,
+      definition: { ...cachedDefinition, display }, selectedViewId: null,
     });
     await state.initialize("team");
     expect(state.definition().display).toBe(display);
@@ -1716,7 +1603,7 @@ describe("GlobalWorkState priority queue", () => {
     // "priorities" was the team lanes display. A stored preference or saved view naming it lands on
     // the overview, whose dock replaced it, on the team lens and falls back everywhere else.
     const stored = { ...cachedDefinition, display: "priorities" } as WorkViewDefinition;
-    writeGlobalWorkPreference(VIEWER_ID, "team", { definition: stored, selectedViewId: null, drilldownLabel: null });
+    writeGlobalWorkPreference(VIEWER_ID, "team", { definition: stored, selectedViewId: null });
     expect(readGlobalWorkPreference(VIEWER_ID, "team")?.definition.display).toBe("priorities");
 
     expect(sanitizeGlobalWorkDefinition(stored, "team", catalog, VIEWER_ID).display).toBe("overview");
@@ -1724,11 +1611,9 @@ describe("GlobalWorkState priority queue", () => {
       ...stored,
       filters: { ...stored.filters, assigneeIds: [TEAMMATE_ID] },
     }, "team", catalog, VIEWER_ID).filters.assigneeIds).toEqual([]);
-    for (const lens of ["my", "portfolio"] as const) {
-      const display = sanitizeGlobalWorkDefinition(stored, lens, catalog, VIEWER_ID).display;
-      expect(["board", "table", "summary"]).toContain(display);
-      expect(display).not.toBe("priorities");
-    }
+    const display = sanitizeGlobalWorkDefinition(stored, "my", catalog, VIEWER_ID).display;
+    expect(["board", "table"]).toContain(display);
+    expect(display).not.toBe("priorities");
   });
 
   it("opens the Up next panel unless this person explicitly closed it", async () => {
@@ -1741,7 +1626,7 @@ describe("GlobalWorkState priority queue", () => {
     // A preference written before the flag existed reads the same as none: still open. The write
     // happens after the reset because tearing down the previous state persists its own preference.
     TestBed.resetTestingModule();
-    writeGlobalWorkPreference(VIEWER_ID, "my", { definition: cachedDefinition, selectedViewId: null, drilldownLabel: null });
+    writeGlobalWorkPreference(VIEWER_ID, "my", { definition: cachedDefinition, selectedViewId: null });
     const upgraded = setup();
     await upgraded.state.initialize("my");
     expect(upgraded.state.upNextPanelOpen()).toBe(true);
@@ -1751,7 +1636,6 @@ describe("GlobalWorkState priority queue", () => {
     writeGlobalWorkPreference(VIEWER_ID, "my", {
       definition: cachedDefinition,
       selectedViewId: null,
-      drilldownLabel: null,
       upNextPanelOpen: false,
     });
     const closed = setup();
@@ -1766,7 +1650,6 @@ describe("GlobalWorkState priority queue", () => {
       definition: cachedDefinition,
       catalog,
       response,
-      portfolio: null,
       savedViews: [],
     } as unknown as CachedGlobalWork;
     const { state } = setup({ apiFails: true, cached });
@@ -1789,6 +1672,6 @@ it("persists every loaded Global Work page for offline reopening", async () => {
   expect(f.saveGlobalWork).toHaveBeenCalled();
   expect(f.saveGlobalWork).toHaveBeenLastCalledWith(
     expect.any(String), expect.anything(), expect.anything(),
-    expect.objectContaining({ cards: [first, second] }), null, expect.anything(),
+    expect.objectContaining({ cards: [first, second] }), expect.anything(),
   );
 });

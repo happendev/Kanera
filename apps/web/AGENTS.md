@@ -65,7 +65,7 @@ Phones, tablets and the installed PWA are first-class, so design for them up fro
   `@media (hover: none), (pointer: coarse), (any-pointer: coarse)` gets 44px targets. In TS, use
   `hasCoarsePointer()` from `core/browser/input-modality.ts`.
 - Dense tables make an explicit, commented choice between stacking into cards and scrolling sideways.
-  Precedents are `.work-table` vs `.portfolio-table` in `global-work.page.scss`.
+  Precedents: `.work-table` in `global-work.page.scss` stacks; `BoardTableViewComponent` scrolls sideways.
 - Touch suppresses `contextmenu` (it collides with CDK drag), so every right-click affordance needs a
   visible button. Hover-revealed controls stay visible on coarse pointers.
 - Anchored panels stay anchored to their trigger on phones too (no bottom sheets); placement clamps

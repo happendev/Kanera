@@ -573,7 +573,7 @@ describe("GlobalWorkPage card routing", () => {
     fixture.destroy();
   });
 
-  it("preserves catalog source order for board sections and portfolio hierarchy", async () => {
+  it("preserves catalog source order for board sections and filter pickers", async () => {
     const secondWorkspaceId = "20000000-0000-4000-8000-000000000002";
     const secondBoardId = "30000000-0000-4000-8000-000000000002";
     const secondCard = {
@@ -636,45 +636,7 @@ describe("GlobalWorkPage card routing", () => {
         ],
         people: [],
       }),
-      // Only the collapse sets are read by the portfolio tree; the rest of the definition is not
-      // touched on this path.
-      definition: signal({ collapsedOrganisationIds: [], collapsedWorkspaceIds: [] }),
-      portfolio: signal({
-        days: 30,
-        activityDays: 60,
-        activity: [],
-        totals: { cards: 2, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0 },
-        buckets: [
-          {
-            organisationId: "10000000-0000-4000-8000-000000000001",
-            organisationName: "Home",
-            workspaceId: card.workspaceId,
-            workspaceName: "Zulu",
-            boardId: card.boardId,
-            boardName: "Zulu board",
-            active: 1,
-            overdue: 0,
-            dueSoon: 0,
-            unassigned: 0,
-            completed: 0,
-            overdueChecklistItems: 0,
-          },
-          {
-            organisationId: "10000000-0000-4000-8000-000000000001",
-            organisationName: "Home",
-            workspaceId: secondWorkspaceId,
-            workspaceName: "Alpha",
-            boardId: secondBoardId,
-            boardName: "Alpha board",
-            active: 1,
-            overdue: 0,
-            dueSoon: 0,
-            unassigned: 0,
-            completed: 0,
-            overdueChecklistItems: 0,
-          },
-        ],
-      }),
+      definition: signal({ collapsedWorkspaceIds: [] }),
       initialize: vi.fn(() => Promise.resolve()),
     };
 
@@ -695,16 +657,11 @@ describe("GlobalWorkPage card routing", () => {
       .compileComponents();
 
     const fixture = TestBed.createComponent(GlobalWorkPage);
-    fixture.componentRef.setInput("lens", "portfolio");
+    fixture.componentRef.setInput("lens", "my");
     fixture.detectChanges();
     TestBed.tick();
 
     expect(fixture.componentInstance.boardWorkspaces().map((workspace) => workspace.name)).toEqual(["Zulu", "Alpha"]);
-    expect(
-      fixture.componentInstance.portfolioRows()
-        .filter((row) => row.level === "workspace")
-        .map((row) => row.label),
-    ).toEqual(["Zulu", "Alpha"]);
     expect(fixture.componentInstance.filterLists().map((list) => [list.id, list.group]))
       .toEqual([["list-zulu", "Zulu"], ["list-alpha", "Alpha"]]);
     expect(fixture.componentInstance.filterLabels().map((label) => [label.id, label.group]))
@@ -952,222 +909,6 @@ describe("GlobalWorkPage offline display", () => {
     TestBed.tick();
     expect(fixture.componentInstance.effectiveDisplay()).toBe("history");
 
-  });
-});
-
-describe("GlobalWorkPage portfolio summary", () => {
-  const organisationId = "10000000-0000-4000-8000-000000000001";
-  const workspaceOne = "20000000-0000-4000-8000-000000000001";
-  const workspaceTwo = "20000000-0000-4000-8000-000000000002";
-  // A standalone board: a `kind: "board"` workspace whose only board carries the same name.
-  const standaloneWorkspace = "20000000-0000-4000-8000-000000000003";
-  const standaloneBoard = "30000000-0000-4000-8000-000000000004";
-  const workspaceNames: Record<string, string> = {
-    [workspaceOne]: "Delivery",
-    [workspaceTwo]: "Product",
-    [standaloneWorkspace]: "Roadmap",
-  };
-  const bucket = (workspaceId: string, boardId: string, active: number, overdue = 0, inactive = 0) => ({
-    organisationId,
-    organisationName: "Home",
-    workspaceId,
-    workspaceName: workspaceNames[workspaceId] ?? "Workspace",
-    boardId,
-    boardName: boardId === standaloneBoard ? "Roadmap" : `Board ${boardId.slice(-1)}`,
-    active,
-    overdue,
-    dueSoon: 0,
-    unassigned: 0,
-    inactive,
-    completed: 0,
-    overdueChecklistItems: 0,
-  });
-
-  async function mount(activity: { date: string; moved: number; completed: number }[] = [], healthDisabledBoardId?: string, overdueDisabledBoardId?: string) {
-    const definition = signal({ collapsedOrganisationIds: [] as string[], collapsedWorkspaceIds: [] as string[] });
-    const toggle = (key: "collapsedOrganisationIds" | "collapsedWorkspaceIds") => (id: string) =>
-      definition.update((current) => ({
-        ...current,
-        [key]: current[key].includes(id) ? current[key].filter((entry) => entry !== id) : [...current[key], id],
-      }));
-    const state = {
-      auth: { user: () => null },
-      focusedTargetUserId: () => null,
-      cards: signal([]),
-      response: signal({
-        cards: [],
-        checklistItems: [],
-        totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
-        nextCursor: null,
-      }),
-      definition,
-      catalog: signal({
-        organisations: [{ id: organisationId, name: "Home", external: false }],
-        workspaces: [
-          { id: workspaceOne, organisationId, name: "Delivery", icon: null, accentColor: null, kind: "standard", viewerCanAccessWorkspace: true },
-          { id: workspaceTwo, organisationId, name: "Product", icon: null, accentColor: null, kind: "standard", viewerCanAccessWorkspace: true },
-          { id: standaloneWorkspace, organisationId, name: "Roadmap", icon: null, accentColor: null, kind: "board", viewerCanAccessWorkspace: true },
-        ],
-        boards: [{ id: standaloneBoard, workspaceId: standaloneWorkspace, name: "Roadmap", icon: "map", iconColor: null, viewerRole: "editor", assignedItemsOnly: false }],
-        lists: [],
-        labels: [],
-        customFields: [],
-        people: [],
-      }),
-      portfolio: signal({
-        days: 30,
-        activityDays: 60,
-        activity,
-        totals: { cards: 6, overdue: 3, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0 },
-        buckets: [
-          bucket(workspaceOne, "30000000-0000-4000-8000-000000000001", 8, 3),
-          bucket(workspaceOne, "30000000-0000-4000-8000-000000000002", 2),
-          bucket(workspaceTwo, "30000000-0000-4000-8000-000000000003", 4),
-          bucket(standaloneWorkspace, standaloneBoard, 1),
-        ].map((row) => ({
-          ...row,
-          boardHealthEnabled: row.boardId !== healthDisabledBoardId,
-          boardHealthOverdueEnabled: row.boardId !== overdueDisabledBoardId,
-        })),
-      }),
-      toggleOrganisationCollapsed: vi.fn(toggle("collapsedOrganisationIds")),
-      toggleWorkspaceCollapsed: vi.fn(toggle("collapsedWorkspaceIds")),
-      initialize: vi.fn(() => Promise.resolve()),
-      canLoadMore: signal(false),
-      loadingMore: signal(false),
-    };
-
-    await TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        { provide: ApiClient, useValue: { get: vi.fn() } },
-        { provide: Dialog, useValue: {} },
-        { provide: Router, useValue: { navigate: vi.fn(() => Promise.resolve(true)) } },
-      ],
-    })
-      .overrideComponent(GlobalWorkPage, {
-        set: {
-          template: "",
-          providers: [{ provide: GlobalWorkState, useValue: state }],
-        },
-      })
-      .compileComponents();
-
-    const fixture = TestBed.createComponent(GlobalWorkPage);
-    fixture.componentRef.setInput("lens", "portfolio");
-    fixture.detectChanges();
-    TestBed.tick();
-    return fixture;
-  }
-
-  it("hides descendants of collapsed organisations and workspaces", async () => {
-    const fixture = await mount();
-    const page = fixture.componentInstance;
-    const ids = () => page.portfolioRows().map((row) => row.id);
-    expect(ids()).toHaveLength(7);
-
-    const workspaceRow = page.portfolioRows().find((row) => row.level === "workspace")!;
-    page.togglePortfolioRow(workspaceRow, new Event("click"));
-    TestBed.tick();
-    // The workspace row itself stays visible; only its boards fold away.
-    expect(ids()).toEqual([
-      "organisation:" + organisationId,
-      "workspace:" + workspaceOne,
-      "workspace:" + workspaceTwo,
-      "board:30000000-0000-4000-8000-000000000003",
-      "workspace:" + standaloneWorkspace,
-    ]);
-
-    const organisationRow = page.portfolioRows()[0]!;
-    page.togglePortfolioRow(organisationRow, new Event("click"));
-    TestBed.tick();
-    expect(ids()).toEqual(["organisation:" + organisationId]);
-
-    // The second workspace is still open, so collapse-all folds the rest rather than expanding.
-    expect(page.portfolioAllCollapsed()).toBe(false);
-    page.togglePortfolioRowsCollapsed();
-    TestBed.tick();
-    expect(page.portfolioAllCollapsed()).toBe(true);
-    expect(ids()).toEqual(["organisation:" + organisationId]);
-
-    // Once everything is folded the same control expands it again.
-    page.togglePortfolioRowsCollapsed();
-    TestBed.tick();
-    expect(ids()).toHaveLength(7);
-    expect(page.portfolioAllCollapsed()).toBe(false);
-
-    fixture.destroy();
-  });
-
-  it("scales conditional highlighting on one column-wide scale across tree levels", async () => {
-    const fixture = await mount();
-    const page = fixture.componentInstance;
-    const organisationRow = page.portfolioRows()[0]!;
-    const boards = page.portfolioRows().filter((row) => row.level === "board");
-    const [busiest, quietest, other] = boards;
-    // The workspace holding 4 active cards, against boards holding 8 and 2.
-    const smallerWorkspace = page.portfolioRows()
-      .find((row) => row.level === "workspace" && row.id === "workspace:" + workspaceTwo)!;
-
-    // The column's largest number — here the organisation rollup — anchors the top of the scale, and
-    // everything else ranks below it in order.
-    expect(page.portfolioHeat(organisationRow, "active")).toBe(1);
-    expect(page.portfolioHeat(busiest!, "active")).toBeLessThan(1);
-    expect(page.portfolioHeat(other!, "active")).toBeLessThan(page.portfolioHeat(busiest!, "active"));
-    expect(page.portfolioHeat(quietest!, "active")).toBeLessThan(page.portfolioHeat(other!, "active"));
-
-    // The point of a single scale: a board with more cards outranks a workspace with fewer, instead of
-    // both reading as the leader of their own level.
-    expect(page.portfolioHeat(busiest!, "active"))
-      .toBeGreaterThan(page.portfolioHeat(smallerWorkspace, "active"));
-    // Equal counts tint identically wherever they sit in the tree.
-    expect(page.portfolioHeat(smallerWorkspace, "active")).toBe(page.portfolioHeat(other!, "active"));
-
-    // Zero is never tinted; anything above zero always is, however far behind the leader it trails.
-    expect(page.portfolioHeat(quietest!, "overdue")).toBe(0);
-    expect(page.portfolioHeat(quietest!, "active")).toBeGreaterThan(0.1);
-
-    fixture.destroy();
-  });
-
-  it("feeds the activity strip separate movement and completion counts per day", async () => {
-    const today = new Date();
-    const localDate = (date: Date) =>
-      `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}`;
-    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-    const fixture = await mount([
-      { date: localDate(today), moved: 8, completed: 1 },
-      { date: localDate(yesterday), moved: 2, completed: 4 },
-    ]);
-    const [movement, completion] = fixture.componentInstance.activitySeries();
-
-    // The two metrics are never blended: a busy-but-undelivering day must read differently in each
-    // row. Column layout and level scaling belong to k-activity-strip and are tested there.
-    expect(movement!.key).toBe("moved");
-    expect(completion!.key).toBe("completed");
-    expect(movement!.counts.get(localDate(today))).toBe(8);
-    expect(completion!.counts.get(localDate(today))).toBe(1);
-    expect(movement!.counts.get(localDate(yesterday))).toBe(2);
-    expect(completion!.counts.get(localDate(yesterday))).toBe(4);
-    expect(fixture.componentInstance.activityWindowDays()).toBe(60);
-
-    fixture.destroy();
-  });
-
-  it("renders a standalone board as one row instead of a wrapper plus its only board", async () => {
-    const fixture = await mount();
-    const rows = fixture.componentInstance.portfolioRows();
-    const standaloneRow = rows.find((row) => row.workspaceId === standaloneWorkspace)!;
-
-    // One row, named after the board, with nothing left to expand under it.
-    expect(rows.filter((row) => row.workspaceId === standaloneWorkspace)).toHaveLength(1);
-    expect(standaloneRow.label).toBe("Roadmap");
-    expect(standaloneRow.collapseId).toBeNull();
-    expect(standaloneRow.boardIds).toEqual([standaloneBoard]);
-    // It takes the board's icon, not the wrapper workspace's default.
-    expect(fixture.componentInstance.portfolioRowIconClass(standaloneRow)).toBe("ti ti-map");
-
-    fixture.destroy();
   });
 });
 
@@ -1588,9 +1329,9 @@ describe("GlobalWorkPage toolbar state", () => {
   /**
    * The filter panel's "Clear all" must stay inside its own menu. On "my"/"team" the assignee is the
    * page's scope, set by the Teammate trigger beside the Filter button and never shown or counted by
-   * the panel; `unassignedOnly` belongs to the portfolio drill-down chip.
+   * the panel; `unassignedOnly` is only ever set by Home's deep links.
    */
-  it("leaves the Teammate selection and the drill-down alone when clearing filters", () => {
+  it("leaves the Teammate selection and the unassigned flag alone when clearing filters", () => {
     return mount().then(({ fixture, updateFilters }) => {
       fixture.componentRef.setInput("lens", "team");
       TestBed.tick();
@@ -1613,18 +1354,6 @@ describe("GlobalWorkPage toolbar state", () => {
     });
   });
 
-  it("still clears the assignee filter on the portfolio lens, where the panel owns it", () => {
-    return mount().then(({ fixture, updateFilters }) => {
-      fixture.componentRef.setInput("lens", "portfolio");
-      TestBed.tick();
-
-      fixture.componentInstance.clearFilters();
-
-      expect((updateFilters.mock.calls.at(-1)![0] as Record<string, unknown>)["assigneeIds"]).toEqual([]);
-
-      fixture.destroy();
-    });
-  });
 });
 
 describe("GlobalWorkPage search shortcut", () => {

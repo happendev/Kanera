@@ -22,7 +22,7 @@ Use the hosted service and get started in minutes, or self-host Kanera on your o
 
 ## One place for moving work forward
 
-- **Plan in the view that fits.** Move between Kanban, Table, Calendar, Dependencies, My Cards, Team Cards, Portfolio, and Work Done without duplicating work.
+- **Plan in the view that fits.** Move between Kanban, Table, Calendar, Dependencies, My Cards, Team Cards, and Work Done without duplicating work.
 - **See what unblocks the team.** Connect prerequisites across boards, trace the chain in Map, Timeline, or Steps, spot risks and bottlenecks, and edit blocking links directly on the map.
 - **Keep the details with the task.** Add descriptions, comments, attachments, labels, custom fields, watchers, and assignable checklist items to cards.
 - **Set clear priorities.** Use Home and a ranked Up next queue to keep urgent work visible across every board.
@@ -132,7 +132,7 @@ Move cards through lists while keeping labels, assignees, due dates, checklist p
 
 ### Keyboard shortcuts keep routine actions close
 
-Press `?` to open a shortcut sheet that reflects the current screen. Use two-key sequences to jump to Home, My Cards, Team Cards, Portfolio, or Settings; single keys to open Scratchpad, Up next, notifications, and board tools; and contextual card shortcuts for assignment, labels, due dates, lists, completion, watching, and copying links. Letter shortcuts automatically stand down while you type.
+Press `?` to open a shortcut sheet that reflects the current screen. Use two-key sequences to jump to Home, My Cards, Team Cards, or Settings; single keys to open Scratchpad, Up next, notifications, and board tools; and contextual card shortcuts for assignment, labels, due dates, lists, completion, watching, and copying links. Letter shortcuts automatically stand down while you type.
 
 ![Kanera keyboard shortcut sheet showing global, navigation, board, and open-card actions](docs/readme-assets/keyboard-shortcuts.jpg?v=20261021design)
 
@@ -150,11 +150,15 @@ Group and sort cards by list, assignee, due date, label, status, or custom field
 
 Export the filtered result to Excel as a multi-sheet workbook containing card rows, spreadsheet-friendly summaries, and a readable report when aggregates are enabled.
 
+![Kanera Platform Delivery Table view showing grouped card rows, configurable columns, and export controls](docs/readme-assets/table-view.jpg?v=20261021design)
+
 ### Timeline view plans the work ahead
 
 Give a card a start date next to its due date and the board's **Timeline** view draws it as a bar on a Gantt-style chart, grouped by list, assignee or label. Drag a bar to reschedule it (its working-day length is kept), pull an end to change its length, click an empty lane to place an unscheduled card, and drag from one bar's end to another to make the second wait on the first. **Critical path** runs a working-day schedule over the board's blocking links, highlights the chain with no slack, fades the rest and shows how far each other card could slip. Cards whose prerequisite is planned to finish after they start are flagged as scheduling conflicts.
 
-![Kanera Platform Delivery Table view showing grouped card rows, configurable columns, and export controls](docs/readme-assets/table-view.jpg?v=20261021design)
+![Kanera campaign Timeline with start-to-finish bars grouped by list and connected by dependency wires](docs/readme-assets/timeline.jpg?v=20261025timeline)
+
+Read the [Timeline and Start Dates guide](https://www.kanera.app/docs/timeline) for working-day scheduling, desktop and phone controls, [MCP planning examples](https://www.kanera.app/docs/ai-mcp-examples#review-a-timeline-and-propose-a-reschedule), and [schedule events](https://www.kanera.app/docs/ai-mcp-events#schedule-transitions).
 
 ### Notifications keep important changes together
 
@@ -197,12 +201,6 @@ Build automations from a **When** trigger and ordered **Do** actions. Triggers c
 Review a daily history of cards created, moved, and completed, plus finished checklist items. Use it on a board, My Cards, or Team Cards for standups, async updates, progress reviews, and client check-ins.
 
 ![Kanera Work Done view showing a daily history of card and checklist progress](docs/readme-assets/work-done.jpg?v=20261021design)
-
-### Portfolio rolls work up without losing its source
-
-Review active, overdue, upcoming, unassigned, and completed work across organisations, workspaces, and boards from one reporting view.
-
-![Kanera Portfolio showing organisation, workspace, and board-level work rollups](docs/readme-assets/portfolio.jpg?v=20261021design)
 
 ### Fully functional on mobile and installable as a PWA
 

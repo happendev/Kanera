@@ -61,16 +61,6 @@
 </div>
 
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-chart-bar"></i><span i18n="Settings section heading: the Portfolio feature">Portfolio</span></h3>
-  <p class="settings-section-help" i18n>Portfolio rolls up card counts and progress across every board a member can see. Turn it off to remove it from the sidebar, search and shortcuts for everyone in this organisation.</p>
-  <label class="push-toggle-row">
-    <input type="checkbox" [checked]="settings.portfolioEnabledDraft()" (change)="settings.savePortfolioEnabled($any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.portfolioEnabledSaving()" />
-    <span class="push-toggle-copy"><span class="push-toggle-title" i18n>Show Portfolio</span></span>
-  </label>
-  @if (settings.portfolioEnabledError()) { <p class="form-error">{{ settings.portfolioEnabledError() }}</p> }
-</div>
-
-<div class="settings-section">
   <h3 class="settings-section-title"><i class="ti ti-progress"></i><span i18n>Time in progress</span></h3>
   <p class="settings-section-help" i18n="Help text for the organisation time in progress switch">Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Workspaces and boards can also opt out individually.</p>
   <label class="push-toggle-row">

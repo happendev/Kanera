@@ -6,6 +6,18 @@ import { boardHref } from "./support/ui";
 // on and what is next for him, from in-progress lists, his own activity, his queue and his other
 // assigned cards, and drills into one set of his cards from the panel's stats.
 
+// This file runs sequentially against the seed board. Remove every card even after a failure:
+// its 2020/2099 agenda examples otherwise stretch later Timeline tests across decades.
+const createdCardIds: string[] = [];
+test.afterEach(async ({ apiAs }) => {
+  if (!createdCardIds.length) return;
+  const api = await apiAs("amelia");
+  for (const id of createdCardIds.splice(0)) {
+    const archived = await api.patch(`/api/cards/${id}/archive`, { data: { archived: true } });
+    expect(archived.ok(), await archived.text()).toBe(true);
+  }
+});
+
 type BoardLists = { boardId: string; lists: Map<string, string> };
 
 async function platformDelivery(page: Page, api: APIRequestContext): Promise<BoardLists> {
@@ -25,7 +37,9 @@ async function userId(api: APIRequestContext): Promise<string> {
 async function createCard(api: APIRequestContext, board: BoardLists, title: string, assigneeIds: string[]): Promise<string> {
   const created = await api.post(`/api/boards/${board.boardId}/lists/${board.lists.get("Backlog")}/cards`, { data: { title, assigneeIds } });
   expect(created.ok(), await created.text()).toBe(true);
-  return ((await created.json()) as { id: string }).id;
+  const { id } = await created.json() as { id: string };
+  createdCardIds.push(id);
+  return id;
 }
 
 async function moveToList(api: APIRequestContext, cardId: string, listId: string) {

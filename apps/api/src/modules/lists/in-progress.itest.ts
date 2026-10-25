@@ -542,10 +542,12 @@ void test("work queries filter and sort by time in progress, and agent sources m
   assert.deepEqual(all, [oldest.id, newest.id, waiting.id]);
 
   // "Too long" reads the current stint against the workspace alert, as the board's amber clock does,
-  // and Portfolio counts exactly what that drill-down returns.
+  // and the agents' portfolio rollup counts exactly what that drill-down returns.
   await db.update(workspaces).set({ inProgressAlertDays: 2 }).where(eq(workspaces.id, workspaceId));
   assert.deepEqual(await query("inProgressAsc", { inProgressTooLongOnly: true }), [oldest.id]);
-  const portfolio = await app.inject({ method: "POST", url: "/work/portfolio/query", headers: auth, payload: { days: 30, timeZone: "UTC" } });
+  const agentApp = await buildIntegrationServer();
+  await agentApp.register(agentWorkQueryRoutes, { prefix: "/agent-public" });
+  const portfolio = await agentApp.inject({ method: "POST", url: "/agent-public/work/portfolio/query", headers: auth, payload: { days: 30, timeZone: "UTC" } });
   assert.equal(portfolio.statusCode, 200, portfolio.body);
   const totals = portfolio.json<{ totals: { inProgress: number; inProgressTooLong: number } }>().totals;
   assert.deepEqual({ inProgress: totals.inProgress, inProgressTooLong: totals.inProgressTooLong }, { inProgress: 2, inProgressTooLong: 1 });
@@ -554,8 +556,6 @@ void test("work queries filter and sort by time in progress, and agent sources m
   assert.deepEqual(await query("inProgressAsc", { inProgressTooLongOnly: true }), []);
 
   // Agents read the same filter and see which source lists are in progress.
-  const agentApp = await buildIntegrationServer();
-  await agentApp.register(agentWorkQueryRoutes, { prefix: "/agent-public" });
   const agent = await agentApp.inject({ method: "POST", url: "/agent-public/work/cards/query", headers: auth, payload: { lens: "my", filters: { inProgressOnly: true }, sort: "inProgressAsc" } });
   assert.equal(agent.statusCode, 200, agent.body);
   const body = agent.json<{ cards: { id: string }[]; sources: { lists: { id: string; inProgress: boolean }[] } }>();

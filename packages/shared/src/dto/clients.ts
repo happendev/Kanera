@@ -47,7 +47,6 @@ export const updateClientBody = z.object({
   inProgressEnabled: z.boolean().optional(),
   dependenciesEnabled: z.boolean().optional(),
   timelineEnabled: z.boolean().optional(),
-  portfolioEnabled: z.boolean().optional(),
   mcpPolicy: z.enum(CLIENT_MCP_POLICIES).optional(),
   defaultCompletedCardsActiveDays: z.number().int().min(0).max(365).optional(),
   defaultInactiveCardsDays: z.number().int().min(0).max(365).optional(),
@@ -120,7 +119,6 @@ export const publicClientResponse = z.object({
   inProgressEnabled: z.boolean(),
   dependenciesEnabled: z.boolean(),
   timelineEnabled: z.boolean(),
-  portfolioEnabled: z.boolean(),
   // Hosted only; self-hosted always reports `write` because the policy is not enforced there.
   mcpPolicy: z.enum(CLIENT_MCP_POLICIES),
   defaultCompletedCardsActiveDays: z.number().int().min(0).max(365),

@@ -169,7 +169,7 @@
 
 // ─── Focus tiles ────────────────────────────────────────────────────────────
 
-// Page-local column count: home shows four tiles where the portfolio shows six.
+// Page-local column count: four tiles, one row.
 .focus-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

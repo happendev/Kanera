@@ -164,7 +164,7 @@ export class WorkDoneViewComponent {
   readonly scope = input.required<"board" | "global">();
   readonly boardId = input<string | null>(null);
   readonly workspaceId = input<string | null>(null);
-  readonly globalLens = input<Exclude<WorkViewLens, "portfolio"> | null>(null);
+  readonly globalLens = input<WorkViewLens | null>(null);
   readonly globalScope = input<WorkScope | null>(null);
   readonly globalFilters = input<WorkFilters | null>(null);
   readonly catalogCustomFields = input<AnyCustomField[]>([]);

@@ -671,11 +671,6 @@ export class BoardPage implements OnDestroy {
     this.boardCardFilter.set(this.boardCardFilter() === filter ? null : filter);
   }
 
-  openPortfolio(): void {
-    this.overviewOpen.set(false);
-    void this.router.navigate(["/portfolio"]);
-  }
-
   // ─── Kanban grouping ────────────────────────────────────────────────────────
   //
   // The kanban's columns are the workspace's lists by default. Pick any other dimension and the

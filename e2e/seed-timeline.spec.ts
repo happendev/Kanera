@@ -63,10 +63,9 @@ test("the seed demonstrates realistic timeline dates and dependency handoffs", a
   const marketing = schedules[1]!;
   const qa = card("Run QA pass for onboarding with no existing workspaces");
   const cleanup = card("Retry orphaned attachment cleanup on startup");
-  expect(development.cards.filter((row) => row.conflicts.length).map((row) => row.id)).toEqual([qa.id]);
-  expect(development.cards.find((row) => row.id === qa.id)?.conflicts).toEqual([
-    expect.objectContaining({ blockerId: cleanup.id, days: 3 }),
-  ]);
+  // The recording calendar now puts QA after cleanup rather than demonstrating a conflict.
+  expect(development.cards.filter((row) => row.conflicts.length)).toEqual([]);
+  expect(qa.startDateLocalDate! > cleanup.dueDateLocalDate!).toBe(true);
   expect(qa.blockedByCount).toBe(2);
   expect(marketing.summary.conflictCount).toBe(0);
   for (const title of ["Produce the launch-day explainer video", "Approve the campaign launch package", "Prepare autumn campaign launch"]) {
@@ -90,11 +89,11 @@ test("the seed demonstrates realistic timeline dates and dependency handoffs", a
   await signIn(page, "amelia");
   await page.goto(`/b/${qa.boardId}?view=timeline`);
   const qaBar = page.locator(`.tl-row-card[data-card-id="${qa.id}"] .tl-bar`);
-  await expect(qaBar).toHaveClass(/has-conflict/);
-  await expect(page.locator(".tl-count.is-warning")).toContainText("1 scheduling conflict");
+  await expect(qaBar).not.toHaveClass(/has-conflict/);
+  await expect(page.locator(".tl-count.is-warning")).toHaveCount(0);
   await expect(page.locator(`.tl-wire-hit[aria-label="${qa.key} waits on ${cleanup.key}"]`)).toHaveCount(1);
   await qaBar.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: testInfo.outputPath("seed-timeline-conflict-desktop.png") });
+  await page.screenshot({ path: testInfo.outputPath("seed-timeline-handoff-desktop.png") });
 
   const launch = card("Prepare autumn campaign launch");
   await page.goto(`/b/${launch.boardId}?view=timeline`);

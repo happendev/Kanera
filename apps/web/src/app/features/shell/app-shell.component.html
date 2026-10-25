@@ -73,15 +73,6 @@
         <span class="nav-label" i18n="Sidebar link to the Team Cards page">Team Cards</span>
       </a>
     </div>
-    @if (showPortfolio()) {
-    <div class="nav-item-row">
-      <a class="nav-item" routerLink="/portfolio" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? text.portfolio : ''"
-        (contextmenu)="openNavContextMenu($event, { label: 'Portfolio', url: '/portfolio', canMarkAllRead: false, clearBoardSearch: false })">
-        <i class="ti ti-chart-bar"></i>
-        <span class="nav-label" i18n="Sidebar link to the Portfolio page">Portfolio</span>
-      </a>
-    </div>
-    }
 
     @if (!sidebarCollapsed()) {
     @if (hasNavBoards()) {

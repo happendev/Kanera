@@ -644,7 +644,7 @@ export class TeamOverviewComponent {
     const filters = this.filters();
     try {
       const { response, cachedAt } = await this.queries.read<WorkQueryResponse>({ url: "/work/cards/query", body: {
-        // The portfolio lens is the one that does not require an assignee; scope, search and the
+        // The ownerless "portfolio" query lens is the one that does not require an assignee; scope, search and the
         // page's other filters still apply, like the rest of the overview's card sections.
         lens: "portfolio",
         scope: this.scope() ?? undefined,

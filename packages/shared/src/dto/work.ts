@@ -147,20 +147,23 @@ export const workViewDefinitionSchema = z.object({
     aggregateSplitBy: "none",
     collapsedGroupKeys: [],
   }),
-  portfolioDays: z.number().int().min(1).max(60).default(30),
   // Collapse state is view layout, not transient component state: saved views and per-lens browser
   // preferences restore the same workspace/section shape the user was looking at.
-  // The portfolio summary tree reuses collapsedWorkspaceIds for its workspace rows (the portfolio
-  // lens has no board display, so the two consumers never share a lens) and pairs it with
-  // collapsedOrganisationIds for the level above.
-  collapsedOrganisationIds: z.array(z.uuid()).max(20).default([]),
   collapsedWorkspaceIds: z.array(z.uuid()).max(100).default([]),
   collapsedSectionIds: z.array(z.string().min(1).max(100)).max(500).default([]),
 });
 export type WorkViewDefinition = z.infer<typeof workViewDefinitionSchema>;
 
+/**
+ * Lenses a card query accepts. "my" and "team" are the saved-view lenses; "portfolio" is the
+ * ownerless projection (every accessible card, no assignee required) behind the Team overview's
+ * unowned section, agent reporting and the portfolio rollup's drill-downs.
+ */
+export const WORK_QUERY_LENSES = [...WORK_VIEW_LENSES, "portfolio"] as const;
+export type WorkQueryLens = (typeof WORK_QUERY_LENSES)[number];
+
 export const workCardsQueryBody = z.object({
-  lens: z.enum(WORK_VIEW_LENSES),
+  lens: z.enum(WORK_QUERY_LENSES),
   scope: workScopeSchema.optional(),
   filters: workFiltersSchema.optional(),
   sort: z.enum(WORK_SORT_VALUES).default("dueAsc"),

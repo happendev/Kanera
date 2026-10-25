@@ -143,8 +143,6 @@ export const authResponse = z.object({
     kaneraEnvironment: kaneraEnvironmentSchema,
     hasWorkspace: z.boolean(),
     inProgressEnabled: z.boolean(),
-    // The active organisation's choice; the web app hides Portfolio navigation when false.
-    portfolioEnabled: z.boolean(),
     role: z.enum(CLIENT_ROLES),
     isClientAdmin: z.boolean().optional(),
     organisations: z.array(authOrganisation),

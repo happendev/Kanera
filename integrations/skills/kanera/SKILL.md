@@ -34,7 +34,7 @@ indexed at https://www.kanera.app/llms.txt.
 | Checklists | https://www.kanera.app/docs/checklists.md |
 | Comments and mentions | https://www.kanera.app/docs/comments.md |
 | Notes | https://www.kanera.app/docs/notes.md |
-| My Cards, Team Cards, Up next, Portfolio | https://www.kanera.app/docs/assigned-work.md, https://www.kanera.app/docs/up-next.md |
+| My Cards, Team Cards, Up next | https://www.kanera.app/docs/assigned-work.md, https://www.kanera.app/docs/up-next.md |
 | Automations | https://www.kanera.app/docs/automations.md |
 
 ## Connect in ChatGPT or Codex
