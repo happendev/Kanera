@@ -54,7 +54,7 @@ export const OTHER_DEADLINES: Readonly<Record<string, Readonly<Record<number, nu
   DevOps: { 1: -3, 2: 4, 3: 5, 4: 2, 5: 3, 6: 10, 7: 1, 8: 12, 9: 3, 12: 9, 13: -3, 14: 5, 15: 8, 16: 6, 17: 7, 18: 11, 19: 4, 21: 5, 23: 9, 24: 8 },
   "Launch Checklist": { 1: -1, 2: -1, 3: 1, 4: 1, 5: 2 },
   "Northstar — Client Feedback": { 1: 1, 2: 5, 3: 3, 4: 4, 5: 0 },
-  "Northstar Internal": { 1: 2, 2: 4 },
+  "Northstar Internal": { 1: 2, 2: 4, 3: 2, 4: 7 },
 };
 
 export type SeedNotificationTime = { workingDaysAgo: number; hour: number; minute: number };

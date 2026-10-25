@@ -63,15 +63,36 @@ synced client cards plus two internal engineering tasks once the initial sync fi
 | Client review | Ready for QA |
 | Accepted | Done |
 
+The billing bug and saved-report feature include a worked-in conversation on the same synced
+cards. Eight working days before the reference date, the copies were linked. Priya/Omar and Ben
+then added private engineering notes, changed the internal owners/delivery dates, and set
+**Implementation branch** and **Engineering estimate** fields that do not exist on the client
+board. Maya later supplied a revised billing CSV, a report-view addendum and follow-up comments;
+the worker reconciles those into the existing copies while leaving the internal work in place.
+Later internal QA/handoff comments acknowledge those client updates.
+
+- **Billing bug (NS-241):** private query diagnosis and 16-hour estimate → newer client tax detail
+  and revised CSV → internal QA confirms invoice/tax reconciliation. Grace remains the client-side
+  owner; Omar owns the internal copy, with a separate delivery target.
+- **Saved report feature (NS-238):** private implementation plan and 24-hour estimate → Maya's
+  rolling-date/column-order addendum → internal handoff. Ben owns the internal copy, with its own
+  rollout date and branch.
+
+The seed authors the historical card links and private work; it does not fabricate an agent run
+or claim an API action occurred. Source comments, files and checklists are imported by the real
+worker on reconciliation. The local demo can also be advanced through ordinary API/UI actions.
+
 For a recording:
 
 1. Open **Northstar — Client Feedback**. The billing-export bug (NS-241) has a screenshot,
    reproduction notes, an acceptance checklist and a conversation between Maya and Grace.
 2. Open its synced copy on **Northstar Internal** to show the same discussion and files.
-   The saved-report feature (NS-238) also includes an agreed scope document.
+   Scroll the same card's activity to compare private engineering notes with newer client replies
+   and uploads. The saved-report feature (NS-238) also shows an agreed brief and later addendum.
 3. Keep the internal copy open, then add a comment or upload a new file on the source in
    another tab. Watch it arrive on the internal copy without copying anything manually.
-4. Add an engineering comment on the internal copy. It stays internal; the relationship
+4. Compare the internal assignee, due date, branch and estimate with the client card, then add an
+   engineering comment on the internal copy. It stays internal; the relationship
    runs from the client board to the delivery board. Source content remains authoritative
    for synced titles, descriptions, lists and other synced content.
 5. Move the shared-report request from **New requests** to **Approved for development**
