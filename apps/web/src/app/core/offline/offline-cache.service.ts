@@ -1,6 +1,6 @@
 import type { WorkspaceFeatures } from "@kanera/shared/workspace-features";
 import { Injectable, signal } from "@angular/core";
-import type { DependencyGraphResponse, HomeTodayResponse, PendingBoardInvitationSummary, PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkViewDefinition } from "@kanera/shared/dto";
+import type { DependencyGraphResponse, HomeTodayResponse, PendingBoardInvitationSummary, PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkPrioritiesResponse, WorkViewDefinition } from "@kanera/shared/dto";
 import type { CardAttachmentRow, CardFeedItem, WireBoardMemberUser, WireCard, WireCardDetail, WireCardLabel, WireCardSummary, WireChecklistTemplate, WireList, WireNote, WireSeparator } from "@kanera/shared/events";
 import type {
   Board,
@@ -158,9 +158,7 @@ export type OfflineGlobalWorkSnapshot = {
   response: WorkQueryResponse;
   portfolio: PortfolioSummary | null;
   savedViews: SavedWorkView[];
-  // Deliberately no priority queue. A stale sequence reads as an instruction, and someone following
-  // "do this first" from a cached order has no way to tell it is last week's. Every queue surface
-  // withholds itself offline instead — see `MyPrioritiesService`.
+  // Personal queues have their own user/organisation-scoped snapshot shared across surfaces.
 };
 
 export type OfflineHomeTodaySnapshot = {
@@ -177,6 +175,12 @@ export type OfflineDependencyGraphSnapshot = {
   response: DependencyGraphResponse;
 };
 
+type OfflinePriorityQueueSnapshot = {
+  key: string;
+  cachedAt: string;
+  response: WorkPrioritiesResponse;
+};
+
 interface StoredNotesSnapshot extends Omit<OfflineNotesSnapshot, "notes"> {
   entries: { id: string; token: string; bytes: number }[];
 }
@@ -185,8 +189,8 @@ interface StoredNoteEntry {
   note: WireNote;
 }
 
-type CacheStore = "shell" | "boards" | "cardDetails" | "notes" | "globalWork" | "homeToday" | "dependencyGraphs";
-const CACHE_STORES: CacheStore[] = ["shell", "boards", "cardDetails", "notes", "globalWork", "homeToday", "dependencyGraphs"];
+type CacheStore = "shell" | "boards" | "cardDetails" | "notes" | "globalWork" | "homeToday" | "dependencyGraphs" | "priorityQueues" | "viewQueries";
+const CACHE_STORES: CacheStore[] = ["shell", "boards", "cardDetails", "notes", "globalWork", "homeToday", "dependencyGraphs", "priorityQueues", "viewQueries"];
 const CACHE_BUDGET_BYTES = 32 * 1024 * 1024;
 const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -224,6 +228,14 @@ interface KaneraOfflineDb extends DBSchema {
   homeToday: {
     key: string;
     value: OfflineHomeTodaySnapshot;
+  };
+  viewQueries: {
+    key: string;
+    value: { key: string; cachedAt: string; response: unknown };
+  };
+  priorityQueues: {
+    key: string;
+    value: OfflinePriorityQueueSnapshot;
   };
   dependencyGraphs: {
     key: string;
@@ -311,6 +323,10 @@ export class OfflineCacheService {
     // A dependency map follows chains across boards, so any snapshot may hold the revoked board's
     // cards; clear them all rather than prune one board out of each chain.
     await tx.objectStore("dependencyGraphs").clear();
+    // Queues also mix boards, including server-resolved names and labels.
+    await tx.objectStore("priorityQueues").clear();
+    // Schedule and history queries can contain cards and aggregates from several boards.
+    await tx.objectStore("viewQueries").clear();
     // Remove accounting for the same rows atomically, so revoked data does not consume the
     // budget and cause unrelated offline boards to be evicted prematurely.
     const metadata = tx.objectStore("cacheMeta");
@@ -427,6 +443,24 @@ export class OfflineCacheService {
     return (await db.get("homeToday", key)) ?? null;
   }
 
+  async savePriorityQueue(key: string, response: WorkPrioritiesResponse, cachedAt: string): Promise<void> {
+    await this.put("priorityQueues", { key, cachedAt, response }, key);
+  }
+
+  async loadPriorityQueue(key: string): Promise<OfflinePriorityQueueSnapshot | null> {
+    const db = await this.db();
+    return (await db.get("priorityQueues", key)) ?? null;
+  }
+
+  async saveViewQuery(key: string, response: unknown): Promise<void> {
+    await this.put("viewQueries", { key, cachedAt: new Date().toISOString(), response }, key);
+  }
+
+  async loadViewQuery(key: string): Promise<{ response: unknown; cachedAt: string } | null> {
+    const db = await this.db();
+    return (await db.get("viewQueries", key)) ?? null;
+  }
+
   async saveDependencyGraph(key: string, response: DependencyGraphResponse): Promise<void> {
     await this.put("dependencyGraphs", { key, cachedAt: new Date().toISOString(), response }, key);
   }
@@ -521,10 +555,13 @@ export class OfflineCacheService {
     // snapshots. Those projections are permission- and user-specific, so they must not survive the
     // move to client+user+lens keys even on a shared browser. Version 7 removes the cache store for
     // the retired workspace-scoped work page. Version 9 drops `homePriorities` and deletes the
-    // stored queue from Global Work snapshots: priority order is never served from cache, because a
-    // stale sequence reads as an instruction the reader cannot date.
-    this.dbPromise ??= openDB<KaneraOfflineDb>("kanera-offline", 12, {
+    // stored queue from Global Work snapshots. Version 13 restores personal queues in a dedicated,
+    // user/organisation-scoped store, with a visible timestamp and read-only offline presentation.
+    this.dbPromise ??= openDB<KaneraOfflineDb>("kanera-offline", 14, {
       upgrade(db, oldVersion, _newVersion, transaction) {
+        // Version 14 retains exact Timeline and Work done queries, including empty responses.
+        if (!db.objectStoreNames.contains("viewQueries")) db.createObjectStore("viewQueries");
+        if (!db.objectStoreNames.contains("priorityQueues")) db.createObjectStore("priorityQueues");
         // Version 12 adds offline Dependencies view snapshots.
         if (!db.objectStoreNames.contains("dependencyGraphs")) db.createObjectStore("dependencyGraphs");
         // Version 11 splits note bodies from their complete snapshot manifest. Existing snapshots

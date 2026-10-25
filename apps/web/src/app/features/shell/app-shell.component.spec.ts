@@ -337,6 +337,8 @@ describe("AppShellComponent board search", () => {
         {
           provide: OfflineCacheService,
           useValue: {
+            savePriorityQueue: vi.fn(async () => undefined),
+            loadPriorityQueue: vi.fn(async () => null),
             saveShell: vi.fn(() => Promise.resolve()),
             loadShell: vi.fn(() => Promise.resolve(null)),
             revokeBoardAccess: vi.fn(() => Promise.resolve()),
@@ -353,6 +355,7 @@ describe("AppShellComponent board search", () => {
             disconnect: vi.fn(),
             pauseForOrganisationSwitch,
             resumeAfterOrganisationSwitch,
+            online: signal(true),
             displayedOnline: signal(true),
             reconnecting: signal(false),
             accessRefreshing: signal(false),

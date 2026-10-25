@@ -689,3 +689,14 @@
   position: absolute;
   width: 100%;
 }
+
+.offline-banner {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--divider);
+}

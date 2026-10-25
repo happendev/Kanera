@@ -196,6 +196,8 @@ describe("HomePage", () => {
         {
           provide: OfflineCacheService,
           useValue: {
+            savePriorityQueue: vi.fn(async () => undefined),
+            loadPriorityQueue: vi.fn(async () => null),
             saveHomeToday: vi.fn(async () => undefined),
             loadHomeToday: vi.fn(async () => options.cached ?? null),
           },
@@ -207,6 +209,7 @@ describe("HomePage", () => {
             connect: vi.fn(() => socket.asSocket()),
             joinBoard: vi.fn(() => vi.fn()),
             joinWorkspace: vi.fn(() => vi.fn()),
+            online: signal(true),
             displayedOnline: signal(true),
             reconnecting: signal(false),
             accessRefreshing: signal(false),
@@ -961,7 +964,7 @@ describe("HomePage", () => {
     expect(text()).not.toContain("Nothing has been added to your Up next yet");
   });
 
-  it("withholds the queue offline rather than showing a stale order", async () => {
+  it("keeps the queue visible and read-only offline", async () => {
     await render();
     const priorities = TestBed.inject(MyPrioritiesService);
     priorities.queue.set({
@@ -993,12 +996,11 @@ describe("HomePage", () => {
     fixture.detectChanges();
     expect(host().querySelector(".priorities-section")).not.toBeNull();
 
-    // A stale sequence reads as an instruction the reader cannot date, so it is hidden outright —
-    // unlike the rest of the agenda, which keeps its cached snapshot behind the offline banner.
     (priorities.online as ReturnType<typeof signal<boolean>>).set(false);
     fixture.detectChanges();
-    expect(host().querySelector(".priorities-section")).toBeNull();
-    expect(text()).toContain("hidden while you’re offline");
+    expect(host().querySelector(".priorities-section")).not.toBeNull();
+    expect(host().querySelector(".panel-row.cdk-drag-disabled")).not.toBeNull();
+    expect(host().querySelector(".priorities-section .row-tools")).toBeNull();
   });
 
   it("blocks standalone board creation and explains the board limit", async () => {

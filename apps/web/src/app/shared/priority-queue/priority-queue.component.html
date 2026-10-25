@@ -212,7 +212,7 @@
      class stripped: mounted but invisible, and dead for every further right-click. A fresh token
      per opening rebuilds the view, so the panel registers and places itself again. Track by token,
      not by card id: right-clicking the *same* row twice has to rebuild for the same reason. -->
-@for (menu of actionsMenu(); track menu.token) {
+@for (menu of readOnly() ? [] : actionsMenu(); track menu.token) {
   <k-card-actions-menu
     [cardId]="menu.card.id"
     [cardKey]="menu.card.key"

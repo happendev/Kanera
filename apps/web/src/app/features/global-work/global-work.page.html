@@ -527,9 +527,6 @@
       <i class="ti ti-cloud-off"></i>
       <span>
         <ng-container i18n="Offline banner">Showing a saved copy from {{ offlineStamp(cachedAt) // i18n(ph="time") }}. Reconnect to make changes.</ng-container>
-        @if (historyOfflineFallback()) { <ng-container i18n="Offline banner">History will return after reconnecting.</ng-container> }
-        @if (overviewOfflineFallback()) { <ng-container i18n="Offline banner">The team overview will return after reconnecting.</ng-container> }
-        @if (dependenciesOfflineFallback()) { <ng-container i18n="Offline banner">The dependency map will return after reconnecting.</ng-container> }
       </span>
     </div>
   } @else if (!state.sockets.displayedOnline()) {
@@ -715,12 +712,12 @@
           [people]="teamPeople()"
           [cards]="state.cards()"
           [queues]="overviewQueues()"
+          [canNavigate]="state.interactionReady()"
           [lists]="state.catalog().lists"
           [boards]="state.catalog().boards"
           [workspaces]="state.catalog().workspaces"
           [scope]="state.definition().scope"
           [filters]="state.definition().filters"
-          [enabled]="state.cachedAt() === null"
           [refreshVersion]="workDoneRefreshVersion() + state.reconciliationVersion()"
           [selectedCardId]="selectedCard()?.id ?? null"
           [focusedUserId]="state.overviewFocusUserId()"
@@ -1080,13 +1077,14 @@
         [priorities]="dockPriorities()"
         [catalog]="state.catalog()"
         [boardSummariesById]="boardsById()"
-        [canDrag]="state.interactionReady()"
+        [canDrag]="dockCanEdit()"
         [targetName]="dockTargetName()"
         [error]="priorityError()"
         [selectedCardId]="selectedCard()?.id ?? null"
         [addableCards]="dockAddableCards()"
         [editableCardIds]="roleEditableCardIds()"
         [allowQuickComplete]="dockAllowQuickComplete()"
+        [offlineMessage]="dockOfflineMessage()"
         (reordered)="onPriorityReordered($event)"
         (removed)="onPriorityRemoved($event)"
         (added)="onUpNextAddFromPanel($event)"

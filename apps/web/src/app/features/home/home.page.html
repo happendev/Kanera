@@ -268,6 +268,9 @@
             <ng-container i18n="Section heading: the user's priority queue">Up next</ng-container>
             <a class="agenda-see-all" routerLink="/my-cards"><ng-container i18n="Link to the full list">See all</ng-container> <i class="ti ti-arrow-narrow-right"></i></a>
           </h2>
+          @if (prioritiesOffline()) {
+          <p class="priorities-hint"><i class="ti ti-wifi-off"></i>{{ myPriorities.offlineMessage() }}</p>
+          }
           @if (priorityError(); as message) {
           <p class="priorities-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
           }
@@ -275,16 +278,12 @@
                identically wherever it is seen — and reordering here is the same gesture there. Capped at
                five: this is the head of the queue, and the block says how many more there are. -->
           <div class="agenda-panel priorities-panel">
-            <k-priority-queue [priorities]="myPriorities.queue()" [canDrag]="true" [visibleLimit]="5" [compact]="true" [showAdd]="false" [showDragHint]="false" [allowQuickComplete]="true" dropListId="home-priorities-drop"
+            <k-priority-queue [priorities]="myPriorities.queue()" [canDrag]="myPriorities.canEdit()" [readOnly]="!myPriorities.canEdit()" [visibleLimit]="5" [compact]="true" [showAdd]="false" [showDragHint]="false" [allowQuickComplete]="myPriorities.canEdit()" dropListId="home-priorities-drop"
               dragLaneId="home-priorities" (reordered)="onPriorityReordered($event)" (removed)="onPriorityRemoved($event)" (completed)="onPriorityCompleted($event)" (cardOpened)="openPriorityCard($event)" />
           </div>
         </section>
         } @else if (prioritiesOffline()) {
-        <!-- Never a cached order: a stale sequence reads as an instruction, and there is no way for the
-             reader to tell it is last week's. -->
-        <p class="priorities-hint">
-          <i class="ti ti-wifi-off"></i> <ng-container i18n="Notice on the home page while offline">Up next is hidden while you’re offline, so you never follow a stale order.</ng-container>
-        </p>
+        <p class="priorities-hint"><i class="ti ti-wifi-off"></i>{{ myPriorities.offlineMessage() }}</p>
         } @else if (showPrioritiesHint()) {
         <!-- One muted line, shown only to someone who has assigned work but no queue. No illustration
              and no dismissal state: this is discoverability, not an empty state worth designing. -->

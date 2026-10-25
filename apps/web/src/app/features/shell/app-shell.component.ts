@@ -153,6 +153,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly panelStack = inject(PanelStackService);
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
+  readonly online = this.sockets.online;
   private readonly workspaceService = inject(WorkspaceService);
   private readonly upgradePrompt = inject(UpgradePromptService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -265,6 +266,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   installKanera(): void {
+    if (!this.online()) return;
     this.closeUserMenu();
     void this.pwaInstall.prompt().catch(() => {
       this.toast.error($localize`Could not open the install prompt. Open the account menu for installation steps.`);
@@ -352,6 +354,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly notificationsOnline = this.notifications.online;
   /** Offline the write would silently go nowhere, so the shortcut and palette verb stand down rather than lie. */
   readonly canMarkAllRead = computed(() => this.notifications.unreadCount() > 0 && this.notificationsOnline());
+  // Menus opened while connected must not retain live server actions after a disconnect.
+  private readonly closeOnlineMenus = effect(() => {
+    if (this.online()) return;
+    this.closeOrganisationMenu();
+    this.closeNavContextMenu();
+  });
+
   readonly userMenuOpen = signal(false);
   readonly organisationMenuOpen = signal(false);
   readonly navContextMenu = signal<NavContextMenu | null>(null);
@@ -643,17 +652,20 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   /** Goes to the checklist on home, first putting it back there if it was hidden. */
   reopenGettingStarted(): void {
+    if (!this.online()) return;
     this.closeUserMenu();
     if (this.gettingStarted.state()?.hidden) this.gettingStarted.show();
     void this.router.navigateByUrl("/");
   }
 
   removeGettingStarted(): void {
+    if (!this.online()) return;
     this.closeUserMenu();
     this.gettingStarted.dismiss();
   }
 
   toggleOrganisationMenu() {
+    if (!this.online()) return;
     this.organisationMenuOpen.update((v) => !v);
   }
 
@@ -662,6 +674,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   async switchOrganisation(clientId: string): Promise<void> {
+    if (!this.online()) return;
     const currentClientId = this.user()?.activeClientId ?? this.user()?.clientId;
     if (clientId === currentClientId || this.switchingOrganisationId()) return;
     this.switchingOrganisationId.set(clientId);
@@ -694,6 +707,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   createOrganisation(): void {
+    if (!this.online()) return;
     if (this.switchingOrganisationId()) return;
     this.closeUserMenu();
     const ref = this.dialog.open<CreateOrganisationResult>(CreateOrganisationDialogComponent, {
@@ -710,6 +724,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   joinOrganisation(): void {
+    if (!this.online()) return;
     this.closeUserMenu();
     const ref = this.dialog.open<string>(JoinOrganisationDialogComponent, {
       ariaLabel: $localize`:Dialog name:Join organisation`,
@@ -770,7 +785,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const prioritiesDialog = () => this.host.nativeElement.querySelector<HTMLElement>('k-my-priorities-panel [role="dialog"]') ?? undefined;
     const notificationsDialog = () => this.host.nativeElement.querySelector<HTMLElement>('k-notifications-panel [role="dialog"]') ?? undefined;
     this.shortcuts.registerAll($localize`:Keyboard shortcuts sheet section — shortcuts that work on every page:Everywhere`, [
-      { keys: "mod+k", label: $localize`:Keyboard shortcut description:Search everything`, allowInDialog: true, run: () => this.search.open() },
+      { keys: "mod+k", label: $localize`:Keyboard shortcut description:Search everything`, allowInDialog: true, when: () => this.online(), run: () => this.search.open() },
       { keys: "?", label: $localize`:Keyboard shortcut description — open the shortcuts sheet:Keyboard shortcuts`, allowInDialog: true, run: () => this.shortcutsOpen.set(true) },
       // The four sidebar utility buttons, in their on-screen order, each on one letter. ⌘⇧. stays as
       // the scratchpad's original chord for anyone who learned it.
@@ -779,7 +794,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       { keys: "u", label: $localize`:Keyboard shortcut description; "Up next" is the personal priority queue:Open or close Up next`, dialog: prioritiesDialog, run: () => this.togglePanel("priorities") },
       { keys: "n", label: $localize`:Keyboard shortcut description:Open or close notifications`, dialog: notificationsDialog, run: () => this.togglePanel("notifications") },
       { keys: "shift+n", label: $localize`:Keyboard shortcut description:Mark all notifications as read`, dialog: notificationsDialog, when: () => this.canMarkAllRead(), run: () => void this.notifications.markAllRead() },
-      { keys: "h", label: $localize`:Keyboard shortcut description — open the documentation:Help & docs`, run: () => window.open(this.docsUrl, "_blank", "noopener") },
+      { keys: "h", label: $localize`:Keyboard shortcut description — open the documentation:Help & docs`, when: () => this.online(), run: () => window.open(this.docsUrl, "_blank", "noopener") },
       { keys: "[", label: $localize`:Keyboard shortcut description:Collapse or expand sidebar`, run: () => this.toggleSidebar() },
     ], this.destroyRef);
     this.shortcuts.registerAll($localize`:Keyboard shortcuts sheet section — navigation shortcuts:Go to`, [
@@ -787,7 +802,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       { keys: "g m", label: $localize`:Keyboard shortcut description — go to the My Cards page:My cards`, run: go("/my-cards") },
       { keys: "g t", label: $localize`:Keyboard shortcut description — go to the Team Cards page:Team cards`, run: go("/team-cards") },
       { keys: "g p", label: $localize`:Keyboard shortcut description — go to the Portfolio page:Portfolio`, when: () => this.showPortfolio(), run: go("/portfolio") },
-      { keys: "g s", label: $localize`:Keyboard shortcut description — go to account settings:Settings`, run: go("/settings") },
+      { keys: "g s", label: $localize`:Keyboard shortcut description — go to account settings:Settings`, when: () => this.online(), run: go("/settings") },
     ], this.destroyRef);
   }
 
@@ -882,6 +897,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
    * nav, so the verb still works from Home or My Cards. Null when the user has no board at all.
    */
   private paletteNewCardTarget(): { boardId: string; here: boolean } | null {
+    if (!this.online()) return null;
     // Only boards the user may write to. `viewerRole` is the effective permission from /home/boards;
     // observers (read-only guests) see the board but cannot add cards, so the verb must not offer it.
     const editable = [...this.groups(), ...this.guestGroups()].flatMap((group) =>
@@ -1343,7 +1359,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly boardReorderError = signal<string | null>(null);
 
   canReorderBoards(workspace?: { role: string }): boolean {
-    return !this.usingOfflineShell() && !this.boardSearchTerm() && !this.boardReorderPending()
+    return this.online() && !this.usingOfflineShell() && !this.boardSearchTerm() && !this.boardReorderPending()
       && (workspace ? this.canManageWorkspace(workspace) : this.isOrgAdmin());
   }
 
@@ -1611,6 +1627,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   newWorkspace() {
+    if (!this.online()) return;
     if (this.boardLimitReached()) {
       this.workspaceCreateAttempted.set(true);
       void this.upgradePrompt.open({ reason: "board", source: "app_shell", boardCount: this.ownBoardCount() });
@@ -1621,6 +1638,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   newStandaloneBoard() {
+    if (!this.online()) return;
     if (this.boardLimitReached()) {
       this.standaloneBoardCreateAttempted.set(true);
       void this.upgradePrompt.open({ reason: "board", source: "app_shell", boardCount: this.ownBoardCount() });

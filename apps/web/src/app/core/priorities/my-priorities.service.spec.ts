@@ -1,3 +1,4 @@
+import { OfflineCacheService } from "../offline/offline-cache.service";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WorkPrioritiesResponse, WorkPriorityItem } from "@kanera/shared/dto";
@@ -118,9 +119,10 @@ function setup(options: {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
+      { provide: OfflineCacheService, useValue: { savePriorityQueue: vi.fn(async () => undefined), loadPriorityQueue: vi.fn(async () => null) } },
       { provide: ApiClient, useValue: { get, post, delete: del, patch } },
       { provide: AuthService, useValue: { user: signal({ id: VIEWER_ID, clientId: "client-1" }).asReadonly() } },
-      { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinBoard, displayedOnline: online } },
+      { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinBoard, online, displayedOnline: online } },
     ],
   });
 
@@ -281,7 +283,7 @@ describe("MyPrioritiesService", () => {
     await vi.waitFor(() => expect(f.service.items()).toHaveLength(2));
     const snapshot = f.service.queue();
 
-    f.online.set(false);
+    f.post.mockRejectedValueOnce(new Error("request failed"));
     const pending = f.service.movePriority("p1", { beforeId: null });
     // Applied before the round trip: the row is under the pointer and must not wait for the server.
     expect(f.service.items().map((item) => item.id)).toEqual(["p2", "p1"]);
@@ -333,7 +335,7 @@ describe("MyPrioritiesService", () => {
     expect(f.service.items().map((item) => item.id)).toEqual(["p2", "p1"]);
   });
 
-  it("withholds the queue offline rather than serving a stale order", async () => {
+  it("shows an offline error when no saved queue is available", async () => {
     const f = setup({ offline: true });
     f.service.initialise();
     await vi.waitFor(() => expect(f.service.loadError()).not.toBeNull());
@@ -341,6 +343,25 @@ describe("MyPrioritiesService", () => {
     expect(f.service.queue()).toBeNull();
     expect(priorityGets(f.get)).toHaveLength(0);
     expect(f.service.loadError()).toContain("offline");
+  });
+
+  // A controlled IndexedDB delay catches session/cache races that browser timing cannot reproduce reliably.
+  it.each(["new response", "teardown"])("does not apply a delayed cached queue after %s", async (boundary) => {
+    const f = setup({ offline: true });
+    const cache = TestBed.inject(OfflineCacheService);
+    let resolve!: (value: Awaited<ReturnType<typeof cache.loadPriorityQueue>>) => void;
+    vi.mocked(cache.loadPriorityQueue).mockImplementation(() => new Promise((done) => { resolve = done; }));
+    f.service.initialise();
+    expect(cache.loadPriorityQueue).toHaveBeenCalledWith(`client-1:${VIEWER_ID}`);
+    if (boundary === "teardown") f.service.teardown();
+    else {
+      f.online.set(true);
+      await f.service.refresh();
+    }
+    resolve({ key: `client-1:${VIEWER_ID}`, cachedAt: "2026-07-01T00:00:00.000Z", response: queue([entry("old", 1)]) });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.service.queue()).toEqual(boundary === "teardown" ? null : queue());
   });
 
   it("resyncs when the connection comes back", async () => {

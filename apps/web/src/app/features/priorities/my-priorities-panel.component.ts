@@ -54,6 +54,8 @@ export class MyPrioritiesPanelComponent {
   readonly loading = this.priorities.loading;
   readonly loadError = this.priorities.loadError;
   readonly online = this.priorities.online;
+  readonly canEdit = this.priorities.canEdit;
+  readonly offlineMessage = this.priorities.offlineMessage;
   readonly addableCards = this.priorities.addableCards;
   readonly addCandidatesLoading = this.priorities.addCandidatesLoading;
   readonly addCandidatesLoadError = this.priorities.addCandidatesLoadError;
@@ -71,11 +73,11 @@ export class MyPrioritiesPanelComponent {
 
   /** Nothing queued, but there is work that could be — the one case worth a "here's how" nudge. */
   readonly showEmptyWithWork = computed(
-    () => this.items().length === 0 && this.addableCards().length > 0,
+    () => this.canEdit() && this.items().length === 0 && this.addableCards().length > 0,
   );
   /** The first load, before anything has ever arrived: loading, not an empty state. */
   readonly showInitialLoading = computed(() => this.loading() && this.queue() === null);
-  readonly showRows = computed(() => this.online() && this.items().length > 0);
+  readonly showRows = computed(() => this.items().length > 0);
 
   /**
    * How much of the queue is under time pressure, for the strip above the rows. The queue is an

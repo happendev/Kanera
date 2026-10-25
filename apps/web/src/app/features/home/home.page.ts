@@ -473,7 +473,7 @@ export class HomePage implements OnInit {
   /** Withheld offline rather than served from cache: a stale sequence reads as an instruction. */
   readonly prioritiesOffline = computed(() => !this.myPriorities.online());
   readonly showPriorities = computed(
-    () => !this.prioritiesOffline() && this.myPriorities.items().length > 0
+    () => this.myPriorities.items().length > 0
   );
   /**
    * Nothing renders for an empty queue — an empty heading is noise, the same rule `groups` follows.

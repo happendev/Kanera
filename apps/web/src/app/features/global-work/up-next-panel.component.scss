@@ -386,3 +386,12 @@
     overflow-y: visible;
   }
 }
+
+.panel-offline {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}

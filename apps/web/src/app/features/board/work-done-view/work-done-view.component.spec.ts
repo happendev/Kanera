@@ -92,6 +92,7 @@ describe("WorkDoneViewComponent", () => {
     ]);
     for (const [key, value] of Object.entries(inputs ?? {})) fixture.componentRef.setInput(key, value);
     fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.loading()).toBe(false));
     await fixture.whenStable();
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
@@ -173,7 +174,10 @@ describe("WorkDoneViewComponent", () => {
     resolveRefresh({ events: [completedEvent] });
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(root.textContent).toContain("Wrap up");
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(root.textContent).toContain("Wrap up");
+    });
   });
 
   it("preserves history on a failed background refresh but shows loading for a new query", async () => {
@@ -191,7 +195,7 @@ describe("WorkDoneViewComponent", () => {
     expect(fixture.componentInstance.loading()).toBe(true);
     expect(root.querySelector(".wd-skeleton-stream")).not.toBeNull();
     await fixture.whenStable();
-    expect(fixture.componentInstance.error()).toBe("Work history could not be loaded.");
+    await vi.waitFor(() => expect(fixture.componentInstance.error()).toBe("Work history could not be loaded."));
   });
 
   it("renders one row per card, per person, per day, newest activity first", async () => {

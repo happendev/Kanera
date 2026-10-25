@@ -4,6 +4,7 @@ import { ApplicationRef, ChangeDetectionStrategy, Component, DestroyRef, Injecto
 import type { CardRelationSummary, DependencyGraphEdge, ScheduleResponse } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { barDurationDays, computeSchedule, dateKeyOf, dayNumber, endForMovedStart, plannedBar, type Schedule, type ScheduledCard } from "@kanera/shared/schedule";
+import { CachedViewService } from "../../../core/offline/cached-view.service";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { APP_DOM_EVENTS } from "../../../core/browser/browser-contracts";
 import { hasCoarsePointer } from "../../../core/browser/input-modality";
@@ -13,7 +14,7 @@ import { DensityService } from "../../../core/theme/density.service";
 import { WorkspaceService } from "../../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { CardKeyDisplayService } from "../../../shared/card-key-display.service";
-import { formatDate, formatDateRange } from "../../../shared/date-format";
+import { formatDate, formatDateRange, formatRelativeTime } from "../../../shared/date-format";
 import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import { FitLabelsDirective } from "../../../shared/fit-labels.directive";
 import { ToastService } from "../../../shared/toast.service";
@@ -167,6 +168,13 @@ export class BoardTimelineViewComponent implements OnInit {
   readonly filteredCardIds = input<Set<string> | null>(null);
   readonly selectedCardId = input<string | null>(null);
   readonly canEdit = input(true);
+  private readonly queries = inject(CachedViewService);
+  readonly cachedAt = signal<string | null>(null);
+  readonly editingEnabled = computed(() => this.canEdit() && this.sockets.online() && !this.cachedAt());
+  readonly offlineCopyLabel = computed(() => {
+    const time = this.cachedAt();
+    return time ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(time)}:time:` : "";
+  });
   /**
    * Over many boards the viewer's role differs per board, so the host names the cards they may
    * reschedule and link; null (a board) means `canEdit` decides for every card.
@@ -444,6 +452,14 @@ export class BoardTimelineViewComponent implements OnInit {
   readonly conflictsLabel = computed(() => icu($localize`:Timeline view toolbar count - cards whose blocker finishes after they start:{count, plural, one {1 scheduling conflict} other {# scheduling conflicts}}`, { count: this.summary().conflicts }));
 
   constructor() {
+    effect(() => {
+      if (!this.editingEnabled()) untracked(() => {
+        this.drag.set(null);
+        this.linkDraft.set(null);
+        this.selectedEdgeId.set(null);
+        this.closeActionsMenu();
+      });
+    });
     // The view only renders where the workspace has the Timeline on, so opening it ticks the step.
     this.gettingStarted.noteUsed("viewTimeline");
     afterNextRender(() => {
@@ -590,9 +606,10 @@ export class BoardTimelineViewComponent implements OnInit {
     const seq = ++this.loadSeq;
     this.edgesLoading.set(true);
     try {
-      const response = await this.readSchedule(scope);
+      const { response, cachedAt } = await this.queries.read({ url: "/cards/schedule", body: scope }, () => this.readSchedule(scope));
       if (seq !== this.loadSeq) return;
       this.scheduleResponse.set(response);
+      this.cachedAt.set(cachedAt);
       this.edgesResponse.set(response.edges.map((edge) => ({ ...edge, kind: "blocks" })));
       // Room leases are ref-counted by SocketService. Retain known boards until leaving this chart:
       // a completed external blocker can reopen and must rejoin the schedule without a page reload.
@@ -602,7 +619,7 @@ export class BoardTimelineViewComponent implements OnInit {
         if (!hostedBoardIds.has(board.id) && !this.graphRooms.has(board.id)) this.graphRooms.set(board.id, this.sockets.joinBoard(board.id));
       }
     } catch {
-      // Offline or refused: the chart still shows its bars; wires come with the next successful read.
+      // Without a saved schedule the host's cached cards still provide the chart's bars.
     } finally {
       if (seq === this.loadSeq) this.edgesLoading.set(false);
     }
@@ -1065,7 +1082,7 @@ export class BoardTimelineViewComponent implements OnInit {
   }
 
   canEditCard(card: AnyCard): boolean {
-    return this.canEdit() && (this.editableCardIds()?.has(card.id) ?? true) && !this.reschedulingCardIds().has(card.id);
+    return this.editingEnabled() && (this.editableCardIds()?.has(card.id) ?? true) && !this.reschedulingCardIds().has(card.id);
   }
 
   canDrag(card: AnyCard): boolean {
@@ -1086,7 +1103,7 @@ export class BoardTimelineViewComponent implements OnInit {
   }
 
   onCardContextMenu(card: AnyCard, event: MouseEvent): void {
-    if (!this.canEdit()) return;
+    if (!this.canEditCard(card)) return;
     event.preventDefault();
     event.stopPropagation();
     document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, { detail: card.id }));
@@ -1187,6 +1204,7 @@ export class BoardTimelineViewComponent implements OnInit {
   }
 
   private async write(card: AnyCard, optimistic: AnyCard, body: Record<string, unknown>, fallback: string): Promise<void> {
+    if (!this.canEditCard(card)) return;
     this.cardStore?.updateCard(optimistic);
     this.markRescheduling(card.id, true);
     try {
@@ -1310,7 +1328,7 @@ export class BoardTimelineViewComponent implements OnInit {
   private async addDependency(blockerId: string, dependentId: string): Promise<void> {
     const blocker = this.cardsById().get(blockerId);
     const dependent = this.cardsById().get(dependentId);
-    if (!blocker || !dependent) return;
+    if (!blocker || !dependent || !this.canEditCard(dependent)) return;
     if (this.edges().some((edge) => edge.sourceCardId === blockerId && edge.targetCardId === dependentId)) return;
     try {
       const created = await this.api.post<CardRelationSummary>(`/cards/${dependentId}/relations`, { targetCardId: blockerId, direction: "blocked_by" });
@@ -1332,7 +1350,7 @@ export class BoardTimelineViewComponent implements OnInit {
 
   async removeSelectedWire(): Promise<void> {
     const wire = this.selectedWire();
-    if (!wire || !this.canEdit()) return;
+    if (!wire || !this.editingEnabled()) return;
     this.selectedEdgeId.set(null);
     const previous = this.edgesResponse();
     this.edgesResponse.set(previous.filter((edge) => edge.id !== wire.id));

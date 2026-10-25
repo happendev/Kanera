@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, output, signal } from "@angular/core";
 import { CdkDrag, type CdkDragDrop, type CdkDragMove, CdkDropList } from "@angular/cdk/drag-drop";
 import type { WorkCatalog, WorkPrioritiesResponse, WorkPriorityItem } from "@kanera/shared/dto";
 import { expandCardSummary, type WireCardSummary } from "@kanera/shared/events";
@@ -145,6 +145,7 @@ export class PriorityQueueComponent {
   readonly compact = input(false);
   /** Adds a one-click "mark complete" to each row — the drawer's and Home's quick action. */
   readonly allowQuickComplete = input(false);
+  readonly readOnly = input(false);
   /**
    * Optional shared wall-clock reading for a host that renders an aggregate of these row states.
    * Null preserves the ordinary render-time behavior used by standalone queue surfaces.
@@ -265,6 +266,14 @@ export class PriorityQueueComponent {
     priorityAddGroups(this.addableCards(), { showCardKeys: this.showCardKeys() })
   );
 
+  constructor() {
+    effect(() => {
+      if (!this.readOnly()) return;
+      this.closeActionsMenu();
+      this.addOpenAt.set(null);
+    });
+  }
+
   toggleAdd(at: "head" | "list" = "list"): void {
     this.addOpenAt.update((current) => (current === at ? null : at));
   }
@@ -344,7 +353,7 @@ export class PriorityQueueComponent {
     // offer quick complete on every row on exactly the same terms: attempt it, and surface the
     // server's refusal.
     const editable = this.editableCardIds();
-    if (!row.card || (editable && !editable.has(row.card.id))) return;
+    if (this.readOnly() || !row.card || (editable && !editable.has(row.card.id))) return;
     event.preventDefault();
     event.stopPropagation();
     this.actionsToken += 1;

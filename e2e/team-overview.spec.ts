@@ -253,9 +253,13 @@ test("Team overview focuses one teammate with their Up next docked, curated from
 
   // Not queued ignores the overview's search (the queue does too), and puts the sooner due first.
   await expect(notQueuedRow(sooner)).toBeVisible();
-  const soonerBox = await notQueuedRow(sooner).boundingBox();
-  const laterBox = await notQueuedRow(later).boundingBox();
-  expect(soonerBox!.y).toBeLessThan(laterBox!.y);
+  // The search entered above can still be settling. During that foreground refresh the dock
+  // disables editing and hides candidates; boundingBox itself does not wait for them to return.
+  await expect.poll(async () => {
+    const soonerBox = await notQueuedRow(sooner).boundingBox();
+    const laterBox = await notQueuedRow(later).boundingBox();
+    return !!soonerBox && !!laterBox && soonerBox.y < laterBox.y;
+  }).toBe(true);
   await expect(notQueuedRow(head)).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath("team-overview-dock.png") });
 

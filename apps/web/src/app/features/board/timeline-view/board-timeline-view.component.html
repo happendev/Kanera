@@ -1,4 +1,5 @@
 <section class="timeline-view" (keydown)="onKeydown($event)" (click)="clearSelection()">
+  @if (offlineCopyLabel()) { <div class="offline-banner" role="status"><i class="ti ti-cloud-off"></i>{{ offlineCopyLabel() }}</div> }
   <div class="timeline-toolbar" kFitLabels (click)="$event.stopPropagation()">
     <div class="timeline-toolbar-left">
       <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label" (click)="scrollToToday()" kTooltip="Scroll to today" i18n-kTooltip="Tooltip on the Timeline view's Today button">
@@ -66,7 +67,7 @@
       <!-- Header: the name pane's corner stays put in both directions; the tiers scroll with the chart. -->
       <div class="tl-header" role="presentation">
         <div class="tl-corner">
-          @if (coarsePointer && canEdit()) {
+          @if (coarsePointer && editingEnabled()) {
           <span class="tl-corner-hint" i18n="Hint in the Timeline view header on touch devices">Change dates from the card</span>
           }
           @if (!narrow()) {
@@ -285,7 +286,7 @@
         </svg>
 
         @if (selectedWire(); as wire) {
-        @if (canEdit()) {
+        @if (editingEnabled()) {
         <button type="button" class="tl-wire-remove" [style.left.px]="namePaneWidth() + wire.midX" [style.top.px]="wire.midY" (click)="removeSelectedWire(); $event.stopPropagation()">
           <i class="ti ti-unlink" aria-hidden="true"></i>
           <span i18n="Button over a selected dependency wire on the timeline">Remove dependency</span>

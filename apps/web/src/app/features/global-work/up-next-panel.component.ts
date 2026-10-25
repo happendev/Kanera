@@ -52,6 +52,7 @@ export class UpNextPanelComponent {
   readonly boardSummariesById = input<Map<string, { id: string; name: string; icon: string | null; iconColor: string | null }>>(new Map());
   /** False while the page is not interaction-ready, or when the viewer may not curate this queue. */
   readonly canDrag = input(false);
+  readonly offlineMessage = input("");
   /** The queue owner's name when curating somebody else; null reads as "your own". */
   readonly targetName = input<string | null>(null);
   readonly maxEntries = input(50);

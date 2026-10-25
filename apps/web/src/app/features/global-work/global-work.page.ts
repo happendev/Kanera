@@ -86,7 +86,7 @@ import { timelineGroupByState } from "../board/timeline-view/timeline-preference
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
-import { formatDate, formatDateTime, formatTime } from "../../shared/date-format";
+import { formatDate, formatDateTime, formatTime, formatRelativeTime } from "../../shared/date-format";
 import { icu } from "../../core/i18n/icu";
 import { appLocale } from "../../core/i18n/locale";
 import { localDateKey } from "../../shared/day-key.util";
@@ -356,14 +356,15 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * drill-down lands. It has no calendar — the rollups are counts rather than dated cards, and the
    * drill-down already carries its own date filter, so a month grid added nothing.
    *
-   * A display stays enabled while it is the current one even when the page is not interaction-ready,
-   * so a reader on a cached copy can still see which display they are on.
+   * Cached cards and per-view snapshots remain browsable offline. Portfolio switches query
+   * different projections, so those stay gated.
    */
   readonly displayOptions = computed<SegmentedOption<WorkDisplayMode>[]>(() => {
     const current = this.effectiveDisplay();
     const busy = !this.state.interactionReady();
+    const canBrowseSaved = !this.state.loading() && this.state.lastSyncedAt() !== null;
     const option = (id: WorkDisplayMode, icon: string, label: string, shortLabel?: string): SegmentedOption<WorkDisplayMode> =>
-      ({ id, icon, label, shortLabel, disabled: busy && current !== id });
+      ({ id, icon, label, shortLabel, disabled: busy && current !== id && (!canBrowseSaved || this.lens() === "portfolio") });
     if (this.lens() === "portfolio") {
       return [
         option("summary", "chart-bar", $localize`:Display option:Summary view`, $localize`:Short display option:Summary`),
@@ -396,23 +397,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     // since the label describes a table the reader is no longer looking at.
     if (display === "summary") this.drilldownLabel.set(null);
   }
-  // History has no offline query, and the team's queues are deliberately not cached (a stale
-  // sequence reads as an instruction). The overview is built from both, so it falls back to the
-  // table over a cached snapshot. The dependency map reads its graph live, so it falls back too.
-  readonly effectiveDisplay = computed<WorkDisplayMode>(() =>
-    this.state.cachedAt() && ["history", "overview", "dependencies"].includes(this.state.definition().display)
-      ? "table"
-      : this.state.definition().display
-  );
-  readonly historyOfflineFallback = computed(() =>
-    this.state.cachedAt() !== null && this.state.definition().display === "history"
-  );
-  readonly overviewOfflineFallback = computed(() =>
-    this.state.cachedAt() !== null && this.state.definition().display === "overview"
-  );
-  readonly dependenciesOfflineFallback = computed(() =>
-    this.state.cachedAt() !== null && this.state.definition().display === "dependencies"
-  );
+  readonly effectiveDisplay = computed<WorkDisplayMode>(() => this.state.definition().display);
   /**
    * The dependency map's seeds: the lens's open loaded cards, after scope, search and filters. The
    * map walks out from them across boards, so a teammate's blocked card brings its blocker along
@@ -1815,14 +1800,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     return queue?.targetUserId === targetUserId ? queue : null;
   });
 
-  /**
-   * The whole feature is withheld on an offline snapshot: a stale sequence reads as an instruction,
-   * and someone following "do this first" from a cached queue can be reading last week's order with
-   * no way to tell. Rank pills and the panel disappear together, from this one gate.
-   */
+  /** Cached personal queues remain readable; interactionReady gates editing separately. */
   readonly upNextAvailable = computed(() =>
     this.currentPriorities() !== null
-    && this.state.cachedAt() === null
     && this.effectiveDisplay() !== "history"
     && this.effectiveDisplay() !== "summary"
     // The overview has no person in focus; its dock follows `overviewDockQueue` instead.
@@ -1921,7 +1901,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   );
   /** Every queue this viewer may read, self first. */
   readonly overviewQueues = computed(() =>
-    this.overviewDock() && this.state.cachedAt() === null ? this.state.teamPriorities()?.queues ?? [] : []
+    this.overviewDock() ? this.state.teamPriorities()?.queues ?? [] : []
   );
   /**
    * Whether the focused person's dock is showing. Separate from the focus so closing the dock (on a
@@ -1962,7 +1942,15 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   });
   readonly dockAddableCards = computed(() => this.overviewDock() ? this.overviewDockAddableCards() : this.upNextAddableCards());
   // Quick complete goes through the shell's own-queue service, which the overview's batch copy is not.
-  readonly dockAllowQuickComplete = computed(() => !this.overviewDock() && this.isSelfUpNextTarget());
+  readonly dockCanEdit = computed(() => this.state.interactionReady() && (this.overviewDock()
+    ? this.state.teamPrioritiesCachedAt() === null
+    : this.isSelfUpNextTarget() ? this.myPriorities.canEdit() : this.state.prioritiesCachedAt() === null));
+  readonly dockOfflineMessage = computed(() => {
+    if (!this.overviewDock() && this.isSelfUpNextTarget()) return this.myPriorities.offlineMessage();
+    const time = this.overviewDock() ? this.state.teamPrioritiesCachedAt() : this.state.prioritiesCachedAt();
+    return time ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(time)}:time:` : "";
+  });
+  readonly dockAllowQuickComplete = computed(() => this.state.interactionReady() && this.myPriorities.canEdit() && !this.overviewDock() && this.isSelfUpNextTarget());
 
   /** The person strip and avatars: show one person with their Up next docked, or everyone again. */
   setOverviewFocus(userId: string | null): void {
@@ -2113,6 +2101,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * where the pointer released it). Failures render inside the panel, where the gesture ended.
    */
   onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null }): void {
+    if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
     const { cardId, ...anchor } = event;
     const target = this.overviewDockQueue()?.target.userId;
@@ -2132,6 +2121,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly upNextDropTargets = computed<string[]>(() => this.upNextOpen() ? ["up-next-drop"] : []);
 
   onPriorityReordered(event: { priorityId: string; afterId?: string | null; beforeId?: string | null }): void {
+    if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
     const { priorityId, ...anchor } = event;
     const target = this.overviewDockQueue()?.target.userId;
@@ -2144,6 +2134,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   onPriorityRemoved(event: { priorityId: string }): void {
+    if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
     const target = this.overviewDockQueue()?.target.userId;
     const removed = this.overviewDock() && target

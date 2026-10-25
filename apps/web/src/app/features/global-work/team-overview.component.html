@@ -1,3 +1,9 @@
+@if (offlineMessage(); as message) {
+  <p class="overview-offline" role="status"><i class="ti ti-cloud-off"></i>{{ message }}</p>
+}
+@if (unownedError()) {
+  <p class="overview-error" i18n>We couldn’t load every card. Try refreshing the page.</p>
+}
 @if (activityError(); as message) {
   <p class="overview-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
 }
@@ -108,7 +114,7 @@
           class="person-open"
           [attr.aria-label]="openCardsLabel(item.person.displayName)"
           [kTooltip]="openCardsLabel(item.person.displayName)"
-          (click)="personFocused.emit(item.person.userId)"
+          [disabled]="!canNavigate()" (click)="personFocused.emit(item.person.userId)"
         >
           <i class="ti ti-arrow-up-right"></i>
         </button>
@@ -160,7 +166,7 @@
             <p class="section-empty">{{ drill.empty }}</p>
           }
           @if (drill.more) {
-            <button type="button" class="section-more is-link" (click)="personFocused.emit(item.person.userId)">
+            <button type="button" class="section-more is-link" [disabled]="!canNavigate()" (click)="personFocused.emit(item.person.userId)">
               <ng-container i18n>+{{ drill.more // i18n(ph="count") }} more — open their cards</ng-container>
             </button>
           }
@@ -342,7 +348,7 @@
       <ul class="quiet-list">
         @for (item of quietPeople(); track item.person.userId) {
           <li>
-            <button type="button" class="quiet-person" (click)="personFocused.emit(item.person.userId)">
+            <button type="button" class="quiet-person" [disabled]="!canNavigate()" (click)="personFocused.emit(item.person.userId)">
               <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="20" [userId]="item.person.userId" />
               <span>{{ item.person.displayName }}</span>
             </button>

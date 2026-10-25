@@ -3114,6 +3114,19 @@
       "src/app/core/priorities/my-priorities.service.ts"
     ]
   },
+  "7380438472091699995": "Offline copy from {$time}",
+  "@7380438472091699995": {
+    "description": "Toast; a relative time such as \"5 minutes ago\" follows",
+    "x-files": [
+      "src/app/core/priorities/my-priorities.service.ts",
+      "src/app/features/board/board.page.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.ts",
+      "src/app/features/board/work-done-view/work-done-view.component.ts",
+      "src/app/features/dependencies/dependency-map.component.ts",
+      "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
   "4082253113407591781": "Blue",
   "@4082253113407591781": {
     "description": "Accent colour option name",
@@ -9208,14 +9221,6 @@
     "description": "Board menu item",
     "x-files": [
       "src/app/features/board/board.page.ts"
-    ]
-  },
-  "7380438472091699995": "Offline copy from {$time}",
-  "@7380438472091699995": {
-    "description": "Toast; a relative time such as \"5 minutes ago\" follows",
-    "x-files": [
-      "src/app/features/board/board.page.ts",
-      "src/app/features/dependencies/dependency-map.component.ts"
     ]
   },
   "3756150389690952207": "{count, plural, one {# board member} other {# board members}}",
@@ -16622,27 +16627,6 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "6427325348186741511": "History will return after reconnecting.",
-  "@6427325348186741511": {
-    "description": "Offline banner",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "4662761733846597167": "The team overview will return after reconnecting.",
-  "@4662761733846597167": {
-    "description": "Offline banner",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "6610186532908963141": "The dependency map will return after reconnecting.",
-  "@6610186532908963141": {
-    "description": "Offline banner",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
   "7669586489275293002": "Connection lost. Showing the last loaded view from {$TIME}. Changes are paused.",
   "@7669586489275293002": {
     "description": "Offline banner",
@@ -16997,6 +16981,7 @@
     "description": "Tooltip, open the Up next panel",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/global-work/team-overview.component.ts",
       "src/app/features/shell/app-shell.component.ts"
     ]
   },
@@ -17175,7 +17160,8 @@
   "8341648913720161003": "We couldn’t load every card. Try refreshing the page.",
   "@8341648913720161003": {
     "x-files": [
-      "src/app/features/global-work/global-work.state.ts"
+      "src/app/features/global-work/global-work.state.ts",
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "3357377997379103082": "Share with",
@@ -18616,13 +18602,6 @@
   "6753902224067608847": "{VAR_PLURAL, plural, =1 {No cards completed in the last day.} other {No cards completed in the last {INTERPOLATION} days.}}",
   "@6753902224067608847": {
     "description": "Progress empty state",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "1918814134791824614": "Up next is hidden while you’re offline, so you never follow a stale order.",
-  "@1918814134791824614": {
-    "description": "Notice on the home page while offline",
     "x-files": [
       "src/app/features/home/home.page.html"
     ]
@@ -21721,18 +21700,6 @@
   },
   "1281926949859734022": "Due in the next 24 hours",
   "@1281926949859734022": {
-    "x-files": [
-      "src/app/features/priorities/my-priorities-panel.component.html"
-    ]
-  },
-  "4293614212085108628": "Up next unavailable",
-  "@4293614212085108628": {
-    "x-files": [
-      "src/app/features/priorities/my-priorities-panel.component.html"
-    ]
-  },
-  "3984709279158005733": "You’re offline. Up next is hidden until you reconnect, so you never follow a stale order.",
-  "@3984709279158005733": {
     "x-files": [
       "src/app/features/priorities/my-priorities-panel.component.html"
     ]

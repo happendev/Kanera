@@ -377,13 +377,14 @@ function setup(options: {
       GlobalWorkState,
       { provide: ApiClient, useValue: { get, post, createCard, delete: del } },
       { provide: AuthService, useValue: { user: user.asReadonly() } },
-      { provide: OfflineCacheService, useValue: { saveGlobalWork, loadGlobalWork } },
+      { provide: OfflineCacheService, useValue: { saveViewQuery: vi.fn(async () => undefined), loadViewQuery: vi.fn(async () => null), saveGlobalWork, loadGlobalWork, savePriorityQueue: vi.fn(async () => undefined), loadPriorityQueue: vi.fn(async () => null) } },
       {
         provide: SocketService,
         useValue: {
           connect: vi.fn(() => socket),
           joinBoard,
           joinWorkspace,
+          online: signal(true),
           displayedOnline: signal(true),
         },
       },
@@ -1505,7 +1506,7 @@ describe("GlobalWorkState priority queue", () => {
     state.setDisplay("overview");
     await vi.waitFor(() => expect(state.reconciling()).toBe(false));
     await vi.waitFor(() => expect(batchGets()).toHaveLength(1));
-    expect(state.teamPriorities()?.queues.map((lane) => lane.target.userId)).toEqual([VIEWER_ID, TEAMMATE_ID]);
+    await vi.waitFor(() => expect(state.teamPriorities()?.queues.map((lane) => lane.target.userId)).toEqual([VIEWER_ID, TEAMMATE_ID]));
 
     socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: TEAMMATE_ID });
     await vi.waitFor(() => expect(batchGets()).toHaveLength(2));
