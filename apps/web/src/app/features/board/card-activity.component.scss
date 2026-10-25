@@ -487,12 +487,16 @@ button.xs {
 }
 
 // Sentence on the left, relative time pinned to the right edge on the same first line. The time
-// keeps its column across rows, so a scan down the right edge reads as a timeline.
+// keeps its column across rows, so a scan down the right edge reads as a timeline. The top padding
+// centres the first line on the 32px avatar, so one-line entries sit level with it instead of
+// hugging its top edge; longer sentences wrap downward from there.
 .activity-head {
   display: flex;
   align-items: baseline;
   gap: 10px;
   min-width: 0;
+  font-size: var(--text-base);
+  padding-top: calc((32px - 1.45em) / 2);
 }
 
 .activity-text {
