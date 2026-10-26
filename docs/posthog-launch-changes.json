@@ -1,0 +1,937 @@
+[
+  {
+    "id": "npvBfRpW",
+    "before": {
+      "name": "Visit to interaction funnel",
+      "description": "Of people who land on a page, how many go on to interact. Replace these steps with your own events to track real conversions.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "name": "$pageview",
+              "event": "$pageview",
+              "custom_name": "Viewed a page"
+            },
+            {
+              "kind": "EventsNode",
+              "name": "$autocapture",
+              "event": "$autocapture",
+              "custom_name": "Clicked something"
+            }
+          ],
+          "version": 2,
+          "interval": "day",
+          "dateRange": {
+            "date_from": "-7d",
+            "explicitDate": false
+          },
+          "properties": [],
+          "funnelsFilter": {
+            "layout": "horizontal",
+            "exclusions": [],
+            "funnelVizType": "steps",
+            "funnelOrderType": "ordered",
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 14,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day"
+          },
+          "breakdownFilter": {
+            "breakdown_type": "event"
+          },
+          "filterTestAccounts": false
+        }
+      },
+      "dashboards": [
+        836835
+      ]
+    },
+    "after": {
+      "id": "npvBfRpW",
+      "name": "Website visit → signup intent",
+      "description": "Consented website visitors progressing to registration_started within 14 days. Uses explicit events; automatic click capture is disabled. Internal/test people excluded.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "name": "$pageview",
+              "event": "$pageview",
+              "custom_name": "Viewed a page",
+              "properties": [
+                {
+                  "key": "page_category",
+                  "type": "event",
+                  "operator": "exact",
+                  "value": [
+                    "marketing",
+                    "docs"
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "EventsNode",
+              "event": "registration_started",
+              "name": "registration_started"
+            }
+          ],
+          "version": 2,
+          "interval": "day",
+          "dateRange": {
+            "date_from": "-7d",
+            "explicitDate": false
+          },
+          "properties": [],
+          "funnelsFilter": {
+            "layout": "horizontal",
+            "exclusions": [],
+            "funnelVizType": "steps",
+            "funnelOrderType": "ordered",
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 14,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day"
+          },
+          "breakdownFilter": {
+            "breakdown_type": "event"
+          },
+          "filterTestAccounts": true
+        }
+      }
+    }
+  },
+  {
+    "id": "GmIBvptO",
+    "before": {
+      "name": "Trial → subscription conversion (+ trial_converted check)",
+      "description": "Organization-level funnel from trial activation to subscription. trial_converted included as an intermediate validation step. Server-side events. Sequence: trial_activated → trial_converted → subscription_started, aggregation: unique organizations, window: 30 days.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "event": "trial_activated",
+              "optionalInFunnel": false
+            },
+            {
+              "kind": "EventsNode",
+              "event": "trial_converted",
+              "optionalInFunnel": false
+            },
+            {
+              "kind": "EventsNode",
+              "event": "subscription_started",
+              "optionalInFunnel": false
+            }
+          ],
+          "version": 2,
+          "dateRange": {
+            "date_from": "-90d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "funnelsFilter": {
+            "layout": "horizontal",
+            "exclusions": [],
+            "showLegend": false,
+            "funnelVizType": "steps",
+            "legendPosition": "bottom",
+            "funnelOrderType": "ordered",
+            "showAnnotations": true,
+            "showValuesOnSeries": false,
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 30,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day",
+            "hideIncompleteConversionWindowPeriods": false
+          },
+          "filterTestAccounts": true,
+          "aggregation_group_type_index": 0
+        }
+      },
+      "dashboards": [
+        878005
+      ]
+    },
+    "after": {
+      "id": "GmIBvptO",
+      "name": "Trial → subscription conversion",
+      "description": "Unique organisations progressing from trial_activated to subscription_started within 30 days. trial_converted is a companion event emitted after subscription_started, not a prerequisite. Historical personless events lack group indexing.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "event": "trial_activated",
+              "optionalInFunnel": false
+            },
+            {
+              "kind": "EventsNode",
+              "event": "subscription_started",
+              "optionalInFunnel": false
+            }
+          ],
+          "version": 2,
+          "dateRange": {
+            "date_from": "-90d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "funnelsFilter": {
+            "layout": "horizontal",
+            "exclusions": [],
+            "showLegend": false,
+            "funnelVizType": "steps",
+            "legendPosition": "bottom",
+            "funnelOrderType": "ordered",
+            "showAnnotations": true,
+            "showValuesOnSeries": false,
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 30,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day",
+            "hideIncompleteConversionWindowPeriods": false
+          },
+          "filterTestAccounts": true,
+          "aggregation_group_type_index": 0
+        }
+      }
+    }
+  },
+  {
+    "id": "OQP9d8We",
+    "before": {
+      "name": "Commercial conversion funnel",
+      "description": "Conversion from trial start through to paid subscription, with cancellation as a final step for churn visibility.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "event": "trial_started",
+              "optionalInFunnel": false
+            },
+            {
+              "kind": "EventsNode",
+              "event": "subscription_started",
+              "optionalInFunnel": false
+            },
+            {
+              "kind": "EventsNode",
+              "event": "subscription_cancelled",
+              "optionalInFunnel": false
+            }
+          ],
+          "version": 2,
+          "dateRange": {
+            "date_from": "-30d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "funnelsFilter": {
+            "layout": "vertical",
+            "exclusions": [],
+            "showLegend": false,
+            "funnelVizType": "steps",
+            "legendPosition": "bottom",
+            "funnelOrderType": "ordered",
+            "showAnnotations": true,
+            "showValuesOnSeries": false,
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 14,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day",
+            "hideIncompleteConversionWindowPeriods": false
+          },
+          "filterTestAccounts": true
+        }
+      },
+      "dashboards": [
+        836835
+      ]
+    },
+    "after": {
+      "id": "OQP9d8We",
+      "name": "Trial → paid organisation conversion",
+      "description": "Unique organisations progressing from trial_activated to subscription_started within 14 days. Cancellation is measured separately. Historical personless server events lack group indexing.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "event": "trial_activated"
+            },
+            {
+              "kind": "EventsNode",
+              "event": "subscription_started"
+            }
+          ],
+          "version": 2,
+          "dateRange": {
+            "date_from": "-30d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "funnelsFilter": {
+            "layout": "vertical",
+            "exclusions": [],
+            "showLegend": false,
+            "funnelVizType": "steps",
+            "legendPosition": "bottom",
+            "funnelOrderType": "ordered",
+            "showAnnotations": true,
+            "showValuesOnSeries": false,
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 14,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day",
+            "hideIncompleteConversionWindowPeriods": false
+          },
+          "filterTestAccounts": true,
+          "aggregation_group_type_index": 0
+        }
+      }
+    }
+  },
+  {
+    "id": "SXuYoh0Z",
+    "before": {
+      "name": "Pricing viewed → checkout started",
+      "description": "How many organizations that viewed pricing went on to start checkout. Server-side events. Sequence: pricing_viewed_in_app → checkout_started, aggregation: unique organizations, window: 30 days, breakdown: premium_feature (first touch), caveat: checkout_started is canonical – exclude subscription_checkout_created alias.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "event": "pricing_viewed_in_app",
+              "optionalInFunnel": false
+            },
+            {
+              "kind": "EventsNode",
+              "event": "checkout_started",
+              "optionalInFunnel": false
+            }
+          ],
+          "version": 2,
+          "interval": "day",
+          "dateRange": {
+            "date_from": "-90d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "funnelsFilter": {
+            "layout": "horizontal",
+            "exclusions": [],
+            "showLegend": false,
+            "funnelVizType": "steps",
+            "legendPosition": "bottom",
+            "funnelOrderType": "ordered",
+            "showAnnotations": true,
+            "showValuesOnSeries": false,
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 30,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day",
+            "hideIncompleteConversionWindowPeriods": false
+          },
+          "breakdownFilter": {
+            "breakdown": "premium_feature",
+            "breakdown_type": "event",
+            "breakdown_limit": 25
+          },
+          "filterTestAccounts": true,
+          "aggregation_group_type_index": 0
+        }
+      },
+      "dashboards": [
+        878006
+      ]
+    },
+    "after": {
+      "id": "SXuYoh0Z",
+      "name": "Pricing viewed → checkout started",
+      "description": "Unique organisations progressing from pricing_viewed_in_app to checkout_started within 30 days, split by upgrade_source on the first step. Internal/test people excluded.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "event": "pricing_viewed_in_app",
+              "optionalInFunnel": false
+            },
+            {
+              "kind": "EventsNode",
+              "event": "checkout_started",
+              "optionalInFunnel": false
+            }
+          ],
+          "version": 2,
+          "interval": "day",
+          "dateRange": {
+            "date_from": "-90d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "funnelsFilter": {
+            "layout": "horizontal",
+            "exclusions": [],
+            "showLegend": false,
+            "funnelVizType": "steps",
+            "legendPosition": "bottom",
+            "funnelOrderType": "ordered",
+            "showAnnotations": true,
+            "showValuesOnSeries": false,
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 30,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day",
+            "hideIncompleteConversionWindowPeriods": false
+          },
+          "breakdownFilter": {
+            "breakdown": "upgrade_source",
+            "breakdown_type": "event",
+            "breakdown_limit": 25
+          },
+          "filterTestAccounts": true,
+          "aggregation_group_type_index": 0
+        }
+      }
+    }
+  },
+  {
+    "id": "T2bhAdQm",
+    "before": {
+      "name": "card_created by creation source",
+      "description": "Total cards created broken down by creation_source each week. Server-side event. Sequence: card_created, aggregation: total count, breakdown: creation_source, window: 14 days, caveat: event_version = 1; templates and mirror copies excluded upstream.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "TrendsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "math": "total",
+              "event": "card_created",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": 1,
+                  "operator": "exact"
+                }
+              ]
+            }
+          ],
+          "version": 4,
+          "interval": "day",
+          "dateRange": {
+            "date_from": "-14d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "trendsFilter": {
+            "display": "ActionsBarValue",
+            "showLegend": true,
+            "hideWeekends": false,
+            "metricSummary": "total",
+            "legendPosition": "bottom",
+            "yAxisScaleType": "linear",
+            "showAnnotations": true,
+            "metricShowChange": true,
+            "showMultipleYAxes": false,
+            "showLabelsOnSeries": false,
+            "showValuesOnSeries": false,
+            "smoothingIntervals": 1,
+            "showPercentStackView": false,
+            "stackBreakdownValues": false,
+            "aggregationAxisFormat": "numeric",
+            "resultCustomizationBy": "value",
+            "excludeBoxPlotOutliers": true,
+            "metricColorByDirection": false,
+            "showAlertThresholdLines": false
+          },
+          "breakdownFilter": {
+            "breakdowns": [
+              {
+                "type": "event",
+                "property": "creation_source"
+              }
+            ],
+            "breakdown_type": "event",
+            "breakdown_limit": 10
+          },
+          "filterTestAccounts": true
+        }
+      },
+      "dashboards": [
+        878003
+      ]
+    },
+    "after": {
+      "id": "T2bhAdQm",
+      "name": "Meaningful work by acquisition source",
+      "description": "Unique organisations reaching meaningful_work_created, split by durable acquisition_source. Measures the workspace activation milestone; individual card creation is deliberately not captured. Campaign attribution begins after the acquisition fix is deployed.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "TrendsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "math": "unique_group",
+              "event": "meaningful_work_created",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": 1,
+                  "operator": "exact"
+                }
+              ],
+              "math_group_type_index": 0
+            }
+          ],
+          "version": 4,
+          "interval": "day",
+          "dateRange": {
+            "date_from": "-14d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "trendsFilter": {
+            "display": "ActionsBarValue",
+            "showLegend": true,
+            "hideWeekends": false,
+            "metricSummary": "total",
+            "legendPosition": "bottom",
+            "yAxisScaleType": "linear",
+            "showAnnotations": true,
+            "metricShowChange": true,
+            "showMultipleYAxes": false,
+            "showLabelsOnSeries": false,
+            "showValuesOnSeries": false,
+            "smoothingIntervals": 1,
+            "showPercentStackView": false,
+            "stackBreakdownValues": false,
+            "aggregationAxisFormat": "numeric",
+            "resultCustomizationBy": "value",
+            "excludeBoxPlotOutliers": true,
+            "metricColorByDirection": false,
+            "showAlertThresholdLines": false
+          },
+          "breakdownFilter": {
+            "breakdown": "acquisition_source",
+            "breakdown_type": "event",
+            "breakdown_limit": 10
+          },
+          "filterTestAccounts": true
+        }
+      }
+    }
+  },
+  {
+    "id": "MecBRlAG",
+    "before": {
+      "name": "Meaningful-work rate (%)",
+      "description": "Percentage of registered organizations that reached meaningful_work_created each week. Sequence: meaningful_work_created / registration_completed × 100, aggregation: unique organizations, window: 14 days, caveat: fires once per workspace after 3 real cards; templates and mirror copies excluded.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "TrendsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "math": "unique_group",
+              "event": "meaningful_work_created",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": 1,
+                  "operator": "exact"
+                }
+              ],
+              "custom_name": "Meaningful work",
+              "math_group_type_index": 0
+            },
+            {
+              "kind": "EventsNode",
+              "math": "unique_group",
+              "event": "registration_completed",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": 1,
+                  "operator": "exact"
+                }
+              ],
+              "custom_name": "Registrations",
+              "math_group_type_index": 0
+            }
+          ],
+          "version": 4,
+          "interval": "week",
+          "dateRange": {
+            "date_from": "-90d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "trendsFilter": {
+            "display": "ActionsLineGraph",
+            "showLegend": true,
+            "formulaNodes": [
+              {
+                "formula": "A/B"
+              }
+            ],
+            "hideWeekends": false,
+            "metricSummary": "total",
+            "legendPosition": "bottom",
+            "yAxisScaleType": "linear",
+            "showAnnotations": true,
+            "metricShowChange": true,
+            "showMultipleYAxes": false,
+            "showLabelsOnSeries": false,
+            "showValuesOnSeries": false,
+            "smoothingIntervals": 1,
+            "showPercentStackView": false,
+            "stackBreakdownValues": false,
+            "aggregationAxisFormat": "percentage_scaled",
+            "resultCustomizationBy": "value",
+            "excludeBoxPlotOutliers": true,
+            "metricColorByDirection": false,
+            "showAlertThresholdLines": false
+          },
+          "filterTestAccounts": true
+        }
+      },
+      "dashboards": [
+        878003
+      ]
+    },
+    "after": {
+      "id": "MecBRlAG",
+      "name": "Signup → meaningful work conversion (14 days)",
+      "description": "Cohort conversion: the same unique organisations must progress from registration_completed to meaningful_work_created within 14 days. Replaces an unrelated period-count ratio. Historical personless events lack group indexing.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "event": "registration_completed",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": 1,
+                  "operator": "exact"
+                }
+              ],
+              "optionalInFunnel": false
+            },
+            {
+              "kind": "EventsNode",
+              "event": "meaningful_work_created",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": 1,
+                  "operator": "exact"
+                }
+              ],
+              "optionalInFunnel": false
+            }
+          ],
+          "version": 2,
+          "dateRange": {
+            "date_from": "-90d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "funnelsFilter": {
+            "layout": "horizontal",
+            "exclusions": [],
+            "showLegend": false,
+            "funnelVizType": "steps",
+            "legendPosition": "bottom",
+            "funnelOrderType": "ordered",
+            "showAnnotations": true,
+            "showValuesOnSeries": false,
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 14,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day",
+            "hideIncompleteConversionWindowPeriods": false
+          },
+          "filterTestAccounts": true,
+          "aggregation_group_type_index": 0
+        }
+      }
+    }
+  },
+  {
+    "id": "ZU9ROIdx",
+    "before": {
+      "name": "Workspace creation rate (%)",
+      "description": "Percentage of registered organizations that created a workspace each week. Sequence: workspace_created / registration_completed × 100, aggregation: unique organizations, window: 14 days, caveat: event_version = 1.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "TrendsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "math": "unique_group",
+              "event": "workspace_created",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": 1,
+                  "operator": "exact"
+                }
+              ],
+              "custom_name": "Workspaces created",
+              "math_group_type_index": 0
+            },
+            {
+              "kind": "EventsNode",
+              "math": "unique_group",
+              "event": "registration_completed",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": 1,
+                  "operator": "exact"
+                }
+              ],
+              "custom_name": "Registrations",
+              "math_group_type_index": 0
+            }
+          ],
+          "version": 4,
+          "interval": "week",
+          "dateRange": {
+            "date_from": "-90d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "trendsFilter": {
+            "display": "ActionsLineGraph",
+            "showLegend": true,
+            "formulaNodes": [
+              {
+                "formula": "A/B"
+              }
+            ],
+            "hideWeekends": false,
+            "metricSummary": "total",
+            "legendPosition": "bottom",
+            "yAxisScaleType": "linear",
+            "showAnnotations": true,
+            "metricShowChange": true,
+            "showMultipleYAxes": false,
+            "showLabelsOnSeries": false,
+            "showValuesOnSeries": false,
+            "smoothingIntervals": 1,
+            "showPercentStackView": false,
+            "stackBreakdownValues": false,
+            "aggregationAxisFormat": "percentage_scaled",
+            "resultCustomizationBy": "value",
+            "excludeBoxPlotOutliers": true,
+            "metricColorByDirection": false,
+            "showAlertThresholdLines": false
+          },
+          "filterTestAccounts": true
+        }
+      },
+      "dashboards": [
+        878003
+      ]
+    },
+    "after": {
+      "id": "ZU9ROIdx",
+      "name": "Signup → workspace conversion (14 days)",
+      "description": "Cohort conversion: the same unique organisations must progress from registration_completed to workspace_created within 14 days. Replaces an unrelated period-count ratio. Historical personless events lack group indexing.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "event": "registration_completed",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": 1,
+                  "operator": "exact"
+                }
+              ],
+              "optionalInFunnel": false
+            },
+            {
+              "kind": "EventsNode",
+              "event": "workspace_created",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": 1,
+                  "operator": "exact"
+                }
+              ],
+              "optionalInFunnel": false
+            }
+          ],
+          "version": 2,
+          "dateRange": {
+            "date_from": "-90d",
+            "explicitDate": false,
+            "excludeIncompletePeriods": false
+          },
+          "properties": [],
+          "funnelsFilter": {
+            "layout": "horizontal",
+            "exclusions": [],
+            "showLegend": false,
+            "funnelVizType": "steps",
+            "legendPosition": "bottom",
+            "funnelOrderType": "ordered",
+            "showAnnotations": true,
+            "showValuesOnSeries": false,
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 14,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day",
+            "hideIncompleteConversionWindowPeriods": false
+          },
+          "filterTestAccounts": true,
+          "aggregation_group_type_index": 0
+        }
+      }
+    }
+  },
+  {
+    "id": "zBVyHpwI",
+    "before": {
+      "name": "Top referrers",
+      "description": "Which sites send you the most visitors, like search, social, and direct. Your acquisition channels at a glance.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "TrendsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "math": "dau",
+              "name": "$pageview",
+              "event": "$pageview"
+            }
+          ],
+          "version": 4,
+          "interval": "day",
+          "dateRange": {
+            "date_from": "-7d",
+            "explicitDate": false
+          },
+          "properties": [],
+          "trendsFilter": {
+            "display": "ActionsBarValue",
+            "showLegend": false,
+            "yAxisScaleType": "linear",
+            "showValuesOnSeries": false,
+            "smoothingIntervals": 1,
+            "showPercentStackView": false,
+            "aggregationAxisFormat": "numeric",
+            "showAlertThresholdLines": false
+          },
+          "breakdownFilter": {
+            "breakdown": "$referring_domain",
+            "breakdown_type": "event"
+          },
+          "filterTestAccounts": false
+        }
+      },
+      "dashboards": [
+        836835
+      ]
+    },
+    "after": {
+      "id": "zBVyHpwI",
+      "name": "Top referring domains",
+      "description": "Unique consented website visitors by the referring_domain captured on pageview. Uses the explicit field present on historical and new events. Internal/test people excluded.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "TrendsQuery",
+          "series": [
+            {
+              "kind": "EventsNode",
+              "math": "dau",
+              "name": "$pageview",
+              "event": "$pageview"
+            }
+          ],
+          "version": 4,
+          "interval": "day",
+          "dateRange": {
+            "date_from": "-7d",
+            "explicitDate": false
+          },
+          "properties": [],
+          "trendsFilter": {
+            "display": "ActionsBarValue",
+            "showLegend": false,
+            "yAxisScaleType": "linear",
+            "showValuesOnSeries": false,
+            "smoothingIntervals": 1,
+            "showPercentStackView": false,
+            "aggregationAxisFormat": "numeric",
+            "showAlertThresholdLines": false
+          },
+          "breakdownFilter": {
+            "breakdown": "referring_domain",
+            "breakdown_type": "event"
+          },
+          "filterTestAccounts": true
+        }
+      }
+    }
+  }
+]

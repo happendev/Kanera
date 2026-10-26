@@ -39,6 +39,7 @@
     "test:cli": "pnpm --filter @kanera/cli test",
     "test:sdk": "pnpm --filter @kanera/sdk test",
     "test:e2e": "bash scripts/test-e2e.sh",
+    "test:analytics": "playwright test --config e2e/playwright.analytics.config.ts",
     "test:mcp:integration": "bash scripts/test-mcp-integration.sh",
     "test:api:integration": "bash scripts/test-api-integration.sh",
     "db:generate": "pnpm --filter @kanera/api db:generate",

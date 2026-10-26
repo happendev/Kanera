@@ -84,7 +84,7 @@ export class AnalyticsService {
     if (granted) {
       if (this.instance) {
         if (!this.policySuppressed) {
-          try { this.instance.opt_in_capturing(); } catch { /* Non-fatal. */ }
+          try { this.instance.opt_in_capturing({ captureEventName: false }); } catch { /* Non-fatal. */ }
         }
         this._ready.set(true);
       } else if (this.runtimeConfig) {
@@ -118,8 +118,9 @@ export class AnalyticsService {
         ...POSTHOG_PRIVACY_CONFIG,
         api_host: config.apiHost,
         loaded: (instance) => {
+          instance.register({ $geoip_disable: true });
           if (this.policySuppressed || !this.consentGranted) instance.opt_out_capturing();
-          else instance.opt_in_capturing();
+          else (instance as PostHog).opt_in_capturing({ captureEventName: false });
         },
       });
     } catch {
@@ -193,7 +194,7 @@ export class AnalyticsService {
       try { this.instance?.opt_out_capturing(); } catch { /* Non-fatal. */ }
     } else {
       if (this.consentGranted) {
-        try { this.instance?.opt_in_capturing(); } catch { /* Non-fatal. */ }
+        try { this.instance?.opt_in_capturing({ captureEventName: false }); } catch { /* Non-fatal. */ }
       }
       this.reset();
     }

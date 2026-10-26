@@ -65,6 +65,8 @@ threshold use fast deflate (level 1) without server context takeover. These sett
 hosted and self-hosted deployments. Existing deployments explicitly set to `true` remain opted in;
 change that setting to `false` and recreate the API containers to adopt the new default.
 
+Compose forwards the analytics configuration to the app API, public API and worker. Recreate all three services after changing it. Consented first-touch acquisition is stored privately in `user_acquisition`; only allow-listed campaign dimensions, never advertising click IDs, accompany PostHog events. Apply migrations before deploying the API.
+
 Product analytics remains disabled for ordinary self-hosted Dokploy installations. A
 Kanera-operated hosted deployment may opt in with the four `ANALYTICS_*`/`POSTHOG_*` variables
 documented in `DEPLOY.md`; use separate PostHog EU projects for staging and production. Browser and

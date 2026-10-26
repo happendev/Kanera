@@ -12,6 +12,7 @@ import {
   refreshTokens,
   supportSessions,
   users,
+  userAcquisitions,
   workspaceMembers,
   workspaces,
   mfaCredentials,
@@ -549,6 +550,14 @@ export async function authRoutes(app: FastifyInstance) {
             locale: body.locale ?? null,
           })
           .returning();
+
+        const attribution = body.analyticsAttribution;
+        // Only consent-stamped hosted acquisition is durable. Legacy/no-consent signups still
+        // work, and a member's private attribution never overwrites the organisation creator's.
+        if (env.KANERA_DEPLOYMENT_MODE === "hosted" && attribution?.consent_version === 1
+          && attribution.consented_at && attribution.captured_at) {
+          await tx.insert(userAcquisitions).values({ userId: user!.id, attribution });
+        }
 
         await tx.insert(clientMembers).values({
           clientId,

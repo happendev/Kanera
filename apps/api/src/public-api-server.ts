@@ -18,6 +18,7 @@ import authPlugin from "./auth/plugin.js";
 import { db } from "./db.js";
 import { getPublicOpenApiDocument, publicWebhookEventTypes } from "./docs/public-openapi.js";
 import { env } from "./env.js";
+import { productAnalytics } from "./lib/product-analytics.js";
 import { clientIpForRequest } from "./lib/client-ip.js";
 import { registerErrorHandler } from "./lib/errors.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
@@ -309,6 +310,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   const uploadsRoot = resolveLocalUploadsRoot(options.uploadsDir ?? env.UPLOADS_DIR);
   await mkdir(uploadsRoot, { recursive: true });
 
+  app.addHook("onClose", async () => productAnalytics.shutdown());
   app.addHook("onClose", async () => rateLimiter?.close());
   app.get("/health", async () => ({ ok: true, service: "public-api" }));
   // Token-gated inside registerMetrics: this server is the internet-facing one, so /metrics must not be

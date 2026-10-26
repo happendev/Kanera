@@ -12,6 +12,7 @@ import { LogoComponent } from "../../shared/logo.component";
 import { LocaleSwitcherComponent } from "./locale-switcher.component";
 import { ThemePickerComponent } from "../../shared/theme-picker.component";
 import { ThemeService, type Theme } from "../../core/theme/theme.service";
+import { signupAcquisition } from "../../core/analytics/signup-attribution";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 
 // Pre-filled for a brand-new organisation; the person can rename it here or later in settings.
@@ -35,24 +36,6 @@ type KaneraEnvironment = "development" | "test" | "staging" | "production";
 type DeploymentMode = "self_hosted" | "hosted";
 const ANALYTICS_EVENT_VERSION = 1;
 
-function analyticsCookie(name: string): string | null {
-  const prefix = `${name}=`;
-  const raw = document.cookie.split(";").map((entry) => entry.trim()).find((entry) => entry.startsWith(prefix));
-  if (!raw) return null;
-  try { return decodeURIComponent(raw.slice(prefix.length)); } catch { return null; }
-}
-
-function signupAcquisition() {
-  const url = new URL(window.location.href);
-  let referrer: string | null = null;
-  try { referrer = document.referrer ? new URL(document.referrer).hostname : null; } catch { /* Invalid referrers are treated as direct. */ }
-  return {
-    source: analyticsCookie("kanera_analytics_source") || url.searchParams.get("utm_source")?.trim().slice(0, 120) || referrer || "direct",
-    medium: analyticsCookie("kanera_analytics_medium") || url.searchParams.get("utm_medium")?.trim().slice(0, 120) || (referrer ? "referral" : "none"),
-    campaign: analyticsCookie("kanera_analytics_campaign") || url.searchParams.get("utm_campaign")?.trim().slice(0, 120) || "none",
-    landing_page: analyticsCookie("kanera_analytics_landing_page") || url.pathname,
-  };
-}
 
 @Component({
   selector: "k-signup",
@@ -241,10 +224,15 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
         if (!marketingAlreadyTracked) {
           const acquisition = signupAcquisition();
           const anonymousId = this.analytics.anonymousId();
-          if (anonymousId) {
+          if (anonymousId && acquisition) {
             this.analytics.track("registration_started", {
               anonymous_id: anonymousId,
-              ...acquisition,
+              source: acquisition.source,
+              medium: acquisition.medium,
+              campaign: acquisition.campaign,
+              landing_page: acquisition.landing_page ?? "/signup",
+              content: acquisition.content,
+              term: acquisition.term,
               event_version: ANALYTICS_EVENT_VERSION,
             });
           }
@@ -331,11 +319,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
       ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
       ...(this.inviteToken() ? { inviteToken: this.inviteToken() } : {}),
       ...(this.boardInviteToken() ? { boardInviteToken: this.boardInviteToken() } : {}),
-      analyticsAttribution: {
-        source: acquisition.source,
-        medium: acquisition.medium,
-        campaign: acquisition.campaign,
-      },
+      analyticsAttribution: acquisition,
     });
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => null);
