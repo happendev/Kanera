@@ -24,6 +24,8 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
+- **OAuth setup:** malformed authorization and client-registration requests return validation errors instead of internal server errors.
+
 - **Scratchpad:** text you were editing could be replaced by an older copy and the cursor thrown to the end of the page when the scratchpad reloaded in the background (switching back to the tab, or the connection dropping and returning), especially on slow connections or on pages with images.
 
 - **Notifications:** deleting a comment now removes the comment, mention and reaction notifications it produced, instead of leaving an empty "commented" entry in people's inboxes.
