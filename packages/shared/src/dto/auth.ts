@@ -33,12 +33,23 @@ export const signupBody = z.object({
   boardInviteToken: z.string().min(1).optional(),
   // The language the signup form was shown in, stored so the first emails already arrive in it.
   locale: z.enum(LOCALES).optional(),
-  // Acquisition values are allow-listed, bounded marketing categories used only for the
-  // registration_completed event. They are never copied into account or organisation models.
+  // Consent-stamped first-touch attribution is stored privately, outside public account DTOs.
+  // Legacy callers may still send the original three fields without requesting persistence.
   analyticsAttribution: z.object({
     source: z.string().trim().min(1).max(120),
     medium: z.string().trim().min(1).max(120),
     campaign: z.string().trim().min(1).max(120),
+    content: z.string().trim().min(1).max(120).optional(),
+    term: z.string().trim().min(1).max(120).optional(),
+    landing_page: z.string().max(256).regex(/^\/[^?#]*$/).optional(),
+    referring_domain: z.string().max(253).regex(/^[a-zA-Z0-9.-]+$/).optional(),
+    captured_at: z.iso.datetime().optional(),
+    consented_at: z.iso.datetime().optional(),
+    consent_version: z.literal(1).optional(),
+    fbclid: z.string().trim().min(1).max(1024).optional(),
+    gclid: z.string().trim().min(1).max(1024).optional(),
+    li_fat_id: z.string().trim().min(1).max(1024).optional(),
+    msclkid: z.string().trim().min(1).max(1024).optional(),
   }).optional(),
   // Optional at the contract level so tests and self-hosted installs
   // configured keep working; the API requires it when Turnstile is enabled.

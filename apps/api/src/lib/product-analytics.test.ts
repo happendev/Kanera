@@ -4,6 +4,7 @@ import "../test/setup.js";
 import { env } from "../env.js";
 import {
   ANALYTICS_EVENT_VERSION,
+  acquisitionEventProperties,
   analyticsCountBand,
   analyticsDaysSince,
   analyticsPlanCode,
@@ -113,4 +114,19 @@ void test("analytics categories are stable at their boundaries", () => {
   assert.deepEqual([0, 1, 2, 3, 4, 10, 11].map(analyticsCountBand), ["0", "1", "2_3", "2_3", "4_10", "4_10", "11_plus"]);
   assert.deepEqual([0, 1, 2, 4, 5, 10, 11].map(seatBand), ["1", "1", "2_4", "2_4", "5_10", "5_10", "over_10"]);
   assert.equal(analyticsDaysSince(new Date("2026-07-01T12:00:00Z"), new Date("2026-07-03T11:59:59Z")), 1);
+});
+
+// Browser E2E cannot inspect private server payloads before ingestion. Protect this boundary
+// against leaking click identifiers while retaining the approved campaign dimensions.
+void test("durable acquisition sends only campaign dimensions to PostHog", () => {
+  assert.deepEqual(acquisitionEventProperties({
+    source: "google", medium: "cpc", campaign: "launch", content: "video-a", term: "kanban",
+    landing_page: "/pricing", gclid: "private-click", fbclid: "private-meta-click",
+    captured_at: "2026-10-26T10:00:00.000Z", consented_at: "2026-10-26T10:00:00.000Z", consent_version: 1,
+  }), {
+    acquisition_source: "google", acquisition_medium: "cpc", acquisition_campaign: "launch",
+    acquisition_content: "video-a", acquisition_term: "kanban", acquisition_landing_page: "/pricing",
+    utm_source: "google", utm_medium: "cpc", utm_campaign: "launch", utm_content: "video-a", utm_term: "kanban",
+  });
+  assert.deepEqual(acquisitionEventProperties(null), {});
 });

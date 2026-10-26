@@ -123,3 +123,8 @@ Timeline planning regressions (`timeline.spec.ts`): filtered blockers retain con
   accepting any nonzero seeded count.
 - Pagination's single-edit retention check remains distinct from the 201-card burst/coalescing
   budget: one verifies retained identities and rendered rows; the other also limits query count/size.
+
+- `analytics/attribution.browser.ts` (separate `playwright.analytics.config.ts`): prevents app bootstrap
+  from resetting a consented marketing visitor ID; verifies first-touch campaign/click IDs reach
+  only the signup API and rejection excludes attribution. The identity assertion was verified to
+  fail with the previous unconditional reset restored, then pass with the fix.

@@ -1,0 +1,91 @@
+{
+  "project_id": 227651,
+  "checked_at": "2026-10-26",
+  "test_account_filters_default_checked": true,
+  "autocapture_opt_out": true,
+  "autocapture_exceptions_opt_in": false,
+  "autocapture_web_vitals_opt_in": false,
+  "capture_console_log_opt_in": false,
+  "capture_performance_opt_in": false,
+  "session_recording_opt_in": false,
+  "surveys_opt_in": false,
+  "heatmaps_opt_in": false,
+  "revenue_analytics_config": {
+    "base_currency": "USD",
+    "events": [
+      {
+        "couponProperty": null,
+        "currencyAwareDecimal": true,
+        "eventName": "subscription_payment_succeeded",
+        "productProperty": "plan_code",
+        "revenueCurrencyProperty": {
+          "property": "currency",
+          "static": null
+        },
+        "revenueProperty": "revenue",
+        "subscriptionDropoffDays": 45,
+        "subscriptionDropoffMode": "last_event",
+        "subscriptionProperty": null
+      }
+    ],
+    "filter_test_accounts": true
+  },
+  "marketing_analytics_config": {
+    "sources_map": {},
+    "conversion_goals": [
+      {
+        "kind": "EventsNode",
+        "math": "dau",
+        "name": "registration_completed",
+        "event": "registration_completed",
+        "properties": [],
+        "schema_map": {
+          "timestamp_field": "timestamp",
+          "utm_source_name": "utm_source",
+          "distinct_id_field": "distinct_id",
+          "utm_campaign_name": "utm_campaign"
+        },
+        "conversion_goal_id": "e64dac4d-db7b-4aee-a230-6e71723a1a62",
+        "conversion_goal_name": "Completed signup"
+      },
+      {
+        "kind": "EventsNode",
+        "math": "total",
+        "name": "meaningful_work_created",
+        "event": "meaningful_work_created",
+        "properties": [],
+        "schema_map": {
+          "timestamp_field": "timestamp",
+          "utm_source_name": "utm_source",
+          "distinct_id_field": "distinct_id",
+          "utm_campaign_name": "utm_campaign"
+        },
+        "conversion_goal_id": "0a10303d-92d6-42cd-84cf-1f87e6518fc9",
+        "conversion_goal_name": "Activated workspace"
+      },
+      {
+        "kind": "EventsNode",
+        "math": "first_time_for_group",
+        "name": "subscription_payment_succeeded",
+        "event": "subscription_payment_succeeded",
+        "properties": [],
+        "schema_map": {
+          "timestamp_field": "timestamp",
+          "utm_source_name": "utm_source",
+          "distinct_id_field": "distinct_id",
+          "utm_campaign_name": "utm_campaign"
+        },
+        "conversion_goal_id": "b1c0caae-1947-4455-a4b3-a4b9c51848ac",
+        "counts_as_customer": true,
+        "conversion_goal_name": "First paying organisation",
+        "math_group_type_index": 0
+      }
+    ],
+    "attribution_window_days": 90,
+    "attribution_mode": "first_touch",
+    "filter_test_accounts": true,
+    "campaign_name_mappings": {},
+    "custom_source_mappings": {},
+    "campaign_field_preferences": {}
+  }
+}
