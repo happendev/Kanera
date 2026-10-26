@@ -103,9 +103,10 @@ export type SegmentedOption<T extends string = string> = {
         gap: 2px;
         height: var(--h-lg);
         padding: 3px;
-        /* A subtle track with a raised pill for the active segment, rather than per-button borders
-           that clashed with tinted toolbar backgrounds. */
-        background: var(--surface-2);
+        /* A recessed track with a raised pill for the active segment, rather than per-button borders
+           that clashed with tinted toolbar backgrounds. --surface-3, not --surface-2: in the light
+           themes --surface-2 is within a few shades of the --surface pill and the selection vanished. */
+        background: var(--surface-3);
         border: 1px solid var(--border);
         border-radius: var(--radius);
         width: var(--sg-fill-width, auto);
@@ -221,17 +222,19 @@ export type SegmentedOption<T extends string = string> = {
       }
 
       .sg-btn.is-active:focus-visible {
-        box-shadow: var(--shadow-sm);
+        box-shadow: var(--sg-pill-shadow);
       }
 
       /* The raised pill is the one and only fill in this control, so the hover rule above must not
          take it away when the active segment is the one under the cursor — hence the explicit
-         :hover here, which outranks it. */
+         :hover here, which outranks it. The --border-strong ring carries the selection: a
+         --surface fill against the light track is too close in value to read on its own. */
       .sg-btn.is-active,
       .sg-btn.is-active:hover:not(:disabled) {
+        --sg-pill-shadow: 0 0 0 1px var(--border-strong), var(--shadow-sm);
         color: var(--text);
         background: var(--surface);
-        box-shadow: var(--shadow-sm);
+        box-shadow: var(--sg-pill-shadow);
       }
 
       .sg-btn:disabled {
