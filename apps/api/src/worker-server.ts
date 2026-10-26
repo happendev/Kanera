@@ -3,6 +3,7 @@ import { EMAIL_QUEUE_STATUS, emailQueue, PUSH_QUEUE_STATUS, pushQueue } from "@k
 import { sql } from "drizzle-orm";
 import { db } from "./db.js";
 import { env } from "./env.js";
+import { productAnalytics } from "./lib/product-analytics.js";
 import { startAgentRunStallScheduler } from "./lib/agent-runs.js";
 import { startArchivedCardCleanupScheduler } from "./lib/archived-card-cleanup.js";
 import { startCardReminderScheduler } from "./lib/card-follow.js";
@@ -104,6 +105,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopPresenceReaper: (() => void) | null = null;
   let stopAgentRunStallScheduler: (() => Promise<void>) | null = null;
 
+  app.addHook("onClose", async () => productAnalytics.shutdown());
   app.addHook("onClose", async () => stopPresenceReaper?.());
   app.addHook("onClose", async () => stopAgentRunStallScheduler?.());
   app.addHook("onClose", async () => stopRealtimeOutboxDispatcher?.());

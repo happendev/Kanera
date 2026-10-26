@@ -1,7 +1,7 @@
 import type { Properties } from "posthog-js";
 
 const allowedByEvent: Record<string, ReadonlySet<string>> = {
-  registration_started: new Set(["anonymous_id", "source", "medium", "campaign", "landing_page", "event_version"]),
+  registration_started: new Set(["anonymous_id", "source", "medium", "campaign", "landing_page", "content", "term", "event_version"]),
   import_started: new Set(["import_source"]),
   premium_feature_attempted: new Set(["premium_feature", "limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),
   plan_limit_warning_seen: new Set(["limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),
@@ -55,6 +55,7 @@ const allowedPersonProfileProperties = new Set([
 // properties supplied by Kanera. These fields are required for ingestion, deduplication, and
 // pseudonymous identity/session continuity; dropping `token` makes PostHog reject the event.
 const allowedTransportProperties = new Set([
+  "$geoip_disable",
   "token",
   "distinct_id",
   "$device_id",
@@ -87,7 +88,8 @@ function privacySafeCurrentUrl(properties: Properties): string | null {
 
 function withPrivacySafeCurrentUrl(sanitized: Properties, source: Properties): Properties {
   const currentUrl = privacySafeCurrentUrl(source);
-  return currentUrl ? { ...sanitized, $current_url: currentUrl } : sanitized;
+  // Keep geo enrichment disabled even after reset clears SDK super properties.
+  return { ...sanitized, $geoip_disable: true, ...(currentUrl ? { $current_url: currentUrl } : {}) };
 }
 
 // This is the final provider boundary. Even if a caller circumvents TypeScript, content fields,

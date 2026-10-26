@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getMfaCredential, verifyMfaCode } from "./mfa.js";
 import { eq, isNull } from "drizzle-orm";
-import { boardMembers, boards, clients, mfaCredentials, passwordResetTokens, refreshTokens, users, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boards, clients, mfaCredentials, passwordResetTokens, refreshTokens, userAcquisitions, users, workspaces } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { buildIntegrationServer } from "../test/integration.js";
@@ -473,4 +473,35 @@ void test("two concurrent verifications of the same TOTP code accept exactly one
   // A sequential replay with a fresh read is still rejected.
   const reread = await getMfaCredential({ kind: "user", id: userId });
   assert.equal(await verifyMfaCode(reread!, code), false);
+});
+
+// The browser cannot read this private table. Exercise the real signup transaction, its public
+// response, and the no-consent/self-hosted boundaries against the throwaway integration DB.
+void test("signup persists consent-stamped acquisition privately only on hosted accounts", async () => {
+  const previousMode = env.KANERA_DEPLOYMENT_MODE;
+  const app = await buildIntegrationServer();
+  const attribution = {
+    source: "google", medium: "cpc", campaign: "launch", content: "video-a",
+    gclid: "private-click-id", landing_page: "/pricing", consent_version: 1,
+    captured_at: new Date().toISOString(), consented_at: new Date().toISOString(),
+  };
+  try {
+    for (const [mode, consented] of [["hosted", true], ["hosted", false], ["self_hosted", true]] as const) {
+      env.KANERA_DEPLOYMENT_MODE = mode;
+      const response = await app.inject({ method: "POST", url: "/auth/signup", payload: {
+        orgName: "Attribution Co", displayName: "Owner", password: "Abc12345",
+        email: `attribution-${mode}-${consented}@example.com`,
+        analyticsAttribution: consented ? attribution : { source: "google", medium: "cpc", campaign: "launch" },
+      } });
+      assert.equal(response.statusCode, 200, response.body);
+      const { user, accessToken } = response.json<{ user: { id: string }; accessToken: string }>();
+      const rows = await db.select().from(userAcquisitions).where(eq(userAcquisitions.userId, user.id));
+      assert.equal(rows.length, mode === "hosted" && consented ? 1 : 0);
+      if (rows.length) assert.deepEqual(rows[0]!.attribution, attribution);
+      assert.equal(response.body.includes("private-click-id"), false);
+      const me = await app.inject({ method: "GET", url: "/me", headers: authHeader(accessToken) });
+      assert.equal(me.statusCode, 200);
+      assert.equal(me.body.includes("private-click-id"), false);
+    }
+  } finally { env.KANERA_DEPLOYMENT_MODE = previousMode; }
 });

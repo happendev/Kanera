@@ -1,4 +1,4 @@
-import { clients } from "@kanera/shared/schema";
+import { clients, userAcquisitions, type SignupAcquisition } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import { PostHog } from "posthog-node";
 import { db } from "../db.js";
@@ -253,6 +253,20 @@ export function sanitizeEventProperties<TEvent extends ServerAnalyticsEventName>
   return Object.fromEntries(Object.entries(properties).filter(([key]) => allowed.has(key))) as ServerAnalyticsEventMap[TEvent];
 }
 
+// Advertising click identifiers remain private in Kanera. Explicit campaign dimensions on
+// every server event survive browser-cookie expiry and work for organisation-level funnels.
+export function acquisitionEventProperties(attribution: SignupAcquisition | null | undefined): Record<string, string> {
+  if (!attribution) return {};
+  const allowed = ["source", "medium", "campaign", "content", "term", "landing_page", "referring_domain"] as const;
+  return {
+    ...Object.fromEntries(allowed.flatMap((key) => attribution[key] ? [[`acquisition_${key}`, attribution[key]!]] : [])),
+    // Marketing Analytics maps campaign/source to standard UTM fields. Preserve the durable
+    // first touch here too, so server conversions can be joined to advertising campaign costs.
+    ...Object.fromEntries((["source", "medium", "campaign", "content", "term"] as const)
+      .flatMap((key) => attribution[key] ? [[`utm_${key}`, attribution[key]!]] : [])),
+  };
+}
+
 class PostHogProductAnalytics implements ProductAnalytics {
   private readonly pending = new Set<Promise<void>>();
   private readonly client = serverAnalyticsEnabled()
@@ -288,15 +302,22 @@ class PostHogProductAnalytics implements ProductAnalytics {
 
   private async captureInternal<TEvent extends ServerAnalyticsEventName>(input: ServerAnalyticsEvent<TEvent>): Promise<void> {
     try {
-      if (!await this.organizationAllowed(input.organizationId, input.supportSession)) return;
+      if (!this.client || input.supportSession) return;
+      const [organization] = await db.select({ excluded: clients.analyticsExcluded, attribution: userAcquisitions.attribution })
+        .from(clients)
+        .leftJoin(userAcquisitions, eq(userAcquisitions.userId, clients.createdByUserId))
+        .where(eq(clients.id, input.organizationId)).limit(1);
+      if (!organization || organization.excluded) return;
       this.client!.capture({
         distinctId: input.distinctId,
         event: input.event,
         groups: { organization: input.organizationId },
         properties: {
+          ...acquisitionEventProperties(organization.attribution),
           ...sanitizeEventProperties(input.event, input.properties),
-          // Server-authoritative events join an identified browser user without creating profiles on their own.
-          $process_person_profile: false,
+          // PostHog excludes personless events from group indexing. Processing the opaque actor
+          // identity is required for organisation funnels, even without browser identification.
+          $process_person_profile: true,
         },
       });
     } catch {

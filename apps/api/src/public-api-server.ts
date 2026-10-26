@@ -18,6 +18,7 @@ import authPlugin from "./auth/plugin.js";
 import { db } from "./db.js";
 import { getPublicOpenApiDocument, publicWebhookEventTypes } from "./docs/public-openapi.js";
 import { env } from "./env.js";
+import { productAnalytics } from "./lib/product-analytics.js";
 import { clientIpForRequest } from "./lib/client-ip.js";
 import { registerErrorHandler } from "./lib/errors.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
@@ -249,6 +250,9 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   await app.register(multipart, { limits: { fileSize: env.ATTACHMENT_MAX_BYTES, files: 1 } });
   await app.register(authPlugin);
   await app.register(mailerPlugin);
+  // Fastify plugins inherit the error handler when registered. OAuth setup must return validation
+  // errors as 400s rather than letting malformed authorization or registration requests become 500s.
+  registerErrorHandler(app, { service: "public-api" });
   await app.register(oauthPublicRoutes);
 
   const checkRateLimit = async (
@@ -306,7 +310,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   const uploadsRoot = resolveLocalUploadsRoot(options.uploadsDir ?? env.UPLOADS_DIR);
   await mkdir(uploadsRoot, { recursive: true });
 
-  registerErrorHandler(app, { service: "public-api" });
+  app.addHook("onClose", async () => productAnalytics.shutdown());
   app.addHook("onClose", async () => rateLimiter?.close());
   app.get("/health", async () => ({ ok: true, service: "public-api" }));
   // Token-gated inside registerMetrics: this server is the internet-facing one, so /metrics must not be

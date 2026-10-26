@@ -135,3 +135,11 @@ exercise checkout or payment-provider webhooks. `email-unsubscribe` constructs s
 tests consumption, not outbound email delivery. MCP local cancellation tests prove session reuse,
 not server-side work cancellation. Concurrent API request bursts are useful stress checks, but do
 not force a specific database interleaving; retain deterministic integration coverage for those races.
+
+## Hosted analytics regression
+
+`pnpm test:analytics` runs a separate
+production-configured web build on port 4223, with all backend and analytics requests intercepted.
+It does not contact production or create accounts. It checks shared anonymous identity, consent
+boundaries and first-touch signup payloads. Traces and desktop/mobile screenshots are saved under
+`e2e/artifacts/analytics/`. The usual E2E build disables analytics, so cannot exercise this startup path.

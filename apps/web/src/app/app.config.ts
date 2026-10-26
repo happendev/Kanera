@@ -30,15 +30,21 @@ export const appConfig: ApplicationConfig = {
       const auth = inject(AuthService);
       const publicAuth = inject(PublicAuthClient);
       const consent = inject(CookieConsentService);
+      let lastUserId: string | null = null;
       const syncIdentity = () => {
-        analytics.ready();
+        const ready = analytics.ready();
         const user = auth.user();
         const suppressed = auth.isSupportSession() || user?.analyticsExcluded === true;
         analytics.setSuppressed(suppressed);
+        if (!ready) return;
         if (!user || suppressed) {
-          analytics.reset();
+          // Preserve the marketing cookie on anonymous arrival; reset only after a real session.
+          if (lastUserId) analytics.reset();
+          lastUserId = null;
           return;
         }
+        if (lastUserId && lastUserId !== user.id) analytics.reset();
+        lastUserId = user.id;
         analytics.identify({ userId: user.id, name: user.displayName, email: user.email });
         analytics.setOrganization({
           organizationId: user.clientId,

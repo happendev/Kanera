@@ -27,6 +27,8 @@ export interface AnalyticsEventMap {
     medium: string;
     campaign: string;
     landing_page: string;
+    content?: string;
+    term?: string;
     event_version: number;
   };
   import_started: { import_source: ImportSource };

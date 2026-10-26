@@ -15,6 +15,7 @@ describe("sanitizeAnalyticsProperties", () => {
       raw_url_with_query_string: "/b/customer-name?search=secret",
       board_name: "Customer launch",
     }, "$pageview")).toEqual({
+      $geoip_disable: true,
       route_pattern: "/b/:boardId",
       page_category: "board",
       is_authenticated: true,
@@ -33,6 +34,7 @@ describe("sanitizeAnalyticsProperties", () => {
       token: "phc_project_token",
       distinct_id: "anonymous-id",
     }, "checkout_started")).toEqual({
+      $geoip_disable: true,
       token: "phc_project_token",
       distinct_id: "anonymous-id",
       $current_url: "https://board.kanera.app/b/:boardId",
@@ -45,6 +47,7 @@ describe("sanitizeAnalyticsProperties", () => {
       distinct_id: "anonymous-id",
       email: "person@example.com",
     }, "unknown_event")).toEqual({
+      $geoip_disable: true,
       token: "phc_project_token",
       distinct_id: "anonymous-id",
     });
@@ -61,6 +64,7 @@ describe("sanitizeAnalyticsProperties", () => {
       email: "person@example.com",
       source_surface: "hero",
     }, "registration_started")).toEqual({
+      $geoip_disable: true,
       anonymous_id: "anonymous-id",
       source: "google",
       medium: "cpc",
@@ -82,6 +86,7 @@ describe("sanitizeAnalyticsProperties", () => {
       upgrade_source: "home",
       board_name: "Private board",
     }, "plan_limit_reached")).toEqual({
+      $geoip_disable: true,
       limit_type: "boards",
       current_usage: 3,
       plan_limit: 3,
@@ -110,6 +115,7 @@ describe("sanitizeAnalyticsProperties", () => {
         board_name: "Private board",
       },
     }, "$identify")).toEqual({
+      $geoip_disable: true,
       $anon_distinct_id: "anonymous-id",
       $set_once: {
         $initial_utm_source: "google",
@@ -138,6 +144,7 @@ describe("sanitizeAnalyticsProperties", () => {
         board_name: "Private board",
       },
     }, "$groupidentify")).toEqual({
+      $geoip_disable: true,
       token: "phc_project_token",
       distinct_id: "user-id",
       $group_type: "organization",

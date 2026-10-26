@@ -124,6 +124,21 @@ async function exercise(client: Client, cell: string, target: { boardId: string;
   record("errors", { invalidArguments: (invalid.content[0] as { text: string }).text, unknownTool: (unknown as ProtocolError).code, notFound: problem.error });
 }
 
+test("OAuth discovery is public and malformed setup requests are client errors", async ({ request }) => {
+  const metadata = await request.get(`${publicApiOrigin}/.well-known/oauth-authorization-server`);
+  expect(metadata.status()).toBe(200);
+  expect(await metadata.json()).toMatchObject({ registration_endpoint: `${publicApiOrigin}/oauth/register` });
+
+  // These probes run against the separate public API process: its OAuth plugin must inherit the
+  // validation handler before registration, otherwise an incomplete setup request becomes a 500.
+  const authorization = await request.get(`${publicApiOrigin}/oauth/authorize`);
+  expect(authorization.status()).toBe(400);
+  expect(await authorization.json()).toMatchObject({ code: "VALIDATION" });
+  const registration = await request.post(`${publicApiOrigin}/oauth/register`, { data: {} });
+  expect(registration.status()).toBe(400);
+  expect(await registration.json()).toMatchObject({ code: "VALIDATION" });
+});
+
 test("both protocol eras work over HTTP and stdio: discovery, reads, writes, resources, prompts, cancellation and errors", async ({ page, signIn, uniqueName }, testInfo) => {
   await signIn(page, "amelia");
   const boardId = await boardIdOf(page, "Platform Delivery");

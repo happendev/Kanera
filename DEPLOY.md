@@ -609,6 +609,8 @@ use the `psql` command above when you need to see those.
 
 ### Product analytics (Kanera Cloud only)
 
+Compose forwards the analytics configuration to the app API, public API and worker. Recreate all three services after changing it. Consented first-touch acquisition is stored privately in `user_acquisition`; only allow-listed campaign dimensions, never advertising click IDs, accompany PostHog events. Apply migrations before deploying the API. See [the analytics launch handoff](docs/analytics-launch.md) for the rollout and verification checklist.
+
 Product analytics is disabled by default, including all self-hosted installations. Kanera Cloud may
 enable explicit PostHog events with `ANALYTICS_ENABLED=true`, `ANALYTICS_PROVIDER=posthog`,
 `POSTHOG_PROJECT_KEY`, and `POSTHOG_API_HOST`. Use separate EU projects for production and staging;

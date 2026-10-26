@@ -1,0 +1,5 @@
+invoice_number,account_reference,billing_contact,net_gbp,tax_gbp,gross_gbp
+NS-1047,NS-RETAIL,Accounts payable,850.00,170.00,1020.00
+NS-1048,NS-RETAIL,Accounts payable,1200.00,240.00,1440.00
+NS-1048,NS-RETAIL,Regional finance,1200.00,240.00,1440.00
+NS-1049,NS-NORTH,Accounts payable,620.00,124.00,744.00

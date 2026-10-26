@@ -40,7 +40,7 @@ test("the seed adds a client-to-internal sync with complete discussion and files
   expect(mirror!.lists).toHaveLength(4);
 
   const open = async (id: string) => {
-    const opened = await json<{ cards: CompactCardSummary[]; lists: { id: string; name: string }[] }>(
+    const opened = await json<{ cards: CompactCardSummary[]; lists: { id: string; name: string }[]; customFields: { id: string; name: string }[] }>(
       await api.post(`/api/boards/${id}/open?includeCompleted=true`));
     return { ...opened, cards: opened.cards.map(expandCardSummary) };
   };
@@ -75,10 +75,34 @@ test("the seed adds a client-to-internal sync with complete discussion and files
       expect(copiedBytes.ok()).toBe(true);
       expect(await copiedBytes.body()).toEqual(await originalBytes.body());
     }
-    const feed = await json<{ items: { type: string; data: { body?: string } }[] }>(await api.get(`/api/cards/${card.id}/feed?limit=100`));
+    const feed = await json<{ items: { type: string; data: { body?: string; createdAt?: string; action?: string; payload?: { fieldName?: string } } }[] }>(await api.get(`/api/cards/${card.id}/feed?limit=100`));
     const copiedFeed = await json<typeof feed>(await api.get(`/api/cards/${copy.id}/feed?limit=100`));
     for (const comment of feed.items.filter((item) => item.type === "comment")) {
       expect(copiedFeed.items.some((item) => item.type === "comment" && item.data.body?.includes(comment.data.body!)), card.title).toBe(true);
+    }
+    if (card.title === "Billing export repeats invoices when a customer has two contacts" || card.title === "Save a filtered report for the Monday operations meeting") {
+      const isBug = card.title.startsWith("Billing export");
+      const initialNote = copiedFeed.items.find((item) => item.type === "comment" && item.data.body?.startsWith(isBug ? "Internal engineering:" : "Internal implementation:"))!;
+      const laterReply = feed.items.find((item) => item.type === "comment" && item.data.body?.startsWith(isBug ? "Finance has sent a fresh sample:" : "We tried the Monday meeting workflow"))!;
+      const finalNote = copiedFeed.items.find((item) => item.type === "comment" && item.data.body?.startsWith(isBug ? "Internal QA:" : "Internal handoff:"))!;
+      expect(initialNote, card.title).toBeTruthy();
+      expect(laterReply, card.title).toBeTruthy();
+      expect(finalNote, card.title).toBeTruthy();
+      expect(feed.items.some((item) => item.data.body?.startsWith("Internal ")), card.title).toBe(false);
+      const laterFile = detail.attachments.find((file) => file.fileName === (isBug ? "northstar-revised-billing-export.csv" : "northstar-saved-views-addendum.md"))!;
+      expect(laterFile, card.title).toBeTruthy();
+      expect(Date.parse(initialNote.data.createdAt!)).toBeLessThan(new Date(laterFile.createdAt).getTime());
+      expect(Date.parse(initialNote.data.createdAt!)).toBeLessThan(Date.parse(laterReply.data.createdAt!));
+      expect(Date.parse(finalNote.data.createdAt!)).toBeGreaterThan(Date.parse(laterReply.data.createdAt!));
+      expect(copiedDetail.assigneeIds, card.title).not.toEqual(detail.assigneeIds);
+      expect(copiedDetail.card.dueDateLocalDate, card.title).not.toBe(detail.card.dueDateLocalDate);
+      const branch = targetBoard.customFields.find((field) => field.name === "Implementation branch")!;
+      const estimate = targetBoard.customFields.find((field) => field.name === "Engineering estimate")!;
+      expect(sourceBoard.customFields.some((field) => [branch.name, estimate.name].includes(field.name))).toBe(false);
+      expect(copiedDetail.customFieldValues).toContainEqual(expect.objectContaining({ fieldId: branch.id, valueText: isBug ? "fix/northstar-invoice-export" : "feat/northstar-saved-report-views" }));
+      expect(copiedDetail.customFieldValues).toContainEqual(expect.objectContaining({ fieldId: estimate.id, valueNumber: isBug ? "16" : "24" }));
+      expect(copiedFeed.items.some((item) => item.data.action === "assignees:set")).toBe(true);
+      expect(copiedFeed.items.some((item) => item.data.action === "customFieldValue:set" && item.data.payload?.fieldName === branch.name)).toBe(true);
     }
     evidence.push({ source: detail, copy: copiedDetail, feed, copiedFeed });
   }
@@ -100,14 +124,14 @@ test("the seed adds a client-to-internal sync with complete discussion and files
   await page.goto(`/b/${target.id}/c/${bug.id}`);
   const dialog = page.getByRole("dialog", { name: `Card detail: ${bug.title}` });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator("li.attach-row")).toHaveCount(2);
+  await expect(dialog.locator("li.attach-row")).toHaveCount(3);
   await expect(dialog.locator(".comment").filter({ hasText: "One more detail from finance" })).toHaveCount(1);
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("synced-bug-desktop.png") });
   await page.setViewportSize({ width: 390, height: 900 });
   await expect(dialog).toBeVisible();
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("synced-bug-phone.png") });
   await dialog.locator(".col-tabs").getByRole("button", { name: /Activity/ }).click();
-  const clientReply = dialog.locator(".comment").filter({ hasText: "One more detail from finance" });
+  const clientReply = dialog.locator(".comment").filter({ hasText: "Finance has sent a fresh sample" });
   await expect(clientReply).toBeVisible();
   await clientReply.scrollIntoViewIfNeeded();
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("synced-discussion-phone.png") });

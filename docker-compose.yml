@@ -15,6 +15,11 @@ name: ${COMPOSE_PROJECT_NAME:-kanera}
 # smaller subset, and merging would silently hand them variables they are not meant to see.
 x-app-env: &app-env
   NODE_ENV: production
+  # Lifecycle and activation events also originate in the worker and public API.
+  ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-false}
+  ANALYTICS_PROVIDER: ${ANALYTICS_PROVIDER:-}
+  POSTHOG_PROJECT_KEY: ${POSTHOG_PROJECT_KEY:-}
+  POSTHOG_API_HOST: ${POSTHOG_API_HOST:-}
   DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
   REDIS_URL: redis://valkey:6379/0
   DATABASE_SSL: ${DATABASE_SSL:-false}
@@ -202,10 +207,6 @@ services:
       PG_POOL_MAX: ${PG_POOL_MAX:-20}
       PUBLIC_API_OAUTH_ISSUER: ${PUBLIC_API_OAUTH_ISSUER:-http://localhost:3001}
       MCP_PUBLIC_URL: ${MCP_SERVER_PUBLIC_URL:-http://localhost:3002/mcp}
-      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-false}
-      ANALYTICS_PROVIDER: ${ANALYTICS_PROVIDER:-}
-      POSTHOG_PROJECT_KEY: ${POSTHOG_PROJECT_KEY:-}
-      POSTHOG_API_HOST: ${POSTHOG_API_HOST:-}
       AUTH_RATE_LIMIT_ENABLED: ${AUTH_RATE_LIMIT_ENABLED:-true}
       AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
       AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-60000}

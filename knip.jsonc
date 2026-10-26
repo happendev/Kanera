@@ -22,6 +22,7 @@
         "benchmarks/api/*.mjs",
         "benchmarks/web/*.cjs",
         "e2e/**/*.spec.ts",
+        "e2e/analytics/*.browser.ts",
         "e2e/playwright.config.ts",
         "e2e/web-proxy.config.mjs"
       ],
