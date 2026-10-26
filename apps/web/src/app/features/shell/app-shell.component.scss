@@ -310,6 +310,14 @@ k-support-session-banner {
   }
 }
 
+// The selected row is a quiet raised pill: the hover fill plus a hairline ring and a small shadow,
+// rather than a darker block. The ring is what tells it apart from a hovered row, in light mode where
+// the fill alone barely registers and in dark mode where a saturated block shouted.
+@mixin sidebar-active-row {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border), var(--shadow-sm);
+}
+
 .nav-item-row {
   display: flex;
   align-items: center;
@@ -335,7 +343,7 @@ k-support-session-banner {
   }
 
   &.active {
-    background: var(--nav-active-bg);
+    @include sidebar-active-row;
   }
 
   // Leading-mark slot. These rows lead with different things — Tabler glyphs at 15px
@@ -401,6 +409,13 @@ k-support-session-banner {
 .ws-group {
   display: flex;
   flex-direction: column;
+
+  // Breathing room between workspaces so one workspace's boards don't run into the next header.
+  // Ungrouped standalone boards are each wrapped in their own .ws-group, but they are rows of one
+  // list, so they keep the ordinary row gap.
+  & + .ws-group:not(.standalone-board-group) {
+    margin-top: var(--space-2);
+  }
 }
 
 .ws-row {
@@ -481,6 +496,14 @@ k-support-session-banner {
 // A grouped standalone board keeps its settings action, but the board target itself should
 // hover exactly like a board inside a workspace. Indent the row as one unit and let each link
 // own its hover surface instead of highlighting the empty gap and settings action together.
+// Board rows keep the same 2px rhythm as the top-level nav and the Notes row above them; flush rows
+// let the selected pill's ring touch its neighbour.
+.nav-board-drop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .standalone-nav-group>.nav-board-drop-list>.standalone-board-row {
   margin-left: 15px;
 
@@ -648,6 +671,9 @@ k-support-session-banner {
   opacity: 0.85;
 }
 
+// Boards are the sidebar's main destinations, so they sit on the secondary text tier rather than
+// the hint tier; at --text-muted the whole board list read as disabled. Attention rows still outrank
+// them through --nav-text-strong and weight 500.
 .board-link {
   position: relative;
   display: flex;
@@ -655,7 +681,7 @@ k-support-session-banner {
   gap: 8px;
   padding: 6px 10px;
   border-radius: var(--radius);
-  color: var(--text-muted);
+  color: var(--text-3);
   font-size: var(--text-md);
 
   i {
@@ -677,7 +703,7 @@ k-support-session-banner {
   }
 
   &.active {
-    background: var(--nav-active-bg);
+    @include sidebar-active-row;
     color: var(--nav-text-strong);
   }
 }
@@ -782,9 +808,10 @@ k-support-session-banner {
   flex-shrink: 0;
 }
 
-// Bordered, filled squares rather than bare glyphs: as ghosts these read as leftovers under the
-// logo, when they are the four personal surfaces the sidebar exists to reach. Sized to the toolbar
-// control height so they line up with the collapse button beside the logo.
+// Bordered squares rather than bare glyphs: as ghosts these read as leftovers under the logo, when
+// they are the personal surfaces the sidebar exists to reach. The outline alone is enough to mark them
+// as controls; a filled surface as well made this row the heaviest thing in the sidebar. Sized to the
+// toolbar control height so they line up with the collapse button beside the logo.
 .utility-btn {
   position: relative;
   display: inline-flex;
@@ -796,7 +823,7 @@ k-support-session-banner {
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface-2);
+  background: transparent;
   color: var(--text-muted);
   text-decoration: none;
   transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
@@ -819,9 +846,10 @@ k-support-session-banner {
     color: var(--nav-text-strong);
   }
 
+  // Unread is carried by the accent glyph and badge; the wash is reserved for an open panel
+  // (.is-active), so "has news" and "is open" no longer look the same.
   &.is-alert {
     border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-    background: var(--accent-soft);
     color: var(--accent);
 
     // The directive enables one pulse every 30 seconds, only while visible and motion is allowed.
