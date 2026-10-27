@@ -1806,10 +1806,13 @@ export class CardDetailComponent {
 
   async createChecklistItem(checklistId: string, event?: Event) {
     event?.preventDefault();
-    const text = this.newItemText().trim();
+    const draft = this.newItemText();
+    const text = draft.trim();
     if (!text) return;
     await this.api.post(`/cards/${this.card().id}/checklists/${checklistId}/items`, { text });
-    // Keep the form open for batch entry — just clear and refocus
+    // Realtime can reveal the saved item before this response arrives. Only clear the submitted
+    // draft, since the user may already be typing the next item or have opened another checklist.
+    if (this.addingItemChecklistId() !== checklistId || this.newItemText() !== draft) return;
     this.newItemText.set("");
     this.addItemInput()?.nativeElement.focus();
   }

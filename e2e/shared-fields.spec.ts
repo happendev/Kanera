@@ -1,6 +1,71 @@
 import { expect, test } from "./support/fixtures";
 import { boardHref, createCard, expectBoardLoaded, moveCardToBoard, openCard, workspaceSettingsHref } from "./support/ui";
 
+test("unchanged custom field blurs do not count as edits", async ({ page, signIn, apiAs, testWorkspace, uniqueName }, testInfo) => {
+  const api = await apiAs("amelia");
+  const fieldResponse = await api.post(`/api/workspaces/${testWorkspace.id}/custom-fields`, {
+    data: { name: "Branch", type: "text" },
+  });
+  expect(fieldResponse.ok()).toBe(true);
+  const field = await fieldResponse.json() as { id: string };
+  const title = uniqueName("Unchanged branch");
+  const created = await api.post(`/api/boards/${testWorkspace.boardId}/lists/${testWorkspace.lists.get("Backlog")}/cards`, { data: { title } });
+  expect(created.ok()).toBe(true);
+  const card = await created.json() as { id: string };
+  await signIn(page, "amelia", `/b/${testWorkspace.boardId}`);
+  await expectBoardLoaded(page, testWorkspace.boardName);
+  const detail = await openCard(page, title);
+  const input = detail.locator(".cf-row").filter({ hasText: "Branch" }).locator("input.cf-input");
+  const endpoint = `/api/cards/${card.id}/custom-fields/${field.id}`;
+  const blur = async () => {
+    await input.focus();
+    const saved = page.waitForResponse((response) => response.url().endsWith(endpoint));
+    await input.press("Tab");
+    expect((await saved).ok()).toBe(true);
+  };
+  const activity = async () => {
+    const feed = await (await api.get(`/api/boards/${testWorkspace.boardId}/activity`)).json() as {
+      type: string; data: { id: string; payload: unknown; coalescedCount: number };
+    }[];
+    return feed.filter((item) => item.type === "activity").map(({ data }) => ({
+      id: data.id, payload: data.payload, coalescedCount: data.coalescedCount,
+    }));
+  };
+  const stored = async () => {
+    const result = await (await api.get(`/api/cards/${card.id}/detail`)).json() as {
+      card: { updatedAt: string }; customFieldValues: unknown[];
+    };
+    return { updatedAt: result.card.updatedAt, values: result.customFieldValues };
+  };
+  await input.fill("dev");
+  await blur();
+  const firstActivity = await activity();
+  const firstStored = await stored();
+  const row = detail.locator(".activity-item").filter({ hasText: "Branch" });
+  await expect(row).toContainText("dev");
+  for (let i = 0; i < 3; i++) {
+    await blur();
+    expect(await activity()).toEqual(firstActivity);
+    expect(await stored()).toEqual(firstStored);
+  }
+  await page.screenshot({ path: testInfo.outputPath("unchanged-branch-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await blur();
+  expect(await activity()).toEqual(firstActivity);
+  await page.screenshot({ path: testInfo.outputPath("unchanged-branch-phone.png") });
+  await input.fill("main");
+  await blur();
+  await expect(row).toContainText("2 times");
+  await expect(row).toContainText("main");
+  await input.fill("");
+  await blur();
+  const clearedActivity = await activity();
+  const clearedStored = await stored();
+  await blur();
+  expect(await activity()).toEqual(clearedActivity);
+  expect(await stored()).toEqual(clearedStored);
+});
+
 for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
   test(`card composer accepts fractional number fields at ${viewport.width}px`, async ({ page, signIn, apiAs, testWorkspace, uniqueName }, testInfo) => {
     const api = await apiAs("amelia");
