@@ -4152,6 +4152,8 @@
     "3652007016355058890": "Deine Boards",
     "2054599520790063739": "Gemeinsame Boards",
     "6368227149612917458": "E-Mail-Adresse kopiert",
-    "8228936172465447983": "Die E-Mail-Adresse konnte nicht kopiert werden."
+    "8228936172465447983": "Die E-Mail-Adresse konnte nicht kopiert werden.",
+    "3821233622608825771": "hat {$fileName} angehängt (inzwischen gelöscht)",
+    "8314482808231085764": "hat einen Anhang hinzugefügt (inzwischen gelöscht)"
   }
 }

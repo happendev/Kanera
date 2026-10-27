@@ -1162,6 +1162,16 @@ export class CardActivityComponent {
       }
       case "attachment_added": {
         const name = p["fileName"] as string | undefined;
+        // Only infer deletion after full detail has loaded; a board summary does not include
+        // every attachment. Read the live rows so remote deletions update the original activity.
+        const attachmentId = p["attachmentId"];
+        const deleted = typeof attachmentId === "string" && this.state.detailForCard(this.cardId())
+          && !this.state.coverAttachmentById().has(attachmentId);
+        if (deleted) {
+          return name
+            ? ` ${$localize`:Card activity after a person's name:attached ${this.v(name)}:fileName: (has since been deleted)`}`
+            : ` ${$localize`:Card activity after a person's name:added an attachment (has since been deleted)`}`;
+        }
         return name
           ? ` ${$localize`:Card activity after a person's name:attached ${this.v(name)}:fileName:`}`
           : ` ${$localize`:Card activity after a person's name:added an attachment`}`;
