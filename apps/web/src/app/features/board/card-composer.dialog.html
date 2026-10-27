@@ -278,7 +278,7 @@
           <label class="cmp-inline-field">
             <i aria-hidden="true" [class]="'ti ti-' + (field.icon || 'forms')"></i>
             <span class="cmp-inline-name">{{ field.name }}</span>
-            <input type="number" [value]="valueFor(field.id).valueNumber ?? ''" [disabled]="busy()" (input)="setNumberField(field, $any($event.target).value)" />
+            <input type="number" step="any" [value]="valueFor(field.id).valueNumber ?? ''" [disabled]="busy()" (input)="setNumberField(field, $any($event.target).value)" />
           </label>
           }
           @case ('url') {
