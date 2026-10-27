@@ -36,7 +36,7 @@
             i18n-kTooltip="Button: create a card"
             (click)="openComposer()"
           >
-            <i class="ti ti-plus"></i>
+            <i aria-hidden="true" class="ti ti-plus"></i>
             <span i18n="Button: create a card">New card</span>
           </button>
         }
@@ -52,7 +52,7 @@
             <!-- Not a bare bookmark: this writes a view and the toolbar's picker reads one, and once
                  both drop to icon-only at narrow widths two identical bookmarks in two rows is not a
                  distinction anyone can make. -->
-            <i [class]="state.selectedView() ? 'ti ti-bookmark-edit' : 'ti ti-bookmark-plus'"></i>
+            <i aria-hidden="true" [class]="state.selectedView() ? 'ti ti-bookmark-edit' : 'ti ti-bookmark-plus'"></i>
             <span>{{ state.selectedView() ? manageViewLabel : saveViewLabel }}</span>
           </button>
           @if (openMenu() === "save") {
@@ -75,19 +75,19 @@
               i18n-kTooltip
               (click)="toggleMenu('display')"
             >
-              <i class="ti ti-dots"></i>
+              <i aria-hidden="true" class="ti ti-dots"></i>
             </button>
             @if (openMenu() === "display") {
               <div kMenu class="display-menu" role="menu" aria-label="Display menu" i18n-aria-label kAnchoredPanel [apAnchor]="displayMenuTrigger" [apPlacement]="displayMenuPlacement" (apDismissed)="closeMenu('display')">
                 <div class="k-menu-heading display-menu-heading" i18n="Menu heading: display settings">Display</div>
                 @if (effectiveDisplay() === "board") {
                   <button type="button" class="k-menu-item display-menu-item" role="menuitemcheckbox" [attr.aria-checked]="compactCards()" (click)="toggleCompactCards()">
-                    <i class="ti" [class.ti-checkbox]="compactCards()" [class.ti-square]="!compactCards()"></i>
+                    <i aria-hidden="true" class="ti" [class.ti-checkbox]="compactCards()" [class.ti-square]="!compactCards()"></i>
                     <span i18n="Menu item: show smaller cards">Compact cards</span>
                   </button>
                 }
                 <button type="button" class="k-menu-item display-menu-item" role="menuitem" (click)="openBackgroundFromMenu()">
-                  <i class="ti ti-palette"></i>
+                  <i aria-hidden="true" class="ti ti-palette"></i>
                   <span i18n="Menu item">Change background</span>
                 </button>
               </div>
@@ -175,10 +175,10 @@
               @if (teamTrigger().person; as person) {
                 <k-avatar [url]="person.avatarUrl" [name]="person.displayName" [size]="20" [userId]="person.userId" />
               } @else {
-                <i class="ti ti-users"></i>
+                <i aria-hidden="true" class="ti ti-users"></i>
               }
               <span>{{ teamTrigger().label }}</span>
-              <i class="ti ti-selector k-toolbar-caret"></i>
+              <i aria-hidden="true" class="ti ti-selector k-toolbar-caret"></i>
             </button>
             @if (selectedTeamPerson() && state.interactionReady()) {
               <button
@@ -190,7 +190,7 @@
                 i18n-aria-label
                 (click)="selectTeamPerson('')"
               >
-                <i class="ti ti-x"></i>
+                <i aria-hidden="true" class="ti ti-x"></i>
               </button>
             }
             @if (openMenu() === "team") {
@@ -223,7 +223,7 @@
           >
             <i [class]="scopeTrigger().icon" [style.color]="scopeTrigger().color"></i>
             <span>{{ scopeTrigger().label }}</span>
-            <i class="ti ti-selector k-toolbar-caret"></i>
+            <i aria-hidden="true" class="ti ti-selector k-toolbar-caret"></i>
           </button>
           @if (sourceValue() && state.interactionReady()) {
             <button
@@ -235,7 +235,7 @@
               i18n-aria-label
               (click)="selectSource('')"
             >
-              <i class="ti ti-x"></i>
+              <i aria-hidden="true" class="ti ti-x"></i>
             </button>
           }
           @if (openMenu() === "source") {
@@ -302,7 +302,7 @@
               : upNextUnavailableTooltip()"
             (click)="toggleUpNextPanel()"
           >
-            <i class="ti ti-list-numbers"></i>
+            <i aria-hidden="true" class="ti ti-list-numbers"></i>
             @if (upNextCount()) {
               <span i18n="Up next button with the number of queued cards">Up next · {{ upNextCount() // i18n(ph="count") }}</span>
             } @else {
@@ -331,9 +331,9 @@
               [kTooltip]="groupTooltip()"
               (click)="toggleMenu('group')"
             >
-              <i class="ti ti-layout-rows"></i>
+              <i aria-hidden="true" class="ti ti-layout-rows"></i>
               <span>{{ groupByLabel() }}</span>
-              <i class="ti ti-selector k-toolbar-caret"></i>
+              <i aria-hidden="true" class="ti ti-selector k-toolbar-caret"></i>
             </button>
             @if (state.groupByIsSet()) {
               <button
@@ -345,7 +345,7 @@
                 i18n-aria-label
                 (click)="clearGrouping()"
               >
-                <i class="ti ti-x"></i>
+                <i aria-hidden="true" class="ti ti-x"></i>
               </button>
             }
             @if (openMenu() === "group") {
@@ -373,9 +373,9 @@
               [kTooltip]="sortTooltip()"
               (click)="toggleMenu('sort')"
             >
-              <i class="ti ti-arrows-sort"></i>
+              <i aria-hidden="true" class="ti ti-arrows-sort"></i>
               <span>{{ sortLabel() }}</span>
-              <i class="ti ti-selector k-toolbar-caret"></i>
+              <i aria-hidden="true" class="ti ti-selector k-toolbar-caret"></i>
             </button>
             @if (state.sortIsSet() && state.interactionReady()) {
               <button
@@ -387,7 +387,7 @@
                 i18n-aria-label
                 (click)="clearSort()"
               >
-                <i class="ti ti-x"></i>
+                <i aria-hidden="true" class="ti ti-x"></i>
               </button>
             }
             @if (openMenu() === "sort") {
@@ -421,9 +421,9 @@
             (click)="toggleMenu('view')"
           >
             <!-- Plural: this one picks from the saved views, it does not save. -->
-            <i class="ti ti-bookmarks"></i>
+            <i aria-hidden="true" class="ti ti-bookmarks"></i>
             <span>{{ savedViewLabel() }}</span>
-            <i class="ti ti-selector k-toolbar-caret"></i>
+            <i aria-hidden="true" class="ti ti-selector k-toolbar-caret"></i>
           </button>
           @if (state.selectedViewId() && state.interactionReady()) {
             <!-- Leaving a saved view restores the lens defaults wholesale (clearSavedView), which is
@@ -437,7 +437,7 @@
               i18n-aria-label
               (click)="selectView('')"
             >
-              <i class="ti ti-x"></i>
+              <i aria-hidden="true" class="ti ti-x"></i>
             </button>
           }
           @if (openMenu() === "view") {
@@ -465,14 +465,14 @@
        block's height under the content. -->
   @if (state.cachedAt(); as cachedAt) {
     <div class="offline-banner" role="status">
-      <i class="ti ti-cloud-off"></i>
+      <i aria-hidden="true" class="ti ti-cloud-off"></i>
       <span>
         <ng-container i18n="Offline banner">Showing a saved copy from {{ offlineStamp(cachedAt) // i18n(ph="time") }}. Reconnect to make changes.</ng-container>
       </span>
     </div>
   } @else if (!state.sockets.displayedOnline()) {
     <div class="offline-banner" role="status">
-      <i class="ti ti-wifi-off"></i>
+      <i aria-hidden="true" class="ti ti-wifi-off"></i>
       <span>
         @if (state.lastSyncedAt(); as syncedAt) {
           <ng-container i18n="Offline banner">Connection lost. Showing the last loaded view from {{ syncedTime(syncedAt) // i18n(ph="time") }}. Changes are paused.</ng-container>
@@ -487,7 +487,7 @@
 
   @if (state.loading() && state.response().cards.length === 0) {
     <div class="k-loading" role="status" aria-live="polite">
-      <i class="ti ti-loader-2"></i>
+      <i aria-hidden="true" class="ti ti-loader-2"></i>
       <span i18n>Loading your cards…</span>
     </div>
   } @else if (state.error(); as error) {
@@ -535,12 +535,13 @@
         </div>
       } @else if (state.canLoadMore()) {
         <div class="board-priority-note overview-partial" role="status">
-          <i class="ti ti-alert-triangle"></i>
+          <i aria-hidden="true" class="ti ti-alert-triangle"></i>
           <span i18n><strong>Showing {{ state.cards().length // i18n(ph="loaded") }} of {{ state.response().totals.cards // i18n(ph="total") }} matching cards.</strong> Counts and the longest-running work cover only these. Narrow the scope or filters for a complete overview.</span>
         </div>
       }
       <k-team-overview
         [people]="teamPeople()"
+        [guestUserIds]="teamGuestUserIds()"
         [cards]="state.cards()"
         [queues]="overviewQueues()"
         [canNavigate]="state.interactionReady()"
@@ -568,7 +569,7 @@
         </div>
       } @else if (state.canLoadMore()) {
         <div class="board-priority-note overview-partial" role="status">
-          <i class="ti ti-alert-triangle"></i>
+          <i aria-hidden="true" class="ti ti-alert-triangle"></i>
           <span i18n><strong>Showing chains for {{ state.cards().length // i18n(ph="loaded") }} of {{ state.response().totals.cards // i18n(ph="total") }} matching cards.</strong> Narrow the scope or filters to map every chain.</span>
         </div>
       }
@@ -601,7 +602,7 @@
         </div>
       }
       @if (moveError(); as error) {
-        <div class="board-move-error" role="alert"><i class="ti ti-alert-circle"></i>{{ error }}</div>
+        <div class="board-move-error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ error }}</div>
       }
 
       @if (effectiveDisplay() === "board") {
@@ -625,7 +626,7 @@
                 [attr.aria-controls]="'workspace-board-' + workspace.id"
                 (click)="toggleWorkspaceCollapsed(workspace.id)"
               >
-                <i
+                <i aria-hidden="true"
                   class="ti section-chevron"
                   [class.ti-chevron-right]="isWorkspaceCollapsed(workspace.id)"
                   [class.ti-chevron-down]="!isWorkspaceCollapsed(workspace.id)"
@@ -730,7 +731,7 @@
           </div>
         } @else if (state.canLoadMore()) {
           <div class="board-priority-note overview-partial" role="status">
-            <i class="ti ti-alert-triangle"></i>
+            <i aria-hidden="true" class="ti ti-alert-triangle"></i>
             <span i18n><strong>Showing {{ state.cards().length // i18n(ph="loaded") }} of {{ state.response().totals.cards // i18n(ph="total") }} matching cards.</strong> Narrow the scope or filters to plan every card.</span>
           </div>
         }
@@ -820,12 +821,12 @@
             aria-controls="checklist-groups"
             (click)="toggleChecklistSectionCollapsed()"
           >
-            <i
+            <i aria-hidden="true"
               class="ti section-chevron"
               [class.ti-chevron-right]="checklistSectionCollapsed()"
               [class.ti-chevron-down]="!checklistSectionCollapsed()"
             ></i>
-            <i class="ti ti-checkbox"></i>
+            <i aria-hidden="true" class="ti ti-checkbox"></i>
             <span class="section-toggle-title">
               <strong i18n="Section heading">Assigned checklist items</strong>
               <small class="section-hint" i18n>Grouped by when they are due, and listed separately from cards.</small>
@@ -850,8 +851,8 @@
                   (click)="toggleCardGroupCollapsed(group.id)"
                 >
                   <span>
-                    <i [class]="isCardGroupCollapsed(group.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
-                    <i class="ti ti-{{ group.icon }}"></i>
+                    <i aria-hidden="true" [class]="isCardGroupCollapsed(group.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+                    <i aria-hidden="true" class="ti ti-{{ group.icon }}"></i>
                     <strong>{{ group.label }}</strong>
                     <small>{{ group.items.length }}</small>
                   </span>
@@ -865,7 +866,7 @@
                         [class.overdue]="isChecklistOverdue(item)"
                         (click)="openChecklistItem(item)"
                       >
-                        <i class="ti ti-square checklist-check"></i>
+                        <i aria-hidden="true" class="ti ti-square checklist-check"></i>
                         <span class="checklist-main">
                           <strong>{{ item.text }}</strong>
                           <!-- Board · list · card: an item means nothing without knowing where it lives. -->

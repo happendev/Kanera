@@ -55,6 +55,110 @@ describe("DescriptionEditorComponent", () => {
 
   const sources = ["description", "comment"] as const;
 
+  it.each([
+    ["Ctrl+backtick", { key: "`", ctrlKey: true }],
+    ["Cmd+backtick", { key: "`", metaKey: true }],
+    ["Ctrl+dead backtick", { key: "Dead", code: "Backquote", ctrlKey: true }],
+  ])("toggles only selected text as inline code with %s, with undo and redo", (_label, keys) => {
+    fixture.componentInstance.setMarkdown("Run example now");
+    const editor = fixture.componentInstance.editor!;
+    editor.commands.setTextSelection({ from: 5, to: 12 });
+
+    expect(pressEditorKey(keys).defaultPrevented).toBe(true);
+    expect(fixture.componentInstance.markdown()).toBe("Run `example` now");
+    editor.commands.undo();
+    expect(fixture.componentInstance.markdown()).toBe("Run example now");
+    editor.commands.redo();
+    expect(fixture.componentInstance.markdown()).toBe("Run `example` now");
+    pressEditorKey(keys);
+    expect(fixture.componentInstance.markdown()).toBe("Run example now");
+  });
+
+  it("does not format backtick input without a modifier or with Alt/Shift held", () => {
+    fixture.componentInstance.setMarkdown("Example");
+    fixture.componentInstance.editor!.commands.selectAll();
+
+    for (const keys of [
+      { key: "Dead", code: "Backquote" },
+      { key: "`", ctrlKey: true, altKey: true },
+      { key: "`", ctrlKey: true, shiftKey: true },
+    ]) {
+      expect(pressEditorKey(keys).defaultPrevented).toBe(false);
+      expect(fixture.componentInstance.markdown()).toBe("Example");
+    }
+  });
+
+  it("leaves formatting shortcuts inactive in a read-only editor", () => {
+    fixture.componentInstance.setMarkdown("**Example**");
+    fixture.componentInstance.editor!.commands.selectAll();
+    fixture.componentRef.setInput("editable", false);
+    fixture.detectChanges();
+
+    for (const key of ["`", "k", "\\"]) {
+      expect(pressEditorKey({ key, ctrlKey: true }).defaultPrevented).toBe(false);
+    }
+    expect(fixture.componentInstance.markdown()).toBe("**Example**");
+    expect(root().querySelector(".de-link-input")).toBeNull();
+  });
+
+  it("creates, edits and cancels a link from a compact editor's keyboard shortcut", async () => {
+    fixture.componentRef.setInput("compact", true);
+    fixture.componentInstance.setMarkdown("Run example now");
+    const editor = fixture.componentInstance.editor!;
+    editor.commands.setTextSelection({ from: 5, to: 12 });
+
+    expect(pressEditorKey({ key: "k", ctrlKey: true }).defaultPrevented).toBe(true);
+    await fixture.whenStable();
+    const input = root().querySelector<HTMLInputElement>(".de-link-input")!;
+    expect(input.value).toBe("");
+    input.value = "https://example.com/original";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await fixture.whenStable();
+    expect(fixture.componentInstance.markdown()).toBe("Run [example](https://example.com/original) now");
+
+    editor.commands.setTextSelection(8);
+    pressEditorKey({ key: "k", metaKey: true });
+    await fixture.whenStable();
+    const editInput = root().querySelector<HTMLInputElement>(".de-link-input")!;
+    expect(editInput.value).toBe("https://example.com/original");
+    editInput.value = "https://example.com/updated";
+    editInput.dispatchEvent(new Event("input", { bubbles: true }));
+    editInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await fixture.whenStable();
+    expect(fixture.componentInstance.markdown()).toBe("Run [example](https://example.com/updated) now");
+
+    pressEditorKey({ key: "k", ctrlKey: true });
+    await fixture.whenStable();
+    const cancelInput = root().querySelector<HTMLInputElement>(".de-link-input")!;
+    cancelInput.value = "https://example.com/discarded";
+    cancelInput.dispatchEvent(new Event("input", { bubbles: true }));
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    cancelInput.dispatchEvent(escape);
+    await fixture.whenStable();
+    expect(escape.defaultPrevented).toBe(true);
+    expect(root().querySelector(".de-link-input")).toBeNull();
+    expect(fixture.componentInstance.markdown()).toBe("Run [example](https://example.com/updated) now");
+  });
+
+  it.each([
+    ["Ctrl", "**_~~[example](https://example.com)~~_**", { ctrlKey: true }],
+    ["Cmd", "`example`", { metaKey: true }],
+  ])("clears inline formatting with %s+backslash while preserving headings and surrounding marks", (_label, formatted, modifier) => {
+    fixture.componentInstance.setMarkdown(`## **Keep** ${formatted} after`);
+    const editor = fixture.componentInstance.editor!;
+    const from = textPosition("example") - 1;
+    editor.commands.setTextSelection({ from, to: from + 7 });
+    const before = fixture.componentInstance.markdown();
+
+    expect(pressEditorKey({ key: "\\", ...modifier }).defaultPrevented).toBe(true);
+    expect(fixture.componentInstance.markdown()).toBe("## **Keep** example after");
+    editor.commands.undo();
+    expect(fixture.componentInstance.markdown()).toBe(before);
+    editor.commands.redo();
+    expect(fixture.componentInstance.markdown()).toBe("## **Keep** example after");
+  });
+
   it("hands file pastes to a host when uploads are disabled without inserting clipboard HTML", () => {
     const file = imageFile();
     const pasted = vi.fn();
@@ -1206,6 +1310,13 @@ describe("DescriptionEditorComponent", () => {
 
   function root(): HTMLElement {
     return fixture.nativeElement as HTMLElement;
+  }
+
+  function pressEditorKey(keys: KeyboardEventInit): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...keys });
+    editorDom().dispatchEvent(event);
+    fixture.detectChanges();
+    return event;
   }
 
   function imageFile(name = "screenshot.png"): File {

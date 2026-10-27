@@ -52,7 +52,7 @@ needs every language translated again before `pnpm lint` passes.
 
 - Follow shadcn/ui's look without importing it: neutral colours, subtle borders, consistent radius,
   clean type, minimal decoration.
-- Use only Tabler icons: `<i class="ti ti-icon-name"></i>`. Ask before adding an inline SVG icon.
+- Use only Tabler icons: `<i class="ti ti-icon-name" aria-hidden="true"></i>`. Ask before adding an inline SVG icon.
 - Never write "changes save automatically" or similar copy. The `k-autosave-status` chip is the whole
   contract.
 - Full-width panels should fill their width. Reshape the data instead of enlarging the marks.

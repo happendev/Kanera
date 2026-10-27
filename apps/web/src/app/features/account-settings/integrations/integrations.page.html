@@ -1,6 +1,6 @@
 @if (settings.githubAppConfig()?.configured || settings.isSelfHosted()) {
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-brand-github"></i><span i18n="Settings section heading">GitHub App</span></h3>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-brand-github"></i><span i18n="Settings section heading">GitHub App</span></h3>
   <p class="settings-section-help">
     @if (settings.githubAppConfig()?.configured) {
     <ng-container i18n>Install the Kanera GitHub App for this organisation to enable private repository link previews.</ng-container>
@@ -9,11 +9,11 @@
     }
   </p>
   @if (settings.githubError()) {
-  <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.githubError() }}</p>
+  <p class="form-error"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ settings.githubError() }}</p>
   }
   @if (settings.githubCompleting()) {
   <div class="github-app-row">
-    <i class="ti ti-loader-2 board-icon kanera-spin"></i>
+    <i aria-hidden="true" class="ti ti-loader-2 board-icon kanera-spin"></i>
     <span class="github-app-name" i18n>Connecting GitHub...</span>
   </div>
   } @else if (!settings.githubAppConfig()?.configured) {
@@ -24,33 +24,33 @@
     </label>
     <div class="button-row">
       <button class="sm" type="submit" [disabled]="settings.githubManifestStarting() || !settings.githubAccountLogin().trim()">
-        <i class="ti ti-brand-github"></i>
+        <i aria-hidden="true" class="ti ti-brand-github"></i>
         @if (settings.githubManifestStarting()) { <ng-container i18n="Button state">Opening GitHub...</ng-container> } @else { <ng-container i18n="Button">Set up GitHub access</ng-container> }
       </button>
     </div>
   </form>
   } @else if (settings.githubInstallation(); as install) {
   <div class="github-app-row">
-    <i class="ti ti-brand-github board-icon"></i>
+    <i aria-hidden="true" class="ti ti-brand-github board-icon"></i>
     <span class="github-app-name">{{ install.accountLogin }}</span>
     <span class="source-badge" [class.success]="install.repositorySelection === 'all' || install.repositories.length > 0" [class.warning]="install.repositorySelection !== 'all' && install.repositories.length === 0">{{
       settings.githubRepositoryAccessLabel(install) }}</span>
     <div class="row-actions">
       @if (install.repositorySelection !== 'all' && settings.githubInstallHref(); as href) {
-      <a class="ghost sm" [href]="href"><i class="ti ti-settings"></i> <ng-container i18n="Button: change which repositories GitHub shares">Update access</ng-container></a>
+      <a class="ghost sm" [href]="href"><i aria-hidden="true" class="ti ti-settings"></i> <ng-container i18n="Button: change which repositories GitHub shares">Update access</ng-container></a>
       }
-      <button class="ghost icon danger" (click)="settings.disconnectGitHub()" aria-label="Disconnect GitHub" i18n-aria-label kTooltip="Disconnect GitHub" i18n-kTooltip><i class="ti ti-unlink"></i></button>
+      <button class="ghost icon danger" (click)="settings.disconnectGitHub()" aria-label="Disconnect GitHub" i18n-aria-label kTooltip="Disconnect GitHub" i18n-kTooltip><i aria-hidden="true" class="ti ti-unlink"></i></button>
     </div>
   </div>
   } @else if (settings.githubInstallHref(); as href) {
   <div class="github-app-row">
-    <i class="ti ti-brand-github board-icon"></i>
+    <i aria-hidden="true" class="ti ti-brand-github board-icon"></i>
     <span class="github-app-name">@if (settings.githubAppConfig()?.appSlug; as slug) { {{ slug }} } @else { <ng-container i18n>GitHub App configured</ng-container> }</span>
     <span class="source-badge warning" i18n="GitHub App status">Not installed</span>
     <div class="row-actions">
-      <a class="sm" [href]="href"><i class="ti ti-plug-connected"></i> <ng-container i18n="Button: install the GitHub App">Install</ng-container></a>
+      <a class="sm" [href]="href"><i aria-hidden="true" class="ti ti-plug-connected"></i> <ng-container i18n="Button: install the GitHub App">Install</ng-container></a>
       @if (settings.canForgetGitHubApp()) {
-      <button class="ghost icon danger" type="button" (click)="settings.forgetGitHubApp()" aria-label="Forget GitHub App" i18n-aria-label kTooltip="Forget GitHub App" i18n-kTooltip><i class="ti ti-trash"></i></button>
+      <button class="ghost icon danger" type="button" (click)="settings.forgetGitHubApp()" aria-label="Forget GitHub App" i18n-aria-label kTooltip="Forget GitHub App" i18n-kTooltip><i aria-hidden="true" class="ti ti-trash"></i></button>
       }
     </div>
   </div>
@@ -62,7 +62,7 @@
 <div class="settings-section">
   <div class="section-heading-row">
     <div>
-      <h3 class="settings-section-title"><i class="ti ti-bell-ringing"></i><span i18n="Settings section heading">Enable push message</span></h3>
+      <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-bell-ringing"></i><span i18n="Settings section heading">Enable push message</span></h3>
       <p class="settings-section-help" i18n>Organisation-wide master switch for browser push. Individual users opt in and choose per-type push preferences from notification settings.</p>
       <span class="source-badge" [class.success]="settings.client()?.pushEnabled" [class.warning]="!settings.client()?.pushEnabled">@if (settings.client()?.pushEnabled) { <ng-container i18n="Push status badge">Enabled</ng-container> } @else { <ng-container i18n="Push status badge">Disabled</ng-container> }</span>
     </div>
@@ -88,7 +88,7 @@
 <div class="settings-section">
   <div class="section-heading-row">
     <div>
-      <h3 class="settings-section-title"><i class="ti ti-mail-cog"></i><span>SMTP</span></h3>
+      <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-mail-cog"></i><span>SMTP</span></h3>
       <p class="settings-section-help" i18n>
         Outbound email settings for this organisation. Docker environment values are used until you save an override here.
       </p>
@@ -133,7 +133,7 @@
             [placeholder]="settings.smtpPasswordIsSaved() ? savedPasswordPlaceholder : ''" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()" />
           <button type="button" class="reveal-btn" (click)="settings.showSmtpPassword.set(!settings.showSmtpPassword())" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()"
             [attr.aria-label]="settings.showSmtpPassword() ? hidePasswordLabel : showPasswordLabel">
-            <i [class]="settings.showSmtpPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+            <i aria-hidden="true" [class]="settings.showSmtpPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>
         </div>
       </label>
@@ -160,7 +160,7 @@
     </button>
     <div class="smtp-test-wrap">
       <button #smtpTestTrigger class="ghost sm" type="button" (click)="settings.toggleSmtpTestPopover()" [disabled]="!settings.isClientAdmin() || settings.smtpSaving()" [attr.aria-expanded]="settings.smtpTestOpen()">
-        <i class="ti ti-mail-check"></i>
+        <i aria-hidden="true" class="ti ti-mail-check"></i>
         <ng-container i18n="Button: send a test email">Test</ng-container>
       </button>
       @if (settings.smtpTestOpen()) {
@@ -170,14 +170,14 @@
           <input type="email" [value]="settings.smtpTestTo()" (input)="settings.smtpTestTo.set($any($event.target).value)" name="smtpTestTo" placeholder="you@example.com" i18n-placeholder="Example email address" [disabled]="settings.smtpTesting()" />
         </label>
         @if (settings.smtpTestError()) {
-        <p class="form-error"><i class="ti ti-circle-x"></i>{{ settings.smtpTestError() }}</p>
+        <p class="form-error"><i aria-hidden="true" class="ti ti-circle-x"></i>{{ settings.smtpTestError() }}</p>
         }
         <button class="sm smtp-send-button" type="button" (click)="settings.testSmtp()" [disabled]="settings.smtpTesting() || !settings.smtpTestTo().trim()">
           @if (settings.smtpTesting()) {
-          <i class="ti ti-loader-2 kanera-spin"></i>
+          <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i>
           <ng-container i18n="Button state">Sending...</ng-container>
           } @else {
-          <i class="ti ti-send"></i>
+          <i aria-hidden="true" class="ti ti-send"></i>
           <ng-container i18n="Button">Send test email</ng-container>
           }
         </button>

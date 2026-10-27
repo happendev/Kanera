@@ -1,15 +1,15 @@
 <div class="board-settings-section">
         <div class="guest-section-head">
-          <i class="ti ti-layout-kanban"></i>
+          <i aria-hidden="true" class="ti ti-layout-kanban"></i>
           <span i18n="Section heading">Boards</span>
         </div>
         <k-docs-link path="boards" label="Learn more about boards" i18n-label />
         <form class="board-form" (submit)="settings.createBoard($event)">
           <input name="board" placeholder="Board name" i18n-placeholder [value]="settings.newBoardName()" (input)="settings.newBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required class="grow" />
-          <button class="sm compact-add-button" type="submit" aria-label="Add board" i18n-aria-label kTooltip="Add board" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add board</span></button>
+          <button class="sm compact-add-button" type="submit" aria-label="Add board" i18n-aria-label kTooltip="Add board" i18n-kTooltip><i aria-hidden="true" class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add board</span></button>
         </form>
         @if (settings.boardLimitReached()) {
-        <p class="plan-limit-hint"><i class="ti ti-lock"></i> <ng-container i18n>Your existing boards stay active on Free. Add another board to review the exact Pro price for your team.</ng-container></p>
+        <p class="plan-limit-hint"><i aria-hidden="true" class="ti ti-lock"></i> <ng-container i18n>Your existing boards stay active on Free. Add another board to review the exact Pro price for your team.</ng-container></p>
         }
         @if (settings.generalSettingsError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
         @for (section of boardSections(); track section.id) {
@@ -26,7 +26,7 @@
         <div class="boards" cdkDropList [cdkDropListData]="section.boards" (cdkDropListDropped)="settings.dropBoard($event)">
           @for (board of section.boards; track board.id) {
           <div cdkDrag class="board-tile board-row">
-            <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+            <i aria-hidden="true" class="ti ti-grip-vertical grip" cdkDragHandle></i>
             <k-board-icon [icon]="board.icon" [color]="board.iconColor || settings.accentColor()" [size]="26" />
             @if (settings.editingBoardId() === board.id) {
             <input class="inline-name-input grow" [value]="settings.editingBoardName()" (input)="settings.editingBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveBoardName(board.id)" (keydown.enter)="settings.saveBoardName(board.id)"
@@ -51,14 +51,14 @@
               <k-color-picker [value]="$any(board.iconColor)" (valueChange)="settings.updateBoardColor(board.id, $event)" />
               @if (settings.canManageBoardAccess()) {
               <button class="ghost icon" [class.active]="settings.managingBoardAccessId() === board.id" (click)="settings.openBoardAccess(board.id)" aria-label="Manage access" i18n-aria-label kTooltip="Manage access" i18n-kTooltip>
-                <i class="ti ti-users"></i>
+                <i aria-hidden="true" class="ti ti-users"></i>
               </button>
               @if (settings.managingBoardAccessId() === board.id) {
               <k-board-members-menu [boardId]="board.id" [workspaceId]="settings.workspaceId()" [ownerClientId]="settings.ownerClientId()" [currentUserId]="settings.currentUserId()" [canManage]="settings.canManageBoardAccess()" [members]="[]" (dismissed)="settings.closeBoardAccess(board.id)" />
               }
               }
               <button class="ghost icon danger" (click)="settings.deleteBoard(board.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete board" i18n-aria-label kTooltip="Delete board" i18n-kTooltip>
-                <i [class]="settings.deletionPreviewKey() === 'board:' + board.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
+                <i aria-hidden="true" [class]="settings.deletionPreviewKey() === 'board:' + board.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
               </button>
             </div>
             <k-board-tile-summary class="board-counts" [summary]="settings.boardTileSummaries().get(board.id) ?? null" />
@@ -93,19 +93,19 @@
 
 <div class="board-settings-section">
         <div class="guest-section-head">
-          <i class="ti ti-folders"></i>
+          <i aria-hidden="true" class="ti ti-folders"></i>
           <span i18n="Section heading: board groups">Groups</span>
         </div>
         <p class="settings-section-hint" i18n>Use groups to organize the sidebar. Boards without a group stay listed directly under Boards.</p>
         <k-docs-link path="boards" fragment="group-boards" label="Learn more about board groups" i18n-label />
         <form class="board-form" (submit)="settings.createBoardGroup($event)">
           <input name="boardGroup" placeholder="Group title" i18n-placeholder [value]="settings.newBoardGroupTitle()" (input)="settings.newBoardGroupTitle.set($any($event.target).value)" required class="grow" />
-          <button class="sm compact-add-button" type="submit" aria-label="Add group" i18n-aria-label kTooltip="Add group" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add group</span></button>
+          <button class="sm compact-add-button" type="submit" aria-label="Add group" i18n-aria-label kTooltip="Add group" i18n-kTooltip><i aria-hidden="true" class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add group</span></button>
         </form>
         <div class="boards board-groups" cdkDropList [cdkDropListData]="settings.boardGroups()" (cdkDropListDropped)="settings.dropBoardGroup($event)">
           @for (group of settings.boardGroups(); track group.id) {
           <div cdkDrag class="board-tile">
-            <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+            <i aria-hidden="true" class="ti ti-grip-vertical grip" cdkDragHandle></i>
             @if (settings.editingBoardGroupId() === group.id) {
             <input class="inline-name-input grow" [value]="settings.editingBoardGroupTitle()" (input)="settings.editingBoardGroupTitle.set($any($event.target).value)" (blur)="settings.saveBoardGroupTitle(group.id)" (keydown.enter)="settings.saveBoardGroupTitle(group.id)"
               (keydown.escape)="settings.cancelEditBoardGroup()" autofocus />
@@ -114,7 +114,7 @@
             }
             <div class="row-actions">
               <button class="ghost icon danger" (click)="settings.deleteBoardGroup(group.id)" aria-label="Delete group" i18n-aria-label kTooltip="Delete group" i18n-kTooltip>
-                <i class="ti ti-trash"></i>
+                <i aria-hidden="true" class="ti ti-trash"></i>
               </button>
             </div>
           </div>

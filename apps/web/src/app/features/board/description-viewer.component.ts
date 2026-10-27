@@ -36,7 +36,8 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
 });
 
 const ALLOWED_TAGS = [
-  "p", "br", "strong", "em", "s", "code", "pre", "blockquote",
+  // marked emits <del> for strikethrough; the editor's HTML uses <s>.
+  "p", "br", "strong", "em", "s", "del", "code", "pre", "blockquote",
   "h1", "h2", "h3", "h4", "h5", "h6",
   "ul", "ol", "li",
   "table", "thead", "tbody", "tr", "th", "td",
@@ -205,14 +206,14 @@ function githubStateLabel(state: string): string {
   template: `
     @if (visibleValue().trim().length === 0) {
       <span class="dv-empty">
-        <i class="ti" [class]="emptyIconClass()"></i>
+        <i aria-hidden="true" class="ti" [class]="emptyIconClass()"></i>
         {{ emptyLabel() }}
       </span>
     } @else {
       <div class="dv-shell" [class.dv-has-copy]="showCopy()">
         @if (showCopy()) {
           <button type="button" class="dv-copy-btn" (click)="copyText($event)" [attr.aria-label]="copied() ? copiedTextLabel : copyTextLabel" [kTooltip]="copied() ? copiedLabel : copyTextLabel">
-            <i class="ti" [class.ti-copy]="!copied()" [class.ti-copy-check]="copied()"></i>
+            <i aria-hidden="true" class="ti" [class.ti-copy]="!copied()" [class.ti-copy-check]="copied()"></i>
           </button>
         }
         <div class="dv-body" [class.dv-compact]="compact()" [innerHTML]="html()" (click)="onClick($event)"></div>
@@ -585,6 +586,7 @@ function githubStateLabel(state: string): string {
     }
 
     .dv-body blockquote {
+      /* accent-stripe-ok: the conventional neutral quote rule on a blockquote, not an accent */
       border-left: 3px solid var(--border-strong);
       margin: 0 0 10px;
       padding: 2px 12px;

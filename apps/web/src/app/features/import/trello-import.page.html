@@ -1,19 +1,19 @@
 <div class="import-shell">
   <div class="board-settings-section">
     <div class="guest-section-head">
-      <i class="ti ti-package-import"></i>
+      <i aria-hidden="true" class="ti ti-package-import"></i>
       <span>{{ sourceCopy().title }}</span>
     </div>
     <p class="settings-section-hint">{{ sourceCopy().hint }}</p>
     @if (fileName()) {
-    <span class="file-chip" [title]="fileName()"><i class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i><span>{{ fileName() }}</span></span>
+    <span class="file-chip" [title]="fileName()"><i aria-hidden="true" class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i><span>{{ fileName() }}</span></span>
     }
   </div>
 
   <div class="import-stepper" aria-label="Import steps" i18n-aria-label>
     @for (item of steps(); track item; let index = $index) {
     <span class="step-pill" [class.is-active]="step() === item" [class.is-done]="stepIndex() > index" [attr.aria-current]="step() === item ? 'step' : null">
-      @if (stepIndex() > index) { <i class="ti ti-check"></i> } @else { <span>{{ index + 1 }}</span> }
+      @if (stepIndex() > index) { <i aria-hidden="true" class="ti ti-check"></i> } @else { <span>{{ index + 1 }}</span> }
     </span>
     }
   </div>
@@ -24,31 +24,31 @@
   </div>
 
   @if (error()) {
-  <p class="import-error"><i class="ti ti-alert-circle"></i>{{ error() }}</p>
+  <p class="import-error"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ error() }}</p>
   }
 
   @if (step() === 'upload') {
   <form class="upload-panel attach-dropzone" [class.is-drag-active]="uploadDragActive()" [class.is-uploading]="busy()" (submit)="analyze($event)" (dragenter)="onUploadDragEnter($event)" (dragover)="onUploadDragOver($event)"
     (dragleave)="onUploadDragLeave($event)" (drop)="onUploadDrop($event)">
     <label class="attach-upload sm" [class.disabled]="busy()">
-      <i class="ti ti-upload"></i>
+      <i aria-hidden="true" class="ti ti-upload"></i>
       @if (selectedFile()) { <ng-container i18n="Button: choose a different import file">Change export</ng-container> } @else { <ng-container i18n="Button: choose an import file">Add export</ng-container> }
       <input type="file" hidden [attr.accept]="source() === 'csv' ? '.csv,text/csv,text/plain' : '.json,application/json'" [disabled]="busy()" (change)="onFileSelected($event)" />
     </label>
     <div class="upload-file-meta">
       @if (selectedFile()) {
-      <span class="upload-file-name" [title]="selectedFile()!.name"><i class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i><span>{{ selectedFile()!.name }}</span></span>
+      <span class="upload-file-name" [title]="selectedFile()!.name"><i aria-hidden="true" class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i><span>{{ selectedFile()!.name }}</span></span>
       <span i18n="File size in megabytes">{{ fileSizeMb(selectedFile()!.size) // i18n(ph="size") }} MB</span>
       } @else {
       <span>{{ sourceCopy().upload }}</span>
       }
     </div>
     <button type="submit" class="sm" [disabled]="busy()">
-      @if (busy()) { <i class="ti ti-loader-2 spin"></i> } @else { <i class="ti ti-scan"></i> }
+      @if (busy()) { <i aria-hidden="true" class="ti ti-loader-2 spin"></i> } @else { <i aria-hidden="true" class="ti ti-scan"></i> }
       <ng-container i18n="Button: analyse the uploaded import file">Analyze</ng-container>
     </button>
     <div class="attach-drop-hint" aria-hidden="true">
-      <i class="ti ti-drag-drop"></i>
+      <i aria-hidden="true" class="ti ti-drag-drop"></i>
       @if (source() === 'csv') { <ng-container i18n>Drop CSV file here</ng-container> } @else { <ng-container i18n>Drop JSON export here</ng-container> }
     </div>
   </form>
@@ -75,7 +75,7 @@
     <span class="csv-timezone" i18n>Due dates use your timezone ({{ mapping.timezone // i18n(ph="timezone") }}).</span>
   </div>
   @if (csvAmbiguousDates()) {
-  <p class="import-warning"><i class="ti ti-alert-triangle"></i><ng-container i18n>Some dates are ambiguous. Confirm whether the day or month comes first.</ng-container></p>
+  <p class="import-warning"><i aria-hidden="true" class="ti ti-alert-triangle"></i><ng-container i18n>Some dates are ambiguous. Confirm whether the day or month comes first.</ng-container></p>
   }
   <div class="csv-columns">
     @for (column of preview.columns; track column.index) {
@@ -126,13 +126,13 @@
   </div>
   @if (csvMappingErrors().length) {
   <div class="import-error csv-errors">
-    <i class="ti ti-alert-circle"></i>
+    <i aria-hidden="true" class="ti ti-alert-circle"></i>
     <div>@for (mappingError of csvMappingErrors(); track mappingError) { <span>{{ mappingError }}</span> }</div>
   </div>
   }
   <div class="wizard-actions">
-    <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i class="ti ti-arrow-left"></i><ng-container i18n="Button: previous wizard step">Back</ng-container></button>
-    <button type="button" class="sm" (click)="next()" [disabled]="busy() || csvMappingErrors().length > 0"><ng-container i18n="Button: next wizard step">Next</ng-container><i class="ti ti-arrow-right"></i></button>
+    <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i aria-hidden="true" class="ti ti-arrow-left"></i><ng-container i18n="Button: previous wizard step">Back</ng-container></button>
+    <button type="button" class="sm" (click)="next()" [disabled]="busy() || csvMappingErrors().length > 0"><ng-container i18n="Button: next wizard step">Next</ng-container><i aria-hidden="true" class="ti ti-arrow-right"></i></button>
   </div>
   }
   } @else if (manifest(); as manifest) {
@@ -223,7 +223,7 @@
     </div>
     }
     @if (incompatibleFieldMaps().length) {
-    <p class="import-warning"><i class="ti ti-alert-triangle"></i><ng-container i18n>Some mapped fields use a different type and need another target.</ng-container></p>
+    <p class="import-warning"><i aria-hidden="true" class="ti ti-alert-triangle"></i><ng-container i18n>Some mapped fields use a different type and need another target.</ng-container></p>
     }
   </div>
   } @else if (step() === 'members') {
@@ -263,7 +263,7 @@
       </div>
       @if (canConnectTrello()) {
       <button type="button" class="ghost sm" (click)="connectTrello()">
-        @if (trelloAttachmentCopyEnabled()) { <i class="ti ti-circle-check"></i><ng-container i18n="Status: Trello account connected">Connected</ng-container> } @else { <i class="ti ti-brand-trello"></i><ng-container i18n="Button: connect a Trello account">Connect Trello</ng-container> }
+        @if (trelloAttachmentCopyEnabled()) { <i aria-hidden="true" class="ti ti-circle-check"></i><ng-container i18n="Status: Trello account connected">Connected</ng-container> } @else { <i aria-hidden="true" class="ti ti-brand-trello"></i><ng-container i18n="Button: connect a Trello account">Connect Trello</ng-container> }
       </button>
       }
     </div>
@@ -281,14 +281,14 @@
   </div>
   } @else if (step() === 'result' && result(); as result) {
   <div class="result-panel">
-    <i class="ti ti-circle-check"></i>
+    <i aria-hidden="true" class="ti ti-circle-check"></i>
     <h3 i18n="Heading after an import finishes">Import complete</h3>
     @if (standalone()) {
     <p i18n>{ result.cards.created, plural, =1 {{{ result.cards.created }} card imported into this board.} other {{{ result.cards.created }} cards imported into this board.} }</p>
     } @else {
     <p i18n>{ result.cards.created, plural, =1 {{{ result.cards.created }} card imported into a new board.} other {{{ result.cards.created }} cards imported into a new board.} }</p>
     }
-    <a class="sm" [routerLink]="['/b', result.createdBoardId]"><i class="ti ti-arrow-right"></i><ng-container i18n="Link: open the imported board">Go to board</ng-container></a>
+    <a class="sm" [routerLink]="['/b', result.createdBoardId]"><i aria-hidden="true" class="ti ti-arrow-right"></i><ng-container i18n="Link: open the imported board">Go to board</ng-container></a>
     @if (result.warnings.length) {
     <div class="summary-box">
       @for (warning of result.warnings; track warning) { <span>{{ warning }}</span> }
@@ -315,16 +315,16 @@
     @if (step() === 'options' && slowImport()) {
     <span class="import-patience" i18n>Please be patient, the import is running...</span>
     }
-    <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i class="ti ti-arrow-left"></i><ng-container i18n="Button: previous wizard step">Back</ng-container></button>
+    <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i aria-hidden="true" class="ti ti-arrow-left"></i><ng-container i18n="Button: previous wizard step">Back</ng-container></button>
     @if (step() === 'options') {
     <div class="import-action">
       <button type="button" class="sm" (click)="commit()" [disabled]="busy()">
-        @if (busy()) { <i class="ti ti-loader-2 spin"></i> } @else { <i class="ti ti-package-import"></i> }
+        @if (busy()) { <i aria-hidden="true" class="ti ti-loader-2 spin"></i> } @else { <i aria-hidden="true" class="ti ti-package-import"></i> }
         <ng-container i18n="Button: start the import">Import</ng-container>
       </button>
     </div>
     } @else {
-    <button type="button" class="sm" (click)="next()" [disabled]="busy()"><ng-container i18n="Button: next wizard step">Next</ng-container><i class="ti ti-arrow-right"></i></button>
+    <button type="button" class="sm" (click)="next()" [disabled]="busy()"><ng-container i18n="Button: next wizard step">Next</ng-container><i aria-hidden="true" class="ti ti-arrow-right"></i></button>
     }
   </div>
   }

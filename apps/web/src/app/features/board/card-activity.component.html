@@ -1,6 +1,6 @@
 <section class="detail-section">
   <div class="section-label">
-    <i class="ti ti-message-circle"></i>
+    <i aria-hidden="true" class="ti ti-message-circle"></i>
     &ngsp;<ng-container i18n="Section heading in card detail: comments and history">Activity</ng-container>
     @if (renderableFeedItems().length) {
     <span class="count">{{ renderableFeedItems().length }}</span>
@@ -11,7 +11,7 @@
     </div>
     <div class="comment-search-wrap">
       <button #commentSearchTrigger class="ghost icon comment-search-btn" [class.is-active]="commentSearchQuery().length > 0 || commentSearchOpen()" (click)="toggleCommentSearch()" kTooltip="Search comments" i18n-kTooltip>
-        <i class="ti ti-search"></i>
+        <i aria-hidden="true" class="ti ti-search"></i>
         @if (commentSearchQuery().length > 0) {
         <span class="comment-search-badge"></span>
         }
@@ -25,11 +25,11 @@
         (apDismissed)="commentSearchOpen.set(false)"
       >
         <div class="comment-search-field">
-          <i class="ti ti-search comment-search-icon"></i>
+          <i aria-hidden="true" class="ti ti-search comment-search-icon"></i>
           <input class="comment-search-input" type="text" placeholder="Search comments..." i18n-placeholder [value]="commentSearchQuery()" (input)="commentSearchQuery.set($any($event.target).value)" autofocus />
           @if (commentSearchQuery().length > 0) {
           <button class="ghost icon comment-search-clear" (click)="commentSearchQuery.set('')" kTooltip="Clear" i18n-kTooltip="Button: clear the comment search">
-            <i class="ti ti-x"></i>
+            <i aria-hidden="true" class="ti ti-x"></i>
           </button>
           }
         </div>
@@ -53,7 +53,7 @@
     </div>
     } @else {
     <button type="button" class="comment-placeholder" [disabled]="!canMutate()" (click)="startAddComment()">
-      <i class="ti ti-message-circle"></i>
+      <i aria-hidden="true" class="ti ti-message-circle"></i>
       <span i18n>Write a comment...</span>
     </button>
     }
@@ -75,15 +75,15 @@
     </div>
     } @else if (feedError() && !feedItems().length) {
     <div class="feed-error">
-      <p class="no-activity"><i class="ti ti-alert-circle"></i><ng-container i18n>Couldn't load activity.</ng-container></p>
-      <button type="button" class="ghost sm" (click)="retryFeed()"><i class="ti ti-refresh"></i>&ngsp;<ng-container i18n="Button: reload the activity feed">Retry</ng-container></button>
+      <p class="no-activity"><i aria-hidden="true" class="ti ti-alert-circle"></i><ng-container i18n>Couldn't load activity.</ng-container></p>
+      <button type="button" class="ghost sm" (click)="retryFeed()"><i aria-hidden="true" class="ti ti-refresh"></i>&ngsp;<ng-container i18n="Button: reload the activity feed">Retry</ng-container></button>
     </div>
     }
     @if (!feedLoading() && !feedError() && !feedItems().length) {
-    <p class="no-activity"><i class="ti ti-clock"></i><ng-container i18n>No activity yet.</ng-container></p>
+    <p class="no-activity"><i aria-hidden="true" class="ti ti-clock"></i><ng-container i18n>No activity yet.</ng-container></p>
     }
     @if (feedItems().length && !filteredFeedItems().length) {
-    <p class="no-activity"><i class="ti ti-message-circle-off"></i>@if (commentSearchQuery()) {<ng-container i18n>No comments match "{{ commentSearchQuery() // i18n(ph="query") }}".</ng-container>} @else {<ng-container i18n>No comments yet.</ng-container>}</p>
+    <p class="no-activity"><i aria-hidden="true" class="ti ti-message-circle-off"></i>@if (commentSearchQuery()) {<ng-container i18n>No comments match "{{ commentSearchQuery() // i18n(ph="query") }}".</ng-container>} @else {<ng-container i18n>No comments yet.</ng-container>}</p>
     }
     @for (item of feedViewItems(); track item.key) {
     @if (item.kind === 'day') {
@@ -92,7 +92,7 @@
     <div class="comment" [class.is-system]="item.data.authorKind === 'system'" [class.is-mirror]="item.isMirror">
       @if (item.isMirror) {
       <div class="activity-mirror-icon" aria-label="Board mirror comment" i18n-aria-label kTooltip="Synced by Board mirror" i18n-kTooltip="Tooltip; Board mirror is the feature that syncs cards between boards">
-        <i class="ti ti-circles-relation"></i>
+        <i aria-hidden="true" class="ti ti-circles-relation"></i>
       </div>
       } @else if (item.data.authorKind === 'system') {
       <k-system-avatar [size]="32" />
@@ -112,7 +112,7 @@
           } @else {
           <span class="comment-author">{{ item.data.authorName }}</span>
           @if (item.data.authorKind === 'agent') {
-          <span class="via-agent" [kTooltip]="writtenByAgentTooltip(item.data.agentName, item.data.authorName)"><i class="ti ti-sparkles"></i>{{ viaAgentLabel(item.data.agentName) }}</span>
+          <span class="via-agent" [kTooltip]="writtenByAgentTooltip(item.data.agentName, item.data.authorName)"><i aria-hidden="true" class="ti ti-sparkles"></i>{{ viaAgentLabel(item.data.agentName) }}</span>
           }
           @if (copiedSystemAuthorName(item.data); as copiedName) {
           <span class="comment-copied-author">&nbsp;({{ copiedName }})</span>
@@ -145,13 +145,13 @@
             @if (reactionsVisible && thumbs) {
             <button type="button" class="reaction-chip" [class.is-active]="userReacted(item.data, 'thumbs_up')" [class.is-readonly]="!canReact(item.data)" [attr.aria-disabled]="!canReact(item.data) ? 'true' : null"
               (click)="toggleReaction(item.data, 'thumbs_up')" (mouseenter)="openReactionPopover($event, thumbs)" (mouseleave)="closeReactionPopover()">
-              <i class="ti ti-thumb-up"></i>
+              <i aria-hidden="true" class="ti ti-thumb-up"></i>
               <span class="reaction-count">{{ thumbs.count }}</span>
             </button>
             }
             @if (reactionsVisible && canReactRole(item.data) && !thumbs) {
             <button type="button" class="reaction-add xs" [disabled]="!canReact(item.data)" (click)="toggleReaction(item.data, 'thumbs_up')" kTooltip="React with thumbs up" i18n-kTooltip>
-              <i class="ti ti-thumb-up"></i>
+              <i aria-hidden="true" class="ti ti-thumb-up"></i>
             </button>
             }
           </div>
@@ -162,7 +162,7 @@
           </div>
           } @else if (canEdit() && (item.data.authorKind !== 'user' || item.data.authorId !== currentUserId()?.id)) {
           <div class="comment-actions">
-            <button class="ghost xs" [disabled]="!canMutate()" (click)="startReplyComment(item.data)"><i class="ti ti-arrow-back-up"></i>&ngsp;<ng-container i18n="Button: reply to this comment">Reply</ng-container></button>
+            <button class="ghost xs" [disabled]="!canMutate()" (click)="startReplyComment(item.data)"><i aria-hidden="true" class="ti ti-arrow-back-up"></i>&ngsp;<ng-container i18n="Button: reply to this comment">Reply</ng-container></button>
             @if (canDeleteCommentRole(item.data)) {
             <button class="ghost xs" [disabled]="!canMutate()" (click)="deleteComment(item.data.id)" i18n="Button: delete this comment">Delete</button>
             }
@@ -176,7 +176,7 @@
     <div class="activity-item" [class.is-system]="item.isSystem" [class.is-mirror]="item.isMirror">
       @if (item.isMirror) {
       <div class="activity-mirror-icon" aria-label="Board mirror activity" i18n-aria-label kTooltip="Synced by Board mirror" i18n-kTooltip="Tooltip; Board mirror is the feature that syncs cards between boards">
-        <i class="ti ti-circles-relation"></i>
+        <i aria-hidden="true" class="ti ti-circles-relation"></i>
       </div>
       } @else if (item.isSystem) {
       <k-system-avatar [size]="32" />
@@ -192,7 +192,7 @@
             <strong class="activity-actor">{{ item.actorText }}</strong>
             }
             @if (item.data.actorKind === 'agent') {
-            <span class="via-agent" [kTooltip]="doneByAgentTooltip(item.data.agentName, item.data.actorName)"><i class="ti ti-sparkles"></i>{{ viaAgentLabel(item.data.agentName) }}</span>
+            <span class="via-agent" [kTooltip]="doneByAgentTooltip(item.data.agentName, item.data.actorName)"><i aria-hidden="true" class="ti ti-sparkles"></i>{{ viaAgentLabel(item.data.agentName) }}</span>
             }
             <span [innerHTML]="item.html"></span>
           </span>
@@ -215,7 +215,7 @@
           @if (preview.thumbnailUrl; as thumb) {
           <img [src]="thumb" [alt]="preview.fileName" />
           } @else {
-          <div class="activity-file-fallback"><i class="ti" [class]="preview.iconClass"></i></div>
+          <div class="activity-file-fallback"><i aria-hidden="true" class="ti" [class]="preview.iconClass"></i></div>
           }
           <span class="activity-file-name">{{ preview.fileName }}</span>
         </a>
@@ -224,7 +224,7 @@
           @if (preview.thumbnailUrl; as thumb) {
           <img [src]="thumb" [alt]="preview.fileName" />
           } @else {
-          <div class="activity-file-fallback"><i class="ti" [class]="preview.iconClass"></i></div>
+          <div class="activity-file-fallback"><i aria-hidden="true" class="ti" [class]="preview.iconClass"></i></div>
           }
           <span class="activity-file-name">{{ preview.fileName }}</span>
         </div>
@@ -238,16 +238,16 @@
           @if (attachmentReactionsVisible && attachmentThumbs) {
           <button type="button" class="reaction-chip" [class.is-active]="attachmentUserReacted(target, 'thumbs_up')" [class.is-readonly]="!canReactToAttachment(target)" [attr.aria-disabled]="!canReactToAttachment(target) ? 'true' : null"
             (click)="toggleAttachmentReaction(target, 'thumbs_up')" (mouseenter)="openReactionPopover($event, attachmentThumbs)" (mouseleave)="closeReactionPopover()">
-            <i class="ti ti-thumb-up"></i>
+            <i aria-hidden="true" class="ti ti-thumb-up"></i>
             <span class="reaction-count">{{ attachmentThumbs.count }}</span>
           </button>
           } @else if (attachmentReactionsVisible && canReactToAttachmentRole(target)) {
           <button type="button" class="reaction-add xs" [disabled]="!canReactToAttachment(target)" (click)="toggleAttachmentReaction(target, 'thumbs_up')" kTooltip="React with thumbs up" i18n-kTooltip>
-            <i class="ti ti-thumb-up"></i>
+            <i aria-hidden="true" class="ti ti-thumb-up"></i>
           </button>
           }
           @if (canEdit()) {
-          <button type="button" class="ghost xs" [disabled]="!canMutate()" (click)="startAttachmentComment(target)"><i class="ti ti-message-circle"></i>&ngsp;<ng-container i18n="verb|Button under an uploaded file in card activity: start a comment about it">Comment</ng-container></button>
+          <button type="button" class="ghost xs" [disabled]="!canMutate()" (click)="startAttachmentComment(target)"><i aria-hidden="true" class="ti ti-message-circle"></i>&ngsp;<ng-container i18n="verb|Button under an uploaded file in card activity: start a comment about it">Comment</ng-container></button>
           }
         </div>
         }
@@ -255,7 +255,7 @@
         }
         @if (item.hasDescriptionChanges) {
         <button type="button" class="activity-diff-toggle" (click)="openDescriptionDiff(item.data.id)">
-          <i class="ti ti-arrows-diff"></i>
+          <i aria-hidden="true" class="ti ti-arrows-diff"></i>
           <span i18n="Button: show what changed in the description">View changes</span>
         </button>
         }
@@ -266,7 +266,7 @@
     @if (feedHasMore() && !commentSearchQuery()) {
     <div class="feed-scroll-sentinel" #feedLoadMoreSentinel aria-hidden="true">
       @if (feedLoadingMore()) {
-      <i class="ti ti-loader-2"></i>
+      <i aria-hidden="true" class="ti ti-loader-2"></i>
       }
     </div>
     }
@@ -278,18 +278,18 @@
   <section class="description-diff-modal" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" aria-labelledby="description-diff-title" (click)="$event.stopPropagation()">
     <header class="description-diff-modal-header">
       <div>
-        <h2 id="description-diff-title"><i class="ti ti-arrows-diff"></i>&ngsp;<ng-container i18n="Dialog heading">Description changes</ng-container></h2>
+        <h2 id="description-diff-title"><i aria-hidden="true" class="ti ti-arrows-diff"></i>&ngsp;<ng-container i18n="Dialog heading">Description changes</ng-container></h2>
         <p>{{ selected.activity.actorName }} · {{ formatFeedTime(selected.activity.updatedAt) }}</p>
       </div>
       <div class="description-diff-modal-actions">
         <button type="button" class="ghost icon" (click)="closeDescriptionDiff()" kTooltip="Close" i18n-kTooltip="Button: close the dialog">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       </div>
     </header>
     @if (selected.diff.formattingOnly && !selected.diff.hasChanges) {
     <p class="description-diff-note">
-      <i class="ti ti-info-circle"></i>
+      <i aria-hidden="true" class="ti ti-info-circle"></i>
       &ngsp;<ng-container i18n>Only cosmetic formatting changed — the semantic content is unchanged.</ng-container>
     </p>
     } @else {
@@ -298,7 +298,7 @@
         @for (line of selected.diff.lines; track $index) {
         @if (line.kind === 'gap') {
         <p class="description-diff-line description-diff-gap">
-          <span class="description-diff-marker"><i class="ti ti-dots"></i></span>
+          <span class="description-diff-marker"><i aria-hidden="true" class="ti ti-dots"></i></span>
           <span class="description-diff-gap-text">{{ line.chunks[0].text }}</span>
         </p>
         } @else {

@@ -13,7 +13,7 @@ import { Subject } from "rxjs";
         <h3 class="title">{{ title() }}</h3>
         @if (message()) {
           <p class="message" [class.loading-message]="loading()">
-            @if (loading()) { <i class="ti ti-loader-2 kanera-spin"></i> }
+            @if (loading()) { <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i> }
             <span>{{ message() }}</span>
           </p>
         }

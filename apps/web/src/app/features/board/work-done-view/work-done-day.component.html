@@ -15,7 +15,7 @@
       [attr.aria-label]="toggleLabel()"
       (click)="toggled.emit(day().dateKey)"
     >
-      <i class="wd-day-chevron ti" [class.ti-chevron-down]="!collapsed()" [class.ti-chevron-right]="collapsed()"></i>
+      <i aria-hidden="true" class="wd-day-chevron ti" [class.ti-chevron-down]="!collapsed()" [class.ti-chevron-right]="collapsed()"></i>
       <span class="wd-day-label">{{ day().label }}</span>
       <span class="wd-day-date">{{ day().fullLabel }}</span>
     </button>
@@ -32,7 +32,7 @@
         [class.is-zero]="count.value === 0"
         [kTooltip]="count.tooltip"
       >
-        <i class="ti ti-{{ count.icon }}"></i>{{ count.value }}
+        <i aria-hidden="true" class="ti ti-{{ count.icon }}"></i>{{ count.value }}
       </span>
       }
     </span>
@@ -69,7 +69,7 @@
       i18n-kTooltip
       (click)="copyRequested.emit(day())"
     >
-      <i class="ti ti-clipboard-text"></i>
+      <i aria-hidden="true" class="ti ti-clipboard-text"></i>
     </button>
   </header>
 
@@ -89,7 +89,7 @@
       <time class="wd-time" [attr.datetime]="digest.lastAt">{{ timeFor(digest) }}</time>
 
       <span [class]="'wd-icon wd-icon--' + digest.leadType" aria-hidden="true">
-        <i class="ti ti-{{ iconFor(digest.leadType) }}"></i>
+        <i aria-hidden="true" class="ti ti-{{ iconFor(digest.leadType) }}"></i>
       </span>
 
       <span class="wd-main">
@@ -100,7 +100,7 @@
           @if (showCardKeys()) { <span class="wd-card-key">{{ digest.card.key }}</span> }
           @if (boardFor(digest); as board) {
           <span class="wd-board">
-            <i class="ti ti-{{ board.icon || 'layout-kanban' }}" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+            <i aria-hidden="true" class="ti ti-{{ board.icon || 'layout-kanban' }}" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
             <span>{{ board.name }}</span>
           </span>
           }
@@ -118,7 +118,7 @@
           -->
           <span class="wd-milestones">
             @if (digest.created && digest.leadType !== 'created') {
-            <span class="wd-chip wd-chip--created"><i class="ti ti-plus"></i><ng-container i18n="Work done milestone chip - the card was created that day">Created</ng-container></span>
+            <span class="wd-chip wd-chip--created"><i aria-hidden="true" class="ti ti-plus"></i><ng-container i18n="Work done milestone chip - the card was created that day">Created</ng-container></span>
             }
             @if (digest.listPath.length > 1) {
             <span class="wd-chip wd-chip--moved">
@@ -141,12 +141,12 @@
             }
             @if (digest.checklistTicks.length) {
             <span class="wd-chip wd-chip--checklistItemCompleted" [kTooltip]="checklistTooltip(digest)">
-              <i class="ti ti-checkbox"></i>{{ checklistChipText(digest) }}
+              <i aria-hidden="true" class="ti ti-checkbox"></i>{{ checklistChipText(digest) }}
             </span>
             }
             @if (timeInProgressFor(digest); as timer) {
             <span class="wd-chip wd-chip--time" [class.is-running]="timer.running" [kTooltip]="timer.label" [attr.aria-label]="timer.label">
-              <i class="ti" [class.ti-progress]="timer.running" [class.ti-clock]="!timer.running"></i>{{ timer.text }}
+              <i aria-hidden="true" class="ti" [class.ti-progress]="timer.running" [class.ti-clock]="!timer.running"></i>{{ timer.text }}
             </span>
             }
           </span>

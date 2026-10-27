@@ -59,7 +59,7 @@ type SourceBoardPayload = {
       />
     } @else if (failed()) {
       <div class="source-error" role="alert">
-        <i class="ti ti-alert-circle"></i>
+        <i aria-hidden="true" class="ti ti-alert-circle"></i>
         <span i18n>This board is no longer available.</span>
         <button type="button" class="secondary" (click)="closed.emit()" i18n="Button: close the message">Close</button>
       </div>

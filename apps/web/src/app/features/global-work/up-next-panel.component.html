@@ -1,5 +1,5 @@
 <header class="panel-head">
-  <i class="ti ti-list-numbers"></i>
+  <i aria-hidden="true" class="ti ti-list-numbers"></i>
   <h3 i18n="Name of the personal priority queue panel">Up next</h3>
   <!-- No "N of 50" readout: the cap only matters when it is hit, and the capacity note below
        says so then. The toggle button in the page chrome already carries the count. -->
@@ -17,7 +17,7 @@
         [kTooltip]="addTooltip()"
         (click)="headAddOpen.set(!headAddOpen())"
       >
-        <i class="ti ti-plus"></i>
+        <i aria-hidden="true" class="ti ti-plus"></i>
       </button>
       @if (headAddOpen()) {
         <k-anchored-picker
@@ -37,16 +37,16 @@
     </span>
   }
   <button type="button" class="panel-close" aria-label="Close Up next" i18n-aria-label kTooltip="Close" i18n-kTooltip="Tooltip: close the panel" (click)="closed.emit()">
-    <i class="ti ti-x"></i>
+    <i aria-hidden="true" class="ti ti-x"></i>
   </button>
 </header>
 
 @if (offlineMessage(); as message) {
-  <p class="panel-offline"><i class="ti ti-wifi-off"></i>{{ message }}</p>
+  <p class="panel-offline"><i aria-hidden="true" class="ti ti-wifi-off"></i>{{ message }}</p>
 }
 
 @if (error(); as message) {
-  <p class="panel-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  <p class="panel-error"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p>
 }
 
 <!-- `acceptExternalCardDrops` only here: this is the one surface docked beside a board whose lanes
@@ -83,7 +83,7 @@
         [attr.aria-label]="notQueuedToggleLabel(notQueuedCollapsed())"
         (click)="notQueuedCollapsed.set(!notQueuedCollapsed())"
       >
-        <i class="ti" [class.ti-chevron-right]="notQueuedCollapsed()" [class.ti-chevron-down]="!notQueuedCollapsed()"></i>
+        <i aria-hidden="true" class="ti" [class.ti-chevron-right]="notQueuedCollapsed()" [class.ti-chevron-down]="!notQueuedCollapsed()"></i>
         <h4 id="up-next-not-queued-title" i18n="Heading in the Up next panel: open assigned cards that are not in the queue">Not queued</h4>
         <span class="not-queued-count">{{ addableCards().length }}</span>
       </button>
@@ -91,7 +91,7 @@
     @if (!notQueuedCollapsed()) {
       @if (atCapacity()) {
         <p class="not-queued-note">
-          <i class="ti ti-alert-circle"></i>
+          <i aria-hidden="true" class="ti ti-alert-circle"></i>
           <ng-container i18n="Queue at capacity">{ maxEntries(), plural, =1 {Full at 1 card. Remove one before adding another.} other {Full at {{ maxEntries() }} cards. Remove one before adding another.} }</ng-container>
         </p>
       }
@@ -138,7 +138,7 @@
                 [kTooltip]="notQueuedTooltip()"
                 (click)="onNotQueuedAdd(row.card.id)"
               >
-                <i class="ti ti-plus"></i>
+                <i aria-hidden="true" class="ti ti-plus"></i>
               </button>
             </div>
           }

@@ -13,6 +13,7 @@ import {
   input,
   output,
   signal,
+  viewChild,
 } from "@angular/core";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { Editor, Extension, textblockTypeInputRule } from "@tiptap/core";
@@ -334,6 +335,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
           [editor]="editor"
           [tick]="tick()"
           [showAttach]="allowAttachments()"
+          (linkRequested)="promptLink()"
           (codeBlockRequested)="toggleCodeBlock()"
           (emojiRequested)="openEmojiPickerFromButton($event)"
           (attachRequested)="filePicker.click()"
@@ -353,6 +355,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
             [tick]="tick()"
             [compact]="true"
             [showAttach]="allowAttachments()"
+            (linkRequested)="promptLink()"
             (codeBlockRequested)="toggleCodeBlock()"
             (emojiRequested)="openEmojiPickerFromButton($event)"
             (attachRequested)="filePicker.click()"
@@ -360,11 +363,28 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
         </div>
       }
 
+      @if (linkPopoverOpen()) {
+        <div class="de-link-bar">
+          <i aria-hidden="true" class="ti ti-link de-link-icon"></i>
+          <input
+            #linkInput
+            class="de-link-input"
+            type="url"
+            placeholder="https://example.com"
+            [value]="linkUrl()"
+            (input)="linkUrl.set($any($event.target).value)"
+            (keydown)="onLinkKeydown($event)"
+          />
+          <button type="button" class="de-link-apply" (click)="applyLink()" i18n="Button: apply the link URL">Apply</button>
+          <button type="button" class="ghost xs" (click)="cancelLink()" i18n>Cancel</button>
+        </div>
+      }
+
       <div #host class="de-host"></div>
 
       @if (uploader.uploading()) {
         <div class="de-uploading">
-          <i class="ti ti-loader-2"></i>&ngsp;<ng-container i18n="Status while a file uploads">Uploading…</ng-container>
+          <i aria-hidden="true" class="ti ti-loader-2"></i>&ngsp;<ng-container i18n="Status while a file uploads">Uploading…</ng-container>
         </div>
       }
       @if (uploader.error(); as err) {
@@ -405,7 +425,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
           @if (emojiMode() === 'picker') {
             <div class="de-emoji-header">
               <div class="de-emoji-search">
-                <i class="ti ti-search"></i>
+                <i aria-hidden="true" class="ti ti-search"></i>
                 <input
                   type="search"
                   placeholder="Search emoji"
@@ -417,7 +437,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
                 />
               </div>
               <button type="button" class="de-emoji-close" (click)="dismissEmojiPicker()" kTooltip="Close emoji picker" i18n-kTooltip>
-                <i class="ti ti-x"></i>
+                <i aria-hidden="true" class="ti ti-x"></i>
               </button>
             </div>
             @if (!emojiQuery().trim()) {
@@ -465,11 +485,11 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       @if (compact()) {
         <div class="de-compact-footer">
           <button type="button" class="de-tool" (click)="openEmojiPickerFromButton($event)" kTooltip="Insert emoji" i18n-kTooltip>
-            <i class="ti ti-mood-smile"></i>
+            <i aria-hidden="true" class="ti ti-mood-smile"></i>
           </button>
           @if (allowAttachments()) {
             <button type="button" class="de-tool" (click)="filePicker.click()" kTooltip="Attach file" i18n-kTooltip [disabled]="uploader.uploading()">
-              <i class="ti ti-paperclip"></i>
+              <i aria-hidden="true" class="ti ti-paperclip"></i>
             </button>
           }
           @if (showActions()) {
@@ -479,7 +499,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
             }
             <button type="button" class="primary sm" (click)="onSave()" [disabled]="saving() || uploader.uploading()">
               @if (saving()) {
-                <i class="ti ti-loader-2 kanera-spin"></i>
+                <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i>
               } @else {
                 {{ submitLabel() }}
               }
@@ -493,7 +513,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
           }
           <button type="button" class="primary sm" (click)="onSave()" [disabled]="saving() || uploader.uploading()">
             @if (saving()) {
-              <i class="ti ti-loader-2 kanera-spin"></i>&ngsp;<ng-container i18n="Button label while saving">Saving…</ng-container>
+              <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i>&ngsp;<ng-container i18n="Button label while saving">Saving…</ng-container>
             } @else {
               {{ submitLabel() }}
             }
@@ -631,6 +651,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       color: inherit;
     }
     .de-host .ProseMirror blockquote {
+      /* accent-stripe-ok: the conventional neutral quote rule on a blockquote, not an accent */
       border-left: 3px solid var(--border-strong);
       margin: 0 0 10px;
       padding: 2px 12px;
@@ -725,6 +746,56 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       background: var(--surface-overlay);
       box-shadow: var(--shadow-lg);
       padding: 6px;
+    }
+
+    .de-link-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .de-link-icon {
+      font-size: var(--text-md);
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .de-link-bar .de-link-input {
+      flex: 1;
+      min-width: 0;
+      height: var(--h-md);
+      padding: 0 8px;
+      font-size: var(--text-base);
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm, 4px);
+      color: var(--text);
+      outline: none;
+      &:focus { border-color: var(--accent); }
+    }
+
+    .de-link-apply {
+      height: var(--h-md);
+      padding: 0 10px;
+      font-size: var(--text-sm);
+      font-weight: 500;
+      background: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-sm, 4px);
+      color: #fff;
+      cursor: pointer;
+      white-space: nowrap;
+      &:hover { opacity: 0.9; }
+    }
+
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .de-link-bar .de-link-input,
+      .de-link-bar button {
+        min-height: 44px;
+      }
     }
 
     .de-bubble-menu {
@@ -1038,6 +1109,10 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   editor: Editor | null = null;
 
+  protected readonly linkPopoverOpen = signal(false);
+  protected readonly linkUrl = signal("");
+  private readonly linkInput = viewChild<ElementRef<HTMLInputElement>>("linkInput");
+
   readonly saving = signal(false);
   readonly tick = signal(0);
 
@@ -1073,6 +1148,13 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   private cleanMarkdown = "";
 
   constructor() {
+    effect(() => {
+      const input = this.linkInput();
+      if (input) {
+        input.nativeElement.focus();
+        input.nativeElement.select();
+      }
+    });
     effect(() => {
       // A save publishes a snapshot and its host may close/reset this editor on success. Freeze the
       // document until that request settles so later keystrokes cannot be discarded with the snapshot.
@@ -1262,12 +1344,64 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     if (this.handleEmojiKeydown(event)) return true;
     if (this.handleMentionKeydown(event)) return true;
     if (this.handleListIndentKeydown(event)) return true;
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && this.editor?.isEditable) {
+      // Use marks so selection, undo and Markdown serialization match the toolbar actions.
+      // International layouts can report Dead instead of a character for the backtick key.
+      if ((event.key === "`" || event.code === "Backquote") && this.editor.commands.toggleCode()) {
+        event.preventDefault();
+        return true;
+      }
+      if (event.key.toLowerCase() === "k") {
+        // Consume the editor action before the document's global-search binding sees Ctrl/Cmd+K.
+        event.preventDefault();
+        this.promptLink();
+        return true;
+      }
+      if (event.key === "\\") {
+        event.preventDefault();
+        // Marks are inline formatting; retaining nodes preserves headings, lists and their text.
+        return this.editor.commands.unsetAllMarks();
+      }
+    }
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
       if (!this.saving() && !this.uploader.uploading()) this.onSave();
       return true;
     }
     return false;
+  }
+
+  protected promptLink() {
+    const editor = this.editor;
+    if (!editor?.isEditable) return;
+    this.closeMentionPicker();
+    this.closeEmojiPicker();
+    this.bubbleMenuOpen.set(false);
+    const current = (editor.getAttributes("link")["href"] as string | undefined) ?? "";
+    this.linkUrl.set(current);
+    this.linkPopoverOpen.set(true);
+  }
+
+  protected applyLink() {
+    const editor = this.editor;
+    if (!editor?.isEditable) return;
+    const url = this.linkUrl().trim();
+    if (url === "") {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    } else {
+      editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+    }
+    this.linkPopoverOpen.set(false);
+  }
+
+  protected cancelLink() {
+    this.linkPopoverOpen.set(false);
+    this.editor?.commands.focus();
+  }
+
+  protected onLinkKeydown(event: KeyboardEvent) {
+    if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); this.applyLink(); }
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); this.cancelLink(); }
   }
 
   private handleMentionKeydown(event: KeyboardEvent): boolean {
@@ -1557,7 +1691,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     }
 
     const { from, to, empty } = this.editor.state.selection;
-    if (empty || this.mentionOpen() || this.emojiOpen()) {
+    if (empty || this.linkPopoverOpen() || this.mentionOpen() || this.emojiOpen()) {
       this.bubbleMenuOpen.set(false);
       return;
     }
@@ -1867,6 +2001,10 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   private focusEnd() {
     const editor = this.editor;
     if (!editor) return;
+    // Restore DOM focus before changing the selection. For an already-open composer, the browser
+    // still holds the caret from before the quote was prepended; deferred focus can restore it over
+    // the new end selection and put the reply inside the attribution.
+    editor.view.focus();
     const { doc } = editor.state;
     const chain = editor.chain();
     if (doc.lastChild?.type.name === "blockquote") {

@@ -254,7 +254,6 @@
 
   &.is-selected {
     background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-    box-shadow: inset 2px 0 0 var(--accent);
   }
 }
 

@@ -12,7 +12,7 @@
 @if (settings.isStandalone()) {
 <div class="board-settings-section standalone-group-section">
   <div class="guest-section-head">
-    <i class="ti ti-folders"></i>
+    <i aria-hidden="true" class="ti ti-folders"></i>
     <span i18n="Section heading">Board group</span>
   </div>
   <div class="board-form single-line-capture">
@@ -26,12 +26,12 @@
             [disabled]="standaloneGroupSaving()" />
           @if (standaloneGroupTitle().trim()) {
           <button type="button" class="standalone-group-clear" aria-label="Remove board from group" i18n-aria-label tabindex="-1" (mousedown)="$event.preventDefault()" (click)="clearStandaloneGroup()" [disabled]="standaloneGroupSaving()">
-            <i class="ti ti-x"></i>
+            <i aria-hidden="true" class="ti ti-x"></i>
           </button>
           }
           <button type="button" class="standalone-group-trigger" aria-label="Show board groups" i18n-aria-label tabindex="-1" (mousedown)="$event.preventDefault()"
             (click)="standaloneGroupMenuOpen() ? standaloneGroupMenuOpen.set(false) : openStandaloneGroupMenu()" [disabled]="standaloneGroupSaving()">
-            <i [class]="standaloneGroupSaving() ? 'ti ti-loader-2 standalone-group-spinner' : 'ti ti-chevron-down'"></i>
+            <i aria-hidden="true" [class]="standaloneGroupSaving() ? 'ti ti-loader-2 standalone-group-spinner' : 'ti ti-chevron-down'"></i>
           </button>
         </div>
         @if (standaloneGroupMenuOpen()) {
@@ -43,10 +43,10 @@
               [class.is-selected]="choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()" [id]="'standalone-board-group-option-' + index" role="option"
               [attr.aria-selected]="choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()" (mouseenter)="standaloneGroupActiveIndex.set(index)"
               (click)="selectStandaloneGroup(choice.title)">
-              <i class="fb-row-icon" [class]="choice.kind === 'create' ? 'ti ti-plus fb-row-icon' : 'ti ti-folders fb-row-icon'"></i>
+              <i aria-hidden="true" class="fb-row-icon" [class]="choice.kind === 'create' ? 'ti ti-plus fb-row-icon' : 'ti ti-folders fb-row-icon'"></i>
               <span class="fb-row-name">@if (choice.kind === 'create') { <ng-container i18n="Menu option: create a new board group">Create “{{ choice.title // i18n(ph="group") }}”</ng-container> } @else { {{ choice.title }} }</span>
               @if (choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()) {
-              <i class="ti ti-check fb-row-check standalone-group-check"></i>
+              <i aria-hidden="true" class="ti ti-check fb-row-check standalone-group-check"></i>
               }
             </button>
             }
@@ -57,14 +57,14 @@
       <span id="standalone-board-group-help" class="board-linking-help" i18n>Boards with the same group name are shown together. Clear the name to leave this board ungrouped.</span>
     </div>
     @if (standaloneGroupError(); as message) {
-    <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+    <p class="board-linking-error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p>
     }
   </div>
 </div>
 }
 <div class="board-settings-section">
   <div class="guest-section-head">
-    <i class="ti ti-hash"></i>
+    <i aria-hidden="true" class="ti ti-hash"></i>
     <span i18n="Section heading">Card keys</span>
   </div>
   <div class="board-form single-line-capture">
@@ -76,13 +76,13 @@
         deletion.</span>
     </label>
     @if (cardKeyPrefixError(); as message) {
-    <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+    <p class="board-linking-error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p>
     }
   </div>
 </div>
 <div class="board-settings-section">
   <div class="guest-section-head">
-    <i class="ti ti-zzz"></i>
+    <i aria-hidden="true" class="ti ti-zzz"></i>
     <span i18n="Section heading">Inactive cards</span>
   </div>
   <div class="board-form single-line-capture">
@@ -96,7 +96,7 @@
 </div>
 <div class="board-settings-section">
   <div class="guest-section-head">
-    <i class="ti ti-adjustments-horizontal"></i>
+    <i aria-hidden="true" class="ti ti-adjustments-horizontal"></i>
     <span i18n="Section heading - optional planning features a workspace can switch off">Planning features</span>
   </div>
   <p class="board-linking-help field-help" i18n="Help text under the Planning features heading">Turn off what this team does not use. A feature that is off is hidden everywhere, including from agents and the API. Nothing is deleted, so turning it back on restores it.</p>
@@ -145,13 +145,13 @@
     </span>
   </label>
   @if (settings.featureError(); as message) {
-  <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  <p class="board-linking-error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p>
   }
 </div>
 @if (settings.isStandalone() || settings.progressSettingsEnabled()) {
 <div class="board-settings-section">
   <div class="guest-section-head">
-    <i class="ti ti-progress"></i>
+    <i aria-hidden="true" class="ti ti-progress"></i>
     <span i18n="Section heading - tracked working time cards spend in In progress lists">Time in progress</span>
   </div>
 @if (settings.isStandalone()) {
@@ -201,7 +201,7 @@
 }
 <div class="board-settings-section">
   <div class="guest-section-head">
-    <i class="ti ti-circle-check"></i>
+    <i aria-hidden="true" class="ti ti-circle-check"></i>
     <span i18n="Section heading">Completed cards</span>
   </div>
   <k-docs-link path="completed-cards" label="Learn more about completed cards" i18n-label />
@@ -215,11 +215,11 @@
   </div>
 </div>
 @if (settings.generalSettingsError(); as message) {
-<p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+<p class="board-linking-error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p>
 }
 <div class="board-settings-section">
   <div class="guest-section-head">
-    <i class="ti ti-notebook"></i>
+    <i aria-hidden="true" class="ti ti-notebook"></i>
     <span i18n="Section heading: the Notes feature">Notes</span>
   </div>
   <k-docs-link path="notes" fragment="turn-notes-on-or-off" label="Learn more about notes" i18n-label />
@@ -238,12 +238,12 @@
     </span>
   </label>
   @if (settings.notesError(); as message) {
-  <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  <p class="board-linking-error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p>
   }
 </div>
 <div class="board-settings-section">
   <div class="guest-section-head">
-    <i class="ti ti-circles-relation"></i>
+    <i aria-hidden="true" class="ti ti-circles-relation"></i>
     <span i18n="Section heading">Board linking</span>
   </div>
   <k-docs-link path="board-syncing" label="Learn more about board syncing" i18n-label />
@@ -262,7 +262,7 @@
     </span>
   </label>
   @if (settings.boardLinkingError(); as message) {
-  <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  <p class="board-linking-error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p>
   }
 </div>
 @if (settings.canManageApi()) {
@@ -271,7 +271,7 @@
     <span class="danger-label" i18n>Danger zone</span>
   </div>
   <div class="danger-action-row">
-    <i class="ti ti-trash danger-action-icon"></i>
+    <i aria-hidden="true" class="ti ti-trash danger-action-icon"></i>
     <div class="danger-action-copy">
       <span class="danger-action-title" i18n>{ settings.entityKind(), select, board {Delete this board} other {Delete this workspace} }</span>
       <span class="danger-action-desc">

@@ -141,7 +141,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
         [attr.aria-label]="triggerLabel()"
         (click)="toggleOpen()"
       >
-        <i class="ti ti-filter"></i>
+        <i aria-hidden="true" class="ti ti-filter"></i>
         @if (!compact()) { <span i18n="Button that opens the filter panel">Filter</span> }
         @if (activeCount() > 0) { <span class="fb-badge">{{ activeCount() }}</span> }
       </button>
@@ -157,7 +157,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
           i18n-aria-label
           (click)="clearAll.emit()"
         >
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       }
 
@@ -171,63 +171,63 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                 }
                 @if (showActivity()) {
                   <button type="button" class="fb-row" [class.active]="value().showUnreadOnly" (click)="toggleUnread()">
-                    <i class="ti ti-bell fb-row-icon"></i><span class="fb-row-name" i18n="Quick filter - cards with unread activity">Unread</span>
-                    @if (value().showUnreadOnly) { <i class="ti ti-check fb-row-check"></i> }
+                    <i aria-hidden="true" class="ti ti-bell fb-row-icon"></i><span class="fb-row-name" i18n="Quick filter - cards with unread activity">Unread</span>
+                    @if (value().showUnreadOnly) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                   </button>
                   <button type="button" class="fb-row" [class.active]="value().showOverdueOnly" (click)="toggleOverdue()">
-                    <i class="ti ti-alert-circle fb-row-icon"></i><span class="fb-row-name" i18n="Quick filter - cards past their due date">Overdue</span>
-                    @if (value().showOverdueOnly) { <i class="ti ti-check fb-row-check"></i> }
+                    <i aria-hidden="true" class="ti ti-alert-circle fb-row-icon"></i><span class="fb-row-name" i18n="Quick filter - cards past their due date">Overdue</span>
+                    @if (value().showOverdueOnly) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
                 <!-- Blocked sits with Overdue: both are "this card needs attention" states. -->
                 @if (showBlocked()) {
                   <button type="button" class="fb-row" [class.active]="value().showBlockedOnly" (click)="toggleBlocked()">
-                    <i class="ti ti-lock fb-row-icon"></i>
+                    <i aria-hidden="true" class="ti ti-lock fb-row-icon"></i>
                     <span class="fb-row-text">
                       <span class="fb-row-name" i18n="card state|Quick filter - cards waiting on another open card">Blocked</span>
                       <small i18n="Quick filter description - cards waiting on another open card">Cards waiting on another card</small>
                     </span>
-                    @if (value().showBlockedOnly) { <i class="ti ti-check fb-row-check"></i> }
+                    @if (value().showBlockedOnly) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
                 @if (showActivity()) {
                   <button type="button" class="fb-row" [class.active]="value().showInactiveOnly" (click)="toggleInactive()">
-                    <i class="ti ti-clock-pause fb-row-icon"></i>
+                    <i aria-hidden="true" class="ti ti-clock-pause fb-row-icon"></i>
                     <span class="fb-row-text">
                       <span class="fb-row-name" i18n="Quick filter - cards with no recent activity">Inactive</span>
                       <small i18n>No activity for 14 days</small>
                     </span>
-                    @if (value().showInactiveOnly) { <i class="ti ti-check fb-row-check"></i> }
+                    @if (value().showInactiveOnly) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                   </button>
                   @if (inProgressEnabled()) {
                   <button type="button" class="fb-row" [class.active]="value().showInProgressOnly" (click)="toggleInProgress()">
-                    <i class="ti ti-progress fb-row-icon"></i>
+                    <i aria-hidden="true" class="ti ti-progress fb-row-icon"></i>
                     <span class="fb-row-text">
                       <span class="fb-row-name" i18n="Quick filter - only open cards whose time-in-progress clock is running">In progress</span>
                       <small i18n="Quick filter description">Open cards in In progress lists</small>
                     </span>
-                    @if (value().showInProgressOnly) { <i class="ti ti-check fb-row-check"></i> }
+                    @if (value().showInProgressOnly) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                   </button>
                   }
                 }
                 @if (showPrioritySet()) {
                   <button type="button" class="fb-row" [class.active]="value().showPrioritySetOnly" (click)="togglePrioritySet()">
-                    <i class="ti ti-list-numbers fb-row-icon"></i>
+                    <i aria-hidden="true" class="ti ti-list-numbers fb-row-icon"></i>
                     <span class="fb-row-text">
                       <span class="fb-row-name" i18n="Quick filter - cards in the viewer's Up next queue">In Up next</span>
                       <small i18n>Only cards in your Up next</small>
                     </span>
-                    @if (value().showPrioritySetOnly) { <i class="ti ti-check fb-row-check"></i> }
+                    @if (value().showPrioritySetOnly) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
                 @if (showReminderSet()) {
                   <button type="button" class="fb-row" [class.active]="value().showReminderSetOnly" (click)="toggleReminderSet()">
-                    <i class="ti ti-alarm fb-row-icon"></i>
+                    <i aria-hidden="true" class="ti ti-alarm fb-row-icon"></i>
                     <span class="fb-row-text">
                       <span class="fb-row-name" i18n="Quick filter - cards the viewer set a reminder on">Reminder set</span>
                       <small i18n>Cards you set a reminder on</small>
                     </span>
-                    @if (value().showReminderSetOnly) { <i class="ti ti-check fb-row-check"></i> }
+                    @if (value().showReminderSetOnly) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
                 <!-- Section headings turn the previously flat menu into scannable groups: what a
@@ -241,44 +241,44 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                 }
                 @if (labels().length) {
                   <button type="button" class="fb-row" (click)="go('labels')">
-                    <i class="ti ti-tag fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Labels</span>
+                    <i aria-hidden="true" class="ti ti-tag fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Labels</span>
                     @if (labelSummary()) { <span class="fb-row-summary">{{ labelSummary() }}</span> }
-                    <i class="ti ti-chevron-right fb-row-caret"></i>
+                    <i aria-hidden="true" class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (showMembers() && members().length) {
                   <button type="button" class="fb-row" (click)="go('members')">
-                    <i class="ti ti-user fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Members</span>
+                    <i aria-hidden="true" class="ti ti-user fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Members</span>
                     @if (memberSummary()) { <span class="fb-row-summary">{{ memberSummary() }}</span> }
-                    <i class="ti ti-chevron-right fb-row-caret"></i>
+                    <i aria-hidden="true" class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (showBoards() && boards().length) {
                   <button type="button" class="fb-row" (click)="go('boards')">
-                    <i class="ti ti-clipboard-list fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Boards</span>
+                    <i aria-hidden="true" class="ti ti-clipboard-list fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Boards</span>
                     @if (boardSummary()) { <span class="fb-row-summary">{{ boardSummary() }}</span> }
-                    <i class="ti ti-chevron-right fb-row-caret"></i>
+                    <i aria-hidden="true" class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (showWorkDoneType()) {
                   <button type="button" class="fb-row" [class.active]="workDoneEventType() !== null" (click)="go('work-done-type')">
-                    <i class="ti ti-activity fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension - the kind of work-done activity">Activity type</span>
+                    <i aria-hidden="true" class="ti ti-activity fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension - the kind of work-done activity">Activity type</span>
                     @if (workDoneEventTypeLabel()) { <span class="fb-row-summary">{{ workDoneEventTypeLabel() }}</span> }
-                    <i class="ti ti-chevron-right fb-row-caret"></i>
+                    <i aria-hidden="true" class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (lists().length) {
                   <button type="button" class="fb-row" (click)="go('lists')">
-                    <i class="ti ti-layout-list fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Lists</span>
+                    <i aria-hidden="true" class="ti ti-layout-list fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Lists</span>
                     @if (listSummary()) { <span class="fb-row-summary">{{ listSummary() }}</span> }
-                    <i class="ti ti-chevron-right fb-row-caret"></i>
+                    <i aria-hidden="true" class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (customFields().length) {
                   <button type="button" class="fb-row" (click)="go('cf-list')">
-                    <i class="ti ti-adjustments fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Custom fields</span>
+                    <i aria-hidden="true" class="ti ti-adjustments fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Custom fields</span>
                     @if (value().cfConditions.length) { <span class="fb-count">{{ value().cfConditions.length }}</span> }
-                    <i class="ti ti-chevron-right fb-row-caret"></i>
+                    <i aria-hidden="true" class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (showCompleted() || showArchived() || showHideCompleted()) {
@@ -286,25 +286,25 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                 }
                 @if (showHideCompleted()) {
                   <button type="button" class="fb-row" [class.active]="hideCompleted()" (click)="hideCompletedChange.emit(!hideCompleted())">
-                    <i class="ti ti-eye-off fb-row-icon"></i>
+                    <i aria-hidden="true" class="ti ti-eye-off fb-row-icon"></i>
                     <span class="fb-row-text">
                       <span class="fb-row-name" i18n="Filter option - hide completed cards">Hide completed</span>
                       <small i18n>Recently completed cards show by default</small>
                     </span>
-                    @if (hideCompleted()) { <i class="ti ti-check fb-row-check"></i> }
+                    @if (hideCompleted()) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
                 @if (showCompleted()) {
                   <button type="button" class="fb-row" [class.active]="completedActive()" (click)="go('completed')">
-                    <i class="ti ti-circle-check fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension - cards completed within a date range">Completed</span>
+                    <i aria-hidden="true" class="ti ti-circle-check fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension - cards completed within a date range">Completed</span>
                     @if (completedActive()) { <span class="fb-row-summary">{{ completedLabel() }}</span> }
-                    <i class="ti ti-chevron-right fb-row-caret"></i>
+                    <i aria-hidden="true" class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (showArchived()) {
                   <button type="button" class="fb-row" [class.active]="archived()" (click)="toggleArchived()">
-                    <i class="ti ti-archive fb-row-icon"></i><span class="fb-row-name" i18n="Filter option - show archived cards">Archived</span>
-                    @if (archived()) { <i class="ti ti-check fb-row-check"></i> }
+                    <i aria-hidden="true" class="ti ti-archive fb-row-icon"></i><span class="fb-row-name" i18n="Filter option - show archived cards">Archived</span>
+                    @if (archived()) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
                 @if (anyActive()) {
@@ -317,7 +317,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
 
             @case ('cf-list') {
               <div class="fb-head">
-                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i class="ti ti-chevron-left"></i></button>
+                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i aria-hidden="true" class="ti ti-chevron-left"></i></button>
                 <span class="fb-head-title" i18n="Filter panel heading">Custom fields</span>
               </div>
               @if (value().cfConditions.length) {
@@ -327,13 +327,13 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                     @if (field) {
                       <div class="fb-row fb-row-static active">
                         <button type="button" class="fb-row-main" (click)="editCondition(i)">
-                          <i class="ti ti-adjustments fb-row-icon"></i>
+                          <i aria-hidden="true" class="ti ti-adjustments fb-row-icon"></i>
                           <span class="fb-row-text">
                             <span class="fb-row-name">{{ cfSummary(cond, field) }}</span>
                             @if (fieldGroup(cond.fieldId); as group) { <small>{{ group }}</small> }
                           </span>
                         </button>
-                        <button type="button" class="fb-row-x" aria-label="Remove filter" i18n-aria-label (click)="removeCondition(i)"><i class="ti ti-x"></i></button>
+                        <button type="button" class="fb-row-x" aria-label="Remove filter" i18n-aria-label (click)="removeCondition(i)"><i aria-hidden="true" class="ti ti-x"></i></button>
                       </div>
                     }
                   }
@@ -346,8 +346,8 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                   @if (section.label) { <div class="fb-group">{{ section.label }}</div> }
                   @for (field of section.fields; track field.id) {
                     <button type="button" class="fb-row" [class.fb-indent]="!!section.label" (click)="addField(field.id)">
-                      <i class="ti ti-{{ field.icon }} fb-row-icon"></i><span class="fb-row-name">{{ field.name }}</span>
-                      <i class="ti ti-plus fb-row-caret"></i>
+                      <i aria-hidden="true" class="ti ti-{{ field.icon }} fb-row-icon"></i><span class="fb-row-name">{{ field.name }}</span>
+                      <i aria-hidden="true" class="ti ti-plus fb-row-caret"></i>
                     </button>
                   }
                 } @empty {
@@ -360,9 +360,9 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
               @let cond = editingCondition();
               @let field = cond ? fieldById().get(cond.fieldId) : undefined;
               <div class="fb-head">
-                <button type="button" class="fb-back" (click)="go('cf-list')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i class="ti ti-chevron-left"></i></button>
+                <button type="button" class="fb-back" (click)="go('cf-list')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i aria-hidden="true" class="ti ti-chevron-left"></i></button>
                 <span class="fb-head-title">{{ field?.name ?? missingFieldTitle }}</span>
-                <button type="button" class="fb-remove" (click)="removeEditingCondition()" aria-label="Remove filter" i18n-aria-label><i class="ti ti-trash"></i></button>
+                <button type="button" class="fb-remove" (click)="removeEditingCondition()" aria-label="Remove filter" i18n-aria-label><i aria-hidden="true" class="ti ti-trash"></i></button>
               </div>
               @if (cond && field) {
                 <select class="fb-select" [value]="cond.op" (change)="changeOperator($any($event.target).value)">
@@ -381,7 +381,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                             <span class="fb-dot" [style.background]="row.color ? 'var(--color-' + row.color + ')' : 'var(--border-strong)'"></span>
                           }
                           <span class="fb-row-name">{{ row.label }}</span>
-                          @if (cfHasId(cond, row.id)) { <i class="ti ti-check fb-row-check"></i> }
+                          @if (cfHasId(cond, row.id)) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                         </button>
                       }
                       @if (cfIdRows(field).length === 0) { <p class="fb-empty" i18n="Empty state - a choice field has no options">No options</p> }
@@ -407,7 +407,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
 
             @case ('completed') {
               <div class="fb-head">
-                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i class="ti ti-chevron-left"></i></button>
+                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i aria-hidden="true" class="ti ti-chevron-left"></i></button>
                 <span class="fb-head-title" i18n="Filter panel heading - cards completed within a date range">Completed</span>
               </div>
               <!-- The shared calendar is embedded inline here (see the fb-drp style) so it lives
@@ -426,7 +426,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
 
             @case ('work-done-type') {
               <div class="fb-head">
-                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i class="ti ti-chevron-left"></i></button>
+                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i aria-hidden="true" class="ti ti-chevron-left"></i></button>
                 <span class="fb-head-title" i18n="Filter panel heading">Activity type</span>
                 @if (workDoneEventType() !== null) {
                   <button type="button" class="fb-head-clear" (click)="selectWorkDoneEventType(null)" i18n="Button - clear this filter">Clear</button>
@@ -442,9 +442,9 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                     [attr.aria-checked]="workDoneEventType() === option.id"
                     (click)="selectWorkDoneEventType(option.id)"
                   >
-                    <i [class]="'ti ti-' + option.icon + ' fb-row-icon'"></i>
+                    <i aria-hidden="true" [class]="'ti ti-' + option.icon + ' fb-row-icon'"></i>
                     <span class="fb-row-name">{{ option.label }}</span>
-                    @if (workDoneEventType() === option.id) { <i class="ti ti-check fb-row-check"></i> }
+                    @if (workDoneEventType() === option.id) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
               </div>
@@ -453,7 +453,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
             @default {
               <!-- labels / members / lists / boards: one searchable multi-select list -->
               <div class="fb-head">
-                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i class="ti ti-chevron-left"></i></button>
+                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i aria-hidden="true" class="ti ti-chevron-left"></i></button>
                 <span class="fb-head-title">{{ dimensionTitle() }}</span>
                 @if (selectedIdsForView().length) {
                   <button type="button" class="fb-head-clear" (click)="clearDimension()" i18n="Button - clear this filter">Clear</button>
@@ -468,12 +468,12 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                       @if (row.member) {
                         <k-avatar class="fb-avatar" [url]="row.member.avatarUrl" [name]="row.member.displayName" [size]="22" [userId]="row.member.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="row.member.lastOnlineAt" />
                       } @else if (row.icon !== undefined) {
-                        <i class="ti ti-{{ row.icon ?? 'layout-list' }} fb-row-icon"></i>
+                        <i aria-hidden="true" class="ti ti-{{ row.icon ?? 'layout-list' }} fb-row-icon"></i>
                       } @else {
                         <span class="fb-dot" [style.background]="row.color ? 'var(--color-' + row.color + ')' : 'var(--border-strong)'"></span>
                       }
                       <span class="fb-row-name">{{ row.label }}</span>
-                      @if (rowSelected(row.id)) { <i class="ti ti-check fb-row-check"></i> }
+                      @if (rowSelected(row.id)) { <i aria-hidden="true" class="ti ti-check fb-row-check"></i> }
                     </button>
                   }
                 } @empty {

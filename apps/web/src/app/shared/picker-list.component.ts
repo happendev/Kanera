@@ -98,7 +98,7 @@ export interface PickerGroup {
         @if (group.showParent && group.parent; as parent) {
           <div class="pl-parent" role="presentation">
             @if (parent.icon) {
-              <i class="ti ti-{{ parent.icon }}" [style.color]="colorToken(parent.color)"></i>
+              <i aria-hidden="true" class="ti ti-{{ parent.icon }}" [style.color]="colorToken(parent.color)"></i>
             }
             <span>{{ parent.label }}</span>
           </div>
@@ -106,7 +106,7 @@ export interface PickerGroup {
         @if (group.label) {
           <div class="pl-group" role="presentation" [class.has-parent]="!!group.parent">
             @if (group.icon) {
-              <i class="ti ti-{{ group.icon }}" [style.color]="colorToken(group.color)"></i>
+              <i aria-hidden="true" class="ti ti-{{ group.icon }}" [style.color]="colorToken(group.color)"></i>
             }
             <span>{{ group.label }}</span>
           </div>
@@ -141,7 +141,7 @@ export interface PickerGroup {
             } @else if (option.dot) {
               <span class="pl-dot" [style.background]="colorToken(option.color) ?? 'var(--border-strong)'"></span>
             } @else if (option.icon) {
-              <i class="ti ti-{{ option.icon }} pl-icon" [style.color]="colorToken(option.color)"></i>
+              <i aria-hidden="true" class="ti ti-{{ option.icon }} pl-icon" [style.color]="colorToken(option.color)"></i>
             }
             <span class="pl-text">
               @if (option.overline) { <small class="pl-overline">{{ option.overline }}</small> }
@@ -156,7 +156,7 @@ export interface PickerGroup {
                 [class.is-danger]="option.trailingTone === 'danger'"
               >{{ option.trailing }}</span>
             }
-            @if (isSelected(option.id)) { <i class="ti ti-check pl-check"></i> }
+            @if (isSelected(option.id)) { <i aria-hidden="true" class="ti ti-check pl-check"></i> }
           </button>
         }
       } @empty {

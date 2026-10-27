@@ -18,20 +18,20 @@ export interface UpgradePromptContent {
   template: `
     <div class="backdrop" (click)="dismissed.emit()">
       <section class="dialog" (click)="$event.stopPropagation()" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" [attr.aria-label]="content().headline">
-        <button class="close" type="button" aria-label="Close" i18n-aria-label (click)="dismissed.emit()"><i class="ti ti-x"></i></button>
+        <button class="close" type="button" aria-label="Close" i18n-aria-label (click)="dismissed.emit()"><i aria-hidden="true" class="ti ti-x"></i></button>
         <span class="context-label">{{ content().attemptedAction }}</span>
         <h2>{{ content().headline }}</h2>
 
         <div class="detail value-detail">
-          <i class="ti ti-circle-check"></i>
+          <i aria-hidden="true" class="ti ti-circle-check"></i>
           <div><span i18n="Upgrade dialog row heading">Value already received</span><strong>{{ content().valueReceived }}</strong></div>
         </div>
         <div class="detail">
-          <i class="ti ti-credit-card"></i>
+          <i aria-hidden="true" class="ti ti-credit-card"></i>
           <div><span i18n="Upgrade dialog row heading">Your team price</span><strong>{{ content().cost }}</strong></div>
         </div>
         <div class="detail free-detail">
-          <i class="ti ti-lock"></i>
+          <i aria-hidden="true" class="ti ti-lock"></i>
           <div><span i18n="Upgrade dialog row heading; Free is the plan name">If you stay on Free</span><strong>{{ content().freeConsequence }}</strong></div>
         </div>
 

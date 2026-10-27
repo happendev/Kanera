@@ -1,19 +1,19 @@
 <div class="chat-integrations-page">
   <div class="settings-info-note">
-    <i class="ti ti-info-circle"></i>
+    <i aria-hidden="true" class="ti ti-info-circle"></i>
     <span i18n>Chat destinations post workspace card activity directly to the channel where your team works.</span>
   </div>
   <k-docs-link path="chat-destinations" label="Learn more about chat destinations" i18n-label />
 
   @if (!settings.webhooksAllowed()) {
   <div class="upgrade-action-callout">
-    <span class="upgrade-action-icon"><i class="ti ti-message-share"></i></span>
+    <span class="upgrade-action-icon"><i aria-hidden="true" class="ti ti-message-share"></i></span>
     <span class="upgrade-action-copy">
       <strong i18n="Upgrade callout heading">Keep project updates in your team's chat</strong>
       <span i18n>Chat destinations aren't available on your plan. Connect Slack, Discord, Telegram, or Zulip with Pro.</span>
     </span>
     <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('integration')">
-      <ng-container i18n="Upgrade button">Add destination</ng-container> <i class="ti ti-arrow-right"></i>
+      <ng-container i18n="Upgrade button">Add destination</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i>
     </button>
   </div>
   } @else {
@@ -21,7 +21,7 @@
     <div class="provider-picker" aria-label="Chat provider" i18n-aria-label>
       @for (option of providers; track option.value) {
       <button type="button" [class.is-selected]="provider() === option.value" (click)="provider.set(option.value); error.set(null)">
-        <i [class]="'ti ti-' + option.icon"></i><span>{{ option.label }}</span>
+        <i aria-hidden="true" [class]="'ti ti-' + option.icon"></i><span>{{ option.label }}</span>
       </button>
       }
     </div>
@@ -66,17 +66,17 @@
       </select>
     </label>
     }
-    <button class="primary sm" type="submit" [disabled]="busyId() !== null"><i class="ti ti-plus"></i> <ng-container i18n="Button">Add destination</ng-container></button>
+    <button class="primary sm" type="submit" [disabled]="busyId() !== null"><i aria-hidden="true" class="ti ti-plus"></i> <ng-container i18n="Button">Add destination</ng-container></button>
   </form>
   }
 
-  @if (error()) { <p class="form-error"><i class="ti ti-alert-circle"></i>{{ error() }}</p> }
+  @if (error()) { <p class="form-error"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ error() }}</p> }
 
   <div class="chat-destination-list">
     @for (destination of destinations(); track destination.id) {
     <article class="chat-destination-card">
       <div class="destination-summary">
-        <i [class]="'ti ti-' + providerIcon(destination.provider) + ' destination-brand'"></i>
+        <i aria-hidden="true" [class]="'ti ti-' + providerIcon(destination.provider) + ' destination-brand'"></i>
         <div class="destination-title">
           <div class="destination-name-row">
             <strong>{{ destination.name }}</strong>
@@ -86,12 +86,12 @@
         </div>
         <span class="last-success"><small i18n="Time of the last successful delivery">Last success</small><span>{{ formatDate(destination.lastSuccessfulAt) }}</span></span>
         <div class="destination-actions">
-          <button class="ghost icon" type="button" (click)="sendTest(destination)" [disabled]="!settings.webhooksAllowed() || !destination.enabled || busyId() !== null" aria-label="Send test" i18n-aria-label="Button: send a test message" kTooltip="Send test" i18n-kTooltip="Button: send a test message"><i class="ti ti-send"></i></button>
-          <button class="ghost icon" type="button" (click)="startEdit(destination)" aria-label="Edit destination" i18n-aria-label kTooltip="Edit" i18n-kTooltip="Button: edit the chat destination"><i class="ti ti-pencil"></i></button>
-          <button class="ghost icon" type="button" (click)="startReconnect(destination)" aria-label="Replace connection" i18n-aria-label kTooltip="Replace connection" i18n-kTooltip><i class="ti ti-plug-connected"></i></button>
-          <button class="ghost icon" type="button" (click)="toggle(destination)" [disabled]="!destination.enabled && !settings.webhooksAllowed()" [attr.aria-label]="destination.enabled ? pauseDestinationLabel : enableDestinationLabel" [kTooltip]="destination.enabled ? pauseLabel : enableLabel"><i class="ti"
+          <button class="ghost icon" type="button" (click)="sendTest(destination)" [disabled]="!settings.webhooksAllowed() || !destination.enabled || busyId() !== null" aria-label="Send test" i18n-aria-label="Button: send a test message" kTooltip="Send test" i18n-kTooltip="Button: send a test message"><i aria-hidden="true" class="ti ti-send"></i></button>
+          <button class="ghost icon" type="button" (click)="startEdit(destination)" aria-label="Edit destination" i18n-aria-label kTooltip="Edit" i18n-kTooltip="Button: edit the chat destination"><i aria-hidden="true" class="ti ti-pencil"></i></button>
+          <button class="ghost icon" type="button" (click)="startReconnect(destination)" aria-label="Replace connection" i18n-aria-label kTooltip="Replace connection" i18n-kTooltip><i aria-hidden="true" class="ti ti-plug-connected"></i></button>
+          <button class="ghost icon" type="button" (click)="toggle(destination)" [disabled]="!destination.enabled && !settings.webhooksAllowed()" [attr.aria-label]="destination.enabled ? pauseDestinationLabel : enableDestinationLabel" [kTooltip]="destination.enabled ? pauseLabel : enableLabel"><i aria-hidden="true" class="ti"
               [class.ti-player-pause]="destination.enabled" [class.ti-player-play]="!destination.enabled"></i></button>
-          <button class="ghost icon danger" type="button" (click)="remove(destination)" aria-label="Delete destination" i18n-aria-label kTooltip="Delete" i18n-kTooltip="Button: delete the chat destination"><i class="ti ti-trash"></i></button>
+          <button class="ghost icon danger" type="button" (click)="remove(destination)" aria-label="Delete destination" i18n-aria-label kTooltip="Delete" i18n-kTooltip="Button: delete the chat destination"><i aria-hidden="true" class="ti ti-trash"></i></button>
         </div>
       </div>
       <div class="destination-events">
@@ -99,7 +99,7 @@
         @for (eventType of destination.eventTypes; track eventType) { <span class="destination-event-chip">{{ eventLabel(eventType) }}</span> }
       </div>
       @if (priorityMappingMissing(destination)) {
-      <p class="mapping-warning"><i class="ti ti-alert-triangle"></i> <ng-container i18n>Priority updates are paused until this destination is mapped to an active text or select field.</ng-container></p>
+      <p class="mapping-warning"><i aria-hidden="true" class="ti ti-alert-triangle"></i> <ng-container i18n>Priority updates are paused until this destination is mapped to an active text or select field.</ng-container></p>
       }
       @if (editingId() === destination.id) {
       <div class="destination-editor">

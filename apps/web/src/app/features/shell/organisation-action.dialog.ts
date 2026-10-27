@@ -38,7 +38,7 @@ const DIALOG_STYLES = `
           </p>
         </div>
         <button type="button" class="ghost icon" (click)="close()" aria-label="Close" i18n-aria-label="Button: close the dialog">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       </header>
 
@@ -105,7 +105,7 @@ export class CreateOrganisationDialogComponent {
           <p i18n>Enter an organisation invitation link or its invite token.</p>
         </div>
         <button type="button" class="ghost icon" (click)="close()" aria-label="Close" i18n-aria-label="Button: close the dialog">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       </header>
 

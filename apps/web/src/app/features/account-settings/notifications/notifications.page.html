@@ -1,7 +1,7 @@
 <div class="settings-section">
         <div class="section-heading-row">
           <div>
-            <h3 class="settings-section-title"><i class="ti ti-bell"></i><span i18n="Settings section heading">Notification channels</span></h3>
+            <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-bell"></i><span i18n="Settings section heading">Notification channels</span></h3>
             <p class="settings-section-help" i18n>Choose how Kanera sends card updates to you.</p>
           </div>
           <k-autosave-status [state]="settings.notificationAutosave.state()" />
@@ -35,7 +35,7 @@
               }
             </select>
             <button type="button" class="ghost" [disabled]="!settings.mentionSound.enabled()" (click)="settings.mentionSound.playMention()">
-              <i class="ti ti-volume"></i><span i18n="Button: preview notification sound">Preview sound</span>
+              <i aria-hidden="true" class="ti ti-volume"></i><span i18n="Button: preview notification sound">Preview sound</span>
             </button>
           </div>
         </div>
@@ -60,7 +60,7 @@
 
         @if (notificationSettings.pushEnabled || settings.pushOptInAttempted()) {
         <div class="push-status-card" [class.success]="settings.browserPush.statusTone() === 'success'" [class.warning]="settings.browserPush.statusTone() === 'warning'">
-          <i class="ti ti-bell push-status-icon"></i>
+          <i aria-hidden="true" class="ti ti-bell push-status-icon"></i>
           <div class="push-status-copy">
             <p class="push-status-title">{{ settings.pushStatusTitle() }}</p>
             <p class="settings-section-help">{{ settings.browserPush.statusMessage() }}</p>
@@ -70,7 +70,7 @@
         }
 
         <div class="notification-types-block">
-          <h3 class="settings-section-title"><i class="ti ti-list-check"></i><span i18n="Settings section heading">Notification types</span></h3>
+          <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-list-check"></i><span i18n="Settings section heading">Notification types</span></h3>
           <k-docs-link path="notification-configuration" label="Learn more about notification types" i18n-label />
           <div class="notification-grid">
             <div class="notification-grid-head">
@@ -99,12 +99,12 @@
         <div class="workspace-rules-block">
           <div class="workspace-rules-heading">
             <div>
-              <h3 class="settings-section-title"><i class="ti ti-adjustments-horizontal"></i><span i18n="Settings section heading">Workspace rules</span></h3>
+              <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-adjustments-horizontal"></i><span i18n="Settings section heading">Workspace rules</span></h3>
               <p class="settings-section-help" i18n>Add exceptions to your account defaults. Rules can restrict delivery, but cannot turn on a channel that is off above. Your in-app inbox stays complete.</p>
             </div>
             @if (settings.inheritedWorkspaceRuleGroups().length > 0) {
             <button type="button" class="primary sm workspace-rule-add" (click)="settings.openWorkspaceRulePicker()">
-              <i class="ti ti-plus"></i><span i18n="Button">Add workspace rule</span>
+              <i aria-hidden="true" class="ti ti-plus"></i><span i18n="Button">Add workspace rule</span>
             </button>
             }
           </div>
@@ -114,16 +114,16 @@
           <section class="workspace-rule-picker" aria-label="Choose a workspace rule" i18n-aria-label>
             <div class="workspace-rule-picker-heading">
               <div><strong i18n>Choose where to add an exception</strong><small i18n>You can change or remove it later.</small></div>
-              <button type="button" class="icon-btn" aria-label="Close workspace picker" i18n-aria-label (click)="settings.closeWorkspaceRuleEditor()"><i class="ti ti-x"></i></button>
+              <button type="button" class="icon-btn" aria-label="Close workspace picker" i18n-aria-label (click)="settings.closeWorkspaceRuleEditor()"><i aria-hidden="true" class="ti ti-x"></i></button>
             </div>
             <div class="workspace-rule-rows">
               @for (group of settings.inheritedWorkspaceRuleGroups(); track group.workspaceId) {
               <button type="button" class="workspace-rule-picker-row" (click)="settings.editWorkspaceRule(group)">
                 <span class="workspace-rule-title">
-                  <i class="ti" [class.ti-layout-kanban]="group.workspaceKind === 'board'" [class.ti-building-community]="group.workspaceKind !== 'board'"></i>
+                  <i aria-hidden="true" class="ti" [class.ti-layout-kanban]="group.workspaceKind === 'board'" [class.ti-building-community]="group.workspaceKind !== 'board'"></i>
                   <span><strong>{{ group.workspaceName }}</strong>@if (settings.workspaceRuleContextLabel(group); as context) { <small>{{ context }}</small> }</span>
                 </span>
-                <i class="ti ti-chevron-right"></i>
+                <i aria-hidden="true" class="ti ti-chevron-right"></i>
               </button>
               }
             </div>
@@ -136,9 +136,9 @@
             <div class="workspace-rule-rows">
               @for (group of settings.customizedWorkspaceRuleGroups(); track group.workspaceId) {
               <button type="button" class="workspace-rule-summary-row" (click)="settings.editWorkspaceRule(group)">
-                <span class="workspace-rule-title"><i class="ti ti-building-community"></i><span><strong>{{ group.workspaceName }}</strong>@if (settings.workspaceRuleContextLabel(group); as context) { <small>{{ context }}</small> }</span></span>
+                <span class="workspace-rule-title"><i aria-hidden="true" class="ti ti-building-community"></i><span><strong>{{ group.workspaceName }}</strong>@if (settings.workspaceRuleContextLabel(group); as context) { <small>{{ context }}</small> }</span></span>
                 <span class="workspace-rule-summary" [class.paused]="settings.workspaceRulePaused(group)">{{ settings.workspaceRuleSummary(group) }}</span>
-                <span class="workspace-rule-edit"><ng-container i18n="Button: edit a workspace rule">Edit</ng-container> <i class="ti ti-chevron-right"></i></span>
+                <span class="workspace-rule-edit"><ng-container i18n="Button: edit a workspace rule">Edit</ng-container> <i aria-hidden="true" class="ti ti-chevron-right"></i></span>
               </button>
               }
             </div>
@@ -151,9 +151,9 @@
             <div class="workspace-rule-rows">
               @for (group of settings.customizedStandaloneRuleGroups(); track group.workspaceId) {
               <button type="button" class="workspace-rule-summary-row" (click)="settings.editWorkspaceRule(group)">
-                <span class="workspace-rule-title"><i class="ti ti-layout-kanban"></i><span><strong>{{ group.workspaceName }}</strong>@if (settings.workspaceRuleContextLabel(group); as context) { <small>{{ context }}</small> }</span></span>
+                <span class="workspace-rule-title"><i aria-hidden="true" class="ti ti-layout-kanban"></i><span><strong>{{ group.workspaceName }}</strong>@if (settings.workspaceRuleContextLabel(group); as context) { <small>{{ context }}</small> }</span></span>
                 <span class="workspace-rule-summary" [class.paused]="settings.workspaceRulePaused(group)">{{ settings.workspaceRuleSummary(group) }}</span>
-                <span class="workspace-rule-edit"><ng-container i18n="Button: edit a workspace rule">Edit</ng-container> <i class="ti ti-chevron-right"></i></span>
+                <span class="workspace-rule-edit"><ng-container i18n="Button: edit a workspace rule">Edit</ng-container> <i aria-hidden="true" class="ti ti-chevron-right"></i></span>
               </button>
               }
             </div>
@@ -169,12 +169,12 @@
           <article class="workspace-rule-editor" [class.paused]="rule.paused">
             <div class="workspace-rule-editor-heading">
               <div class="workspace-rule-title">
-                <i class="ti" [class.ti-layout-kanban]="group.workspaceKind === 'board'" [class.ti-building-community]="group.workspaceKind !== 'board'"></i>
+                <i aria-hidden="true" class="ti" [class.ti-layout-kanban]="group.workspaceKind === 'board'" [class.ti-building-community]="group.workspaceKind !== 'board'"></i>
                 <span><strong>{{ group.workspaceName }}</strong>@if (settings.workspaceRuleContextLabel(group); as context) { <small>{{ context }}</small> }</span>
               </div>
               <span class="workspace-rule-editor-heading-actions">
                 <k-autosave-status [state]="settings.workspaceRuleAutosave.state()" />
-                <button type="button" class="icon-btn" aria-label="Close workspace rule editor" i18n-aria-label (click)="settings.closeWorkspaceRuleEditor()"><i class="ti ti-x"></i></button>
+                <button type="button" class="icon-btn" aria-label="Close workspace rule editor" i18n-aria-label (click)="settings.closeWorkspaceRuleEditor()"><i aria-hidden="true" class="ti ti-x"></i></button>
               </span>
             </div>
 
@@ -183,7 +183,7 @@
               <span class="workspace-rule-master-actions">
                 <span class="workspace-rule-state" [class.paused]="rule.paused">@if (rule.paused) { <ng-container i18n="Workspace notification rule status">Paused</ng-container> } @else { <ng-container i18n="Workspace notification rule status">Active</ng-container> }</span>
                 <button type="button" class="secondary sm workspace-rule-pause-action" (click)="settings.setWorkspaceRulePaused(group.workspaceId, !rule.paused)" [disabled]="settings.workspaceRuleSaving() === group.workspaceId">
-                  <i class="ti" [class.ti-player-play]="rule.paused" [class.ti-player-pause]="!rule.paused"></i>@if (rule.paused) { <span i18n="Button: resume a paused notification rule">Resume</span> } @else { <span i18n="Button: pause a notification rule">Pause</span> }
+                  <i aria-hidden="true" class="ti" [class.ti-player-play]="rule.paused" [class.ti-player-pause]="!rule.paused"></i>@if (rule.paused) { <span i18n="Button: resume a paused notification rule">Resume</span> } @else { <span i18n="Button: pause a notification rule">Pause</span> }
                 </button>
               </span>
             </div>
@@ -227,7 +227,7 @@
             </fieldset>
 
             @if (group.workspaceKind === 'board') {
-            <div class="standalone-rule-note"><i class="ti ti-layout-kanban"></i><span><strong i18n>This rule applies only to this standalone board.</strong><small i18n>There are no other boards in its workspace.</small></span></div>
+            <div class="standalone-rule-note"><i aria-hidden="true" class="ti ti-layout-kanban"></i><span><strong i18n>This rule applies only to this standalone board.</strong><small i18n>There are no other boards in its workspace.</small></span></div>
             }
 
             <div class="workspace-rule-actions">
@@ -241,10 +241,10 @@
 
           @if (settings.inheritedWorkspaceRuleGroups().length > 0) {
           <details class="workspace-rule-defaults">
-            <summary><span i18n="Collapsible heading with the number of workspaces">Using account defaults ({{ settings.inheritedWorkspaceRuleGroups().length // i18n(ph="count") }})</span><i class="ti ti-chevron-down"></i></summary>
+            <summary><span i18n="Collapsible heading with the number of workspaces">Using account defaults ({{ settings.inheritedWorkspaceRuleGroups().length // i18n(ph="count") }})</span><i aria-hidden="true" class="ti ti-chevron-down"></i></summary>
             <div class="workspace-rule-default-list">
               @for (group of settings.inheritedWorkspaceRuleGroups(); track group.workspaceId) {
-              <div><span class="workspace-rule-title"><i class="ti" [class.ti-layout-kanban]="group.workspaceKind === 'board'" [class.ti-building-community]="group.workspaceKind !== 'board'"></i><span><strong>{{ group.workspaceName }}</strong>@if (settings.workspaceRuleContextLabel(group); as context) { <small>{{ context }}</small> }</span></span><button type="button" class="ghost sm" (click)="settings.editWorkspaceRule(group)" i18n="Button: create a workspace-specific rule">Customize</button></div>
+              <div><span class="workspace-rule-title"><i aria-hidden="true" class="ti" [class.ti-layout-kanban]="group.workspaceKind === 'board'" [class.ti-building-community]="group.workspaceKind !== 'board'"></i><span><strong>{{ group.workspaceName }}</strong>@if (settings.workspaceRuleContextLabel(group); as context) { <small>{{ context }}</small> }</span></span><button type="button" class="ghost sm" (click)="settings.editWorkspaceRule(group)" i18n="Button: create a workspace-specific rule">Customize</button></div>
               }
             </div>
           </details>
@@ -255,20 +255,20 @@
         <details class="additional-notification-destinations">
           <summary>
             <span class="additional-destinations-summary-copy">
-              <i class="ti ti-plug-connected"></i>
+              <i aria-hidden="true" class="ti ti-plug-connected"></i>
               <span><strong><ng-container i18n="Section heading">Additional Notification Destinations</ng-container> @if (settings.isHosted()) { <span class="pro-marker" i18n="Plan name badge: feature requires the Pro plan">Pro</span> }</strong><small i18n>Send notifications to ntfy, Gotify, or a personal webhook.</small></span>
             </span>
-            <i class="ti ti-chevron-down additional-destinations-chevron"></i>
+            <i aria-hidden="true" class="ti ti-chevron-down additional-destinations-chevron"></i>
           </summary>
           <div class="additional-destinations-content">
             <k-docs-link path="notification-channels" label="Learn more about delivery channels" i18n-label />
 
         @if (!settings.personalNotificationChannelsAllowed()) {
-        <p class="plan-limit-hint"><i class="ti ti-lock"></i> <ng-container i18n>ntfy, Gotify, and personal webhooks aren't available on your plan. Upgrade your plan to unlock them.</ng-container></p>
+        <p class="plan-limit-hint"><i aria-hidden="true" class="ti ti-lock"></i> <ng-container i18n>ntfy, Gotify, and personal webhooks aren't available on your plan. Upgrade your plan to unlock them.</ng-container></p>
         } @else {
 
         <div class="personal-channel-policy">
-          <i class="ti ti-shield-lock"></i>
+          <i aria-hidden="true" class="ti ti-shield-lock"></i>
           <span>
             @if (notificationSettings.personalChannels.destinationPolicy === 'private-network-allowed') {
             <ng-container i18n>HTTP and private-network receivers are allowed by this self-hosted deployment.</ng-container>
@@ -281,7 +281,7 @@
         <div class="personal-channel-list">
           <article class="personal-channel-card">
             <div class="personal-channel-heading">
-              <div><i class="ti ti-broadcast"></i><strong>ntfy</strong><span>@if (notificationSettings.personalChannels.ntfy.configured) { <ng-container i18n="Notification channel status">Configured</ng-container> } @else { <ng-container i18n="Notification channel status">Not configured</ng-container> }</span></div>
+              <div><i aria-hidden="true" class="ti ti-broadcast"></i><strong>ntfy</strong><span>@if (notificationSettings.personalChannels.ntfy.configured) { <ng-container i18n="Notification channel status">Configured</ng-container> } @else { <ng-container i18n="Notification channel status">Not configured</ng-container> }</span></div>
               <label class="mini-toggle">
                 <input type="checkbox" [checked]="notificationSettings.personalChannels.ntfy.enabled" (change)="settings.setPersonalChannelEnabled('ntfy', $any($event.target).checked)" [disabled]="settings.notificationSettingsSaving() || !notificationSettings.personalChannels.ntfy.configured" />
                 <span i18n="Toggle label: notification channel is on">Enabled</span>
@@ -313,7 +313,7 @@
 
           <article class="personal-channel-card">
             <div class="personal-channel-heading">
-              <div><i class="ti ti-device-mobile-message"></i><strong>Gotify</strong><span>@if (notificationSettings.personalChannels.gotify.configured) { <ng-container i18n="Notification channel status">Configured</ng-container> } @else { <ng-container i18n="Notification channel status">Not configured</ng-container> }</span></div>
+              <div><i aria-hidden="true" class="ti ti-device-mobile-message"></i><strong>Gotify</strong><span>@if (notificationSettings.personalChannels.gotify.configured) { <ng-container i18n="Notification channel status">Configured</ng-container> } @else { <ng-container i18n="Notification channel status">Not configured</ng-container> }</span></div>
               <label class="mini-toggle">
                 <input type="checkbox" [checked]="notificationSettings.personalChannels.gotify.enabled" (change)="settings.setPersonalChannelEnabled('gotify', $any($event.target).checked)" [disabled]="settings.notificationSettingsSaving() || !notificationSettings.personalChannels.gotify.configured" />
                 <span i18n="Toggle label: notification channel is on">Enabled</span>
@@ -344,7 +344,7 @@
 
           <article class="personal-channel-card">
             <div class="personal-channel-heading">
-              <div><i class="ti ti-webhook"></i><strong i18n="Notification channel name">Personal webhook</strong><span>@if (notificationSettings.personalChannels.webhook.configured) { <ng-container i18n="Notification channel status">Configured</ng-container> } @else { <ng-container i18n="Notification channel status">Not configured</ng-container> }</span></div>
+              <div><i aria-hidden="true" class="ti ti-webhook"></i><strong i18n="Notification channel name">Personal webhook</strong><span>@if (notificationSettings.personalChannels.webhook.configured) { <ng-container i18n="Notification channel status">Configured</ng-container> } @else { <ng-container i18n="Notification channel status">Not configured</ng-container> }</span></div>
               <label class="mini-toggle">
                 <input type="checkbox" [checked]="notificationSettings.personalChannels.webhook.enabled" (change)="settings.setPersonalChannelEnabled('webhook', $any($event.target).checked)" [disabled]="settings.notificationSettingsSaving() || !notificationSettings.personalChannels.webhook.configured" />
                 <span i18n="Toggle label: notification channel is on">Enabled</span>
@@ -353,7 +353,7 @@
             <label class="settings-field"><span i18n="Field label">Endpoint URL</span><input type="url" placeholder="https://hooks.example.com/kanera" [value]="settings.personalWebhookUrl()" (input)="settings.personalWebhookUrl.set($any($event.target).value)" /></label>
             @if (settings.generatedWebhookSecret(); as secret) {
             <div class="webhook-secret-callout">
-              <i class="ti ti-key"></i>
+              <i aria-hidden="true" class="ti ti-key"></i>
               <div><strong i18n>Copy this signing secret now</strong><p i18n>It will not be shown again. Configure your receiver before rotating or sending notifications.</p><code>{{ secret }}</code></div>
               <button type="button" class="ghost sm" (click)="settings.copyGeneratedWebhookSecret()" i18n="Button: copy to clipboard">Copy</button>
             </div>

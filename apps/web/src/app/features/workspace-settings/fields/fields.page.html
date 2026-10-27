@@ -17,7 +17,7 @@
           <ng-container i18n="Checkbox: field allows multiple values">Multiple</ng-container>
         </label>
         }
-        <button class="sm compact-add-button" type="submit" [disabled]="!!settings.customFieldValidation()" aria-label="Add field" i18n-aria-label kTooltip="Add field" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add field</span></button>
+        <button class="sm compact-add-button" type="submit" [disabled]="!!settings.customFieldValidation()" aria-label="Add field" i18n-aria-label kTooltip="Add field" i18n-kTooltip><i aria-hidden="true" class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add field</span></button>
       </form>
       @if (settings.customFieldValidation()) {
       <p class="empty-hint">{{ settings.customFieldValidation() }}</p>
@@ -26,7 +26,7 @@
         @for (field of settings.fields(); track field.id) {
         <div cdkDrag class="board-tile cf-field-tile">
           <div class="cf-field-head">
-            <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+            <i aria-hidden="true" class="ti ti-grip-vertical grip" cdkDragHandle></i>
             <k-icon-picker [value]="field.icon" (valueChange)="settings.updateFieldIcon(field.id, $event)" />
             @if (settings.editingFieldId() === field.id) {
             <input class="inline-name-input grow" [value]="settings.editingFieldName()" (input)="settings.editingFieldName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveFieldName(field.id)" (keydown.enter)="settings.saveFieldName(field.id)"
@@ -43,15 +43,15 @@
               <button class="ghost icon" (click)="settings.toggleFieldAllowMultiple(field.id, field.allowMultiple)"
                 [kTooltip]="field.allowMultiple ? multipleOnHint : multipleOffHint"
                 [attr.aria-label]="field.allowMultiple ? multipleOnLabel : multipleOffLabel">
-                <i class="ti" [class.ti-checkbox]="field.allowMultiple" [class.ti-square]="!field.allowMultiple"></i>
+                <i aria-hidden="true" class="ti" [class.ti-checkbox]="field.allowMultiple" [class.ti-square]="!field.allowMultiple"></i>
               </button>
               }
               <button class="ghost icon" (click)="settings.toggleFieldShowOnCard(field.id, field.showOnCard)" [kTooltip]="field.showOnCard ? showOnCardHint : hiddenFromCardHint"
                 [attr.aria-label]="field.showOnCard ? hideFromCardLabel : showOnCardLabel">
-                <i class="ti" [class.ti-eye]="field.showOnCard" [class.ti-eye-off]="!field.showOnCard" [style.color]="field.showOnCard ? 'var(--accent)' : 'var(--text-muted)'"></i>
+                <i aria-hidden="true" class="ti" [class.ti-eye]="field.showOnCard" [class.ti-eye-off]="!field.showOnCard" [style.color]="field.showOnCard ? 'var(--accent)' : 'var(--text-muted)'"></i>
               </button>
               <button class="ghost icon danger" (click)="settings.archiveField(field.id)" aria-label="Delete field" i18n-aria-label kTooltip="Delete field" i18n-kTooltip>
-                <i class="ti ti-trash"></i>
+                <i aria-hidden="true" class="ti ti-trash"></i>
               </button>
             </div>
           </div>
@@ -60,13 +60,13 @@
             <div cdkDropList [cdkDropListData]="field.options" (cdkDropListDropped)="settings.dropOption(field.id, $event)">
               @for (option of field.options; track option.id) {
               <div cdkDrag class="cf-option-row">
-                <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+                <i aria-hidden="true" class="ti ti-grip-vertical grip" cdkDragHandle></i>
                 <k-color-picker [value]="$any(option.color)" (valueChange)="settings.recolorOption(field.id, option.id, $event)" />
                 <input class="cf-option-input" [value]="option.label"
                   (blur)="settings.renameOption(field.id, option.id, $any($event.target).value)"
                   (keydown.enter)="settings.renameOption(field.id, option.id, $any($event.target).value); $any($event.target).blur()" />
                 <button class="ghost icon" (click)="settings.deleteOption(field.id, option.id)" aria-label="Delete option" i18n-aria-label kTooltip="Delete option" i18n-kTooltip>
-                  <i class="ti ti-x"></i>
+                  <i aria-hidden="true" class="ti ti-x"></i>
                 </button>
               </div>
               }
@@ -77,7 +77,7 @@
                 (input)="settings.setNewOptionLabel(field.id, $any($event.target).value)"
                 (keydown.enter)="settings.addOption(field.id)" />
               <button class="ghost icon" (click)="settings.addOption(field.id)" aria-label="Add option" i18n-aria-label kTooltip="Add option" i18n-kTooltip>
-                <i class="ti ti-plus"></i>
+                <i aria-hidden="true" class="ti ti-plus"></i>
               </button>
             </div>
           </div>

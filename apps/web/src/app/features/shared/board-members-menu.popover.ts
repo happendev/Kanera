@@ -92,20 +92,20 @@ function errorMessage(error: unknown): string {
             <option value="observer" [selected]="addRole() === 'observer'" i18n="Board role: can view but not edit">Observer</option>
             <option value="editor" [selected]="addRole() === 'editor'" i18n="Board role: can edit">Editor</option>
           </select>
-          <button type="submit" [disabled]="busy() || !addUserId()" aria-label="Add member" i18n-aria-label><i class="ti ti-user-plus"></i></button>
+          <button type="submit" [disabled]="busy() || !addUserId()" aria-label="Add member" i18n-aria-label><i aria-hidden="true" class="ti ti-user-plus"></i></button>
           <button class="bmp-access-toggle bmp-add-access" type="button" [class.is-active]="addAssignedItemsOnly()" [attr.aria-pressed]="addAssignedItemsOnly()" (click)="addAssignedItemsOnly.update(value => !value)" [disabled]="busy()" [title]="assignedItemsOnlyTooltip(addAssignedItemsOnly())">
-            <i [class]="addAssignedItemsOnly() ? 'ti ti-lock' : 'ti ti-lock-open'"></i>
+            <i aria-hidden="true" [class]="addAssignedItemsOnly() ? 'ti ti-lock' : 'ti ti-lock-open'"></i>
             <span i18n="Toggle: restrict a board member to cards assigned to them">Assigned items only</span>
           </button>
         </form>
       } @else if (canManage() && !loading() && candidates().length === 0 && !error()) {
         <div class="bmp-all-added">
-          <i class="ti ti-user-check"></i>
+          <i aria-hidden="true" class="ti ti-user-check"></i>
           <span>@if (candidateScope() === "organisation") { <ng-container i18n>All organisation members are already on this board.</ng-container> } @else { <ng-container i18n>All workspace members are already on this board.</ng-container> }</span>
         </div>
       }
-      @if (error()) { <p class="bmp-error"><i class="ti ti-alert-circle"></i> {{ error() }}</p> }
-      @if (loading() && renderedMembers().length === 0) { <p class="bmp-empty"><i class="ti ti-loader-2 spin"></i> <ng-container i18n>Loading members…</ng-container></p> }
+      @if (error()) { <p class="bmp-error"><i aria-hidden="true" class="ti ti-alert-circle"></i> {{ error() }}</p> }
+      @if (loading() && renderedMembers().length === 0) { <p class="bmp-empty"><i aria-hidden="true" class="ti ti-loader-2 spin"></i> <ng-container i18n>Loading members…</ng-container></p> }
       @else {
         <section class="bmp-section">
           <div class="bmp-section-title" i18n="Section heading: board members">Members</div>
@@ -127,12 +127,12 @@ function errorMessage(error: unknown): string {
                       <option value="observer" [selected]="member.role === 'observer'" i18n="Board role: can view but not edit">Observer</option>
                       <option value="editor" [selected]="member.role === 'editor'" i18n="Board role: can edit">Editor</option>
                     </select>
-                    <button class="bmp-access-toggle" type="button" [class.is-active]="member.assignedItemsOnly" [attr.aria-pressed]="member.assignedItemsOnly" (click)="changeRestriction(member, !member.assignedItemsOnly)" [disabled]="busy()" [attr.aria-label]="assignedOnlyForLabel(member.displayName)" [title]="assignedItemsOnlyTooltip(!!member.assignedItemsOnly)"><i [class]="member.assignedItemsOnly ? 'ti ti-lock' : 'ti ti-lock-open'"></i></button>
-                    <button class="bmp-remove" type="button" (click)="removeMember(member)" [disabled]="busy()" [attr.aria-label]="removeLabel(member.displayName)"><i class="ti ti-trash"></i></button>
+                    <button class="bmp-access-toggle" type="button" [class.is-active]="member.assignedItemsOnly" [attr.aria-pressed]="member.assignedItemsOnly" (click)="changeRestriction(member, !member.assignedItemsOnly)" [disabled]="busy()" [attr.aria-label]="assignedOnlyForLabel(member.displayName)" [title]="assignedItemsOnlyTooltip(!!member.assignedItemsOnly)"><i aria-hidden="true" [class]="member.assignedItemsOnly ? 'ti ti-lock' : 'ti ti-lock-open'"></i></button>
+                    <button class="bmp-remove" type="button" (click)="removeMember(member)" [disabled]="busy()" [attr.aria-label]="removeLabel(member.displayName)"><i aria-hidden="true" class="ti ti-trash"></i></button>
                   }
                 } @else {
                   <span class="bmp-role">{{ roleLabel(member.role) }}</span>
-                  @if (member.assignedItemsOnly) { <span class="bmp-access-readonly" kTooltip="This member can only see cards assigned directly or through a checklist item." i18n-kTooltip tabindex="0" aria-label="Assigned items only" i18n-aria-label="Badge: member restricted to cards assigned to them"><i class="ti ti-lock"></i></span> }
+                  @if (member.assignedItemsOnly) { <span class="bmp-access-readonly" kTooltip="This member can only see cards assigned directly or through a checklist item." i18n-kTooltip tabindex="0" aria-label="Assigned items only" i18n-aria-label="Badge: member restricted to cards assigned to them"><i aria-hidden="true" class="ti ti-lock"></i></span> }
                 }
               </div>
             </div>
@@ -156,11 +156,11 @@ function errorMessage(error: unknown): string {
                       <option value="observer" [selected]="guest.role === 'observer'" i18n="Board role: can view but not edit">Observer</option>
                       <option value="editor" [selected]="guest.role === 'editor'" i18n="Board role: can edit">Editor</option>
                     </select>
-                    <button class="bmp-access-toggle" type="button" [class.is-active]="guest.assignedItemsOnly" [attr.aria-pressed]="guest.assignedItemsOnly" (click)="changeRestriction(guest, !guest.assignedItemsOnly)" [disabled]="busy()" [attr.aria-label]="assignedOnlyForLabel(guest.displayName)" [title]="assignedItemsOnlyTooltip(!!guest.assignedItemsOnly)"><i [class]="guest.assignedItemsOnly ? 'ti ti-lock' : 'ti ti-lock-open'"></i></button>
-                    <button class="bmp-remove" type="button" (click)="removeMember(guest)" [disabled]="busy()" [attr.aria-label]="removeLabel(guest.displayName)"><i class="ti ti-trash"></i></button>
+                    <button class="bmp-access-toggle" type="button" [class.is-active]="guest.assignedItemsOnly" [attr.aria-pressed]="guest.assignedItemsOnly" (click)="changeRestriction(guest, !guest.assignedItemsOnly)" [disabled]="busy()" [attr.aria-label]="assignedOnlyForLabel(guest.displayName)" [title]="assignedItemsOnlyTooltip(!!guest.assignedItemsOnly)"><i aria-hidden="true" [class]="guest.assignedItemsOnly ? 'ti ti-lock' : 'ti ti-lock-open'"></i></button>
+                    <button class="bmp-remove" type="button" (click)="removeMember(guest)" [disabled]="busy()" [attr.aria-label]="removeLabel(guest.displayName)"><i aria-hidden="true" class="ti ti-trash"></i></button>
                   } @else {
                     <span class="bmp-role">{{ roleLabel(guest.role) }}</span>
-                    @if (guest.assignedItemsOnly) { <span class="bmp-access-readonly" kTooltip="This guest can only see cards assigned directly or through a checklist item." i18n-kTooltip tabindex="0" aria-label="Assigned items only" i18n-aria-label="Badge: member restricted to cards assigned to them"><i class="ti ti-lock"></i></span> }
+                    @if (guest.assignedItemsOnly) { <span class="bmp-access-readonly" kTooltip="This guest can only see cards assigned directly or through a checklist item." i18n-kTooltip tabindex="0" aria-label="Assigned items only" i18n-aria-label="Badge: member restricted to cards assigned to them"><i aria-hidden="true" class="ti ti-lock"></i></span> }
                   }
                 </div>
               </div>

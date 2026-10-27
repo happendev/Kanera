@@ -27,7 +27,7 @@ export interface NoteMoveRequest {
       <div class="nt-root">
         @if (roots().length === 0) {
           <div class="nt-empty">
-            <i class="ti ti-notebook"></i>
+            <i aria-hidden="true" class="ti ti-notebook"></i>
             <span i18n="Empty state in the notes tree">No notes yet</span>
           </div>
         }

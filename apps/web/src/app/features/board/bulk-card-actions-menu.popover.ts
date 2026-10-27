@@ -38,19 +38,19 @@ const BULK_MENU_WIDTH = 232;
       </div>
 
       <button type="button" class="bcam-item" (click)="setCompletion($event, true)" [disabled]="saving()">
-        <i class="ti ti-circle-check"></i>
+        <i aria-hidden="true" class="ti ti-circle-check"></i>
         <span i18n="Bulk card menu item">Mark complete</span>
       </button>
       <button type="button" class="bcam-item" (click)="setCompletion($event, false)" [disabled]="saving()">
-        <i class="ti ti-circle"></i>
+        <i aria-hidden="true" class="ti ti-circle"></i>
         <span i18n="Bulk card menu item">Mark incomplete</span>
       </button>
 
       <div class="bcam-sub">
         <button #dateTrigger type="button" class="bcam-item" [class.is-active]="dateOpen()" (click)="toggleSub($event, 'date')">
-          <i class="ti ti-calendar-event"></i>
+          <i aria-hidden="true" class="ti ti-calendar-event"></i>
           <span i18n="Bulk card menu item">Set due date...</span>
-          <i class="ti ti-chevron-right bcam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (dateOpen()) {
           <k-date-picker
@@ -66,9 +66,9 @@ const BULK_MENU_WIDTH = 232;
 
       <div class="bcam-sub">
         <button #labelsTrigger type="button" class="bcam-item" [class.is-active]="labelsOpen()" (click)="toggleSub($event, 'labels')" [disabled]="!workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : oneWorkspaceHint">
-          <i class="ti ti-tag"></i>
+          <i aria-hidden="true" class="ti ti-tag"></i>
           <span i18n="Bulk card menu item: edit labels">Labels</span>
-          <i class="ti ti-chevron-right bcam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (labelsOpen()) {
           <div class="bcam-picker cqe-section" kAnchoredPanel [apAnchor]="labelsTrigger" [apPlacement]="submenuPlacement" (apDismissed)="labelsOpen.set(false)">
@@ -79,9 +79,9 @@ const BULK_MENU_WIDTH = 232;
                 <span class="cqe-dot" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"></span>
                 <span>{{ label.name }}</span>
                 @if (labelState(label.id) === 'all') {
-                  <i class="ti ti-check"></i>
+                  <i aria-hidden="true" class="ti ti-check"></i>
                 } @else if (labelState(label.id) === 'mixed') {
-                  <i class="ti ti-square-half"></i>
+                  <i aria-hidden="true" class="ti ti-square-half"></i>
                 }
               </button>
             } @empty {
@@ -94,9 +94,9 @@ const BULK_MENU_WIDTH = 232;
 
       <div class="bcam-sub">
         <button #membersTrigger type="button" class="bcam-item" [class.is-active]="membersOpen()" (click)="toggleSub($event, 'members')">
-          <i class="ti ti-users"></i>
+          <i aria-hidden="true" class="ti ti-users"></i>
           <span i18n="Bulk card menu item: edit assignees">Assignees</span>
-          <i class="ti ti-chevron-right bcam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (membersOpen()) {
           <div class="bcam-picker cqe-section" kAnchoredPanel [apAnchor]="membersTrigger" [apPlacement]="submenuPlacement" (apDismissed)="membersOpen.set(false)">
@@ -107,9 +107,9 @@ const BULK_MENU_WIDTH = 232;
                 <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="22" [userId]="member.userId" />
                 <span>{{ member.userId === currentUserId() ? meLabel : member.displayName }}</span>
                 @if (assigneeState(member.userId) === 'all') {
-                  <i class="ti ti-check"></i>
+                  <i aria-hidden="true" class="ti ti-check"></i>
                 } @else if (assigneeState(member.userId) === 'mixed') {
-                  <i class="ti ti-square-half"></i>
+                  <i aria-hidden="true" class="ti ti-square-half"></i>
                 }
               </button>
             } @empty {
@@ -122,15 +122,15 @@ const BULK_MENU_WIDTH = 232;
 
       <div class="bcam-sub">
         <button #listsTrigger type="button" class="bcam-item" [class.is-active]="listsOpen()" (click)="toggleSub($event, 'lists')" [disabled]="!workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : oneWorkspaceHint">
-          <i class="ti ti-arrows-transfer-down"></i>
+          <i aria-hidden="true" class="ti ti-arrows-transfer-down"></i>
           <span i18n="Bulk card menu item">Move to list</span>
-          <i class="ti ti-chevron-right bcam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (listsOpen()) {
           <div class="bcam-picker" kAnchoredPanel [apAnchor]="listsTrigger" [apPlacement]="submenuPlacement" (apDismissed)="listsOpen.set(false)">
             @for (list of lists(); track list.id) {
               <button type="button" class="bcam-picker-row" (click)="moveToList(list.id)" [disabled]="saving()">
-                <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+                <i aria-hidden="true" [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
                 <span>{{ list.name }}</span>
               </button>
             }
@@ -139,20 +139,20 @@ const BULK_MENU_WIDTH = 232;
       </div>
 
       <button type="button" class="bcam-item" (click)="openCustomFields($event)" [disabled]="saving() || !workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : oneWorkspaceHint">
-        <i class="ti ti-forms"></i>
+        <i aria-hidden="true" class="ti ti-forms"></i>
         <span i18n="Bulk card menu item">Custom fields...</span>
       </button>
 
       <button type="button" class="bcam-item" (click)="duplicate($event)" [disabled]="saving()">
-        <i class="ti ti-copy"></i>
+        <i aria-hidden="true" class="ti ti-copy"></i>
         <span i18n="Bulk card menu item">Duplicate cards</span>
       </button>
 
       <div class="bcam-sub">
         <button type="button" class="bcam-item" [class.is-active]="copyBoardOpen()" (click)="toggleSub($event, 'copyBoard')" [disabled]="saving()">
-          <i class="ti ti-copy-plus"></i>
+          <i aria-hidden="true" class="ti ti-copy-plus"></i>
           <span i18n="Bulk card menu item">Copy to board...</span>
-          <i class="ti ti-chevron-right bcam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (copyBoardOpen()) {
           <k-board-picker
@@ -180,7 +180,7 @@ const BULK_MENU_WIDTH = 232;
         </div>
       } @else {
         <button type="button" class="bcam-item bcam-danger" (click)="showArchiveConfirmation($event)" [disabled]="saving()">
-          <i class="ti ti-archive"></i>
+          <i aria-hidden="true" class="ti ti-archive"></i>
           <span i18n="Bulk card menu item">Archive cards</span>
         </button>
       }

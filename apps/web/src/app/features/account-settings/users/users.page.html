@@ -2,13 +2,13 @@
 <p class="empty-hint" i18n>Only organisation admins can manage users.</p>
 } @else {
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-user-plus"></i><span i18n="Settings section heading">Invite people</span></h3>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-user-plus"></i><span i18n="Settings section heading">Invite people</span></h3>
   <p class="settings-section-help" i18n>Create an invite link to join {{ settings.user()?.orgName // i18n(ph="organisation") }}.</p>
   <k-docs-link path="managing-users" label="Learn more about managing users" i18n-label />
   @if (settings.isHosted()) {
   <div class="user-seat-pool" [class.user-seat-pool--full]="settings.planTier() !== 'trial' && settings.availableSeats() === 0">
     <div class="user-seat-pool-icon">
-      <i class="ti" [class.ti-infinity]="settings.planTier() === 'trial'" [class.ti-armchair]="settings.planTier() !== 'trial' && settings.availableSeats() > 0" [class.ti-alert-circle]="settings.planTier() !== 'trial' && settings.availableSeats() === 0"></i>
+      <i aria-hidden="true" class="ti" [class.ti-infinity]="settings.planTier() === 'trial'" [class.ti-armchair]="settings.planTier() !== 'trial' && settings.availableSeats() > 0" [class.ti-alert-circle]="settings.planTier() !== 'trial' && settings.availableSeats() === 0"></i>
     </div>
     <div class="user-seat-pool-copy">
       <span class="user-seat-pool-label">@if (settings.planTier() === 'trial') { <ng-container i18n>Trial seats</ng-container> } @else if (settings.planTier() === 'free') { <ng-container i18n>Free seats</ng-container> } @else { <ng-container i18n>Seat pool</ng-container> }</span>
@@ -28,7 +28,7 @@
     </div>
     @if (settings.planTier() !== 'trial') {
     <a class="ghost sm user-seat-pool-action" href="/settings/account-plan" routerLink="/settings/account-plan">
-      <i class="ti ti-credit-card"></i>
+      <i aria-hidden="true" class="ti ti-credit-card"></i>
       @if (settings.planTier() === 'free') { <ng-container i18n="Button">Upgrade plan</ng-container> } @else { <ng-container i18n="Button">Manage seats</ng-container> }
     </a>
     }
@@ -76,24 +76,24 @@
     }
     @if (settings.inviteError()) { <p class="form-error">{{ settings.inviteError() }}</p> }
     @if (settings.memberLimitReached()) {
-    <p class="plan-limit-hint"><i class="ti ti-lock"></i> <ng-container i18n>Your current team fills every Free seat. Create the invite to see the exact annual price for adding this person.</ng-container></p>
+    <p class="plan-limit-hint"><i aria-hidden="true" class="ti ti-lock"></i> <ng-container i18n>Your current team fills every Free seat. Create the invite to see the exact annual price for adding this person.</ng-container></p>
     }
     <button class="sm" type="submit" [disabled]="settings.inviteBusy()">@if (settings.inviteBusy()) { <ng-container i18n="Button state">Creating...</ng-container> } @else { <ng-container i18n="Button">Create invite</ng-container> }</button>
   </form>
   @if (settings.createdInviteUrl()) {
   <p class="settings-section-help invite-hint">
-    <i class="ti ti-shield-check"></i>
+    <i aria-hidden="true" class="ti ti-shield-check"></i>
     <ng-container i18n>Give this secure link to users to sign up to {{ settings.user()?.orgName // i18n(ph="organisation") }}.</ng-container>
   </p>
   <div class="board-tile invite-url-tile">
-    <i class="ti ti-link board-icon"></i>
+    <i aria-hidden="true" class="ti ti-link board-icon"></i>
     <span class="invite-url-text">{{ settings.createdInviteUrl() }}</span>
     <div class="row-actions">
       <button class="ghost sm" (click)="settings.copyInviteUrl()" aria-label="Copy invite link" i18n-aria-label>
         @if (settings.inviteCopied()) {
-        <i class="ti ti-check text-success"></i> <ng-container i18n="Button state after copying">Copied</ng-container>
+        <i aria-hidden="true" class="ti ti-check text-success"></i> <ng-container i18n="Button state after copying">Copied</ng-container>
         } @else {
-        <i class="ti ti-copy"></i> <ng-container i18n="Button: copy to clipboard">Copy</ng-container>
+        <i aria-hidden="true" class="ti ti-copy"></i> <ng-container i18n="Button: copy to clipboard">Copy</ng-container>
         }
       </button>
     </div>
@@ -104,7 +104,7 @@
 @if (settings.orgInvites().length > 0) {
 <div class="settings-section">
   <h3 class="settings-section-title">
-    <i class="ti ti-ticket"></i><span i18n="Settings section heading">Pending invites</span>
+    <i aria-hidden="true" class="ti ti-ticket"></i><span i18n="Settings section heading">Pending invites</span>
     <span class="invite-count">{{ settings.orgInvites().length }}</span>
   </h3>
   <p class="settings-section-help" i18n>Anyone holding one of these links can join until it expires or is revoked. Revoking a link does not affect people who already joined with it.</p>
@@ -120,7 +120,7 @@
     @let expiry = settings.inviteExpiry(invite);
     <div class="invite-row">
       <div class="invite-identity">
-        <span class="invite-identity-icon"><i class="ti ti-link"></i></span>
+        <span class="invite-identity-icon"><i aria-hidden="true" class="ti ti-link"></i></span>
         <div class="invite-identity-copy">
           <span class="invite-identity-title" i18n>Invite link</span>
           <!-- Tooltipped with the same text so a narrow column truncating it never loses the attribution. -->
@@ -131,7 +131,7 @@
         @if (invite.workspaces.length > 0) {
         @for (w of invite.workspaces; track w.workspaceId) {
         <span class="ws-badge invite-ws-badge" [kTooltip]="w.workspaceName">
-          <i class="ti ti-layout-kanban"></i>
+          <i aria-hidden="true" class="ti ti-layout-kanban"></i>
           <span class="invite-ws-name">{{ w.workspaceName }}</span>
           <span class="ws-badge-role" i18n="Workspace role badge">{ w.role, select, admin {admin} member {member} other {{{ w.role }}} }</span>
         </span>
@@ -144,21 +144,21 @@
         <span class="invite-role-chip">{{ settings.orgRoleLabel(invite.orgRole) }}</span>
       </div>
       <span class="invite-expiry" [class.urgent]="expiry.urgent" data-label="Expires" i18n-data-label="Column heading: when the invite expires" [kTooltip]="expiry.tooltip">
-        @if (expiry.urgent) { <i class="ti ti-alert-triangle"></i> }
+        @if (expiry.urgent) { <i aria-hidden="true" class="ti ti-alert-triangle"></i> }
         {{ expiry.label }}
       </span>
       <div class="invite-actions">
         @if (invite.url) {
         <button class="ghost icon" (click)="settings.copyInviteLink(invite)" aria-label="Copy invite link" i18n-aria-label [kTooltip]="settings.inviteCopiedId() === invite.id ? copiedLabel : copyInviteLinkLabel">
-          <i [class]="settings.inviteCopiedId() === invite.id ? 'ti ti-check invite-copied' : 'ti ti-copy'"></i>
+          <i aria-hidden="true" [class]="settings.inviteCopiedId() === invite.id ? 'ti ti-check invite-copied' : 'ti ti-copy'"></i>
         </button>
         } @else {
         <!-- The raw token is never returned again after creation, so older invites have no link to copy. -->
         <span class="invite-link-hidden" kTooltip="The link is only shown when the invite is created. Revoke this one and create a new invite if you need a link to share." i18n-kTooltip>
-          <i class="ti ti-eye-off"></i>
+          <i aria-hidden="true" class="ti ti-eye-off"></i>
         </span>
         }
-        <button class="ghost icon danger" (click)="settings.revokeInvite(invite.id)" aria-label="Revoke invite" i18n-aria-label kTooltip="Revoke invite" i18n-kTooltip><i class="ti ti-trash"></i></button>
+        <button class="ghost icon danger" (click)="settings.revokeInvite(invite.id)" aria-label="Revoke invite" i18n-aria-label kTooltip="Revoke invite" i18n-kTooltip><i aria-hidden="true" class="ti ti-trash"></i></button>
       </div>
     </div>
     }
@@ -167,11 +167,11 @@
 }
 
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-users"></i><span i18n="Settings section heading">People in {{ settings.user()?.orgName // i18n(ph="organisation") }}</span></h3>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-users"></i><span i18n="Settings section heading">People in {{ settings.user()?.orgName // i18n(ph="organisation") }}</span></h3>
   <k-docs-link path="user-roles" label="Learn more about roles and permissions" i18n-label />
   @if (settings.orgUsersError()) { <p class="form-error">{{ settings.orgUsersError() }}</p> }
   @if (settings.isHosted() && settings.suspendedMemberCount() > 0) {
-  <p class="plan-limit-hint"><i class="ti ti-ban"></i> <ng-container i18n>{ settings.suspendedMemberCount(), plural, =1 {1 member is suspended by your plan's member limit.} other {{{ settings.suspendedMemberCount() }} members are suspended by your plan's member limit.} } Upgrade your plan to restore their access.</ng-container></p>
+  <p class="plan-limit-hint"><i aria-hidden="true" class="ti ti-ban"></i> <ng-container i18n>{ settings.suspendedMemberCount(), plural, =1 {1 member is suspended by your plan's member limit.} other {{{ settings.suspendedMemberCount() }} members are suspended by your plan's member limit.} } Upgrade your plan to restore their access.</ng-container></p>
   }
   <k-search-field class="member-search" [value]="settings.orgUserSearch()" placeholder="Search members…" i18n-placeholder (valueChange)="settings.orgUserSearch.set($event)" />
   <div class="org-user-list">
@@ -190,7 +190,7 @@
           <span class="org-user-name-line">
             <span class="org-user-name">{{ orgUser.displayName }}</span>
             @if (settings.isHosted() && orgUser.suspendedAt) {
-            <span class="org-user-suspended-badge" kTooltip="Suspended by your plan's member limit. Upgrade to restore access." i18n-kTooltip><i class="ti ti-ban"></i> <ng-container i18n="Member status badge">Suspended</ng-container></span>
+            <span class="org-user-suspended-badge" kTooltip="Suspended by your plan's member limit. Upgrade to restore access." i18n-kTooltip><i aria-hidden="true" class="ti ti-ban"></i> <ng-container i18n="Member status badge">Suspended</ng-container></span>
             }
           </span>
           <span class="org-user-email">{{ orgUser.email }}</span>
@@ -200,7 +200,7 @@
         @if (orgUser.workspaces.length > 0) {
         @for (w of orgUser.workspaces; track w.workspaceId) {
         <span class="ws-badge">
-          <i class="ti ti-layout-kanban"></i>
+          <i aria-hidden="true" class="ti ti-layout-kanban"></i>
           {{ w.workspaceName }}
           <span class="ws-badge-role" i18n="Workspace role badge">{ w.role, select, admin {admin} member {member} other {{{ w.role }}} }</span>
         </span>
@@ -217,7 +217,7 @@
       <div class="org-user-actions-cell">
         @if (orgUser.id !== settings.user()?.id && (orgUser.role !== 'owner' || settings.isOrgOwner())) {
         <button class="ghost icon danger" (click)="settings.removeOrgUser(orgUser.id)" aria-label="Remove" i18n-aria-label="Button: remove a member from the organisation" kTooltip="Remove from organisation" i18n-kTooltip>
-          <i class="ti ti-trash"></i>
+          <i aria-hidden="true" class="ti ti-trash"></i>
         </button>
         }
       </div>
@@ -230,7 +230,7 @@
 
 @if (settings.isHosted() && settings.orgGuestSeats().length > 0) {
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-user-star"></i><span i18n="Settings section heading">External guest seats</span></h3>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-user-star"></i><span i18n="Settings section heading">External guest seats</span></h3>
   <p class="settings-section-help" i18n>A guest's first board is free; their second board uses one purchased seat, and further boards reuse it. Manage guest access from the relevant workspace's Settings → Guests page.</p>
   <div class="guest-seat-list">
     @for (guest of settings.orgGuestSeatRows(); track guest.userId) {
@@ -240,7 +240,7 @@
         <div class="org-user-name-wrap">
           <span class="org-user-name-line">
             <span class="org-user-name">{{ guest.displayName }}</span>
-            <span class="guest-seat-chip"><i class="ti ti-armchair"></i> <ng-container i18n="Badge: this guest occupies a paid seat">Seat used</ng-container></span>
+            <span class="guest-seat-chip"><i aria-hidden="true" class="ti ti-armchair"></i> <ng-container i18n="Badge: this guest occupies a paid seat">Seat used</ng-container></span>
           </span>
           <span class="org-user-email">{{ guest.email }}</span>
         </div>
@@ -248,7 +248,7 @@
       <div class="guest-seat-boards">
         @for (workspace of guest.workspaces; track workspace.workspaceId) {
         <span class="ws-badge">
-          <i class="ti ti-briefcase"></i>
+          <i aria-hidden="true" class="ti ti-briefcase"></i>
           {{ workspace.workspaceName }}
         </span>
         } @empty {
@@ -263,11 +263,11 @@
 
 @if (settings.isHosted() && settings.archivedWorkspaces().length > 0) {
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-archive"></i><span i18n="Settings section heading">Archived workspaces</span></h3>
-  <p class="plan-limit-hint"><i class="ti ti-lock"></i> <ng-container i18n>{ settings.archivedWorkspaces().length, plural, =1 {1 workspace was archived by a previous plan change. Upgrade your plan to restore it.} other {{{ settings.archivedWorkspaces().length }} workspaces were archived by a previous plan change. Upgrade your plan to restore them.} }</ng-container></p>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-archive"></i><span i18n="Settings section heading">Archived workspaces</span></h3>
+  <p class="plan-limit-hint"><i aria-hidden="true" class="ti ti-lock"></i> <ng-container i18n>{ settings.archivedWorkspaces().length, plural, =1 {1 workspace was archived by a previous plan change. Upgrade your plan to restore it.} other {{{ settings.archivedWorkspaces().length }} workspaces were archived by a previous plan change. Upgrade your plan to restore them.} }</ng-container></p>
   <div class="archived-ws-list">
     @for (ws of settings.archivedWorkspaces(); track ws.id) {
-    <span class="ws-badge archived"><i class="ti ti-layout-kanban"></i>{{ ws.name }}</span>
+    <span class="ws-badge archived"><i aria-hidden="true" class="ti ti-layout-kanban"></i>{{ ws.name }}</span>
     }
   </div>
 </div>

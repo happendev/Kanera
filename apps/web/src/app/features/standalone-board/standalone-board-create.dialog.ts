@@ -28,7 +28,7 @@ const DEFAULT_TEMPLATE = LOCALIZED_TEMPLATES.find((template) => template.id === 
           <p i18n>Its workflow and settings stay independent from every workspace.</p>
         </div>
         <button type="button" class="ghost icon" (click)="close()" aria-label="Close" i18n-aria-label="Button: close the dialog">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       </header>
 
@@ -47,7 +47,7 @@ const DEFAULT_TEMPLATE = LOCALIZED_TEMPLATES.find((template) => template.id === 
       </label>
 
       <div class="template-preview" aria-live="polite">
-        <span class="template-icon"><i [class]="'ti ti-' + selectedTemplate().icon"></i></span>
+        <span class="template-icon"><i aria-hidden="true" [class]="'ti ti-' + selectedTemplate().icon"></i></span>
         <div class="template-copy">
           <strong class="template-name">{{ selectedTemplate().name }}</strong>
           <p class="template-description">{{ selectedTemplate().description }}</p>

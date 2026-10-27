@@ -12,7 +12,7 @@
   <form class="cmp-dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="New card" i18n-aria-label="Dialog title" [attr.aria-busy]="busy()" (click)="$event.stopPropagation()" (submit)="submit($event)">
     @if (dragActive()) {
     <div class="cmp-drop" aria-hidden="true">
-      <i class="ti ti-paperclip"></i>
+      <i aria-hidden="true" class="ti ti-paperclip"></i>
       <span i18n>Drop files to attach</span>
     </div>
     }
@@ -22,13 +22,13 @@
         <h3 class="cmp-title" i18n="Dialog title">New card</h3>
         @if (selectedList(); as list) {
         <p class="cmp-sub">
-          <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+          <i aria-hidden="true" [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
           <span>{{ list.name }}</span>
         </p>
         }
       </div>
       <button type="button" class="cmp-icon-btn" (click)="requestDismiss()" aria-label="Close" i18n-aria-label [disabled]="busy()">
-        <i class="ti ti-x"></i>
+        <i aria-hidden="true" class="ti ti-x"></i>
       </button>
     </header>
 
@@ -78,11 +78,11 @@
       <ul class="cmp-files">
         @for (item of pendingAttachments(); track item.key) {
         <li class="cmp-file">
-          <i class="ti" [class]="'ti ' + iconFor(item.file)"></i>
+          <i aria-hidden="true" class="ti" [class]="'ti ' + iconFor(item.file)"></i>
           <span class="cmp-file-name">{{ item.file.name }}</span>
           <span class="cmp-file-size">{{ formatBytes(item.file.size) }}</span>
           <button type="button" class="cmp-icon-btn cmp-file-remove" [attr.aria-label]="removeFileLabel(item.file.name)" [disabled]="busy()" (click)="removePendingAttachment(item.key)">
-            <i class="ti ti-x"></i>
+            <i aria-hidden="true" class="ti ti-x"></i>
           </button>
         </li>
         }
@@ -100,10 +100,10 @@
         <span class="cmp-prop">
           <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('board')" [disabled]="busy()" (click)="togglePicker('board')">
             @if (selectedBoard(); as board) {
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.color ? 'var(--color-' + board.color + ')' : null"></i>
+            <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.color ? 'var(--color-' + board.color + ')' : null"></i>
             <span>{{ board.label }}</span>
             } @else {
-            <i class="ti ti-layout-kanban"></i>
+            <i aria-hidden="true" class="ti ti-layout-kanban"></i>
             <span class="cmp-chip-empty" i18n>Choose a board</span>
             }
           </button>
@@ -116,10 +116,10 @@
         <span class="cmp-prop">
           <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('list')" [disabled]="busy() || !lists().length" (click)="togglePicker('list')">
             @if (selectedList(); as list) {
-            <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+            <i aria-hidden="true" [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
             <span>{{ list.name }}</span>
             } @else {
-            <i class="ti ti-list"></i>
+            <i aria-hidden="true" class="ti ti-list"></i>
             <span class="cmp-chip-empty" i18n>Choose a list</span>
             }
           </button>
@@ -142,7 +142,7 @@
             <span i18n>{ selectedAssignees().length, plural, other {{{ selectedAssignees().length }} assignees} }</span>
             }
             } @else {
-            <i class="ti ti-user-plus"></i>
+            <i aria-hidden="true" class="ti ti-user-plus"></i>
             <span class="cmp-chip-empty" i18n="Chip: choose who the card is assigned to">Assignees</span>
             }
           </button>
@@ -166,7 +166,7 @@
             <span i18n>{ selected.length, plural, other {{{ selected.length }} labels} }</span>
             }
             } @else {
-            <i class="ti ti-tag"></i>
+            <i aria-hidden="true" class="ti ti-tag"></i>
             <span class="cmp-chip-empty" i18n="Chip: choose the card's labels">Labels</span>
             }
             }
@@ -178,7 +178,7 @@
 
         <span class="cmp-prop">
           <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('due')" [disabled]="busy()" (click)="togglePicker('due')">
-            <i class="ti ti-calendar-event"></i>
+            <i aria-hidden="true" class="ti ti-calendar-event"></i>
             @if (dueDateLabel(); as label) {
             <span>{{ label }}</span>
             } @else {
@@ -194,7 +194,7 @@
              touch device, where neither exists. -->
         <span class="cmp-prop">
           <button type="button" class="cmp-chip" [class.is-set]="pendingAttachments().length" [disabled]="busy()" (click)="fileInput.click()">
-            <i class="ti ti-paperclip"></i>
+            <i aria-hidden="true" class="ti ti-paperclip"></i>
             @if (pendingAttachments().length; as count) {
             <span i18n>{ count, plural, one {{{ count }} file} other {{{ count }} files} }</span>
             } @else {
@@ -207,7 +207,7 @@
         @if (checklistTemplates().length) {
         <span class="cmp-prop">
           <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('checklists')" [disabled]="busy()" (click)="togglePicker('checklists')">
-            <i class="ti ti-checklist"></i>
+            <i aria-hidden="true" class="ti ti-checklist"></i>
             @if (selectedChecklistTemplates().length; as count) {
             <span i18n>{ count, plural, one {{{ count }} checklist} other {{{ count }} checklists} }</span>
             } @else {
@@ -218,7 +218,7 @@
           <div class="cmp-panel" kAnchoredPanel [apPlacement]="{ width: 288, maxHeight: 320 }" (apDismissed)="closePicker()">
             <div class="cmp-panel-head">
               <span i18n="Picker heading">Checklist templates</span>
-              <button type="button" class="cmp-icon-btn" aria-label="Close" i18n-aria-label (click)="closePicker()"><i class="ti ti-x"></i></button>
+              <button type="button" class="cmp-icon-btn" aria-label="Close" i18n-aria-label (click)="closePicker()"><i aria-hidden="true" class="ti ti-x"></i></button>
             </div>
             <k-picker-list [groups]="checklistTemplateGroups()" [selectedIds]="draft().checklistTemplateIds" searchPlaceholder="Search templates…" i18n-searchPlaceholder emptyLabel="No checklist templates" i18n-emptyLabel (pick)="toggleChecklistTemplate($event)" />
           </div>
@@ -231,13 +231,13 @@
           @switch (field.type) {
           @case ('checkbox') {
           <button type="button" class="cmp-chip" [class.is-set]="valueFor(field.id).valueCheckbox" [disabled]="busy()" (click)="setCheckboxField(field, !valueFor(field.id).valueCheckbox)">
-            <i class="ti" [class.ti-checkbox]="valueFor(field.id).valueCheckbox" [class.ti-square]="!valueFor(field.id).valueCheckbox"></i>
+            <i aria-hidden="true" class="ti" [class.ti-checkbox]="valueFor(field.id).valueCheckbox" [class.ti-square]="!valueFor(field.id).valueCheckbox"></i>
             <span>{{ field.name }}</span>
           </button>
           }
           @case ('select') {
           <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('cf', field.id)" [disabled]="busy()" (click)="toggleCfPicker(field.id)">
-            <i [class]="'ti ti-' + (field.icon || 'forms')"></i>
+            <i aria-hidden="true" [class]="'ti ti-' + (field.icon || 'forms')"></i>
             @if (optionIdsFor(field.id).length) {
             <span>{{ selectedOptionLabels(field) }}</span>
             } @else {
@@ -250,7 +250,7 @@
           }
           @case ('user') {
           <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('cf', field.id)" [disabled]="busy()" (click)="toggleCfPicker(field.id)">
-            <i [class]="'ti ti-' + (field.icon || 'user')"></i>
+            <i aria-hidden="true" [class]="'ti ti-' + (field.icon || 'user')"></i>
             @if (userIdsFor(field.id).length) {
             <span>{{ selectedUserNames(field) }}</span>
             } @else {
@@ -263,7 +263,7 @@
           }
           @case ('date') {
           <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('cf', field.id)" [disabled]="busy()" (click)="toggleCfPicker(field.id)">
-            <i [class]="'ti ti-' + (field.icon || 'calendar')"></i>
+            <i aria-hidden="true" [class]="'ti ti-' + (field.icon || 'calendar')"></i>
             @if (valueFor(field.id).valueDate; as value) {
             <span>{{ formatFieldDate(value) }}</span>
             } @else {
@@ -276,21 +276,21 @@
           }
           @case ('number') {
           <label class="cmp-inline-field">
-            <i [class]="'ti ti-' + (field.icon || 'forms')"></i>
+            <i aria-hidden="true" [class]="'ti ti-' + (field.icon || 'forms')"></i>
             <span class="cmp-inline-name">{{ field.name }}</span>
-            <input type="number" [value]="valueFor(field.id).valueNumber ?? ''" [disabled]="busy()" (input)="setNumberField(field, $any($event.target).value)" />
+            <input type="number" step="any" [value]="valueFor(field.id).valueNumber ?? ''" [disabled]="busy()" (input)="setNumberField(field, $any($event.target).value)" />
           </label>
           }
           @case ('url') {
           <label class="cmp-inline-field">
-            <i [class]="'ti ti-' + (field.icon || 'link')"></i>
+            <i aria-hidden="true" [class]="'ti ti-' + (field.icon || 'link')"></i>
             <span class="cmp-inline-name">{{ field.name }}</span>
             <input type="url" placeholder="https://…" [value]="valueFor(field.id).valueUrl ?? ''" [disabled]="busy()" (input)="setUrlField(field, $any($event.target).value)" />
           </label>
           }
           @default {
           <label class="cmp-inline-field">
-            <i [class]="'ti ti-' + (field.icon || 'forms')"></i>
+            <i aria-hidden="true" [class]="'ti ti-' + (field.icon || 'forms')"></i>
             <span class="cmp-inline-name">{{ field.name }}</span>
             <input type="text" [value]="valueFor(field.id).valueText ?? ''" [disabled]="busy()" (input)="setTextField(field, $any($event.target).value)" />
           </label>

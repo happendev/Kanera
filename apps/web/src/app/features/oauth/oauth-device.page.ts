@@ -15,7 +15,7 @@ interface DeviceContext {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="device-card">
-      <i class="ti ti-device-desktop-code device-icon"></i>
+      <i aria-hidden="true" class="ti ti-device-desktop-code device-icon"></i>
       @if (completed(); as result) {
         @if (result === "approved") {
           <h1 i18n>Device connected</h1>
@@ -30,11 +30,11 @@ interface DeviceContext {
         <div class="code">{{ request.userCode }}</div>
         <p i18n>This client will act as you in Kanera. It will be able to:</p>
         <ul>
-          <li><i class="ti ti-eye"></i> <span i18n="Permission granted to a connected client">Read work you can access</span></li>
+          <li><i aria-hidden="true" class="ti ti-eye"></i> <span i18n="Permission granted to a connected client">Read work you can access</span></li>
           @if (request.scopes.includes("kanera:write")) {
-            <li><i class="ti ti-edit"></i> <span i18n="Permission granted to a connected client">Create and update work wherever you have permission</span></li>
+            <li><i aria-hidden="true" class="ti ti-edit"></i> <span i18n="Permission granted to a connected client">Create and update work wherever you have permission</span></li>
           }
-          <li><i class="ti ti-lock"></i> <span i18n="Permission granted to a connected client">Stay limited to your current Kanera permissions</span></li>
+          <li><i aria-hidden="true" class="ti ti-lock"></i> <span i18n="Permission granted to a connected client">Stay limited to your current Kanera permissions</span></li>
         </ul>
         <p class="muted" i18n>Only approve this request if you started it. You can revoke it later from Settings → AI agents.</p>
         @if (error(); as message) { <p class="error">{{ message }}</p> }

@@ -22,7 +22,7 @@ import { formatDueDate } from "../board/due-date.util";
           that glyph is a *ticked* box, which the app uses elsewhere to mean completed (see
           notifications-panel), and every row on this agenda is by definition still open.
         -->
-        <i class="ti ti-{{ item().kind === 'checklistItem' ? 'list-check' : 'layout-kanban' }}"></i>
+        <i aria-hidden="true" class="ti ti-{{ item().kind === 'checklistItem' ? 'list-check' : 'layout-kanban' }}"></i>
       </span>
       <span class="agenda-main">
         <span class="agenda-title">
@@ -45,7 +45,7 @@ import { formatDueDate } from "../board/due-date.util";
       <!-- The board is the primary context, so it gets its own chip carrying the board's own icon
            and colour rather than sharing a muted run-on line with the list name. -->
       <span class="agenda-board" [style.--board-color]="boardColor()">
-        <i class="ti ti-{{ boardIcon() }}"></i>
+        <i aria-hidden="true" class="ti ti-{{ boardIcon() }}"></i>
         <span class="agenda-board-name">{{ item().boardName }}</span>
         @if (item().listName; as list) {
           <span class="agenda-list">{{ list }}</span>

@@ -1,6 +1,35 @@
 import { expect, test } from "./support/fixtures";
 import { boardHref, createCard, expectBoardLoaded, moveCardToBoard, openCard, workspaceSettingsHref } from "./support/ui";
 
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  test(`card composer accepts fractional number fields at ${viewport.width}px`, async ({ page, signIn, apiAs, testWorkspace, uniqueName }, testInfo) => {
+    const api = await apiAs("amelia");
+    const field = await api.post(`/api/workspaces/${testWorkspace.id}/custom-fields`, {
+      data: { name: "Billing Hours", type: "number" },
+    });
+    expect(field.ok(), await field.text()).toBe(true);
+    await page.setViewportSize(viewport);
+    await signIn(page, "amelia", `/b/${testWorkspace.boardId}`);
+    await expectBoardLoaded(page, testWorkspace.boardName);
+    await page.getByRole("button", { name: "New card", exact: true }).click();
+    const composer = page.getByRole("dialog", { name: "New card" });
+    const title = uniqueName("Half-hour capture");
+    await composer.locator("textarea.cmp-title-input").fill(title);
+    const hours = composer.getByRole("spinbutton", { name: "Billing Hours" });
+    await hours.fill("0.5");
+    await page.screenshot({ path: testInfo.outputPath("fractional-number-composer.png") });
+    // Chromium's default integer step blocks native form submission before Angular sees it.
+    expect(await hours.evaluate((input: HTMLInputElement) => input.checkValidity())).toBe(true);
+    await composer.getByRole("button", { name: "Create card" }).click();
+    await expect(composer).toBeHidden();
+    await page.reload();
+    await expectBoardLoaded(page, testWorkspace.boardName);
+    const detail = await openCard(page, title);
+    await expect(detail.locator(".cf-row").filter({ hasText: "Billing Hours" }).locator("input.cf-input")).toHaveValue("0.5");
+    await page.screenshot({ path: testInfo.outputPath("fractional-number-persisted.png") });
+  });
+}
+
 test("workspace field edits and card values survive a board transfer and work in the target filter", async ({ page, signIn, uniqueName }) => {
   const initialField = uniqueName("E2E source field");
   const field = `${initialField} renamed`;

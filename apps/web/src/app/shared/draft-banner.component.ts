@@ -8,15 +8,15 @@ import { TooltipDirective } from "./tooltip.directive";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="draft-banner" role="status">
-      <i class="ti ti-notes"></i>
+      <i aria-hidden="true" class="ti ti-notes"></i>
       <span>{{ message() }}</span>
       @if (mode() === 'saved' && showEdit()) {
         <button type="button" class="ghost xs draft-banner-action" [disabled]="!editEnabled()" (click)="edit.emit()" aria-label="Edit saved draft" i18n-aria-label kTooltip="Edit draft" i18n-kTooltip="Tooltip on the button that resumes editing a draft">
-          <i class="ti ti-pencil"></i>
+          <i aria-hidden="true" class="ti ti-pencil"></i>
         </button>
       }
       <button type="button" class="ghost xs draft-banner-action" (click)="discard.emit()" [attr.aria-label]="discardLabel()" kTooltip="Discard draft" i18n-kTooltip="Tooltip on the button that deletes a draft">
-        <i class="ti ti-x"></i>
+        <i aria-hidden="true" class="ti ti-x"></i>
       </button>
     </div>
   `,

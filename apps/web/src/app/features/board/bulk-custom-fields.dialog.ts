@@ -69,26 +69,26 @@ function formatFieldNumber(value: number | string): string {
             <h3 class="title" i18n>Edit custom fields</h3>
             <p class="sub" i18n>{ cardIds().length, plural, one {{{ cardIds().length }} card selected} other {{{ cardIds().length }} cards selected} }</p>
           </div>
-          <button type="button" class="icon-btn" (click)="dismiss()" aria-label="Close" i18n-aria-label [disabled]="saving()"><i class="ti ti-x"></i></button>
+          <button type="button" class="icon-btn" (click)="dismiss()" aria-label="Close" i18n-aria-label [disabled]="saving()"><i aria-hidden="true" class="ti ti-x"></i></button>
         </header>
 
         @if (saving()) {
           <div class="saving-state" role="status">
-            <i class="ti ti-loader-2 kanera-spin"></i>
+            <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i>
             <strong i18n>Saving changes…</strong>
             <span i18n>{ cardIds().length, plural, one {Updating {{ cardIds().length }} card. This may take a moment.} other {Updating {{ cardIds().length }} cards. This may take a moment.} }</span>
           </div>
         } @else if (loading()) {
-          <p class="notice"><i class="ti ti-loader-2 kanera-spin"></i><span i18n>Loading current values…</span></p>
+          <p class="notice"><i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i><span i18n>Loading current values…</span></p>
         } @else {
           <div class="fields">
             @for (field of fields(); track field.id) {
               <div class="field" [class.is-open]="expandedId() === field.id" [class.is-staged]="isStaged(field.id)">
                 <button type="button" class="field-head" (click)="toggle(field.id)">
-                  <i class="fi" [class]="'ti ti-' + (field.icon || 'forms')"></i>
+                  <i aria-hidden="true" class="fi" [class]="'ti ti-' + (field.icon || 'forms')"></i>
                   <span class="fname">{{ field.name }}</span>
                   <span class="fsummary">{{ stagedSummary(field) ?? currentSummary(field) }}</span>
-                  <i class="chev ti" [class.ti-chevron-down]="expandedId() === field.id" [class.ti-chevron-right]="expandedId() !== field.id"></i>
+                  <i aria-hidden="true" class="chev ti" [class.ti-chevron-down]="expandedId() === field.id" [class.ti-chevron-right]="expandedId() !== field.id"></i>
                 </button>
 
                 @if (expandedId() === field.id) {
@@ -118,8 +118,8 @@ function formatFieldNumber(value: number | string): string {
                             <button type="button" class="row" [class.sel]="optionSelected(field, opt.id) !== 'none'" (click)="toggleOption(field, opt.id)">
                               <span class="dot" [style.background]="opt.color ? 'var(--color-' + opt.color + ')' : 'var(--border-strong)'"></span>
                               <span class="rlabel">{{ opt.label }}</span>
-                              @if (optionSelected(field, opt.id) === 'all') { <i class="ti ti-check"></i> }
-                              @else if (optionSelected(field, opt.id) === 'mixed') { <i class="ti ti-square-half"></i> }
+                              @if (optionSelected(field, opt.id) === 'all') { <i aria-hidden="true" class="ti ti-check"></i> }
+                              @else if (optionSelected(field, opt.id) === 'mixed') { <i aria-hidden="true" class="ti ti-square-half"></i> }
                             </button>
                           } @empty {
                             <p class="empty" i18n>No options</p>
@@ -132,8 +132,8 @@ function formatFieldNumber(value: number | string): string {
                             <button type="button" class="row" [class.sel]="userSelected(field, m.userId) !== 'none'" (click)="toggleUser(field, m.userId)">
                               <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="22" [userId]="m.userId" />
                               <span class="rlabel">{{ m.userId === currentUserId() ? meLabel : m.displayName }}</span>
-                              @if (userSelected(field, m.userId) === 'all') { <i class="ti ti-check"></i> }
-                              @else if (userSelected(field, m.userId) === 'mixed') { <i class="ti ti-square-half"></i> }
+                              @if (userSelected(field, m.userId) === 'all') { <i aria-hidden="true" class="ti ti-check"></i> }
+                              @else if (userSelected(field, m.userId) === 'mixed') { <i aria-hidden="true" class="ti ti-square-half"></i> }
                             </button>
                           } @empty {
                             <p class="empty" i18n>No members</p>
@@ -165,7 +165,7 @@ function formatFieldNumber(value: number | string): string {
           </div>
 
           @if (applyNotice(); as notice) {
-            <p class="notice skip"><i class="ti ti-info-circle"></i><span>{{ notice }}</span></p>
+            <p class="notice skip"><i aria-hidden="true" class="ti ti-info-circle"></i><span>{{ notice }}</span></p>
           }
 
           <footer class="foot">
@@ -173,7 +173,7 @@ function formatFieldNumber(value: number | string): string {
               @if (applyNotice()) { <ng-container i18n="Button: close the dialog">Close</ng-container> } @else { <ng-container i18n>Cancel</ng-container> }
             </button>
             <button type="button" class="sm" (click)="apply()" [disabled]="saving() || stagedCount() === 0">
-              @if (saving()) { <i class="ti ti-loader-2 kanera-spin"></i> }
+              @if (saving()) { <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i> }
               @if (stagedCount() > 0) {
                 <ng-container i18n="Button: apply the staged custom field changes; the number of changed fields follows">Apply ({{ stagedCount() // i18n(ph="count") }})</ng-container>
               } @else {

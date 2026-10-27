@@ -14,7 +14,7 @@
   i18n-aria-label="Button label: toggle the scratchpad"
   (click)="toggle()"
 >
-  <i class="ti ti-notes"></i>
+  <i aria-hidden="true" class="ti ti-notes"></i>
 </button>
 }
 
@@ -153,7 +153,7 @@
           i18n-aria-label="Button label: add a scratchpad page"
           (click)="addNote()"
         >
-          <i class="ti ti-plus"></i>
+          <i aria-hidden="true" class="ti ti-plus"></i>
         </button>
         <!-- Everything rarer than "new page" lives here: page actions, then the panel's own. -->
         <button
@@ -167,11 +167,11 @@
           i18n-kTooltip="Tooltip: open the scratchpad options menu"
           (click)="togglePanelMenu($event)"
         >
-          <i class="ti ti-dots"></i>
+          <i aria-hidden="true" class="ti ti-dots"></i>
         </button>
         @if (!isPage()) {
         <button type="button" class="icon-btn" kTooltip="Close" i18n-kTooltip="Tooltip: close the scratchpad" aria-label="Close scratchpad" i18n-aria-label (click)="close()">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
         }
       </div>
@@ -233,7 +233,7 @@
     </div>
     <div class="k-menu-separator" role="separator"></div>
     <button type="button" class="k-menu-item" role="menuitem" [disabled]="atCapacity()" (click)="closePageList(); addNote()">
-      <i class="ti ti-plus"></i><span i18n="Menu item: add a scratchpad page">New page</span>
+      <i aria-hidden="true" class="ti ti-plus"></i><span i18n="Menu item: add a scratchpad page">New page</span>
     </button>
   </div>
   }
@@ -244,10 +244,10 @@
   <div class="panel-menu" role="menu" aria-label="Scratchpad options" i18n-aria-label="Label for the scratchpad options menu" kMenu kAnchoredPanel [apAnchor]="open.anchor" [apPlacement]="panelMenuPlacement" (apDismissed)="closePanelMenu()">
     @if (open.note; as note) {
     <button type="button" class="k-menu-item" role="menuitem" (click)="startRename(note.id, $event)">
-      <i class="ti ti-pencil"></i><span i18n="Menu item: rename the scratchpad page">Rename page</span>
+      <i aria-hidden="true" class="ti ti-pencil"></i><span i18n="Menu item: rename the scratchpad page">Rename page</span>
     </button>
     <button type="button" class="k-menu-item danger" role="menuitem" (click)="removeNote(note, $event)">
-      <i class="ti ti-trash"></i><span i18n="Menu item: delete the scratchpad page">Delete page</span>
+      <i aria-hidden="true" class="ti ti-trash"></i><span i18n="Menu item: delete the scratchpad page">Delete page</span>
     </button>
     <div class="k-menu-separator" role="separator"></div>
     }
@@ -257,11 +257,11 @@
     -->
     @if (!isPage()) {
     <button type="button" class="k-menu-item" role="menuitem" (click)="popOut()">
-      <i class="ti ti-external-link"></i><span i18n="Menu item: pop the scratchpad out into its own browser tab">Open in a new tab</span>
+      <i aria-hidden="true" class="ti ti-external-link"></i><span i18n="Menu item: pop the scratchpad out into its own browser tab">Open in a new tab</span>
     </button>
     } @else {
     <button type="button" class="k-menu-item" role="menuitem" (click)="dockBack()">
-      <i class="ti ti-layout-sidebar-right-expand"></i><span i18n="Menu item: return the popped-out scratchpad to the app">Dock back in the app</span>
+      <i aria-hidden="true" class="ti ti-layout-sidebar-right-expand"></i><span i18n="Menu item: return the popped-out scratchpad to the app">Dock back in the app</span>
     </button>
     }
   </div>

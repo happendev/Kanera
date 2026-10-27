@@ -19,7 +19,7 @@ import { PickerListComponent, type PickerGroup } from "./picker-list.component";
       <div class="ap-head">
         <span class="ap-title">{{ title() }}</span>
         <button type="button" class="ap-icon-button" aria-label="Close" i18n-aria-label (click)="closed.emit()">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       </div>
       <k-picker-list

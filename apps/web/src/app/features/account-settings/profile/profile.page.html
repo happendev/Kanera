@@ -1,5 +1,5 @@
 <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-user-circle"></i><span i18n="Settings section heading">Profile picture</span></h3>
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-user-circle"></i><span i18n="Settings section heading">Profile picture</span></h3>
         <p class="settings-section-help" i18n>Upload a square avatar and adjust the circle crop before saving.</p>
         <div class="avatar-row">
           <div class="profile-avatar-preview">
@@ -7,7 +7,7 @@
           </div>
           <div class="logo-actions">
             <label class="sm logo-button" [class.disabled]="avatarUploading()">
-              <i class="ti ti-upload"></i>
+              <i aria-hidden="true" class="ti ti-upload"></i>
               @if (settings.user()?.avatarUrl) { <ng-container i18n="Button">Replace picture</ng-container> } @else { <ng-container i18n="Button">Upload picture</ng-container> }
               <input type="file" accept="image/png,image/jpeg,image/webp" (change)="selectAvatar($event)" [disabled]="avatarUploading()" hidden />
             </label>
@@ -51,7 +51,7 @@
       <div class="settings-section">
         <div class="section-heading-row">
           <div>
-            <h3 class="settings-section-title"><i class="ti ti-id"></i><span i18n="Settings section heading">Display name</span></h3>
+            <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-id"></i><span i18n="Settings section heading">Display name</span></h3>
             <p class="settings-section-help" i18n>Shown to teammates across the workspace.</p>
           </div>
           <k-autosave-status [state]="settings.nameAutosave.state()" />
@@ -63,7 +63,7 @@
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-palette"></i><span i18n="Settings section heading">Appearance</span></h3>
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-palette"></i><span i18n="Settings section heading">Appearance</span></h3>
         <p class="settings-section-help" i18n>Choose the theme, accent colour and density used on this device.</p>
         <k-theme-picker [value]="settings.theme.theme()" (picked)="settings.setTheme($event)" />
 
@@ -94,14 +94,14 @@
         <p class="settings-section-help accent-help" i18n>Density</p>
         <div class="density-options" role="radiogroup" aria-label="Density" i18n-aria-label>
           <button type="button" class="density-option" role="radio" [class.active]="settings.density.density() === 'comfortable'" [attr.aria-checked]="settings.density.density() === 'comfortable'" (click)="settings.density.setDensity('comfortable')">
-            <i class="ti ti-layout-rows"></i>
+            <i aria-hidden="true" class="ti ti-layout-rows"></i>
             <span class="density-option-text">
               <span i18n="Density option name">Comfortable</span>
               <small i18n="Density option description">Roomier sidebar rows and board cards.</small>
             </span>
           </button>
           <button type="button" class="density-option" role="radio" [class.active]="settings.density.density() === 'compact'" [attr.aria-checked]="settings.density.density() === 'compact'" (click)="settings.density.setDensity('compact')">
-            <i class="ti ti-layout-list"></i>
+            <i aria-hidden="true" class="ti ti-layout-list"></i>
             <span class="density-option-text">
               <span i18n="Density option name">Compact</span>
               <small i18n="Density option description">Tighter rows, smaller cards and labels as dots.</small>
@@ -111,7 +111,7 @@
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-language"></i><span i18n="Settings section heading">Language</span></h3>
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-language"></i><span i18n="Settings section heading">Language</span></h3>
         <p class="settings-section-help" i18n>Used across Kanera on every device you sign in to, and for your emails and notifications. Dates follow the language you choose.</p>
         <k-language-menu [value]="settings.activeLocale" [disabled]="settings.localeSaving()" (picked)="settings.setLocale($event)" />
         @if (settings.localeError()) { <p class="form-error">{{ settings.localeError() }}</p> }
@@ -119,17 +119,17 @@
 
       @if (consent.available()) {
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-cookie"></i><span i18n="Settings section heading">Privacy</span></h3>
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-cookie"></i><span i18n="Settings section heading">Privacy</span></h3>
         <p class="settings-section-help" i18n>Review or change the optional analytics choice stored on this device.</p>
         <button class="sm" type="button" (click)="consent.openSettings()">
-          <i class="ti ti-adjustments-horizontal"></i>
+          <i aria-hidden="true" class="ti ti-adjustments-horizontal"></i>
           <ng-container i18n="Button">Cookie settings</ng-container>
         </button>
       </div>
       }
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-mail"></i><span i18n="Settings section heading: the account email address">Email</span></h3>
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-mail"></i><span i18n="Settings section heading: the account email address">Email</span></h3>
         <p class="settings-section-help">
           <ng-container i18n>Your email address is used to sign in.</ng-container>
           @if (settings.emailVerificationEnabled()) {

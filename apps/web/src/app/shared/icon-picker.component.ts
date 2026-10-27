@@ -30,7 +30,7 @@ const POPULAR_ICONS = [
   template: `
     <div class="ip-wrapper">
       <button #trigger type="button" class="ip-trigger" [kTooltip]="title()" [disabled]="disabled()" (click)="toggle()">
-        <i class="ti ti-{{ value() }}" [style.color]="color() ? 'var(--color-' + color() + ')' : null"></i>
+        <i aria-hidden="true" class="ti ti-{{ value() }}" [style.color]="color() ? 'var(--color-' + color() + ')' : null"></i>
       </button>
 
       @if (open()) {
@@ -42,7 +42,7 @@ const POPULAR_ICONS = [
           (apDismissed)="open.set(false)"
         >
           <div class="ip-search">
-            <i class="ti ti-search"></i>
+            <i aria-hidden="true" class="ti ti-search"></i>
             <input
               #searchInput
               placeholder="Search icons…"
@@ -72,7 +72,7 @@ const POPULAR_ICONS = [
                 [kTooltip]="icon"
                 (click)="select(icon)"
               >
-                <i class="ti ti-{{ icon }}"></i>
+                <i aria-hidden="true" class="ti ti-{{ icon }}"></i>
               </button>
             }
             @if (displayed().length === 0) {

@@ -36,18 +36,10 @@ const HIDE_GUESTS_KEY = viewPreferenceKey("hideGuests", "teamOverview");
 
 function storedHideGuests(): boolean {
   try {
-    return localStorage.getItem(HIDE_GUESTS_KEY) === "true";
+    return localStorage.getItem(HIDE_GUESTS_KEY) !== "false";
   } catch {
-    return false;
+    return true;
   }
-}
-
-/**
- * A guest on every board they share with this scope: someone from a client or partner organisation
- * rather than the team. A member of any in-scope board's organisation is never one.
- */
-function isGuest(person: WorkCatalogPerson): boolean {
-  return person.boardIds.length > 0 && person.boardIds.every((boardId) => person.guestBoardIds.includes(boardId));
 }
 
 /** Viewer-local and best-effort: private windows and blocked storage simply start expanded. */
@@ -162,6 +154,9 @@ export class TeamOverviewComponent {
   protected readonly recentTooltip = $localize`:Team overview section tooltip:Other open cards they moved, created or ticked items on in the last ${OVERVIEW_ACTIVITY_DAYS}:days: days`;
 
   readonly people = input<WorkCatalogPerson[]>([]);
+  /** People connected only through guest access by either side, resolved within the page's scope. */
+  readonly guestUserIds = input<string[]>([]);
+  private readonly guestUserIdSet = computed(() => new Set(this.guestUserIds()));
   readonly cards = input<WireCardSummary[]>([]);
   readonly queues = input<WorkPriorityQueue[]>([]);
   readonly lists = input<WorkCatalogList[]>([]);
@@ -206,9 +201,9 @@ export class TeamOverviewComponent {
 
   /** Viewer-local, like the folds: whether to leave guests out of the strip and the panels. */
   readonly hideGuests = signal(storedHideGuests());
-  readonly guestCount = computed(() => this.people().filter(isGuest).length);
+  readonly guestCount = computed(() => this.people().filter((person) => this.guestUserIdSet().has(person.userId)).length);
   private readonly shownPeople = computed(() =>
-    this.hideGuests() ? this.people().filter((person) => !isGuest(person)) : this.people()
+    this.hideGuests() ? this.people().filter((person) => !this.guestUserIdSet().has(person.userId)) : this.people()
   );
 
   toggleHideGuests(): void {
@@ -221,7 +216,7 @@ export class TeamOverviewComponent {
     }
     // A focused guest would otherwise leave their Up next docked beside a panel that is gone.
     const focused = this.people().find((person) => person.userId === this.focusedUserId());
-    if (next && focused && isGuest(focused)) this.focusChanged.emit(null);
+    if (next && focused && this.guestUserIdSet().has(focused.userId)) this.focusChanged.emit(null);
   }
 
   /** Says what a press does and to whom, since "guest" alone does not say which side of the line they are. */

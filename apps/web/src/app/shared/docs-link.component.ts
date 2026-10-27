@@ -52,7 +52,7 @@ export type DocsPath =
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <a class="docs-link" [href]="href()" target="_blank" rel="noopener noreferrer">
-      {{ label() }} <i class="ti ti-external-link"></i>
+      {{ label() }} <i aria-hidden="true" class="ti ti-external-link"></i>
     </a>
   `,
   styleUrl: "./docs-link.component.scss",

@@ -1,5 +1,5 @@
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-hash"></i><span i18n="Settings section heading">Card keys</span></h3>
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-hash"></i><span i18n="Settings section heading">Card keys</span></h3>
         <k-docs-link path="cards" fragment="card-keys-and-links" label="Learn more about card keys" i18n-label />
         <label class="push-toggle-row">
           <input type="checkbox" [checked]="settings.user()?.showCardKeys ?? true" (change)="settings.setShowCardKeys($any($event.target).checked)" [disabled]="settings.cardKeysSaving()" />
@@ -12,7 +12,7 @@
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-notes"></i><span i18n="Settings section heading">Scratchpad</span></h3>
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-notes"></i><span i18n="Settings section heading">Scratchpad</span></h3>
         <k-docs-link path="scratchpad" label="Learn more about the scratchpad" i18n-label />
         <label class="push-toggle-row">
           <input type="checkbox" [checked]="settings.user()?.showScratchpad ?? true" (change)="settings.setShowScratchpad($any($event.target).checked)" [disabled]="settings.scratchpadVisibilitySaving()" />

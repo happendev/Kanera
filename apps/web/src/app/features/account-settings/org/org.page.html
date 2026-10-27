@@ -1,5 +1,5 @@
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-building-skyscraper"></i><span i18n="Settings section heading">Organisation name and logo</span></h3>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-building-skyscraper"></i><span i18n="Settings section heading">Organisation name and logo</span></h3>
   <k-docs-link path="organisations" label="Learn more about organisations" i18n-label />
   <div class="board-form">
     <input name="orgName" placeholder="Organisation name" i18n-placeholder [value]="settings.orgName()" (input)="settings.orgName.set($any($event.target).value)" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving()" class="grow" />
@@ -14,12 +14,12 @@
       @if (visibleLogoUrl()) {
       <img [ngSrc]="visibleLogoUrl()!" alt="Organisation logo" i18n-alt width="200" height="50" />
       } @else {
-      <i class="ti ti-photo"></i>
+      <i aria-hidden="true" class="ti ti-photo"></i>
       }
     </div>
     <div class="logo-actions">
       <label class="sm logo-button" [class.disabled]="!settings.isClientAdmin() || settings.logoUploading()">
-        <i class="ti ti-upload"></i>
+        <i aria-hidden="true" class="ti ti-upload"></i>
         @if (settings.logoUploading()) { <ng-container i18n="Button state">Uploading...</ng-container> } @else if (settings.client()?.logoUrl) { <ng-container i18n="Button">Replace logo</ng-container> } @else { <ng-container i18n="Button">Upload logo</ng-container> }
         <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" (change)="settings.uploadLogo($event)" [disabled]="!settings.isClientAdmin() || settings.logoUploading()" hidden />
       </label>
@@ -36,21 +36,21 @@
 <div class="settings-section">
   <div class="section-heading-row">
     <div>
-      <h3 class="settings-section-title"><i class="ti ti-clock-cog"></i><span i18n="Settings section heading">New workspace defaults</span></h3>
+      <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-clock-cog"></i><span i18n="Settings section heading">New workspace defaults</span></h3>
       <p class="settings-section-help" i18n>Applied when a workspace or standalone board is created. Existing workspaces keep their own settings.</p>
     </div>
     <k-autosave-status [state]="settings.cardTimingDefaultsAutosave.state()" />
   </div>
   <div class="settings-form">
     <label class="settings-field">
-      <span class="settings-field-label"><i class="ti ti-circle-check"></i><ng-container i18n="Field label, followed by a number of days">Show completed cards for</ng-container></span>
+      <span class="settings-field-label"><i aria-hidden="true" class="ti ti-circle-check"></i><ng-container i18n="Field label, followed by a number of days">Show completed cards for</ng-container></span>
       <span class="card-timing-default-input">
         <input type="number" min="0" max="365" step="1" [value]="settings.defaultCompletedCardsActiveDays()" (input)="settings.defaultCompletedCardsActiveDays.set(+$any($event.target).value); settings.queueCardTimingDefaultsSave()" (blur)="settings.saveCardTimingDefaultsNow()" [disabled]="!settings.isClientAdmin() || settings.cardTimingDefaultsSaving()" />
         <span i18n="Unit after a number input">days</span>
       </span>
     </label>
     <label class="settings-field">
-      <span class="settings-field-label"><i class="ti ti-zzz"></i><ng-container i18n="Field label, followed by a number of days">Mark cards inactive after</ng-container></span>
+      <span class="settings-field-label"><i aria-hidden="true" class="ti ti-zzz"></i><ng-container i18n="Field label, followed by a number of days">Mark cards inactive after</ng-container></span>
       <span class="card-timing-default-input">
         <input type="number" min="0" max="365" step="1" [value]="settings.defaultInactiveCardsDays()" (input)="settings.defaultInactiveCardsDays.set(+$any($event.target).value); settings.queueCardTimingDefaultsSave()" (blur)="settings.saveCardTimingDefaultsNow()" [disabled]="!settings.isClientAdmin() || settings.cardTimingDefaultsSaving()" />
         <span i18n="Unit after a number input">days</span>
@@ -61,7 +61,7 @@
 </div>
 
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-progress"></i><span i18n>Time in progress</span></h3>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-progress"></i><span i18n>Time in progress</span></h3>
   <p class="settings-section-help" i18n="Help text for the organisation time in progress switch">Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Workspaces and boards can also opt out individually.</p>
   <label class="push-toggle-row">
     <input type="checkbox" [checked]="settings.inProgressEnabledDraft()" (change)="settings.saveInProgressEnabled($any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.inProgressEnabledSaving()" />
@@ -71,7 +71,7 @@
 </div>
 
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-adjustments-horizontal"></i><span i18n="Section heading - optional planning features a workspace can switch off">Planning features</span></h3>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-adjustments-horizontal"></i><span i18n="Section heading - optional planning features a workspace can switch off">Planning features</span></h3>
   <p class="settings-section-help" i18n="Help text for the organisation planning feature switches">Turn off what your teams do not use. A feature that is off is hidden in every workspace, including from agents and the API. Nothing is deleted, so turning it back on restores it. Workspaces can also opt out individually.</p>
   <label class="push-toggle-row">
     <input type="checkbox" [checked]="settings.dependenciesEnabledDraft()" (change)="settings.savePlanningFeature('dependenciesEnabled', $any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.planningFeatureSaving()" />
@@ -90,7 +90,7 @@
     <span class="danger-label" i18n>Danger zone</span>
   </div>
   <div class="danger-action-row">
-    <i class="ti ti-trash danger-action-icon"></i>
+    <i aria-hidden="true" class="ti ti-trash danger-action-icon"></i>
     <div class="danger-action-copy">
       <span class="danger-action-title" i18n>Delete this organisation</span>
       <span class="danger-action-desc" i18n>Permanently removes this organisation and everything it owns, including all boards, lists, cards, and attachments.</span>

@@ -25,26 +25,22 @@ New specs are discovered automatically with an estimated weight; the timing file
 Refresh weights after a successful full run with
 `node scripts/update-e2e-timings.mjs e2e/artifacts/<run>/results.json` and commit the updated JSON.
 
-The `seed` project runs the `seed-*.spec.ts` files against the pristine database before the
-`behavior` project on every shard. These are curated demo-data checks with small UI rendering
-checks, not prerequisites that depend on a behavior test's mutations. They also run first in an
-unsharded invocation. Run them alone with `pnpm test:e2e -- --project=seed`. When deliberately
-repeating only behavior tests, `--project=behavior --no-deps` omits that already-verified dependency.
+The `behavior` project runs directly on every shard. Seeding remains part of stack startup so
+behavioral tests have their accounts and fixture data; there is no separate seed-validation project.
 
-A fourth matrix job runs `realtime-compression.spec.ts` with
-`REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true` in parallel with the three shards. The normal shards
-exercise the default-off setting. Compression still uses a fresh stack, but its startup no longer
-extends shard 3's critical path. This requires capacity for four concurrent CI runners.
+The three shards exercise the default-off compression setting, including
+`realtime-compression.spec.ts`. The compression-enabled setting can be checked manually with
+`REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true`; it does not have a separate CI job.
 CI caches the pnpm package store by lockfile and Chromium by Playwright version. Every runner still
 performs a frozen-lockfile install and installs browser system dependencies.
 
-Reproduce an individual shard locally:
+Reproduce an individual shard or manually check compression locally:
 
 ```bash
 KANERA_E2E_SHARD=1/3 pnpm test:e2e
 KANERA_E2E_SHARD=2/3 pnpm test:e2e
 KANERA_E2E_SHARD=3/3 pnpm test:e2e
-REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true pnpm test:e2e -- realtime-compression.spec.ts --project=behavior --no-deps
+REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true pnpm test:e2e -- realtime-compression.spec.ts --project=behavior
 ```
 
 Run those commands one at a time on a local checkout: its fixed E2E ports, Docker Compose project
@@ -55,7 +51,6 @@ with `KANERA_E2E_SHARD`, which would shard an already restricted file set and om
 
 All shards finish even if one fails, and upload separate `e2e-results-<index>-of-3` artifacts with
 traces, screenshots, service logs, reports and the command/environment in `REPRODUCE.txt`.
-The compression job uploads `e2e-results-compression`.
 The existing `e2e` CI check passes only when every shard passes, so branch protection can continue
 requiring that check. Sharding repeats stack setup on each runner, trading more runner minutes
 for a shorter wait; it does not skip tests or retry failures.

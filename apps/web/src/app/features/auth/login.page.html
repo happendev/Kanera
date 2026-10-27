@@ -1,7 +1,7 @@
 <div class="auth-root">
   @if (environmentBannerLabel(); as environmentLabel) {
   <div class="auth-env-banner">
-    <i class="ti ti-code"></i>
+    <i aria-hidden="true" class="ti ti-code"></i>
     <span>{{ environmentLabel }}</span>
   </div>
   }
@@ -14,7 +14,7 @@
     <form (submit)="submit($event)">
       @if (!challengeToken()) {
       <div class="field">
-        <label for="email"><i class="ti ti-mail"></i> <ng-container i18n="Field label: email address">Email</ng-container></label>
+        <label for="email"><i aria-hidden="true" class="ti ti-mail"></i> <ng-container i18n="Field label: email address">Email</ng-container></label>
         <input id="email" type="email" placeholder="you@example.com" i18n-placeholder="Example email address" [formField]="loginForm.email" autocomplete="email" />
       </div>
       }
@@ -30,7 +30,7 @@
       <pre>{{ recoveryCodes().join('\n') }}</pre>
       } @else {
       <div class="field">
-        <label for="mfa-code"><i class="ti ti-shield-lock"></i> <ng-container i18n="Field label">Verification code</ng-container></label>
+        <label for="mfa-code"><i aria-hidden="true" class="ti ti-shield-lock"></i> <ng-container i18n="Field label">Verification code</ng-container></label>
         <input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" i18n-placeholder [formField]="mfaForm.code" autofocus />
       </div>
       }
@@ -39,11 +39,11 @@
       <a class="small-link" routerLink="/forgot-password" i18n>Forgot password?</a>
 
       <div class="field">
-        <label for="password"><i class="ti ti-lock"></i> <ng-container i18n="Field label">Password</ng-container></label>
+        <label for="password"><i aria-hidden="true" class="ti ti-lock"></i> <ng-container i18n="Field label">Password</ng-container></label>
         <div class="input-wrap">
           <input id="password" [type]="showPassword() ? 'text' : 'password'" placeholder="••••••••" [formField]="loginForm.password" autocomplete="current-password" />
           <button type="button" class="reveal-btn" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? hidePasswordLabel : showPasswordLabel">
-            <i [class]="showPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+            <i aria-hidden="true" [class]="showPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>
         </div>
       </div>
@@ -51,14 +51,14 @@
 
       @if (error()) {
       <div class="error-banner">
-        <i class="ti ti-alert-circle"></i>
+        <i aria-hidden="true" class="ti ti-alert-circle"></i>
         {{ error() }}
       </div>
       }
 
       <button type="submit" [disabled]="busy()" class="submit-btn">
         @if (busy()) {
-        <i class="ti ti-loader-2 kanera-spin"></i>
+        <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i>
         }
         @if (recoveryCodes().length) { <ng-container i18n="Button">I saved these codes</ng-container> } @else if (challengeToken()) { @if (mfaEnrollment()) { <ng-container i18n="Button">Enable and continue</ng-container> } @else { <ng-container i18n="Button: verify the code">Verify</ng-container> } } @else { <ng-container i18n="Button">Sign in</ng-container> }
       </button>

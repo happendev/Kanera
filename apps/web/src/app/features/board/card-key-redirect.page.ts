@@ -18,11 +18,11 @@ interface ResolvedCardKey {
   template: `
     <main class="key-resolver" aria-live="polite">
       @if (failed()) {
-        <i class="ti ti-file-unknown"></i>
+        <i aria-hidden="true" class="ti ti-file-unknown"></i>
         <h1 i18n>Card not found</h1>
         <p i18n>The card may not exist, or you may not have access to it.</p>
       } @else {
-        <i class="ti ti-loader-2 spin"></i>
+        <i aria-hidden="true" class="ti ti-loader-2 spin"></i>
         <span i18n>Opening card…</span>
       }
     </main>
