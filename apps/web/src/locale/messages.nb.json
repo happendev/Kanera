@@ -4152,6 +4152,8 @@
     "3652007016355058890": "Tavlene dine",
     "2054599520790063739": "Tavler du deler",
     "6368227149612917458": "E-postadresse kopiert",
-    "8228936172465447983": "Kunne ikke kopiere e-postadressen."
+    "8228936172465447983": "Kunne ikke kopiere e-postadressen.",
+    "3821233622608825771": "la ved {$fileName} (har siden blitt slettet)",
+    "8314482808231085764": "la til et vedlegg (har siden blitt slettet)"
   }
 }

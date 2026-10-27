@@ -534,6 +534,9 @@ export class CardDetailComponent {
   readonly coverUrl = computed((): string | null => {
     const card = this.card();
     const coverId = card.coverAttachmentId;
+    // The summary still holds the old URL while deletion waits for Undo. Do not resurrect it
+    // through the fallback after hiding the attachment locally.
+    if (coverId && this.pendingDeletedAttachmentIds().has(coverId)) return null;
     const summaryCoverUrl = "coverUrl" in card ? card.coverUrl : null;
     const resolved = coverId ? (this.visibleAttachments().find((a) => a.id === coverId)?.url ?? summaryCoverUrl) : summaryCoverUrl;
     // Suppress a cover whose signed token has already expired (e.g. from a
