@@ -8,7 +8,7 @@ import type { OnInit } from "@angular/core";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="trello-auth-callback">
-      <i class="ti ti-brand-trello"></i>
+      <i aria-hidden="true" class="ti ti-brand-trello"></i>
       <h1>{{ title }}</h1>
       <p>{{ message }}</p>
     </main>

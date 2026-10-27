@@ -1,7 +1,7 @@
 <section class="agent-card" [class.is-compact]="compact()">
   @if (!compact()) {
   <header class="agent-card-header">
-    <span class="agent-card-icon"><i class="ti ti-plug-connected"></i></span>
+    <span class="agent-card-icon"><i aria-hidden="true" class="ti ti-plug-connected"></i></span>
     <div class="agent-card-heading">
       <h3 i18n="Card heading">Connect an AI agent</h3>
       <p i18n>Let Claude, Copilot, Codex, ChatGPT, or any other agent set up boards and manage work for you. Your AI Agent can do all the heavy lifting and get you productive faster.</p>
@@ -12,7 +12,7 @@
   @if (mcpUrl()) {
   <div class="agent-card-actions">
     <button type="button" class="sm" (click)="copyPrompt()">
-      <i [class]="copied() === 'prompt' ? 'ti ti-check' : 'ti ti-sparkles'"></i>
+      <i aria-hidden="true" [class]="copied() === 'prompt' ? 'ti ti-check' : 'ti ti-sparkles'"></i>
       @if (copied() === 'prompt') {
       <ng-container i18n="Button label after the prompt was copied">Setup prompt copied</ng-container>
       } @else {
@@ -20,14 +20,14 @@
       }
     </button>
     <a class="ghost sm" [href]="docsUrl" target="_blank" rel="noopener noreferrer">
-      <ng-container i18n="Link to the agent setup documentation">Setup guide</ng-container> <i class="ti ti-external-link"></i>
+      <ng-container i18n="Link to the agent setup documentation">Setup guide</ng-container> <i aria-hidden="true" class="ti ti-external-link"></i>
     </a>
   </div>
   <div class="agent-card-address">
-    <i class="ti ti-world"></i>
+    <i aria-hidden="true" class="ti ti-world"></i>
     <code>{{ mcpUrl() }}</code>
     <button type="button" class="ghost icon" (click)="copyUrl()" aria-label="Copy MCP address" i18n-aria-label [kTooltip]="copied() === 'url' ? copiedLabel : copyUrlLabel">
-      <i [class]="copied() === 'url' ? 'ti ti-check' : 'ti ti-copy'"></i>
+      <i aria-hidden="true" [class]="copied() === 'url' ? 'ti ti-check' : 'ti ti-copy'"></i>
     </button>
   </div>
   @if (showSnippets() && snippet(); as current) {
@@ -44,7 +44,7 @@
     <div class="agent-card-snippet-code">
       <pre><code>{{ current.code }}</code></pre>
       <button type="button" class="ghost icon" (click)="copySnippet()" [attr.aria-label]="copySnippetAriaLabel(current.label)" [kTooltip]="copied() === 'snippet' ? copiedLabel : copySnippetLabel">
-        <i [class]="copied() === 'snippet' ? 'ti ti-check' : 'ti ti-copy'"></i>
+        <i aria-hidden="true" [class]="copied() === 'snippet' ? 'ti ti-check' : 'ti ti-copy'"></i>
       </button>
     </div>
   </div>
@@ -52,14 +52,14 @@
   } @else if (!loading()) {
   <div class="agent-card-actions">
     <a class="ghost sm" [href]="docsUrl" target="_blank" rel="noopener noreferrer">
-      <ng-container i18n="Link to the agent setup documentation">Setup guide</ng-container> <i class="ti ti-external-link"></i>
+      <ng-container i18n="Link to the agent setup documentation">Setup guide</ng-container> <i aria-hidden="true" class="ti ti-external-link"></i>
     </a>
   </div>
   }
 
   @if (showManageLink()) {
   <a class="agent-card-manage" routerLink="/settings/api-keys">
-    <ng-container i18n="Link">Manage keys and connected agents</ng-container> <i class="ti ti-arrow-right"></i>
+    <ng-container i18n="Link">Manage keys and connected agents</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i>
   </a>
   }
 </section>

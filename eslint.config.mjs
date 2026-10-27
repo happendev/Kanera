@@ -2,6 +2,7 @@ import eslint from '@eslint/js';
 import angular from 'angular-eslint';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import kanera from './apps/web/eslint/kanera-plugin.mjs';
 
 export default tseslint.config(
   {
@@ -99,7 +100,9 @@ export default tseslint.config(
     languageOptions: {
       globals: globals.browser,
     },
+    plugins: { kanera },
     rules: {
+      'kanera/localize-description-colon': 'error',
       '@angular-eslint/component-class-suffix': [
         'error',
         { suffixes: ['Component', 'Page', 'Popover'] },
@@ -207,6 +210,14 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/unbound-method': 'off',
+    },
+  },
+  {
+    // Covers both .html templates and the inline templates processInlineTemplates extracts from .ts.
+    files: ['apps/web/**/*.html'],
+    plugins: { kanera },
+    rules: {
+      'kanera/tabler-icon-aria-hidden': 'error',
     },
   },
   {

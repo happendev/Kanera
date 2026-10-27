@@ -1,5 +1,5 @@
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span i18n="Settings section heading">Two-factor authentication</span></h3>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-shield-lock"></i><span i18n="Settings section heading">Two-factor authentication</span></h3>
   <p class="settings-section-help" i18n>Require every organisation member to enroll an authenticator before their next fresh sign-in. Existing signed-in sessions remain active.</p>
   <label class="push-toggle-row">
     <input type="checkbox" [checked]="settings.requireMfaDraft()" (change)="settings.requireMfaDraft.set($any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.requireMfaSaving()" />
@@ -11,7 +11,7 @@
 
 @if (settings.isHosted()) {
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span i18n="Settings section heading">AI agent access (MCP)</span></h3>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-plug-connected"></i><span i18n="Settings section heading">AI agent access (MCP)</span></h3>
   <p class="settings-section-help" i18n>Controls what AI agents connected through MCP, and personal API keys, can do with this organisation's boards. It also applies to board guests from other organisations. Workspace API keys are managed separately.</p>
   <k-segmented
     [options]="mcpPolicyOptions"

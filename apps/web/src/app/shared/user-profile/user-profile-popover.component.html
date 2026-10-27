@@ -32,23 +32,23 @@
       <div class="up-contact">
         <a class="up-email" [href]="'mailto:' + email" [kTooltip]="emailTooltip()">{{ email }}</a>
         <button type="button" class="up-icon-btn" (click)="copyEmail(email)" aria-label="Copy email address" i18n-aria-label kTooltip="Copy email" i18n-kTooltip="Tooltip: copy the email address">
-          <i class="ti ti-copy"></i>
+          <i aria-hidden="true" class="ti ti-copy"></i>
         </button>
       </div>
       } @else if (profile()?.user?.homeOrganisationName; as organisation) {
       <div class="up-contact">
-        <span class="up-org"><i class="ti ti-building"></i>{{ organisation }}</span>
+        <span class="up-org"><i aria-hidden="true" class="ti ti-building"></i>{{ organisation }}</span>
       </div>
       }
     </div>
     <button type="button" class="up-icon-btn up-close" (click)="close(true)" aria-label="Close profile" i18n-aria-label>
-      <i class="ti ti-x"></i>
+      <i aria-hidden="true" class="ti ti-x"></i>
     </button>
   </header>
 
   @if (localTime(); as clock) {
   <div class="up-clock" [kTooltip]="clock.zone">
-    <i class="ti ti-clock"></i>
+    <i aria-hidden="true" class="ti ti-clock"></i>
     <span i18n="Profile card: the person's current local time"><strong>{{ clock.time // i18n(ph="time") }}</strong> local time</span>
     @if (clock.difference) {
     <span class="up-muted">· {{ clock.difference }}</span>
@@ -58,7 +58,7 @@
 
   @if (failed()) {
   <div class="up-error">
-    <i class="ti ti-cloud-off"></i>
+    <i aria-hidden="true" class="ti ti-cloud-off"></i>
     <span i18n>Couldn't load this profile.</span>
     <button type="button" class="up-text-btn" (click)="load(true)" i18n="Button: retry loading">Try again</button>
   </div>
@@ -96,7 +96,7 @@
       @if (profile(); as p) {
       <span class="up-muted">{{ completedSummary(p.activity.total) }}</span>
       }
-      <i class="ti ti-info-circle up-hint" [kTooltip]="completedHint()"></i>
+      <i aria-hidden="true" class="ti ti-info-circle up-hint" [kTooltip]="completedHint()"></i>
     </div>
     <div class="up-grid" [class.is-loading]="!grid()" [style.--up-weeks]="grid()?.weeks?.length ?? skeletonWeeks.length">
       <div class="up-grid-days" aria-hidden="true">
@@ -162,7 +162,7 @@
       <li>
         @if (cardHref(card); as href) {
         <a class="up-card" [routerLink]="href" (click)="close()" [kTooltip]="card.boardName">
-          <i class="ti" [class.ti-circle-check]="card.completed" [class.ti-cards]="!card.completed" [class.is-done]="card.completed"></i>
+          <i aria-hidden="true" class="ti" [class.ti-circle-check]="card.completed" [class.ti-cards]="!card.completed" [class.is-done]="card.completed"></i>
           @if (showCardKeys()) {
           <span class="up-card-key">{{ card.cardKey }}</span>
           }
@@ -185,7 +185,7 @@
     <div class="up-boards">
       @for (board of boards(); track board.id) {
       <a class="up-board" [routerLink]="['/b', board.id]" (click)="close()" [kTooltip]="board.workspaceKind === 'standard' ? board.workspaceName + ' · ' + board.name : board.name">
-        <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="boardIconColor(board.iconColor)"></i>
+        <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="boardIconColor(board.iconColor)"></i>
         <span>{{ board.name }}</span>
       </a>
       }
@@ -199,7 +199,7 @@
 
   <footer class="up-actions">
     <a class="up-action" [routerLink]="cardsLink().path" [queryParams]="cardsLink().query" (click)="close()">
-      <i class="ti ti-cards"></i>
+      <i aria-hidden="true" class="ti ti-cards"></i>
       @if (isSelf()) {
       <ng-container i18n="Profile card link to your own cards">My cards</ng-container>
       } @else {
@@ -208,13 +208,13 @@
     </a>
     @if (isSelf()) {
     <a class="up-action" routerLink="/settings/profile" (click)="close()">
-      <i class="ti ti-user-edit"></i>
+      <i aria-hidden="true" class="ti ti-user-edit"></i>
       <ng-container i18n="Link">Edit profile</ng-container>
     </a>
     }
     @for (action of actions(); track action.id) {
     <button type="button" class="up-action" [class.is-danger]="action.tone === 'danger'" [disabled]="runningAction() !== null" (click)="runAction(action)">
-      <i [class]="'ti ti-' + action.icon"></i>
+      <i aria-hidden="true" [class]="'ti ti-' + action.icon"></i>
       {{ action.label }}
     </button>
     }

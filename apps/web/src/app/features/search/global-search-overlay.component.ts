@@ -36,7 +36,7 @@ type FlatResult =
       <div class="backdrop" (click)="search.close()">
         <div class="panel" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="Search" i18n-aria-label="Name of the global search dialog" (click)="$event.stopPropagation()">
           <div class="search-row">
-            <i class="ti ti-search"></i>
+            <i aria-hidden="true" class="ti ti-search"></i>
             <input
               #searchInput
               type="text"
@@ -57,7 +57,7 @@ type FlatResult =
               (keydown)="onKeydown($event)"
             />
             @if (search.loading()) {
-              <i class="ti ti-loader-2 spin"></i>
+              <i aria-hidden="true" class="ti ti-loader-2 spin"></i>
             }
             <kbd class="esc">Esc</kbd>
           </div>
@@ -65,7 +65,7 @@ type FlatResult =
           @if (showResults()) {
             <div id="global-search-results" class="results" role="listbox" aria-label="Search results" i18n-aria-label>
               @if (commands().length) {
-                <div class="group-label"><i class="ti ti-bolt"></i> <ng-container i18n="Search result group heading">Quick actions</ng-container></div>
+                <div class="group-label"><i aria-hidden="true" class="ti ti-bolt"></i> <ng-container i18n="Search result group heading">Quick actions</ng-container></div>
                 @for (command of commands(); track command.id; let i = $index) {
                   <button
                     [id]="resultId(i)"
@@ -77,7 +77,7 @@ type FlatResult =
                     (mouseenter)="highlightedIndex.set(i)"
                     (click)="select(command)"
                   >
-                    <span class="row-icon"><i [class]="'ti ti-' + command.icon"></i></span>
+                    <span class="row-icon"><i aria-hidden="true" [class]="'ti ti-' + command.icon"></i></span>
                     <span class="row-main">
                       <span class="row-title">{{ command.label }}</span>
                       <span class="meta">{{ command.detail }}</span>
@@ -96,13 +96,13 @@ type FlatResult =
               }
               @if (flat().length === 0 && !search.loading() && hasQuery()) {
                 <div class="empty" role="status" aria-live="polite">
-                  <i class="ti ti-mood-empty"></i>
+                  <i aria-hidden="true" class="ti ti-mood-empty"></i>
                   <span i18n="Search empty state">No results for "{{ search.query() // i18n(ph="query") }}"</span>
                 </div>
               }
 
               @if (cards().length) {
-                <div class="group-label"><i class="ti ti-layout-kanban"></i> <ng-container i18n="Search result group heading">Cards</ng-container></div>
+                <div class="group-label"><i aria-hidden="true" class="ti ti-layout-kanban"></i> <ng-container i18n="Search result group heading">Cards</ng-container></div>
                 @for (c of cards(); track c.id; let i = $index) {
                   <button
                     [id]="resultId(cardsOffset() + i)"
@@ -115,7 +115,7 @@ type FlatResult =
                     (click)="select({ kind: 'card', data: c })"
                   >
                     <span class="row-icon">
-                      <i [class]="'ti ti-' + (c.boardIcon || 'layout-kanban')"
+                      <i aria-hidden="true" [class]="'ti ti-' + (c.boardIcon || 'layout-kanban')"
                          [style.color]="c.boardColor ? 'var(--color-' + c.boardColor + ')' : null"></i>
                     </span>
                     <span class="row-main">
@@ -129,7 +129,7 @@ type FlatResult =
               }
 
               @if (notes().length) {
-                <div class="group-label"><i class="ti ti-notebook"></i> <ng-container i18n="Search result group heading">Notes</ng-container></div>
+                <div class="group-label"><i aria-hidden="true" class="ti ti-notebook"></i> <ng-container i18n="Search result group heading">Notes</ng-container></div>
                 @for (n of notes(); track n.id; let i = $index) {
                   <button
                     [id]="resultId(notesOffset() + i)"
@@ -143,10 +143,10 @@ type FlatResult =
                   >
                     <span class="row-icon">
                       @if (n.boardId) {
-                        <i [class]="'ti ti-' + (n.boardIcon || 'layout-kanban')"
+                        <i aria-hidden="true" [class]="'ti ti-' + (n.boardIcon || 'layout-kanban')"
                            [style.color]="n.boardColor ? 'var(--color-' + n.boardColor + ')' : null"></i>
                       } @else {
-                        <i class="ti ti-notebook"></i>
+                        <i aria-hidden="true" class="ti ti-notebook"></i>
                       }
                     </span>
                     <span class="row-main">
@@ -159,7 +159,7 @@ type FlatResult =
               }
 
               @if (comments().length) {
-                <div class="group-label"><i class="ti ti-message"></i> <ng-container i18n="Search result group heading">Comments</ng-container></div>
+                <div class="group-label"><i aria-hidden="true" class="ti ti-message"></i> <ng-container i18n="Search result group heading">Comments</ng-container></div>
                 @for (c of comments(); track c.id; let i = $index) {
                   <button
                     [id]="resultId(commentsOffset() + i)"
@@ -172,7 +172,7 @@ type FlatResult =
                     (click)="select({ kind: 'comment', data: c })"
                   >
                     <span class="row-icon">
-                      <i [class]="'ti ti-' + (c.boardIcon || 'layout-kanban')"
+                      <i aria-hidden="true" [class]="'ti ti-' + (c.boardIcon || 'layout-kanban')"
                          [style.color]="c.boardColor ? 'var(--color-' + c.boardColor + ')' : null"></i>
                     </span>
                     <span class="row-main">
@@ -185,7 +185,7 @@ type FlatResult =
               }
 
               @if (attachments().length) {
-                <div class="group-label"><i class="ti ti-paperclip"></i> <ng-container i18n="Search result group heading">Attachments</ng-container></div>
+                <div class="group-label"><i aria-hidden="true" class="ti ti-paperclip"></i> <ng-container i18n="Search result group heading">Attachments</ng-container></div>
                 @for (a of attachments(); track a.id; let i = $index) {
                   <button
                     [id]="resultId(attachmentsOffset() + i)"
@@ -198,7 +198,7 @@ type FlatResult =
                     (click)="select({ kind: 'attachment', data: a })"
                   >
                     <span class="row-icon">
-                      <i [class]="'ti ti-' + (a.boardIcon || 'layout-kanban')"
+                      <i aria-hidden="true" [class]="'ti ti-' + (a.boardIcon || 'layout-kanban')"
                          [style.color]="a.boardColor ? 'var(--color-' + a.boardColor + ')' : null"></i>
                     </span>
                     <span class="row-main">

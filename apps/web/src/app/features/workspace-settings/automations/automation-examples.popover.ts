@@ -23,7 +23,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
       <div class="ap-head">
         <span class="ap-title" i18n="Panel heading">Example automations</span>
         <button type="button" class="ap-icon-button" aria-label="Close" i18n-aria-label (click)="closed.emit()">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       </div>
 
@@ -43,16 +43,16 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
                 [attr.aria-disabled]="recipe.available ? null : true"
                 (click)="pick(recipe.id, recipe.available)"
               >
-                <i class="ti {{ recipe.icon }} ae-recipe-icon"></i>
+                <i aria-hidden="true" class="ti {{ recipe.icon }} ae-recipe-icon"></i>
                 <span class="ae-recipe-text">
                   <strong>{{ recipe.title }}</strong>
                   <small>{{ recipe.detail }}</small>
                   @if (!recipe.available) {
-                    <em class="ae-recipe-blocked"><i class="ti ti-plus"></i> {{ recipe.requirement }}</em>
+                    <em class="ae-recipe-blocked"><i aria-hidden="true" class="ti ti-plus"></i> {{ recipe.requirement }}</em>
                   }
                 </span>
                 @if (recipe.available) {
-                  <i class="ti ti-arrow-right ae-recipe-go"></i>
+                  <i aria-hidden="true" class="ti ti-arrow-right ae-recipe-go"></i>
                 }
               </button>
             }

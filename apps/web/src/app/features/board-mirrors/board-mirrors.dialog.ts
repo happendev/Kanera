@@ -54,61 +54,61 @@ const MIRROR_STATUS = {
       <div class="actions">
         @if (mirror.manageTarget) {
         <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.pausedAt" (click)="togglePause(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.pausedAt && mirror.planBlocked)">
-          <i [class]="mirror.pausedAt ? 'ti ti-player-play' : 'ti ti-player-pause'"></i>
+          <i aria-hidden="true" [class]="mirror.pausedAt ? 'ti ti-player-play' : 'ti ti-player-pause'"></i>
           @if (mirror.pausedAt) { <ng-container i18n="Button: resume a paused board mirror">Resume syncing</ng-container> } @else { <ng-container i18n="Button: pause a board mirror">Pause syncing</ng-container> }
         </button>
         }
         @if (mirror.manageSource) {
         <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.sourceDisabledAt" (click)="toggleSource(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.sourceDisabledAt && mirror.planBlocked)">
-          <i [class]="mirror.sourceDisabledAt ? 'ti ti-link' : 'ti ti-link-off'"></i>
+          <i aria-hidden="true" [class]="mirror.sourceDisabledAt ? 'ti ti-link' : 'ti ti-link-off'"></i>
           @if (mirror.sourceDisabledAt) { <ng-container i18n="Button: re-enable a board mirror from the source side">Enable mirror</ng-container> } @else { <ng-container i18n="Button: disable a board mirror from the source side">Disable mirror</ng-container> }
         </button>
         }
         @if (mirror.manageSource || mirror.manageTarget) {
-        <button type="button" class="ghost" (click)="editLists(mirror)"><i class="ti ti-list-check"></i><ng-container i18n="Button: edit which lists a board mirror copies">Edit lists</ng-container></button>
+        <button type="button" class="ghost" (click)="editLists(mirror)"><i aria-hidden="true" class="ti ti-list-check"></i><ng-container i18n="Button: edit which lists a board mirror copies">Edit lists</ng-container></button>
         @if (confirmDeleteId() === mirror.id) { <button type="button" class="danger" (click)="remove(mirror)" i18n="Button: confirm deleting a board mirror">Confirm delete</button><button type="button" class="ghost" (click)="confirmDeleteId.set(null)" i18n="Button: keep the board mirror">Cancel</button> }
-        @else { <button type="button" class="ghost danger-text" (click)="confirmDeleteId.set(mirror.id)"><i class="ti ti-trash"></i>{{ deleteLabel }}</button> }
+        @else { <button type="button" class="ghost danger-text" (click)="confirmDeleteId.set(mirror.id)"><i aria-hidden="true" class="ti ti-trash"></i>{{ deleteLabel }}</button> }
         } @else {
-          <span class="read-only"><i class="ti ti-lock"></i> <ng-container i18n="Shown instead of actions when the viewer cannot manage a board mirror">Read-only mirror status</ng-container></span>
+          <span class="read-only"><i aria-hidden="true" class="ti ti-lock"></i> <ng-container i18n="Shown instead of actions when the viewer cannot manage a board mirror">Read-only mirror status</ng-container></span>
         }
       </div>
     </ng-template>
 
     <div class="backdrop" (click)="dismissed.emit()">
       <section class="dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" aria-label="Board mirrors" i18n-aria-label="Dialog name" (click)="$event.stopPropagation()">
-        <header><div><h2 i18n="Dialog heading">Board mirrors</h2><p i18n>Manage incoming copies and outbound governance.</p></div><button type="button" class="icon" (click)="dismissed.emit()" aria-label="Close" i18n-aria-label="Button: close the dialog"><i class="ti ti-x"></i></button></header>
-        @if (loading()) { <p class="loading"><i class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n>Loading mirrors…</ng-container></p> }
+        <header><div><h2 i18n="Dialog heading">Board mirrors</h2><p i18n>Manage incoming copies and outbound governance.</p></div><button type="button" class="icon" (click)="dismissed.emit()" aria-label="Close" i18n-aria-label="Button: close the dialog"><i aria-hidden="true" class="ti ti-x"></i></button></header>
+        @if (loading()) { <p class="loading"><i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n>Loading mirrors…</ng-container></p> }
         @else {
           @if (inbound().length > 0 && outbound().length > 0) {
-            <div class="topology-banner danger" role="alert"><i class="ti ti-alert-triangle"></i><div><strong i18n>Invalid mirror direction detected</strong><span i18n>This board is configured as both a mirror source and a mirror target. Delete one side before re-enabling any mirror.</span></div></div>
+            <div class="topology-banner danger" role="alert"><i aria-hidden="true" class="ti ti-alert-triangle"></i><div><strong i18n>Invalid mirror direction detected</strong><span i18n>This board is configured as both a mirror source and a mirror target. Delete one side before re-enabling any mirror.</span></div></div>
           } @else if (inbound().length > 0) {
-            <div class="topology-banner"><i class="ti ti-arrow-bar-to-down"></i><div><strong i18n>This board is a mirror target</strong><span i18n>It cannot also be used as a mirror source while an incoming relationship exists, even when paused or disabled.</span></div></div>
+            <div class="topology-banner"><i aria-hidden="true" class="ti ti-arrow-bar-to-down"></i><div><strong i18n>This board is a mirror target</strong><span i18n>It cannot also be used as a mirror source while an incoming relationship exists, even when paused or disabled.</span></div></div>
           } @else if (outbound().length > 0) {
-            <div class="topology-banner"><i class="ti ti-arrow-bar-up"></i><div><strong i18n>This board is a mirror source</strong><span i18n>Cards are copied to its target boards only. It cannot be selected as a mirror target while an outbound relationship exists.</span></div></div>
+            <div class="topology-banner"><i aria-hidden="true" class="ti ti-arrow-bar-up"></i><div><strong i18n>This board is a mirror source</strong><span i18n>Cards are copied to its target boards only. It cannot be selected as a mirror target while an outbound relationship exists.</span></div></div>
           }
-          <div class="section"><h3><ng-container i18n="Section heading: mirrors copying cards into this board">Inbound</ng-container> <span><ng-container i18n="Mirror direction diagram: source side, shown as Other boards → this board">Other boards</ng-container> <i class="ti ti-arrow-right"></i> <ng-container i18n="Mirror direction diagram: target side, shown as Other boards → this board">this board</ng-container></span></h3>
+          <div class="section"><h3><ng-container i18n="Section heading: mirrors copying cards into this board">Inbound</ng-container> <span><ng-container i18n="Mirror direction diagram: source side, shown as Other boards → this board">Other boards</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i> <ng-container i18n="Mirror direction diagram: target side, shown as Other boards → this board">this board</ng-container></span></h3>
             @for (mirror of inbound(); track mirror.id) {
               <article class="mirror-card">
                 <div class="mirror-title"><div><strong>{{ mirror.sourceBoardName }}</strong><span>{{ mirror.sourceOrganisationName }} / {{ mirror.sourceWorkspaceName }}</span></div><span class="status" [class.warn]="mirror.planBlocked || !!mirror.sourceDisabledAt || !!mirror.lastError">{{ statusLabel(mirror) }}</span></div>
                 <p class="sync-line">{{ syncLine(mirror) }}</p>
-                @if (mirror.planBlocked) { <p class="warning"><i class="ti ti-lock"></i> <ng-container i18n>Syncing is paused until both organisations have Pro.</ng-container></p> }
-                @if (hasArchivedTarget(mirror)) { <p class="warning"><i class="ti ti-alert-triangle"></i> <ng-container i18n>A mapped target list is archived. Card moves into it are being skipped.</ng-container></p> }
-                <div class="chips">@for (list of mirror.lists; track list.sourceListId) { <span>{{ list.sourceListName }} <i class="ti ti-arrow-right"></i> {{ list.targetListName }}</span> }</div>
+                @if (mirror.planBlocked) { <p class="warning"><i aria-hidden="true" class="ti ti-lock"></i> <ng-container i18n>Syncing is paused until both organisations have Pro.</ng-container></p> }
+                @if (hasArchivedTarget(mirror)) { <p class="warning"><i aria-hidden="true" class="ti ti-alert-triangle"></i> <ng-container i18n>A mapped target list is archived. Card moves into it are being skipped.</ng-container></p> }
+                <div class="chips">@for (list of mirror.lists; track list.sourceListId) { <span>{{ list.sourceListName }} <i aria-hidden="true" class="ti ti-arrow-right"></i> {{ list.targetListName }}</span> }</div>
                 <ng-container *ngTemplateOutlet="mirrorEditor; context: { $implicit: mirror, deleteLabel: deleteLabel }" />
               </article>
             } @empty { <p class="empty" i18n>No boards mirror into this board.</p> }
           </div>
-          <div class="section"><h3><ng-container i18n="Section heading: mirrors copying cards out of this board">Outbound</ng-container> <span><ng-container i18n="Mirror direction diagram: source side, shown as This board → other boards">This board</ng-container> <i class="ti ti-arrow-right"></i> <ng-container i18n="Mirror direction diagram: target side, shown as This board → other boards">other boards</ng-container></span></h3>
+          <div class="section"><h3><ng-container i18n="Section heading: mirrors copying cards out of this board">Outbound</ng-container> <span><ng-container i18n="Mirror direction diagram: source side, shown as This board → other boards">This board</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i> <ng-container i18n="Mirror direction diagram: target side, shown as This board → other boards">other boards</ng-container></span></h3>
             @for (mirror of outbound(); track mirror.id) {
               <article class="mirror-card compact"><div class="mirror-title"><div><strong>{{ mirror.targetBoardName }}</strong><span>{{ mirror.targetOrganisationName }}</span></div><span class="status" [class.warn]="mirror.planBlocked">{{ outboundStatusLabel(mirror) }}</span></div>
-                @if (mirror.planBlocked) { <p class="warning"><i class="ti ti-lock"></i> <ng-container i18n>Syncing is paused until both organisations have Pro.</ng-container></p> }
-                @if (hasArchivedTarget(mirror)) { <p class="warning"><i class="ti ti-alert-triangle"></i> <ng-container i18n>A mapped target list is archived. Card moves into it are being skipped.</ng-container></p> }
-                <div class="chips">@for (list of mirror.lists; track list.sourceListId) { <span>{{ list.sourceListName }} <i class="ti ti-arrow-right"></i> {{ list.targetListName }}</span> }</div>
+                @if (mirror.planBlocked) { <p class="warning"><i aria-hidden="true" class="ti ti-lock"></i> <ng-container i18n>Syncing is paused until both organisations have Pro.</ng-container></p> }
+                @if (hasArchivedTarget(mirror)) { <p class="warning"><i aria-hidden="true" class="ti ti-alert-triangle"></i> <ng-container i18n>A mapped target list is archived. Card moves into it are being skipped.</ng-container></p> }
+                <div class="chips">@for (list of mirror.lists; track list.sourceListId) { <span>{{ list.sourceListName }} <i aria-hidden="true" class="ti ti-arrow-right"></i> {{ list.targetListName }}</span> }</div>
                 <ng-container *ngTemplateOutlet="mirrorEditor; context: { $implicit: mirror, deleteLabel: deleteMirrorLabel }" />
               </article>
             } @empty { <p class="empty" i18n>This board does not feed another board.</p> }
           </div>
-          @if (error(); as message) { <p class="error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p> }
+          @if (error(); as message) { <p class="error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p> }
         }
       </section>
     </div>

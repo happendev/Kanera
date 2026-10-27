@@ -1,6 +1,6 @@
 <div class="automations-page">
   <p class="settings-info-note">
-    <i class="ti ti-info-circle"></i>
+    <i aria-hidden="true" class="ti ti-info-circle"></i>
     <span i18n>{ settings.entityKind(), select, board {Automations run on this board: each one watches for a single event, then applies its actions in order to cards that do not already match.} other {Automations run on every board in this workspace: each one watches for a single event, then applies its actions in order to cards that do not already match.} }</span>
   </p>
   <k-docs-link path="automations" label="Learn more about automations" i18n-label />
@@ -8,26 +8,26 @@
   @if (settings.enabledAutomationLimitHint(); as automationLimitHint) {
     @if (settings.enabledAutomationLimitReached()) {
     <div class="upgrade-action-callout">
-      <span class="upgrade-action-icon"><i class="ti ti-settings-automation"></i></span>
+      <span class="upgrade-action-icon"><i aria-hidden="true" class="ti ti-settings-automation"></i></span>
       <span class="upgrade-action-copy">
         <strong i18n="Upgrade callout heading; Free is the plan name">{ settings.enabledAutomationAllowance(), plural, =1 {1 active automation on Free} other {{{ settings.enabledAutomationAllowance() }} active automations on Free} }</strong>
         <span i18n>Your current automations keep running. Pro lets you enable every automation your team needs.</span>
       </span>
       <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('automationRule')">
-        <ng-container i18n="Upgrade button">Enable more automations</ng-container> <i class="ti ti-arrow-right"></i>
+        <ng-container i18n="Upgrade button">Enable more automations</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i>
       </button>
     </div>
     }
   }
   @if (settings.automationExecutionAllowanceExhausted()) {
   <div class="upgrade-action-callout">
-    <span class="upgrade-action-icon"><i class="ti ti-bolt"></i></span>
+    <span class="upgrade-action-icon"><i aria-hidden="true" class="ti ti-bolt"></i></span>
     <span class="upgrade-action-copy">
       <strong i18n="Upgrade callout heading">{ settings.automationExecutionAllowance(), plural, =1 {1 action automated this month} other {{{ settings.automationExecutionAllowance() }} actions automated this month} }</strong>
       <span i18n>Your automations stay configured on Free; Pro keeps them running without the monthly allowance.</span>
     </span>
     <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('automation')">
-      <ng-container i18n="Upgrade button">Keep automating</ng-container> <i class="ti ti-arrow-right"></i>
+      <ng-container i18n="Upgrade button">Keep automating</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i>
     </button>
   </div>
   }
@@ -43,14 +43,14 @@
       }
       @if (settings.enabledAutomationLimitHint(); as hint) {
         @if (!settings.enabledAutomationLimitReached()) {
-        <span class="automation-tally-note" [kTooltip]="hint"><i class="ti ti-settings-automation"></i> <ng-container i18n="Plan limit on automations that can be turned on at once">{{ settings.enabledAutomationAllowance() // i18n(ph="count") }} max active</ng-container></span>
+        <span class="automation-tally-note" [kTooltip]="hint"><i aria-hidden="true" class="ti ti-settings-automation"></i> <ng-container i18n="Plan limit on automations that can be turned on at once">{{ settings.enabledAutomationAllowance() // i18n(ph="count") }} max active</ng-container></span>
         }
       }
       <!-- Only shown when the workspace-detail response actually carried a remaining count; falling
            back to the full allowance here would claim a fresh budget the org may already have spent. -->
       @if (settings.automationExecutionLimitHint(); as hint) {
         @if (settings.automationExecutionsRemaining(); as remaining) {
-        <span class="automation-tally-note" [kTooltip]="hint"><i class="ti ti-bolt"></i> <ng-container i18n="Automation runs remaining in the monthly allowance">{ remaining, plural, =1 {1 run left this month} other {{{ remaining }} runs left this month} }</ng-container></span>
+        <span class="automation-tally-note" [kTooltip]="hint"><i aria-hidden="true" class="ti ti-bolt"></i> <ng-container i18n="Automation runs remaining in the monthly allowance">{ remaining, plural, =1 {1 run left this month} other {{{ remaining }} runs left this month} }</ng-container></span>
         }
       }
     </div>
@@ -68,7 +68,7 @@
           [kTooltip]="settings.canDuplicateAutomation() ? browseExamplesHint : settings.automationLimitHint()"
           (click)="toggleExamples('toolbar')"
         >
-          <i class="ti ti-bulb"></i> <span class="automation-examples-label" i18n="Button that opens example automations">Examples</span> <i class="ti ti-chevron-down automation-examples-caret"></i>
+          <i aria-hidden="true" class="ti ti-bulb"></i> <span class="automation-examples-label" i18n="Button that opens example automations">Examples</span> <i aria-hidden="true" class="ti ti-chevron-down automation-examples-caret"></i>
         </button>
         @if (examplesAnchor() === "toolbar") {
         <k-automation-examples (closed)="closeExamples('toolbar')" />
@@ -81,7 +81,7 @@
         [kTooltip]="settings.addAutomationHint()"
         (click)="settings.addAutomation()"
       >
-        <i class="ti ti-plus"></i> <ng-container i18n="Button">New automation</ng-container>
+        <i aria-hidden="true" class="ti ti-plus"></i> <ng-container i18n="Button">New automation</ng-container>
       </button>
     </div>
   </div>
@@ -90,7 +90,7 @@
   <!-- First-run state. Deliberately one idea and one decision: the catalogue that used to live here
        now sits in the toolbar's Examples menu, which stays reachable once the first rule exists. -->
   <div class="automation-empty">
-    <span class="automation-empty-icon"><i class="ti ti-bolt"></i></span>
+    <span class="automation-empty-icon"><i aria-hidden="true" class="ti ti-bolt"></i></span>
     <div class="automation-empty-copy">
       <h3 i18n>Automate repetitive work</h3>
       <p i18n>Choose what starts the automation, then add up to {{ settings.automationActionLimit // i18n(ph="limit") }} actions. Kanera handles the routine work every time.</p>
@@ -108,7 +108,7 @@
         >
           <!-- The count is the point of the button: it says how many of these the workspace can build
                right now, which a bare "Browse examples" does not. Dropped when nothing resolves. -->
-          <i class="ti ti-bulb"></i> @if (settings.availableAutomationRecipeCount(); as count) { <ng-container i18n="Button; number of example automations this workspace can use">{ count, plural, =1 {Browse 1 example} other {Browse {{ count }} examples} }</ng-container> } @else { <ng-container i18n="Button">Browse examples</ng-container> }
+          <i aria-hidden="true" class="ti ti-bulb"></i> @if (settings.availableAutomationRecipeCount(); as count) { <ng-container i18n="Button; number of example automations this workspace can use">{ count, plural, =1 {Browse 1 example} other {Browse {{ count }} examples} }</ng-container> } @else { <ng-container i18n="Button">Browse examples</ng-container> }
         </button>
         @if (examplesAnchor() === "empty") {
         <k-automation-examples (closed)="closeExamples('empty')" />
@@ -133,9 +133,9 @@
     @let failure = settings.automationFailureMessage(automation);
     <div cdkDrag class="automation-card" [attr.data-automation-id]="automation.id" [class.is-disabled]="!automation.enabled" [class.is-failing]="!!failure" [class.is-open]="expanded">
       <div class="ac-head">
-        <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+        <i aria-hidden="true" class="ti ti-grip-vertical grip" cdkDragHandle></i>
         <button class="ghost icon ac-expander" type="button" (click)="settings.toggleAutomationExpanded(automation.id)" [attr.aria-expanded]="expanded" [attr.aria-label]="expanded ? collapseLabel : expandLabel">
-          <i class="ti" [class.ti-chevron-down]="expanded" [class.ti-chevron-right]="!expanded"></i>
+          <i aria-hidden="true" class="ti" [class.ti-chevron-down]="expanded" [class.ti-chevron-right]="!expanded"></i>
         </button>
 
         <!-- Automations have no name of their own, so the generated trigger sentence is the identity.
@@ -148,15 +148,15 @@
             <!-- Deliberately neutral, not a warning: an automation enabled a moment ago has legitimately
                  not run yet. The run-history footer carries the fuller explanation. -->
             @if (settings.automationHeadRunLabel(automation); as runLabel) {
-            <span class="ac-meta-item"><i class="ti ti-history"></i>{{ runLabel }}</span>
+            <span class="ac-meta-item"><i aria-hidden="true" class="ti ti-history"></i>{{ runLabel }}</span>
             }
             @if (settings.automationIncompleteActionCount(automation.id) > 0) {
-            <span class="ac-meta-item is-warning" kTooltip="Unfinished actions are not saved and will not run" i18n-kTooltip><i class="ti ti-alert-triangle"></i><ng-container i18n="Count of automation actions that are not fully configured">{{ settings.automationIncompleteActionCount(automation.id) // i18n(ph="count") }} unfinished</ng-container></span>
+            <span class="ac-meta-item is-warning" kTooltip="Unfinished actions are not saved and will not run" i18n-kTooltip><i aria-hidden="true" class="ti ti-alert-triangle"></i><ng-container i18n="Count of automation actions that are not fully configured">{{ settings.automationIncompleteActionCount(automation.id) // i18n(ph="count") }} unfinished</ng-container></span>
             }
             @if (settings.automationHasNoEntryType(automation)) {
             <!-- The trigger sentence stays neutral about this; health belongs in the meta row. Only
                  reachable through the public API — the editor locks the last scope on. -->
-            <span class="ac-meta-item is-warning" kTooltip="Open this automation and turn on Created here or Moved here" i18n-kTooltip><i class="ti ti-alert-triangle"></i><ng-container i18n="Warning: the automation can never run">Never fires</ng-container></span>
+            <span class="ac-meta-item is-warning" kTooltip="Open this automation and turn on Created here or Moved here" i18n-kTooltip><i aria-hidden="true" class="ti ti-alert-triangle"></i><ng-container i18n="Warning: the automation can never run">Never fires</ng-container></span>
             }
           </span>
         </button>
@@ -185,8 +185,8 @@
         </button>
 
         <div class="row-actions">
-          <button class="ghost icon" type="button" [disabled]="!settings.canDuplicateAutomation()" (click)="settings.duplicateAutomation(automation.id)" aria-label="Duplicate automation" i18n-aria-label [kTooltip]="settings.canDuplicateAutomation() ? duplicateLabel : settings.automationLimitHint()"><i class="ti ti-copy"></i></button>
-          <button class="ghost icon" type="button" (click)="settings.deleteAutomation(automation.id)" aria-label="Delete automation" i18n-aria-label kTooltip="Delete automation" i18n-kTooltip><i class="ti ti-trash"></i></button>
+          <button class="ghost icon" type="button" [disabled]="!settings.canDuplicateAutomation()" (click)="settings.duplicateAutomation(automation.id)" aria-label="Duplicate automation" i18n-aria-label [kTooltip]="settings.canDuplicateAutomation() ? duplicateLabel : settings.automationLimitHint()"><i aria-hidden="true" class="ti ti-copy"></i></button>
+          <button class="ghost icon" type="button" (click)="settings.deleteAutomation(automation.id)" aria-label="Delete automation" i18n-aria-label kTooltip="Delete automation" i18n-kTooltip><i aria-hidden="true" class="ti ti-trash"></i></button>
         </div>
       </div>
 
@@ -194,7 +194,7 @@
       <!-- Only shown when the *most recent* run failed, so an automation that failed once and has worked
            since is not permanently marked broken. -->
       <p class="ac-failure">
-        <i class="ti ti-alert-triangle"></i>
+        <i aria-hidden="true" class="ti ti-alert-triangle"></i>
         <span i18n="Banner; the failure reason follows"><strong>Last run failed.</strong> {{ failure // i18n(ph="reason") }}</span>
       </p>
       }
@@ -279,16 +279,16 @@
                   @let moveLocked = !settings.canToggleAutomationApply(automation, 'applyOnMove');
                   <div class="ac-scope">
                     <button type="button" class="ac-scope-option" [class.is-active]="automation.applyOnCreate" [class.is-locked]="createLocked" [attr.aria-disabled]="createLocked || null" [kTooltip]="settings.automationApplyToggleHint(automation, 'applyOnCreate')" [attr.aria-pressed]="automation.applyOnCreate" (click)="settings.toggleAutomationApply(automation.id, 'applyOnCreate')">
-                      <i class="ti" [class.ti-check]="automation.applyOnCreate" [class.ti-plus]="!automation.applyOnCreate"></i> <ng-container i18n="Toggle: run for cards created in the list">Created here</ng-container>
+                      <i aria-hidden="true" class="ti" [class.ti-check]="automation.applyOnCreate" [class.ti-plus]="!automation.applyOnCreate"></i> <ng-container i18n="Toggle: run for cards created in the list">Created here</ng-container>
                     </button>
                     <button type="button" class="ac-scope-option" [class.is-active]="automation.applyOnMove" [class.is-locked]="moveLocked" [attr.aria-disabled]="moveLocked || null" [kTooltip]="settings.automationApplyToggleHint(automation, 'applyOnMove')" [attr.aria-pressed]="automation.applyOnMove" (click)="settings.toggleAutomationApply(automation.id, 'applyOnMove')">
-                      <i class="ti" [class.ti-check]="automation.applyOnMove" [class.ti-plus]="!automation.applyOnMove"></i> <ng-container i18n="Toggle: run for cards moved into the list">Moved here</ng-container>
+                      <i aria-hidden="true" class="ti" [class.ti-check]="automation.applyOnMove" [class.ti-plus]="!automation.applyOnMove"></i> <ng-container i18n="Toggle: run for cards moved into the list">Moved here</ng-container>
                     </button>
                   </div>
                   @if (createLocked || moveLocked) {
                   <!-- Persistent, because the tooltip is hover-only: on a touch device a tap that does
                        nothing would otherwise be unexplained. -->
-                  <p class="ac-scope-note"><i class="ti ti-info-circle"></i> <ng-container i18n>Turn the other one on first — an automation with neither can never run.</ng-container></p>
+                  <p class="ac-scope-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n>Turn the other one on first — an automation with neither can never run.</ng-container></p>
                   }
                 </div>
               }
@@ -312,7 +312,7 @@
                     (valueChange)="settings.updateAutomationTriggerList(automation.id, $event)"
                   />
                 </div>
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>Runs whenever a card moves out of this list, including a move to another board.</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n>Runs whenever a card moves out of this list, including a move to another board.</ng-container></p>
               }
               @case ('card_assigned_to_user') {
                 <div class="ac-field ac-field-wide">
@@ -341,17 +341,17 @@
                 </label>
               }
               @case ('due_date_arrives') {
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs once per card on the day its due date arrives, on this board.} other {Runs once per card on the day its due date arrives, on every board in this workspace.} }</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs once per card on the day its due date arrives, on this board.} other {Runs once per card on the day its due date arrives, on every board in this workspace.} }</ng-container></p>
               }
               @case ('start_date_arrives') {
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs once per card on the day its planned start date arrives, on this board.} other {Runs once per card on the day its planned start date arrives, on every board in this workspace.} }</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs once per card on the day its planned start date arrives, on this board.} other {Runs once per card on the day its planned start date arrives, on every board in this workspace.} }</ng-container></p>
               }
               @case ('due_date_approaching') {
                 <label class="ac-field">
                   <span class="ac-field-label" i18n>Days before due date</span>
                   <input type="number" min="1" max="3650" [value]="settings.automationTriggerDaysBefore(automation)" (change)="settings.updateAutomationTriggerDaysBefore(automation.id, +$any($event.target).value)" />
                 </label>
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>Runs once per due date and lead-time setting when the card enters this window. Completed cards are skipped.</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n>Runs once per due date and lead-time setting when the card enters this window. Completed cards are skipped.</ng-container></p>
               }
               @case ('custom_field_value_changed') {
                 @let triggerField = settings.automationTriggerCustomField(automation);
@@ -392,10 +392,10 @@
                     }
                   }
                 }
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>Runs only when an edit changes the field from a different value to the selected value.</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n>Runs only when an edit changes the field from a different value to the selected value.</ng-container></p>
               }
               @case ('card_becomes_inactive') {
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs when a card reaches the inactivity period, on this board. New card activity resets the period.} other {Runs when a card reaches the inactivity period, on every board in this workspace. New card activity resets the period.} }</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs when a card reaches the inactivity period, on this board. New card activity resets the period.} other {Runs when a card reaches the inactivity period, on every board in this workspace. New card activity resets the period.} }</ng-container></p>
               }
               @case ('card_in_progress_too_long') {
                 @let thresholdSource = settings.automationThresholdSource(automation);
@@ -448,7 +448,7 @@
                     </button>
                   </div>
                 </div>
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i>
                   @switch (thresholdSource) {
                     @case ('fixed') {
                       <ng-container i18n="Help for the Card in progress too long automation trigger with its own time limit">Runs once per card when its current time in progress passes this limit. Moving between lists doesn't run it again.</ng-container>
@@ -467,22 +467,22 @@
                 </p>
               }
               @case ('all_checklist_items_complete') {
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>Runs when the last unticked checklist item on a card is completed.</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n>Runs when the last unticked checklist item on a card is completed.</ng-container></p>
               }
               @case ('card_marked_complete') {
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs when a card is marked complete, on this board.} other {Runs when a card is marked complete, on every board in this workspace.} }</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs when a card is marked complete, on this board.} other {Runs when a card is marked complete, on every board in this workspace.} }</ng-container></p>
               }
               @case ('card_blocked') {
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Card blocked automation trigger">Runs when a card gains its first active blocker, including when a blocker is reopened or restored. Includes changes made by integrations and automations.</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n="Help for the Card blocked automation trigger">Runs when a card gains its first active blocker, including when a blocker is reopened or restored. Includes changes made by integrations and automations.</ng-container></p>
               }
               @case ('scheduling_conflict_appears') {
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Scheduling conflict appears automation trigger">Runs when a card it waits on is first planned to finish on or after this card's planned start, whichever card's dates changed. Includes changes made by integrations and automations.</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n="Help for the Scheduling conflict appears automation trigger">Runs when a card it waits on is first planned to finish on or after this card's planned start, whichever card's dates changed. Includes changes made by integrations and automations.</ng-container></p>
               }
               @case ('critical_path_slips') {
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Critical path slips automation trigger">Runs for a card on the board's critical path when it is rescheduled later and the chain's projected finish moves with it. Includes changes made by integrations and automations.</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n="Help for the Critical path slips automation trigger">Runs for a card on the board's critical path when it is rescheduled later and the chain's projected finish moves with it. Includes changes made by integrations and automations.</ng-container></p>
               }
               @case ('card_unblocked') {
-                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n="Help for the Card unblocked automation trigger">Runs when a card's last active blocker is completed, archived, deleted or removed. Includes changes made by integrations and automations.</ng-container></p>
+                <p class="ac-trigger-note"><i aria-hidden="true" class="ti ti-info-circle"></i> <ng-container i18n="Help for the Card unblocked automation trigger">Runs when a card's last active blocker is completed, archived, deleted or removed. Includes changes made by integrations and automations.</ng-container></p>
               }
               @default never;
             }
@@ -501,7 +501,7 @@
             @let issue = settings.automationActionIssue(action);
             <div class="aa-card" cdkDrag [class.is-incomplete]="!!issue">
               <div class="aa-head">
-                <i class="ti ti-grip-vertical aa-grip" cdkDragHandle></i>
+                <i aria-hidden="true" class="ti ti-grip-vertical aa-grip" cdkDragHandle></i>
                 <span class="aa-step">{{ i + 1 }}</span>
                 <span class="aa-type-label" i18n="Field label: automation action type">Action</span>
                 <k-automation-select-dropdown
@@ -518,7 +518,7 @@
                   [value]="settings.automationActionTypeValue(action)"
                   (valueChange)="settings.updateAutomationActionType(automation.id, i, $any($event))"
                 />
-                <button class="ghost icon aa-remove" type="button" (click)="settings.removeAutomationAction(automation.id, i)" aria-label="Remove action" i18n-aria-label kTooltip="Remove action" i18n-kTooltip><i class="ti ti-x"></i></button>
+                <button class="ghost icon aa-remove" type="button" (click)="settings.removeAutomationAction(automation.id, i)" aria-label="Remove action" i18n-aria-label kTooltip="Remove action" i18n-kTooltip><i aria-hidden="true" class="ti ti-x"></i></button>
               </div>
 
               <k-automation-action-fields class="aa-fields" [automationId]="automation.id" [index]="i" [action]="action" />
@@ -526,7 +526,7 @@
               @if (issue) {
               <!-- The API rejects an incomplete action, so saveAutomationActions filters it out. Say
                    that here instead of letting the row silently disagree with the server. -->
-              <p class="aa-issue"><i class="ti ti-alert-triangle"></i> {{ issue }}</p>
+              <p class="aa-issue"><i aria-hidden="true" class="ti ti-alert-triangle"></i> {{ issue }}</p>
               }
             </div>
             } @empty {
@@ -541,7 +541,7 @@
             [kTooltip]="addActionLabel(automation.id)"
             (click)="settings.addAutomationAction(automation.id)"
           >
-            <i class="ti ti-plus"></i>
+            <i aria-hidden="true" class="ti ti-plus"></i>
             {{ addActionLabel(automation.id) }}
           </button>
         </section>
@@ -549,7 +549,7 @@
         <!-- Run history. Written by the automation engine on every run; an automation that has never fired
              or that keeps no-opping is almost always a trigger that does not match what was meant. -->
         <footer class="ac-runs">
-          <span class="ac-runs-label"><i class="ti ti-history"></i> <ng-container i18n>Run history</ng-container></span>
+          <span class="ac-runs-label"><i aria-hidden="true" class="ti ti-history"></i> <ng-container i18n>Run history</ng-container></span>
           @if (settings.automationRunCount(automation) === 0) {
           <span class="ac-runs-empty">
             @if (automation.enabled) { <ng-container i18n>Enabled, but has not run yet.</ng-container> } @else { <ng-container i18n>Has never run.</ng-container> }

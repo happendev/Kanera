@@ -1,20 +1,20 @@
 <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span i18n="Settings section heading">AI agent connection</span></h3>
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-plug-connected"></i><span i18n="Settings section heading">AI agent connection</span></h3>
         <p class="settings-section-help" i18n>Connect Claude, Copilot, Codex, ChatGPT, or another compatible agent. Kanera will open a browser sign-in and consent screen; you do not need to create an API key. An interactive connection can read and write wherever you can, unless an organisation limits AI agent access. For a look-only agent, create a read-only personal key below.</p>
         @if (isPlanLimited() && apiRequestsPerSecond() !== null && apiRequestsPerMinute() !== null) {
-        <p class="plan-limit-hint"><i class="ti ti-gauge"></i> <ng-container i18n>On a Free organisation's boards, your AI agents and personal API keys can make up to {{ apiRequestsPerSecond() // i18n(ph="perSecond") }} requests per second and {{ apiRequestsPerMinute() // i18n(ph="perMinute") }} per minute. Boards in Pro organisations allow more.</ng-container></p>
+        <p class="plan-limit-hint"><i aria-hidden="true" class="ti ti-gauge"></i> <ng-container i18n>On a Free organisation's boards, your AI agents and personal API keys can make up to {{ apiRequestsPerSecond() // i18n(ph="perSecond") }} requests per second and {{ apiRequestsPerMinute() // i18n(ph="perMinute") }} per minute. Boards in Pro organisations allow more.</ng-container></p>
         }
         <k-agent-connect-card [compact]="true" [showManageLink]="false" [showSnippets]="true" />
         <div class="key-list">
           @for (connection of oauthConnections(); track connection.id) {
           <div class="key-row">
-            <i class="ti ti-sparkles key-row-icon"></i>
+            <i aria-hidden="true" class="ti ti-sparkles key-row-icon"></i>
             <div class="key-row-primary">
               <span>{{ connection.clientName }}</span>
               <code>{{ connection.scopes.join(' · ') }}</code>
             </div>
             <span class="key-row-used"><small i18n="Label before the date an AI agent was connected">Connected</small><span>{{ formatKeyLastUsed(connection.createdAt) }}</span></span>
-            <button type="button" class="ghost icon danger" (click)="revokeOauthConnection(connection.id)" aria-label="Disconnect agent" i18n-aria-label kTooltip="Disconnect agent" i18n-kTooltip><i class="ti ti-plug-connected-x"></i></button>
+            <button type="button" class="ghost icon danger" (click)="revokeOauthConnection(connection.id)" aria-label="Disconnect agent" i18n-aria-label kTooltip="Disconnect agent" i18n-kTooltip><i aria-hidden="true" class="ti ti-plug-connected-x"></i></button>
           </div>
           } @empty {
           <k-empty-state size="sm" icon="sparkles" title="No connected AI agents yet" i18n-title />
@@ -23,7 +23,7 @@
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-key"></i><span i18n="Settings section heading">Personal API keys</span></h3>
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-key"></i><span i18n="Settings section heading">Personal API keys</span></h3>
         <p class="settings-section-help" i18n>
           A personal key acts as you: it is evaluated against everything you can access, and activity done with it shows up as you.
           A write key can create and edit anything you can, including workspace administration where you are an admin.
@@ -42,28 +42,28 @@
         @if (personalKeyError()) { <p class="form-error">{{ personalKeyError() }}</p> }
         @if (revealedPersonalKeySecret()) {
         <div class="key-secret-reveal">
-          <i class="ti ti-lock"></i>
+          <i aria-hidden="true" class="ti ti-lock"></i>
           <code>{{ revealedPersonalKeySecret() }}</code>
-          <button type="button" class="ghost icon" (click)="copyText(revealedPersonalKeySecret())" aria-label="Copy key" i18n-aria-label><i class="ti ti-copy"></i></button>
-          <button type="button" class="ghost icon" (click)="revealedPersonalKeySecret.set(null)" aria-label="Hide key" i18n-aria-label><i class="ti ti-eye-off"></i></button>
+          <button type="button" class="ghost icon" (click)="copyText(revealedPersonalKeySecret())" aria-label="Copy key" i18n-aria-label><i aria-hidden="true" class="ti ti-copy"></i></button>
+          <button type="button" class="ghost icon" (click)="revealedPersonalKeySecret.set(null)" aria-label="Hide key" i18n-aria-label><i aria-hidden="true" class="ti ti-eye-off"></i></button>
         </div>
         <p class="settings-section-help" i18n>Copy this key now — it won't be shown again.</p>
         }
         <div class="key-list">
           @for (key of personalApiKeys(); track key.id) {
           <div class="key-row">
-            <i class="ti ti-key key-row-icon"></i>
+            <i aria-hidden="true" class="ti ti-key key-row-icon"></i>
             <div class="key-row-primary">
               <span>@if (key.label) { {{ key.label }} } @else { <ng-container i18n="Fallback name for an unlabelled API key">Personal key</ng-container> }</span>
               <code>{{ key.keyPrefix }}...</code>
-              <small><i class="ti ti-building"></i> @if (key.orgName) { {{ key.orgName }} } @else { <ng-container i18n="Fallback when the organisation name is unknown">Organisation</ng-container> }</small>
+              <small><i aria-hidden="true" class="ti ti-building"></i> @if (key.orgName) { {{ key.orgName }} } @else { <ng-container i18n="Fallback when the organisation name is unknown">Organisation</ng-container> }</small>
             </div>
             <span class="field-type-badge" i18n="API key scope badge">{ key.scope, select, write {write} read {read} other {{{ key.scope }}} }</span>
             <span class="key-row-used">
               <small i18n="Label before the date an API key was last used">Last used</small>
               <span>{{ formatKeyLastUsed(key.lastUsedAt) }}</span>
             </span>
-            <button type="button" class="ghost icon danger" (click)="deletePersonalKey(key.id)" aria-label="Delete key" i18n-aria-label><i class="ti ti-trash"></i></button>
+            <button type="button" class="ghost icon danger" (click)="deletePersonalKey(key.id)" aria-label="Delete key" i18n-aria-label><i aria-hidden="true" class="ti ti-trash"></i></button>
           </div>
           } @empty {
           <k-empty-state size="sm" icon="key-off" title="No personal keys yet" i18n-title />

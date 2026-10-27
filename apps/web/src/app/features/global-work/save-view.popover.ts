@@ -35,7 +35,7 @@ import { GlobalWorkState } from "./global-work.state";
       @if (view() === "share") {
         <div class="ap-head">
           <button type="button" class="ap-icon-button" aria-label="Back" i18n-aria-label="Button: back to the previous panel" (click)="view.set('main')">
-            <i class="ti ti-chevron-left"></i>
+            <i aria-hidden="true" class="ti ti-chevron-left"></i>
           </button>
           <span class="ap-title" i18n="Heading: pick people to share a saved view with">Share with</span>
         </div>
@@ -51,7 +51,7 @@ import { GlobalWorkState } from "./global-work.state";
         <div class="ap-head">
           <span class="ap-title">{{ selected.name }}</span>
           <button type="button" class="ap-icon-button" aria-label="Close" i18n-aria-label="Button: close the popover" (click)="closed.emit()">
-            <i class="ti ti-x"></i>
+            <i aria-hidden="true" class="ti ti-x"></i>
           </button>
         </div>
 
@@ -67,7 +67,7 @@ import { GlobalWorkState } from "./global-work.state";
                     [disabled]="!state.interactionReady()"
                     (click)="setVisibility(option.value)"
                   >
-                    <i class="ti ti-{{ option.icon }}"></i>
+                    <i aria-hidden="true" class="ti ti-{{ option.icon }}"></i>
                     {{ option.label }}
                   </button>
                 }
@@ -92,7 +92,7 @@ import { GlobalWorkState } from "./global-work.state";
                       } @else {
                         <ng-container i18n="Stand-in for a deleted or inaccessible user">User no longer available</ng-container>
                       }
-                      <i class="ti ti-x"></i>
+                      <i aria-hidden="true" class="ti ti-x"></i>
                     </button>
                   }
                 </div>
@@ -103,14 +103,14 @@ import { GlobalWorkState } from "./global-work.state";
                 [disabled]="!state.interactionReady() || shareCandidateCount() === 0"
                 (click)="view.set('share')"
               >
-                <i class="ti ti-user-plus"></i>
+                <i aria-hidden="true" class="ti ti-user-plus"></i>
                 <ng-container i18n="Button: share the saved view with another person">Add a colleague</ng-container>
               </button>
             </div>
 
             <footer class="sv-actions">
               <button type="button" class="sv-delete" [disabled]="!state.interactionReady()" (click)="deleteView()">
-                <i class="ti ti-trash"></i>
+                <i aria-hidden="true" class="ti ti-trash"></i>
                 <ng-container i18n="Button: delete the saved view">Delete view</ng-container>
               </button>
               <button
@@ -119,7 +119,7 @@ import { GlobalWorkState } from "./global-work.state";
                 [disabled]="state.saving() || !state.interactionReady()"
                 (click)="saveCurrentView()"
               >
-                <i class="ti ti-device-floppy"></i>
+                <i aria-hidden="true" class="ti ti-device-floppy"></i>
                 <ng-container i18n="Button: overwrite the saved view with the current filters">Update view</ng-container>
               </button>
             </footer>
@@ -131,7 +131,7 @@ import { GlobalWorkState } from "./global-work.state";
         <div class="ap-head">
           <span class="ap-title" i18n="Heading of the save view popover">Save this view</span>
           <button type="button" class="ap-icon-button" aria-label="Close" i18n-aria-label="Button: close the popover" (click)="closed.emit()">
-            <i class="ti ti-x"></i>
+            <i aria-hidden="true" class="ti ti-x"></i>
           </button>
         </div>
 
@@ -158,7 +158,7 @@ import { GlobalWorkState } from "./global-work.state";
                   [class.active]="newViewVisibility() === option.value"
                   (click)="newViewVisibility.set(option.value)"
                 >
-                  <i class="ti ti-{{ option.icon }}"></i>
+                  <i aria-hidden="true" class="ti ti-{{ option.icon }}"></i>
                   {{ option.label }}
                 </button>
               }

@@ -76,13 +76,13 @@ const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1
       <div #shell class="ne-shell" [class.is-attachment-drag-active]="attachmentDragActive()" (paste)="onNotePaste($event)">
         @if (attachmentDragActive()) {
           <div class="ne-drop-overlay" aria-hidden="true">
-            <i class="ti ti-upload"></i>
+            <i aria-hidden="true" class="ti ti-upload"></i>
             <span i18n="Overlay shown while dragging files over a note">Drop to attach</span>
           </div>
         }
         @if (heldByOther()) {
           <div class="ne-banner">
-            <i class="ti ti-lock"></i>
+            <i aria-hidden="true" class="ti ti-lock"></i>
             @if (activeLock(); as lock) {
               @if (visibleMediaUrl(lock.editingUserAvatarUrl); as avatarUrl) {
                 <img class="ne-lock-avatar" [src]="avatarUrl" alt="" />
@@ -96,10 +96,10 @@ const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1
         }
         @if (saveError(); as err) {
           <div class="ne-banner is-error" role="alert">
-            <i class="ti ti-alert-triangle"></i>
+            <i aria-hidden="true" class="ti ti-alert-triangle"></i>
             <span>{{ err }}</span>
             <button type="button" class="ne-banner-dismiss" (click)="saveError.set(null)" aria-label="Dismiss" i18n-aria-label="Button label: dismiss an error banner">
-              <i class="ti ti-x"></i>
+              <i aria-hidden="true" class="ti ti-x"></i>
             </button>
           </div>
         }
@@ -135,15 +135,15 @@ const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1
                 <h2 class="ne-title" [class.is-readonly]="!canEdit() || lockedByOther()" (click)="startTitleEdit()">{{ title() || untitledLabel }}</h2>
               }
               <button type="button" class="ne-copy-link" (click)="copyNoteLink(n); $event.stopPropagation()" aria-label="Copy note link" i18n-aria-label kTooltip="Copy note link" i18n-kTooltip>
-                <i class="ti ti-link"></i>
+                <i aria-hidden="true" class="ti ti-link"></i>
               </button>
             </div>
             <div class="ne-meta">
               <span class="ne-meta-chip" [class.personal]="n.scope === 'personal'" [class.team]="n.scope === 'team'">
                 @if (n.scope === 'personal') {
-                  <i class="ti ti-user"></i><span i18n="Note scope chip: visible only to you">Private</span>
+                  <i aria-hidden="true" class="ti ti-user"></i><span i18n="Note scope chip: visible only to you">Private</span>
                 } @else {
-                  <i class="ti ti-users"></i><span i18n="Note scope chip: shared with the team">Team</span>
+                  <i aria-hidden="true" class="ti ti-users"></i><span i18n="Note scope chip: shared with the team">Team</span>
                 }
               </span>
               <span class="ne-last-edit">
@@ -163,13 +163,13 @@ const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1
             @if (backlinks().length) {
               <div class="ne-backlinks">
                 <div class="ne-backlinks-label">
-                  <i class="ti ti-arrow-back-up"></i>
+                  <i aria-hidden="true" class="ti ti-arrow-back-up"></i>
                   <span i18n="Section heading: items that link to this note">Backlinks</span>
                 </div>
                 <div class="ne-backlinks-list">
                   @for (link of backlinks(); track link.kind + ':' + link.id) {
                     <a class="ne-backlink" [href]="backlinkHref(link)" (click)="openBacklink($event, link)">
-                      <i [class]="'ti ti-' + backlinkIcon(link)"
+                      <i aria-hidden="true" [class]="'ti ti-' + backlinkIcon(link)"
                         [style.color]="backlinkColor(link) ? 'var(--color-' + backlinkColor(link) + ')' : null"></i>
                       <span class="ne-backlink-title">{{ link.title || untitledLabel }}</span>
                       <span class="ne-backlink-hint">{{ backlinkHint(link) }}</span>
@@ -220,7 +220,7 @@ const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1
             </div>
             <section class="ne-attachments">
               <div class="ne-section-label">
-                <i class="ti ti-paperclip"></i>
+                <i aria-hidden="true" class="ti ti-paperclip"></i>
                 <span i18n="Section heading">Attachments</span>
                 @if (attachments().length) {
                   <span class="ne-count">{{ attachments().length }}</span>
@@ -230,18 +230,18 @@ const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1
               @if (canChangeAttachments()) {
                 <div class="ne-attach-dropzone" [class.is-drag-active]="attachmentDragActive()">
                   <label class="ne-attach-upload">
-                    <i class="ti ti-upload"></i>
+                    <i aria-hidden="true" class="ti ti-upload"></i>
                     <ng-container i18n="Button: upload a file to the note">Add attachment</ng-container>
                     <input type="file" hidden multiple [accept]="acceptAttr" (change)="onAttachmentSelected($event)" />
                   </label>
                   <div class="ne-attach-drop-hint" aria-hidden="true">
-                    <i class="ti ti-drag-drop"></i>
+                    <i aria-hidden="true" class="ti ti-drag-drop"></i>
                     <ng-container i18n="Drop zone hint">Drop files here</ng-container>
                   </div>
                 </div>
 
                 @if (uploads.validationError(); as err) {
-                  <p class="ne-attach-error"><i class="ti ti-alert-circle"></i> {{ err }}</p>
+                  <p class="ne-attach-error"><i aria-hidden="true" class="ti ti-alert-circle"></i> {{ err }}</p>
                 }
                 <k-attachment-upload-list [items]="uploads.items()" (retry)="uploads.retry($event)" (dismiss)="uploads.dismiss($event)" />
               }
@@ -255,32 +255,32 @@ const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1
                           @if (visibleMediaUrl(a.url); as thumb) {
                           <img [src]="thumb" [alt]="a.fileName" />
                           } @else {
-                          <i class="ti ti-photo"></i>
+                          <i aria-hidden="true" class="ti ti-photo"></i>
                           }
                         </button>
                       } @else if (isVideoMime(a.mimeType)) {
                         <button type="button" class="ne-attach-thumb is-doc is-video" (click)="openAttachmentVideo(a.id, $event)" [kTooltip]="playLabel(a.fileName)" [attr.aria-label]="playVideoLabel(a.fileName)">
-                          <i class="ti ti-video"></i>
+                          <i aria-hidden="true" class="ti ti-video"></i>
                         </button>
                       } @else if (isAudioMime(a.mimeType)) {
                         <button type="button" class="ne-attach-thumb is-doc is-audio" (click)="openAttachmentAudio(a.id, $event)" [kTooltip]="playLabel(a.fileName)" [attr.aria-label]="playAudioLabel(a.fileName)">
-                          <i class="ti ti-file-music"></i>
+                          <i aria-hidden="true" class="ti ti-file-music"></i>
                         </button>
                       } @else if (isPdfMime(a.mimeType)) {
                         <button type="button" class="ne-attach-thumb is-doc is-pdf" (click)="openAttachmentPdf(a.id, $event)" [kTooltip]="previewLabel(a.fileName)" [attr.aria-label]="previewPdfLabel(a.fileName)">
-                          <i class="ti ti-file-type-pdf"></i>
+                          <i aria-hidden="true" class="ti ti-file-type-pdf"></i>
                         </button>
                       } @else if (isMarkdownAttachment(a.mimeType, a.fileName)) {
                         <button type="button" class="ne-attach-thumb is-doc" (click)="openAttachmentMarkdown(a.id, $event)" [kTooltip]="previewLabel(a.fileName)" [attr.aria-label]="previewMarkdownLabel(a.fileName)">
-                          <i class="ti ti-markdown"></i>
+                          <i aria-hidden="true" class="ti ti-markdown"></i>
                         </button>
                       } @else if (isTextAttachment(a.mimeType, a.fileName)) {
                         <button type="button" class="ne-attach-thumb is-doc" (click)="openAttachmentText(a.id, $event)" [kTooltip]="previewLabel(a.fileName)" [attr.aria-label]="previewTextLabel(a.fileName)">
-                          <i class="ti ti-file-text"></i>
+                          <i aria-hidden="true" class="ti ti-file-text"></i>
                         </button>
                       } @else {
                         <a class="ne-attach-thumb is-doc" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()" [kTooltip]="a.fileName">
-                          <i class="ti {{ attachmentIconClass(a.mimeType, a.fileName) }}"></i>
+                          <i aria-hidden="true" class="ti {{ attachmentIconClass(a.mimeType, a.fileName) }}"></i>
                         </a>
                       }
                       <div class="ne-attach-meta">
@@ -301,18 +301,18 @@ const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1
                             <a class="ne-attach-name" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()">{{ a.fileName }}</a>
                           }
                           @if (a.source === 'description') {
-                            <span class="ne-source-pill" kTooltip="Added in description" i18n-kTooltip="Tooltip: the attachment was added inside the note body"><i class="ti ti-align-left"></i> <ng-container i18n="Pill on an attachment that was added inside the note body">description</ng-container></span>
+                            <span class="ne-source-pill" kTooltip="Added in description" i18n-kTooltip="Tooltip: the attachment was added inside the note body"><i aria-hidden="true" class="ti ti-align-left"></i> <ng-container i18n="Pill on an attachment that was added inside the note body">description</ng-container></span>
                           }
                         </div>
                         <span class="ne-attach-sub">{{ a.uploadedByName }} • {{ formatFeedTime(a.createdAt) }} • {{ formatBytes(a.byteSize) }}</span>
                       </div>
                       <div class="ne-attach-actions">
                         <button type="button" class="ne-icon-btn" (click)="downloadAttachment(a.url, a.fileName)" kTooltip="Download" i18n-kTooltip="Tooltip: download the attachment" aria-label="Download attachment" i18n-aria-label>
-                          <i class="ti ti-download"></i>
+                          <i aria-hidden="true" class="ti ti-download"></i>
                         </button>
                         @if (canChangeAttachments()) {
                           <button type="button" class="ne-icon-btn" (click)="confirmDeleteAttachment(a.id, a.fileName)" kTooltip="Delete" i18n-kTooltip="Tooltip: delete the attachment" aria-label="Delete attachment" i18n-aria-label>
-                            <i class="ti ti-trash"></i>
+                            <i aria-hidden="true" class="ti ti-trash"></i>
                           </button>
                         }
                       </div>

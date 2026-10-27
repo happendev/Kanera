@@ -68,7 +68,7 @@ import { byPosition } from "../../shared/position-sort";
             ></span>
             <span class="lp-name"><k-match-highlight [text]="option.label" [query]="query()" /></span>
             @if (selectedIds().includes(option.id)) {
-              <i class="ti ti-check lp-check"></i>
+              <i aria-hidden="true" class="ti ti-check lp-check"></i>
             }
           </button>
         }

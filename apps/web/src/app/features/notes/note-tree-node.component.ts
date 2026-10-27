@@ -50,35 +50,35 @@ export interface NodeDropEvent {
         (click)="toggleExpand.emit(node().id); $event.stopPropagation()"
         [attr.aria-label]="isExpanded() ? collapseLabel : expandLabel">
         @if (node().children.length > 0) {
-          <i [class]="isExpanded() ? 'ti ti-chevron-down' : 'ti ti-chevron-right'"></i>
+          <i aria-hidden="true" [class]="isExpanded() ? 'ti ti-chevron-down' : 'ti ti-chevron-right'"></i>
         } @else {
           <span class="nt-bullet"></span>
         }
       </button>
       <a class="nt-link" [href]="noteHref(node().id)" (click)="onLinkClick($event)" draggable="false">
-        <i class="nt-icon ti ti-{{ node().icon || 'file-text' }}"
+        <i aria-hidden="true" class="nt-icon ti ti-{{ node().icon || 'file-text' }}"
           [style.color]="node().color ? 'var(--color-' + node().color + ')' : 'var(--accent)'"></i>
         <span class="nt-title">{{ node().title || untitledLabel }}</span>
         @if (node().editingUserId && node().editingUserId !== currentUserId()) {
-          <i class="nt-lock ti ti-lock" kTooltip="Being edited" i18n-kTooltip="Tooltip on a lock icon: another person is editing this note"></i>
+          <i aria-hidden="true" class="nt-lock ti ti-lock" kTooltip="Being edited" i18n-kTooltip="Tooltip on a lock icon: another person is editing this note"></i>
         }
       </a>
       <div class="nt-actions" [class.is-open]="actionsOpen()" (click)="$event.stopPropagation()">
         <button #actionsTrigger class="nt-act" type="button" (click)="toggleActions()" [disabled]="!canEdit()" [kTooltip]="actionTitle(noteActionsLabel)" aria-label="Note actions" i18n-aria-label aria-haspopup="menu" [attr.aria-expanded]="actionsOpen()">
-          <i class="ti ti-dots"></i>
+          <i aria-hidden="true" class="ti ti-dots"></i>
         </button>
         @if (actionsOpen()) {
         <div class="nt-actions-menu k-menu" kMenu kAnchoredPanel [apAnchor]="actionsTrigger" [apPlacement]="actionsMenuPlacement" (apDismissed)="actionsOpen.set(false)" role="menu">
           @if (canAddChild()) {
           <button type="button" class="k-menu-item" (click)="onNewChild(); actionsOpen.set(false)" role="menuitem">
-            <i class="ti ti-plus"></i><span i18n="Menu item: create a child note">Add sub-note</span>
+            <i aria-hidden="true" class="ti ti-plus"></i><span i18n="Menu item: create a child note">Add sub-note</span>
           </button>
           }
           <button type="button" class="k-menu-item" (click)="onDuplicate(); actionsOpen.set(false)" role="menuitem">
-            <i class="ti ti-copy"></i><span i18n="Menu item: duplicate the note">Duplicate</span>
+            <i aria-hidden="true" class="ti ti-copy"></i><span i18n="Menu item: duplicate the note">Duplicate</span>
           </button>
           <button class="k-menu-item danger" type="button" (click)="onDelete(); actionsOpen.set(false)" role="menuitem">
-            <i class="ti ti-trash"></i><span i18n="Menu item: delete the note">Delete</span>
+            <i aria-hidden="true" class="ti ti-trash"></i><span i18n="Menu item: delete the note">Delete</span>
           </button>
         </div>
         }

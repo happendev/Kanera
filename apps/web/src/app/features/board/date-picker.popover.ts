@@ -41,11 +41,11 @@ type CalendarDay = {
     <div class="dp-panel">
       <div class="dp-head">
         <button type="button" class="dp-icon-btn" (click)="previousMonth()" aria-label="Previous month" i18n-aria-label kTooltip="Previous month" i18n-kTooltip>
-          <i class="ti ti-chevron-left"></i>
+          <i aria-hidden="true" class="ti ti-chevron-left"></i>
         </button>
         <div class="dp-title" aria-live="polite">{{ monthLabel() }}</div>
         <button type="button" class="dp-icon-btn" (click)="nextMonth()" aria-label="Next month" i18n-aria-label kTooltip="Next month" i18n-kTooltip>
-          <i class="ti ti-chevron-right"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right"></i>
         </button>
       </div>
 

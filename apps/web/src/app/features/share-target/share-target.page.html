@@ -8,14 +8,14 @@
       i18n-title="Page heading"
     >
       <button phActions type="button" class="ghost sm" (click)="cancel()">
-        <i class="ti ti-x"></i>
+        <i aria-hidden="true" class="ti ti-x"></i>
         <ng-container i18n="Button: leave without creating a card">Cancel</ng-container>
       </button>
     </k-page-header>
 
     @if (loading()) {
     <div class="k-loading" role="status" aria-live="polite">
-      <i class="ti ti-loader-2"></i>
+      <i aria-hidden="true" class="ti ti-loader-2"></i>
       <span i18n>Loading boards…</span>
     </div>
     } @else if (groups().length === 0) {
@@ -24,7 +24,7 @@
     <form class="share-form" (submit)="$event.preventDefault(); save()">
       @if (!hasIncomingContent()) {
       <div class="capture-hint">
-        <i class="ti ti-share-3"></i>
+        <i aria-hidden="true" class="ti ti-share-3"></i>
         <p i18n>On Android, install Kanera and choose it from any app's Share menu. On other devices, copy text or a link and paste it here.</p>
       </div>
       }
@@ -72,7 +72,7 @@
         <span class="field-heading">
           <span i18n="Form field label: card description">Description</span>
           <button type="button" class="ghost sm paste-button" [disabled]="pasteBusy()" (click)="pasteFromClipboard()">
-            <i class="ti ti-clipboard"></i>
+            <i aria-hidden="true" class="ti ti-clipboard"></i>
             @if (pasteBusy()) { <ng-container i18n="Button while pasting from the clipboard">Pasting...</ng-container> } @else { <ng-container i18n="Button: paste from the clipboard">Paste</ng-container> }
           </button>
         </span>
@@ -81,21 +81,21 @@
 
       @if (captureNotice()) {
       <p class="capture-notice" role="status" aria-live="polite">
-        <i class="ti ti-info-circle"></i>
+        <i aria-hidden="true" class="ti ti-info-circle"></i>
         {{ captureNotice() }}
       </p>
       }
 
       @if (error()) {
       <p class="error-message">
-        <i class="ti ti-alert-circle"></i>
+        <i aria-hidden="true" class="ti ti-alert-circle"></i>
         {{ error() }}
       </p>
       }
 
       <div class="actions">
         <button type="submit" [disabled]="!canSave()">
-          <i class="ti ti-plus"></i>
+          <i aria-hidden="true" class="ti ti-plus"></i>
           @if (saving()) { <ng-container i18n="Button while the card is being created">Creating...</ng-container> } @else { <ng-container i18n="Button: create the card">Create card</ng-container> }
         </button>
       </div>

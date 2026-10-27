@@ -1,7 +1,7 @@
 @if (!embedded()) {
 <button type="button" class="bell-btn" (click)="toggle()" [class.has-unread]="unreadCount() > 0" [attr.aria-label]="bellLabel()" [attr.aria-expanded]="open()"
   kTooltip="Notifications" i18n-kTooltip="Tooltip on the notifications bell">
-  <i [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
+  <i aria-hidden="true" [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
   @if (unreadCount() > 0) {
   <span class="bell-badge">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</span>
   }
@@ -13,14 +13,14 @@
 <aside class="drawer" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Notifications" i18n-aria-label="Label for the notifications drawer" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
   <header class="drawer-header">
     <div class="drawer-title">
-      <i [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
+      <i aria-hidden="true" [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
       <h2 i18n="Notifications drawer heading">Notifications</h2>
       @if (unreadCount() > 0) {
       <span class="title-count">{{ unreadCount() }}</span>
       }
     </div>
     <button type="button" class="ghost icon close-btn" cdkFocusInitial (click)="close()" aria-label="Close notifications" i18n-aria-label>
-      <i class="ti ti-x"></i>
+      <i aria-hidden="true" class="ti ti-x"></i>
     </button>
   </header>
 
@@ -39,7 +39,7 @@
       />
       <div class="filter-selects">
         <label class="filter-select-wrap" kTooltip="Group notifications" i18n-kTooltip="Tooltip on the notification grouping menu">
-          <i class="ti ti-category"></i>
+          <i aria-hidden="true" class="ti ti-category"></i>
           <select class="filter-select" [value]="groupBy()" aria-label="Group notifications" i18n-aria-label="Label for the notification grouping menu" (change)="setGroupBy($any($event.target).value)">
             <option value="day" [selected]="groupBy() === 'day'" i18n="Notification grouping option">Group by day</option>
             <option value="board" [selected]="groupBy() === 'board'" i18n="Notification grouping option">Group by board</option>
@@ -48,7 +48,7 @@
           </select>
         </label>
         <label class="filter-select-wrap" kTooltip="Filter by board" i18n-kTooltip="Tooltip on the notification board filter">
-          <i class="ti ti-layout-kanban"></i>
+          <i aria-hidden="true" class="ti ti-layout-kanban"></i>
           <select class="filter-select" [class.is-active]="!!boardFilter()" [value]="boardFilter() ?? ''" aria-label="Filter notifications by board" i18n-aria-label (change)="setBoardFilter($any($event.target).value || null)">
             @if (selectedBoardFilterFallbackId(); as boardId) {
             <option [value]="boardId" selected i18n="Board filter option for a board no longer in the list">Selected board</option>
@@ -60,7 +60,7 @@
           </select>
         </label>
         <label class="filter-select-wrap" kTooltip="Filter by user" i18n-kTooltip="Tooltip on the notification user filter">
-          <i class="ti ti-user"></i>
+          <i aria-hidden="true" class="ti ti-user"></i>
           <select class="filter-select" [class.is-active]="!!userFilter()" [value]="userFilter() ?? ''" aria-label="Filter notifications by user" i18n-aria-label (change)="setUserFilter($any($event.target).value || null)">
             @if (selectedUserFilterFallbackId(); as userId) {
             <option [value]="userId" selected i18n="User filter option for a person no longer in the list">Selected user</option>
@@ -83,7 +83,7 @@
       />
     </div>
     <button type="button" class="ghost mark-all-btn" (click)="markAllRead()" [disabled]="unreadCount() === 0 || !online()" [kTooltip]="online() ? markAllReadLabel : offlineTitle">
-      <i class="ti ti-checks"></i>
+      <i aria-hidden="true" class="ti ti-checks"></i>
       <ng-container i18n="Button: mark every notification as read">Mark all read</ng-container>
     </button>
   </div>
@@ -108,7 +108,7 @@
     } @else if (hasUnresolvedUnreadMismatch()) {
     <k-empty-state class="drawer-empty" plain icon="bell-exclamation" title="Refreshing unread notifications" i18n-title="Empty state title" text="Try reopening the drawer in a moment." i18n-text="Empty state text">
       <button type="button" class="ghost empty-all-btn" (click)="refreshNotifications()">
-        <i class="ti ti-refresh"></i>
+        <i aria-hidden="true" class="ti ti-refresh"></i>
         <ng-container i18n="Button: reload notifications">Refresh</ng-container>
       </button>
     </k-empty-state>
@@ -151,9 +151,9 @@
         <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="openNotificationLabel(n)"></a>
         <div class="notif-actor" [class.notif-actor--overdue]="n.reason === 'overdue'" [class.notif-actor--reminder]="n.reason === 'reminder'">
           @if (n.reason === 'overdue') {
-          <i class="ti ti-calendar-exclamation"></i>
+          <i aria-hidden="true" class="ti ti-calendar-exclamation"></i>
           } @else if (n.reason === 'reminder') {
-          <i class="ti ti-alarm"></i>
+          <i aria-hidden="true" class="ti ti-alarm"></i>
           } @else if (n.activity?.actorKind === 'system') {
           <k-system-avatar [size]="32" />
           } @else {
@@ -166,7 +166,7 @@
             @if (n.orgLogoUrl) {
             <img [ngSrc]="n.orgLogoUrl" [alt]="n.orgName" width="16" height="16" />
             } @else {
-            <i class="ti ti-building"></i>
+            <i aria-hidden="true" class="ti ti-building"></i>
             }
             <span>{{ n.orgName }}</span>
           </div>
@@ -176,14 +176,14 @@
           @if (showCardKeys() && n.cardKey) { <span class="notif-card-key">{{ n.cardKey }}</span> }
           <div class="notif-breadcrumb">
             <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, n)" (auxclick)="openBoardInNewTab($event, n)" [attr.aria-label]="openBoardLabel(n.boardName)">
-              <i [class]="'ti ti-' + (n.boardIcon || 'layout-kanban')" [style.color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"></i>
+              <i aria-hidden="true" [class]="'ti ti-' + (n.boardIcon || 'layout-kanban')" [style.color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"></i>
               <span>{{ n.boardName }}</span>
             </button>
             @if (n.listName) {
             <!-- Board and list share one inline row, so the hierarchy needs an explicit separator. -->
             <i class="ti ti-chevron-right sep-chevron" aria-hidden="true"></i>
             <div class="breadcrumb-row">
-              <i [class]="'ti ti-' + (n.listIcon || 'layout-list')" [style.color]="n.listColor ? 'var(--color-' + n.listColor + ')' : null"></i>
+              <i aria-hidden="true" [class]="'ti ti-' + (n.listIcon || 'layout-list')" [style.color]="n.listColor ? 'var(--color-' + n.listColor + ')' : null"></i>
               <span [style.color]="n.listColor ? 'var(--color-' + n.listColor + ')' : null">{{ n.listName }}</span>
             </div>
             }
@@ -197,7 +197,7 @@
             <i [class]="changeSummary(n).icon"></i>
             <span class="actor-name">{{ n.actorName }}</span>
             @if (n.activity?.actorKind === 'agent') {
-            <span class="via-agent" [kTooltip]="agentTooltip(n.activity.agentName, n.actorName)"><i class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ n.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>
+            <span class="via-agent" [kTooltip]="agentTooltip(n.activity.agentName, n.actorName)"><i aria-hidden="true" class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ n.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>
             }
             <span class="action-text">{{ changeSummary(n).text }}</span>
             @if (changeSummary(n).value) {
@@ -225,7 +225,7 @@
             @if (visibleThumbUrl(n.attachment.thumbnailUrl); as thumb) {
             <img [ngSrc]="thumb" [alt]="n.attachment.fileName" width="44" height="44" />
             } @else {
-            <div class="notif-attachment-fallback"><i class="ti" [class]="attachmentIcon(n.attachment.mimeType, n.attachment.fileName)"></i></div>
+            <div class="notif-attachment-fallback"><i aria-hidden="true" class="ti" [class]="attachmentIcon(n.attachment.mimeType, n.attachment.fileName)"></i></div>
             }
             <span class="notif-attachment-name">{{ n.attachment.fileName }}</span>
           </div>
@@ -263,7 +263,7 @@
               @if (cluster.head.orgLogoUrl) {
               <img [ngSrc]="cluster.head.orgLogoUrl" [alt]="cluster.head.orgName" width="16" height="16" />
               } @else {
-              <i class="ti ti-building"></i>
+              <i aria-hidden="true" class="ti ti-building"></i>
               }
               <span>{{ cluster.head.orgName }}</span>
             </div>
@@ -271,13 +271,13 @@
             @if (showCardKeys() && cluster.head.cardKey) { <span class="notif-card-key">{{ cluster.head.cardKey }}</span> }
             <div class="notif-breadcrumb">
               <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, cluster.head)" (auxclick)="openBoardInNewTab($event, cluster.head)" [attr.aria-label]="openBoardLabel(cluster.head.boardName)">
-                <i [class]="'ti ti-' + (cluster.head.boardIcon || 'layout-kanban')" [style.color]="cluster.head.boardIconColor ? 'var(--color-' + cluster.head.boardIconColor + ')' : null"></i>
+                <i aria-hidden="true" [class]="'ti ti-' + (cluster.head.boardIcon || 'layout-kanban')" [style.color]="cluster.head.boardIconColor ? 'var(--color-' + cluster.head.boardIconColor + ')' : null"></i>
                 <span>{{ cluster.head.boardName }}</span>
               </button>
               @if (cluster.head.listName) {
               <i class="ti ti-chevron-right sep-chevron" aria-hidden="true"></i>
               <div class="breadcrumb-row">
-                <i [class]="'ti ti-' + (cluster.head.listIcon || 'layout-list')" [style.color]="cluster.head.listColor ? 'var(--color-' + cluster.head.listColor + ')' : null"></i>
+                <i aria-hidden="true" [class]="'ti ti-' + (cluster.head.listIcon || 'layout-list')" [style.color]="cluster.head.listColor ? 'var(--color-' + cluster.head.listColor + ')' : null"></i>
                 <span [style.color]="cluster.head.listColor ? 'var(--color-' + cluster.head.listColor + ')' : null">{{ cluster.head.listName }}</span>
               </div>
               }
@@ -302,9 +302,9 @@
             <div class="notif-entry-actor" [class.notif-entry-actor--overdue]="item.notification.reason === 'overdue' || item.notification.reason === 'checklist_item_overdue'"
               [class.notif-entry-actor--reminder]="item.notification.reason === 'reminder'">
               @if (item.notification.reason === 'overdue' || item.notification.reason === 'checklist_item_overdue') {
-              <i class="ti ti-calendar-exclamation"></i>
+              <i aria-hidden="true" class="ti ti-calendar-exclamation"></i>
               } @else if (item.notification.reason === 'reminder') {
-              <i class="ti ti-alarm"></i>
+              <i aria-hidden="true" class="ti ti-alarm"></i>
               } @else if (item.notification.activity?.actorKind === 'system') {
               <k-system-avatar [size]="20" />
               } @else {
@@ -320,7 +320,7 @@
                 <i [class]="item.summary.icon"></i>
                 @if (item.notification.actorName) { <span class="actor-name">{{ item.notification.actorName }}</span> }
                 @if (item.notification.activity?.actorKind === 'agent') {
-                <span class="via-agent" [kTooltip]="agentTooltip(item.notification.activity.agentName, item.notification.actorName)"><i class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ item.notification.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>
+                <span class="via-agent" [kTooltip]="agentTooltip(item.notification.activity.agentName, item.notification.actorName)"><i aria-hidden="true" class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ item.notification.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>
                 }
                 <span class="action-text">{{ item.summary.text }}</span>
                 @if (item.summary.value) {
@@ -342,7 +342,7 @@
                 @if (visibleThumbUrl(item.notification.attachment.thumbnailUrl); as thumb) {
                 <img [ngSrc]="thumb" [alt]="item.notification.attachment.fileName" width="44" height="44" />
                 } @else {
-                <div class="notif-attachment-fallback"><i class="ti" [class]="attachmentIcon(item.notification.attachment.mimeType, item.notification.attachment.fileName)"></i></div>
+                <div class="notif-attachment-fallback"><i aria-hidden="true" class="ti" [class]="attachmentIcon(item.notification.attachment.mimeType, item.notification.attachment.fileName)"></i></div>
                 }
                 <span class="notif-attachment-name">{{ item.notification.attachment.fileName }}</span>
               </div>
@@ -372,7 +372,7 @@
     }
     <div class="drawer-scroll-sentinel" #loadMoreSentinel aria-hidden="true">
       @if (loading() && hasMore()) {
-      <i class="ti ti-loader-2 kanera-spin"></i>
+      <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i>
       }
     </div>
     }

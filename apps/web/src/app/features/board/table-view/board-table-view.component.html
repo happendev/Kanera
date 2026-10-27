@@ -17,7 +17,7 @@
   <div class="tv-toolbar" kFitLabels>
     @if (showSearch()) {
       <div class="tv-search">
-        <i class="ti ti-search"></i>
+        <i aria-hidden="true" class="ti ti-search"></i>
         <input
           type="text"
           placeholder="Search tasks…"
@@ -70,11 +70,11 @@
         i18n-aria-label
         (click)="toggleColumnsMenu($event)"
       >
-        <i class="ti ti-columns-3"></i><span i18n="Toolbar button that opens the column picker">Columns</span>
+        <i aria-hidden="true" class="ti ti-columns-3"></i><span i18n="Toolbar button that opens the column picker">Columns</span>
       </button>
       @if (columnsIsSet()) {
         <button type="button" class="k-toolbar-clear" kTooltip="Restore default columns" i18n-kTooltip aria-label="Restore default columns" i18n-aria-label (click)="clearColumns()">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       }
       @if (columnsOpen()) {
@@ -88,9 +88,9 @@
           <div class="tv-columns-list">
             @for (column of pickableColumns(); track column.id) {
               <button type="button" class="k-menu-item tv-menu-row" (click)="toggleColumn(column.id)">
-                <i [class]="'ti ti-' + column.icon"></i>
+                <i aria-hidden="true" [class]="'ti ti-' + column.icon"></i>
                 <span>{{ column.label }}</span>
-                @if (column.visible) { <i class="ti ti-check"></i> }
+                @if (column.visible) { <i aria-hidden="true" class="ti ti-check"></i> }
               </button>
             }
           </div>
@@ -122,13 +122,13 @@
         [attr.aria-label]="groupTriggerLabel()"
         (click)="toggleMenu('group')"
       >
-        <i class="ti" [class.ti-chart-donut]="hostGroupBy()" [class.ti-layout-rows]="!hostGroupBy()"></i>
+        <i aria-hidden="true" class="ti" [class.ti-chart-donut]="hostGroupBy()" [class.ti-layout-rows]="!hostGroupBy()"></i>
         <span>{{ groupTriggerLabel() }}</span>
       </button>
       @if (groupIsSet()) {
         @let clearGroupLabel = hostGroupBy() ? text.clearBreakdown : text.resetGrouping;
         <button type="button" class="k-toolbar-clear" [kTooltip]="clearGroupLabel" [attr.aria-label]="clearGroupLabel" (click)="clearGroup()">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       }
       @if (groupOpen()) {
@@ -137,9 +137,9 @@
             <div class="k-menu-heading tv-panel-title" i18n="Menu heading for grouping options">Group by</div>
             @for (option of groupByOptions(); track option.value) {
               <button type="button" class="k-menu-item tv-menu-row" [class.is-selected]="groupBy() === option.value" (click)="setGroupBy(option.value)">
-                <i [class]="'ti ti-' + option.icon"></i>
+                <i aria-hidden="true" [class]="'ti ti-' + option.icon"></i>
                 <span>{{ option.label }}</span>
-                @if (groupBy() === option.value) { <i class="ti ti-check"></i> }
+                @if (groupBy() === option.value) { <i aria-hidden="true" class="ti ti-check"></i> }
               </button>
             }
           }
@@ -151,9 +151,9 @@
           } @else {
           @for (option of availableSplitByOptions(); track option.value) {
             <button type="button" class="k-menu-item tv-menu-row" [class.is-selected]="aggregateSplitBy() === option.value" (click)="setSplitBy(option.value)">
-              <i [class]="'ti ti-' + option.icon"></i>
+              <i aria-hidden="true" [class]="'ti ti-' + option.icon"></i>
               <span>{{ option.label }}</span>
-              @if (aggregateSplitBy() === option.value) { <i class="ti ti-check"></i> }
+              @if (aggregateSplitBy() === option.value) { <i aria-hidden="true" class="ti ti-check"></i> }
             </button>
           }
           }
@@ -174,11 +174,11 @@
           [attr.aria-label]="sortTriggerLabel()"
           (click)="toggleMenu('sort')"
         >
-          <i class="ti ti-arrows-sort"></i><span>{{ sortTriggerLabel() }}</span>
+          <i aria-hidden="true" class="ti ti-arrows-sort"></i><span>{{ sortTriggerLabel() }}</span>
         </button>
         @if (sortIsSet()) {
           <button type="button" class="k-toolbar-clear" kTooltip="Reset sort" i18n-kTooltip aria-label="Reset sort" i18n-aria-label (click)="clearSort()">
-            <i class="ti ti-x"></i>
+            <i aria-hidden="true" class="ti ti-x"></i>
           </button>
         }
         @if (sortOpen()) {
@@ -186,7 +186,7 @@
             @for (option of sortOptions(); track option.value) {
               <button type="button" class="k-menu-item tv-menu-row" [class.is-selected]="sortBy() === option.value" (click)="setSort(option.value)">
                 <span>{{ option.label }}</span>
-                @if (sortBy() === option.value) { <i class="ti ti-check"></i> }
+                @if (sortBy() === option.value) { <i aria-hidden="true" class="ti ti-check"></i> }
               </button>
             }
           </div>
@@ -202,7 +202,7 @@
         [kTooltip]="allGroupsCollapsed() ? text.expandAll : text.collapseAll"
         (click)="toggleAllGroups()"
       >
-        <i class="ti" [class.ti-arrows-minimize]="!allGroupsCollapsed()" [class.ti-arrows-maximize]="allGroupsCollapsed()"></i>
+        <i aria-hidden="true" class="ti" [class.ti-arrows-minimize]="!allGroupsCollapsed()" [class.ti-arrows-maximize]="allGroupsCollapsed()"></i>
       </button>
     }
 
@@ -221,23 +221,23 @@
         [attr.aria-expanded]="moreOpen()"
         (click)="toggleMenu('more')"
       >
-        <i class="ti ti-dots"></i>
+        <i aria-hidden="true" class="ti ti-dots"></i>
       </button>
       @if (moreOpen()) {
         <div kMenu class="ap-panel tv-small-menu" role="menu" aria-label="More table actions" i18n-aria-label kAnchoredPanel [apPlacement]="{ align: 'end', width: 230, minHeight: 90 }" (apDismissed)="moreOpen.set(false)">
           <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="resetTable()">
-            <i class="ti ti-refresh"></i><span i18n>Reset table layout</span>
+            <i aria-hidden="true" class="ti ti-refresh"></i><span i18n>Reset table layout</span>
           </button>
           @if (canEditRole()) {
             <p class="tv-panel-hint tv-export-scope" i18n="Export menu note, e.g. Export 12 cards in this view">Export {{ exportScopeLabel() // i18n(ph="cards") }}</p>
             <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="exportExcel()">
-              <i class="ti ti-file-spreadsheet"></i><span i18n="Export format menu item">Excel workbook</span>
+              <i aria-hidden="true" class="ti ti-file-spreadsheet"></i><span i18n="Export format menu item">Excel workbook</span>
             </button>
             <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="exportCsv()">
-              <i class="ti ti-file-type-csv"></i><span i18n="Export format menu item">CSV (this grid)</span>
+              <i aria-hidden="true" class="ti ti-file-type-csv"></i><span i18n="Export format menu item">CSV (this grid)</span>
             </button>
             <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="exportJson()">
-              <i class="ti ti-file-code"></i><span>JSON</span>
+              <i aria-hidden="true" class="ti ti-file-code"></i><span>JSON</span>
             </button>
           }
         </div>
@@ -313,7 +313,7 @@
               />
             </span>
           }
-          <i class="ti ti-forms"></i><span i18n="Table column header - card title">Title</span>
+          <i aria-hidden="true" class="ti ti-forms"></i><span i18n="Table column header - card title">Title</span>
           <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" i18n-kTooltip="Tooltip on a column's resize handle" (pointerdown)="startColumnResize('title', $event)" (dblclick)="autoFitColumn('title', $event)"></span>
         </div>
         @for (col of visibleColumns(); track col) {
@@ -330,14 +330,14 @@
           >
             <!-- Drag is handle-scoped so a pointerdown on the resize strip still resizes: both
                  gestures start on pointerdown and would otherwise fire together. -->
-            <span class="tv-col-drag-handle" cdkDragHandle kTooltip="Reorder column" i18n-kTooltip aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>
-            <i [class]="'ti ti-' + columnIcon(col)"></i><span>{{ columnHeaderLabel(col) }}</span>
+            <span class="tv-col-drag-handle" cdkDragHandle kTooltip="Reorder column" i18n-kTooltip aria-hidden="true"><i aria-hidden="true" class="ti ti-grip-vertical"></i></span>
+            <i aria-hidden="true" [class]="'ti ti-' + columnIcon(col)"></i><span>{{ columnHeaderLabel(col) }}</span>
             <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" i18n-kTooltip="Tooltip on a column's resize handle" (pointerdown)="startColumnResize(col, $event)" (dblclick)="autoFitColumn(col, $event)"></span>
           </div>
         }
         <div class="tv-th tv-actions-head">
           <button type="button" aria-label="Choose columns" i18n-aria-label kTooltip="Choose columns" i18n-kTooltip (click)="toggleColumnsMenu($event)">
-            <i class="ti ti-plus"></i>
+            <i aria-hidden="true" class="ti ti-plus"></i>
           </button>
         </div>
       </div>
@@ -391,7 +391,7 @@
                 [attr.aria-label]="group.collapsed ? text.expandNamed(group.name) : text.collapseNamed(group.name)"
                 (click)="toggleGroupCollapsed(group.key)"
               >
-                <i class="ti tv-run-caret" [class.ti-chevron-down]="!group.collapsed" [class.ti-chevron-right]="group.collapsed"></i>
+                <i aria-hidden="true" class="ti tv-run-caret" [class.ti-chevron-down]="!group.collapsed" [class.ti-chevron-right]="group.collapsed"></i>
                 <span class="tv-chip">
                   <!-- An assignee bucket is identified by the face, every other dimension by its
                        icon. Grouping by member with a row of identical user glyphs would be the same
@@ -399,7 +399,7 @@
                   @if (group.avatarUrl !== null || group.icon === null) {
                     <k-avatar [url]="group.avatarUrl" [name]="group.name" [size]="16" [workspaceId]="workspaceId()" />
                   } @else {
-                    <i [class]="'ti ti-' + group.icon"></i>
+                    <i aria-hidden="true" [class]="'ti ti-' + group.icon"></i>
                   }
                   <span>{{ group.name }}</span>
                 </span>
@@ -416,7 +416,7 @@
                     [kTooltip]="hostAddGroupsByGroup().get(group.key)?.length ? text.addCard : text.noAddableCards"
                     (click)="toggleHostAdd(group.key, $event)"
                   >
-                    <i class="ti ti-plus"></i>
+                    <i aria-hidden="true" class="ti ti-plus"></i>
                   </button>
                   @if (hostAddOpenGroupKey() === group.key) {
                     <k-anchored-picker
@@ -475,7 +475,7 @@
               }
               @if (rowDragEnabled(group, card)) {
                 <span class="tv-drag-handle tv-row-stop" cdkDragHandle kTooltip="Drag to move" i18n-kTooltip aria-hidden="true">
-                  <i class="ti ti-grip-vertical"></i>
+                  <i aria-hidden="true" class="ti ti-grip-vertical"></i>
                 </span>
               }
               <!-- Shares the checkbox's slot: the number is what you see at rest, the checkbox what
@@ -503,7 +503,7 @@
                        permanent control here would cost every title another 20px of indent, and this
                        view already reserves a gutter for the bulk-select checkbox. Toggling stays in
                        the row actions menu. -->
-                  @if (card.completedAt) { <i class="ti ti-circle-check tv-completed-icon" kTooltip="Completed" i18n-kTooltip="Tooltip on the tick shown beside a completed card's title"></i> }
+                  @if (card.completedAt) { <i aria-hidden="true" class="ti ti-circle-check tv-completed-icon" kTooltip="Completed" i18n-kTooltip="Tooltip on the tick shown beside a completed card's title"></i> }
                   <!-- Inline before the key, the same slot and shape as on the board tile. It indents
                        the title on marked rows only, which the completed tick beside it already does —
                        reserving the width on every row would tax the column people actually read. -->
@@ -513,7 +513,7 @@
                   <span class="tv-title">@if (showCardKeys()) { <span class="tv-card-key"><span class="tv-key-sizer" aria-hidden="true">{{ keySlotSizer() }}</span><span class="tv-key-text">{{ card.key }}</span></span> }<span class="tv-title-text">{{ card.title }}</span></span>
                 </button>
                 <button type="button" class="tv-open-btn tv-title-open tv-row-stop" aria-label="Open card" i18n-aria-label kTooltip="Open card" i18n-kTooltip (click)="$event.stopPropagation(); cardOpened.emit(card.id)">
-                  <i class="ti ti-arrows-maximize"></i>
+                  <i aria-hidden="true" class="ti ti-arrows-maximize"></i>
                 </button>
               }
             </div>
@@ -540,7 +540,7 @@
                       (click)="openCellPicker(card, col, $event)"
                     >
                       <span class="tv-chip">
-                        <i [class]="'ti ti-' + listIcon(card)"></i>
+                        <i aria-hidden="true" [class]="'ti ti-' + listIcon(card)"></i>
                         <span>{{ listName(card) }}</span>
                       </span>
                     </button>
@@ -565,7 +565,7 @@
                            `--tv-status-color`, which a list-grouped run sets on the whole block, so a
                            board pill would silently take the status's colour. -->
                       <button type="button" class="tv-cell-trigger tv-source-link tv-row-stop" [kTooltip]="text.openNamed(board.name)" (click)="$event.stopPropagation(); boardOpened.emit(board.id)">
-                        <i [class]="'ti ti-' + (board.icon ?? 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+                        <i aria-hidden="true" [class]="'ti ti-' + (board.icon ?? 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
                         <span>{{ board.name }}</span>
                       </button>
                     } @else {
@@ -604,7 +604,7 @@
                   }
                   @case ('start') {
                     <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)">
-                      @if (card.startDateLocalDate) { <i class="ti ti-calendar-time"></i><span>{{ formattedStart(card) }}</span> }
+                      @if (card.startDateLocalDate) { <i aria-hidden="true" class="ti ti-calendar-time"></i><span>{{ formattedStart(card) }}</span> }
                       @else { <span class="tv-muted">—</span> }
                     </button>
                     @if (pickerIsOpen(card.id, col)) {
@@ -620,7 +620,7 @@
                   }
                   @case ('due') {
                     <button type="button" class="tv-cell-trigger" [class.is-overdue]="isCardOverdue(card)" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)">
-                      @if (card.dueDateLocalDate) { <i class="ti ti-calendar-event"></i><span>{{ formattedDue(card) }}</span> }
+                      @if (card.dueDateLocalDate) { <i aria-hidden="true" class="ti ti-calendar-event"></i><span>{{ formattedDue(card) }}</span> }
                       @else { <span class="tv-muted">—</span> }
                     </button>
                     @if (pickerIsOpen(card.id, col)) {
@@ -657,7 +657,7 @@
                   @case ('inProgress') {
                     @if (timeInProgress(card); as timer) {
                       <span class="tv-static-value tv-time-in-progress" [class.is-done]="!timer.running" [class.is-alert]="timer.alert" [kTooltip]="timer.label">
-                        <i class="ti" [class.ti-progress]="timer.running" [class.ti-clock]="!timer.running"></i>{{ timer.text }}
+                        <i aria-hidden="true" class="ti" [class.ti-progress]="timer.running" [class.ti-clock]="!timer.running"></i>{{ timer.text }}
                       </span>
                     } @else { <span class="tv-muted">—</span> }
                   }
@@ -697,7 +697,7 @@
                         }
                         @case ('checkbox') {
                           <button type="button" class="tv-cell-trigger tv-checkbox-value" [class.checked]="valueFor(card.id, field.id)?.valueCheckbox === true" [disabled]="!canEditColumn(card, col)" (click)="setCheckboxField(card, field, $event)">
-                            <i class="ti" [class.ti-checkbox]="valueFor(card.id, field.id)?.valueCheckbox === true" [class.ti-square]="valueFor(card.id, field.id)?.valueCheckbox !== true"></i>
+                            <i aria-hidden="true" class="ti" [class.ti-checkbox]="valueFor(card.id, field.id)?.valueCheckbox === true" [class.ti-square]="valueFor(card.id, field.id)?.valueCheckbox !== true"></i>
                             <span i18n="Checkbox field cell - the box is ticked">Yes</span>
                           </button>
                         }
@@ -717,7 +717,7 @@
                         }
                         @case ('date') {
                           <button type="button" class="tv-cell-trigger" [disabled]="!canEditColumn(card, col)" (click)="openCellPicker(card, col, $event)">
-                            <i class="ti ti-calendar"></i><span>{{ displayValue(card, field) }}</span>
+                            <i aria-hidden="true" class="ti ti-calendar"></i><span>{{ displayValue(card, field) }}</span>
                           </button>
                           @if (pickerIsOpen(card.id, col)) {
                             <k-date-picker
@@ -754,7 +754,7 @@
             <div class="tv-cell tv-actions-cell tv-row-stop">
               @if (rowEditable) {
                 <button type="button" class="tv-actions-btn" [class.is-active]="activeActionsCardId() === card.id" aria-label="Card actions" i18n-aria-label kTooltip="Card actions" i18n-kTooltip (click)="toggleActionsMenu(card, $event)">
-                  <i class="ti ti-dots"></i>
+                  <i aria-hidden="true" class="ti ti-dots"></i>
                 </button>
                 @if (activeActionsCardId() === card.id) {
                   <k-card-actions-menu
@@ -802,7 +802,7 @@
             <div class="tv-run-foot">
               @if (runComposeListId() === group.listId) {
                 <form class="tv-run-compose" (submit)="submitRunTask(group.listId, $event)">
-                  <i class="ti ti-plus"></i>
+                  <i aria-hidden="true" class="ti ti-plus"></i>
                   <input
                     type="text"
                     autofocus
@@ -815,7 +815,7 @@
                 </form>
               } @else {
                 <button type="button" class="tv-run-add" [attr.aria-label]="text.addTaskTo(group.name)" (click)="startRunCompose(group.listId, $event)">
-                  <i class="ti ti-plus"></i><span i18n="Button - add a task to this list">New task</span>
+                  <i aria-hidden="true" class="ti ti-plus"></i><span i18n="Button - add a task to this list">New task</span>
                 </button>
               }
             </div>
@@ -823,7 +823,7 @@
         </div>
         } @empty {
           <div class="tv-empty">
-            <i class="ti ti-table-off"></i>
+            <i aria-hidden="true" class="ti ti-table-off"></i>
             <span i18n>No tasks match this view.</span>
           </div>
         }
@@ -839,7 +839,7 @@
             <div class="tv-new-task">
               @if (runComposeListId() === list.id) {
                 <form class="tv-run-compose" (submit)="submitRunTask(list.id, $event)">
-                  <i class="ti ti-plus"></i>
+                  <i aria-hidden="true" class="ti ti-plus"></i>
                   <input
                     type="text"
                     autofocus
@@ -852,7 +852,7 @@
                 </form>
               } @else {
                 <button type="button" class="tv-run-add" [attr.aria-label]="text.addTaskTo(list.name)" (click)="startRunCompose(list.id, $event)">
-                  <i class="ti ti-plus"></i><span i18n="Button - add a task to this list">New task</span>
+                  <i aria-hidden="true" class="ti ti-plus"></i><span i18n="Button - add a task to this list">New task</span>
                 </button>
               }
             </div>
@@ -888,7 +888,7 @@
               >
                 <!-- Chevron first: the row is right-aligned, so the value keeps the column's edge
                      whether or not the chevron is showing. -->
-                <i class="ti ti-chevron-down"></i>
+                <i aria-hidden="true" class="ti ti-chevron-down"></i>
                 @if (aggregateFor(key); as metric) {
                   <span class="tv-aggregate-label">{{ text.metric[metric] }}</span><strong>{{ aggregateValue(key) }}</strong>
                 } @else { <span i18n="Footer button - choose a sum or average for this column">Calculate</span> }

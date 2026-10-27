@@ -21,18 +21,18 @@ export type StatTileTone = "neutral" | "danger" | "warning" | "success";
     <ng-template #body>
       <span class="stat-tile-label">
         @if (icon(); as iconName) {
-          <i class="ti ti-{{ iconName }}"></i>
+          <i aria-hidden="true" class="ti ti-{{ iconName }}"></i>
         }
         {{ label() }}
       </span>
       <strong>{{ value() }}</strong>
       @if (deltaLabel(); as delta) {
         <span class="stat-tile-delta" [class.is-up]="isUp()">
-          <i class="ti ti-{{ deltaIcon() }}"></i>
+          <i aria-hidden="true" class="ti ti-{{ deltaIcon() }}"></i>
           {{ delta }}
         </span>
       } @else if (interactive()) {
-        <i class="ti ti-{{ active() ? 'x' : 'arrow-narrow-right' }} stat-tile-go"></i>
+        <i aria-hidden="true" class="ti ti-{{ active() ? 'x' : 'arrow-narrow-right' }} stat-tile-go"></i>
       }
       @if (caption() && !deltaLabel()) {
         <span class="stat-tile-caption">{{ caption() }}</span>

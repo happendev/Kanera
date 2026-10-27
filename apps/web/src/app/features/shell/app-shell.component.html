@@ -15,7 +15,7 @@
       }
     </a>
     <button class="collapse-btn ghost icon" (click)="toggleSidebar()" [kTooltip]="sidebarCollapsed() ? text.expandSidebar : text.collapseSidebar" [attr.aria-label]="sidebarCollapsed() ? text.expandSidebar : text.collapseSidebar">
-      <i [class]="sidebarCollapsed() ? 'ti ti-layout-sidebar-left-expand' : 'ti ti-layout-sidebar-left-collapse'"></i>
+      <i aria-hidden="true" [class]="sidebarCollapsed() ? 'ti ti-layout-sidebar-left-expand' : 'ti ti-layout-sidebar-left-collapse'"></i>
     </button>
   </div>
 
@@ -25,15 +25,15 @@
   <div class="utility-row" role="toolbar" aria-label="Personal tools" i18n-aria-label="Toolbar of personal panels in the sidebar">
     @if (showScratchpad()) {
     <button type="button" class="utility-btn" [class.is-active]="scratchpad.open()" (click)="scratchpad.toggle()" aria-label="Scratchpad" i18n-aria-label="Button: the scratchpad panel" [attr.aria-expanded]="scratchpad.open()" [kTooltip]="scratchpadTooltip()">
-      <i class="ti ti-notes"></i>
+      <i aria-hidden="true" class="ti ti-notes"></i>
     </button>
     }
     <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" (click)="togglePanel('priorities')" [attr.aria-label]="upNextLabel()" [attr.aria-expanded]="pendingPanel() === 'priorities' || (prioritiesPanel()?.open() ?? false)" [kTooltip]="upNextTooltip()">
-      <i class="ti ti-list-numbers"></i>
+      <i aria-hidden="true" class="ti ti-list-numbers"></i>
       @if (myPriorities.totalCount() > 0) { <span class="utility-badge" [class.is-danger]="myPriorities.overdueCount() > 0">{{ myPriorities.totalCount() > 99 ? '99+' : myPriorities.totalCount() }}</span> }
     </button>
     <button type="button" class="utility-btn" [class.has-badge]="notifications.unreadCount() > 0" [class.is-alert]="notifications.unreadCount() > 0" (click)="togglePanel('notifications')" [attr.aria-label]="notificationsLabel()" [attr.aria-expanded]="pendingPanel() === 'notifications' || (notificationsPanel()?.open() ?? false)" kTooltip="Notifications · N" i18n-kTooltip="Tooltip: notifications button; N is its keyboard shortcut">
-      <i [class]="notifications.unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
+      <i aria-hidden="true" [class]="notifications.unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
       @if (notifications.unreadCount() > 0) { <span kUnreadGlow class="utility-badge is-accent">{{ notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount() }}</span> }
     </button>
   </div>
@@ -42,7 +42,7 @@
   @if (environmentBannerLabel(); as environmentLabel) {
   @if (!sidebarCollapsed()) {
   <div class="dev-banner">
-    <i class="ti ti-code"></i>
+    <i aria-hidden="true" class="ti ti-code"></i>
     <span>{{ environmentLabel }}</span>
   </div>
   }
@@ -53,7 +53,7 @@
     <div class="nav-item-row">
       <a class="nav-item" routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" [kTooltip]="sidebarCollapsed() ? text.home : ''"
         (contextmenu)="openNavContextMenu($event, { label: 'Home', url: '/', canMarkAllRead: false, clearBoardSearch: false })">
-        <i class="ti ti-home-2"></i>
+        <i aria-hidden="true" class="ti ti-home-2"></i>
         <span class="nav-label" i18n="Sidebar link to the home page">Home</span>
       </a>
       @if (!sidebarCollapsed()) {
@@ -69,7 +69,7 @@
     <div class="nav-item-row">
       <a class="nav-item" routerLink="/team-cards" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? text.teamCards : ''"
         (contextmenu)="openNavContextMenu($event, { label: 'Team Cards', url: '/team-cards', canMarkAllRead: false, clearBoardSearch: false })">
-        <i class="ti ti-users"></i>
+        <i aria-hidden="true" class="ti ti-users"></i>
         <span class="nav-label" i18n="Sidebar link to the Team Cards page">Team Cards</span>
       </a>
     </div>
@@ -77,7 +77,7 @@
     @if (!sidebarCollapsed()) {
     @if (hasNavBoards()) {
     <button type="button" class="board-search" [disabled]="!online()" (click)="search.open()" aria-label="Find content" i18n-aria-label="Button: open search">
-      <i class="ti ti-search"></i>
+      <i aria-hidden="true" class="ti ti-search"></i>
       <span i18n="Button: open search">Find content</span>
       @if (searchShortcutLabel(); as shortcutLabel) {
       <kbd class="search-kbd">{{ shortcutLabel }}</kbd>
@@ -91,13 +91,13 @@
       }
       @if (isOrgAdmin()) {
       <button class="new-ws-btn ghost icon" [disabled]="!online()" (click)="newWorkspace()" (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" i18n-kTooltip aria-label="New workspace" i18n-aria-label>
-        <i class="ti ti-plus"></i>
+        <i aria-hidden="true" class="ti ti-plus"></i>
       </button>
       }
     </div>
     @if (workspaceCreateLimitMessage(); as message) {
     <div class="workspace-limit-feedback" role="alert">
-      <i class="ti ti-lock"></i>
+      <i aria-hidden="true" class="ti ti-lock"></i>
       <span>{{ message }}</span>
     </div>
     }
@@ -110,7 +110,7 @@
 
     @if (boardSearchTerm() && !hasBoardSearchMatches() && !sidebarCollapsed()) {
     <div class="board-search-empty">
-      <i class="ti ti-search-off"></i>
+      <i aria-hidden="true" class="ti ti-search-off"></i>
       <span i18n="Sidebar board search: no matches">No boards found</span>
     </div>
     }
@@ -121,14 +121,14 @@
       @if (!sidebarCollapsed()) {
       <div class="ws-row">
         <button class="ws-toggle" (click)="toggle(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !collapsed()[group.workspace.id]">
-          <i [class]="!boardSearchTerm() && collapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
-          <span class="ws-icon"><i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="workspaceIconColor(group.workspace.id)"></i></span>
+          <i aria-hidden="true" [class]="!boardSearchTerm() && collapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+          <span class="ws-icon"><i aria-hidden="true" [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="workspaceIconColor(group.workspace.id)"></i></span>
           <span class="ws-name">{{ group.workspace.name }}</span>
         </button>
         @if (canManageWorkspace(group.workspace)) {
         <a class="ws-settings" [routerLink]="online() ? ['/w', group.workspace.id, 'settings'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" routerLinkActive="active" kTooltip="Workspace settings" i18n-kTooltip
           (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: group.workspace.name + ' settings', url: '/w/' + group.workspace.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
-          <i class="ti ti-settings"></i>
+          <i aria-hidden="true" class="ti ti-settings"></i>
         </a>
         }
       </div>
@@ -136,11 +136,11 @@
       @if (canManageWorkspace(group.workspace)) {
       <a class="ws-icon-link" [routerLink]="online() ? ['/w', group.workspace.id, 'settings'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" routerLinkActive="active" [kTooltip]="group.workspace.name"
         (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: group.workspace.name + ' settings', url: '/w/' + group.workspace.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
-        <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="workspaceIconColor(group.workspace.id)"></i>
+        <i aria-hidden="true" [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="workspaceIconColor(group.workspace.id)"></i>
       </a>
       } @else {
       <span class="ws-icon-link" [kTooltip]="group.workspace.name">
-        <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="workspaceIconColor(group.workspace.id)"></i>
+        <i aria-hidden="true" [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="workspaceIconColor(group.workspace.id)"></i>
       </span>
       }
       }
@@ -149,7 +149,7 @@
       <div class="ws-me">
         <a class="board-link" [routerLink]="['/w', group.workspace.id, 'notes']" routerLinkActive="active"
           (contextmenu)="openNavContextMenu($event, { label: 'Workspace Notes', url: '/w/' + group.workspace.id + '/notes', canMarkAllRead: false, clearBoardSearch: false })">
-          <i class="ti ti-notebook"></i>
+          <i aria-hidden="true" class="ti ti-notebook"></i>
           <span class="nav-label" i18n="Sidebar link to the workspace notes">Notes</span>
         </a>
       </div>
@@ -163,11 +163,11 @@
           <a cdkDrag (cdkDragStarted)="onNavBoardDragStarted()" [cdkDragData]="board" [cdkDragDisabled]="!canReorderBoards(group.workspace) || isPlanDisabled(board)" [cdkDragStartDelay]="{ touch: 200, mouse: 0 }" cdkDragLockAxis="y" cdkDragPreviewContainer="parent" class="board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
             [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
             (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
+            <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')"
               [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
             <span class="nav-label">{{ board.name }}</span>
             @if (isPlanDisabled(board)) {
-            <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
+            <span class="plan-disabled-badge"><i aria-hidden="true" class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
             } @else if (boardAttentionCount(board.id) > 0) {
             <span class="board-attention-dot" aria-hidden="true"></span>
             <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
@@ -179,7 +179,7 @@
         @for (boardGroup of filteredBoardGroups(group); track boardGroup.id) {
         <div class="board-nav-group">
           <button class="board-group-toggle" (click)="toggleBoardGroup(group.workspace.id, boardGroup.id)" [attr.aria-expanded]="!!boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)">
-            <i [class]="!boardSearchTerm() && isBoardGroupCollapsed(group.workspace.id, boardGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+            <i aria-hidden="true" [class]="!boardSearchTerm() && isBoardGroupCollapsed(group.workspace.id, boardGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
             <span>{{ boardGroup.title }}</span>
           </button>
           @if (boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)) {
@@ -188,11 +188,11 @@
             <a cdkDrag (cdkDragStarted)="onNavBoardDragStarted()" [cdkDragData]="board" [cdkDragDisabled]="!canReorderBoards(group.workspace) || isPlanDisabled(board)" [cdkDragStartDelay]="{ touch: 200, mouse: 0 }" cdkDragLockAxis="y" cdkDragPreviewContainer="parent" class="board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
               [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
               (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-              <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
+              <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')"
                 [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
               <span class="nav-label">{{ board.name }}</span>
               @if (isPlanDisabled(board)) {
-              <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
+              <span class="plan-disabled-badge"><i aria-hidden="true" class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
               } @else if (boardAttentionCount(board.id) > 0) {
               <span class="board-attention-dot" aria-hidden="true"></span>
               <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
@@ -208,11 +208,11 @@
           <a cdkDrag (cdkDragStarted)="onNavBoardDragStarted()" [cdkDragData]="board" [cdkDragDisabled]="!canReorderBoards(group.workspace) || isPlanDisabled(board)" [cdkDragStartDelay]="{ touch: 200, mouse: 0 }" cdkDragLockAxis="y" cdkDragPreviewContainer="parent" class="board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
             [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
             (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
+            <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')"
               [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
             <span class="nav-label">{{ board.name }}</span>
             @if (isPlanDisabled(board)) {
-            <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
+            <span class="plan-disabled-badge"><i aria-hidden="true" class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
             } @else if (boardAttentionCount(board.id) > 0) {
             <span class="board-attention-dot" aria-hidden="true"></span>
             <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
@@ -236,13 +236,13 @@
       <span i18n="Sidebar section heading: standalone boards">Boards</span>
       @if (isOrgAdmin()) {
       <button class="new-board-btn ghost icon" [disabled]="!online()" (click)="newStandaloneBoard()" kTooltip="New standalone board" i18n-kTooltip aria-label="New standalone board" i18n-aria-label>
-        <i class="ti ti-plus"></i>
+        <i aria-hidden="true" class="ti ti-plus"></i>
       </button>
       }
     </div>
     @if (standaloneBoardCreateLimitMessage(); as message) {
     <div class="workspace-limit-feedback" role="alert">
-      <i class="ti ti-lock"></i>
+      <i aria-hidden="true" class="ti ti-lock"></i>
       <span>{{ message }}</span>
     </div>
     }
@@ -258,10 +258,10 @@
       <a cdkDrag (cdkDragStarted)="onNavBoardDragStarted()" [cdkDragData]="board" [cdkDragDisabled]="!canReorderBoards() || isPlanDisabled(board)" [cdkDragStartDelay]="{ touch: 200, mouse: 0 }" cdkDragLockAxis="y" cdkDragPreviewContainer="parent" class="board-link standalone-board-link collapsed-standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
         [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
         (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-        <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+        <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
         <span class="nav-label">{{ board.name }}</span>
         @if (isPlanDisabled(board)) {
-        <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
+        <span class="plan-disabled-badge"><i aria-hidden="true" class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
         } @else if (boardAttentionCount(board.id) > 0) {
         <span class="board-attention-dot" aria-hidden="true"></span>
         <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
@@ -273,7 +273,7 @@
     @for (standaloneGroup of ownStandaloneBoardGroups(); track standaloneGroup.id) {
     <div class="board-nav-group standalone-nav-group">
       <button class="board-group-toggle" (click)="toggleBoardGroup('standalone', standaloneGroup.id)" [attr.aria-expanded]="!!boardSearchTerm() || !isBoardGroupCollapsed('standalone', standaloneGroup.id)">
-        <i [class]="!boardSearchTerm() && isBoardGroupCollapsed('standalone', standaloneGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+        <i aria-hidden="true" [class]="!boardSearchTerm() && isBoardGroupCollapsed('standalone', standaloneGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
         <span>{{ standaloneGroup.title }}</span>
       </button>
       @if (boardSearchTerm() || !isBoardGroupCollapsed('standalone', standaloneGroup.id)) {
@@ -283,10 +283,10 @@
         <div class="ws-row standalone-board-row" cdkDrag (cdkDragStarted)="onNavBoardDragStarted()" [cdkDragData]="board" [cdkDragDisabled]="!canReorderBoards() || isPlanDisabled(board)" [cdkDragStartDelay]="{ touch: 200, mouse: 0 }" cdkDragLockAxis="y" cdkDragPreviewContainer="parent">
           <a class="board-link standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active" [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
             (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+            <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
             <span class="nav-label">{{ board.name }}</span>
             @if (isPlanDisabled(board)) {
-            <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
+            <span class="plan-disabled-badge"><i aria-hidden="true" class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
             } @else if (boardAttentionCount(board.id) > 0) {
             <span class="board-attention-dot" aria-hidden="true"></span>
             <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
@@ -295,7 +295,7 @@
           @if (canManageWorkspace(item.homeGroup.workspace) && !isPlanDisabled(board)) {
           <a class="ws-settings" [routerLink]="online() ? ['/b', board.id, 'settings'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" routerLinkActive="active" kTooltip="Board settings" i18n-kTooltip [attr.aria-label]="boardSettingsLabel(board.name)"
             (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
-            <i class="ti ti-settings"></i>
+            <i aria-hidden="true" class="ti ti-settings"></i>
           </a>
           }
         </div>
@@ -311,10 +311,10 @@
       <div class="ws-row">
         <a class="board-link standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active" [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
           (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           <span class="nav-label">{{ board.name }}</span>
           @if (isPlanDisabled(board)) {
-          <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
+          <span class="plan-disabled-badge"><i aria-hidden="true" class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
           } @else if (boardAttentionCount(board.id) > 0) {
           <span class="board-attention-dot" aria-hidden="true"></span>
           <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
@@ -323,7 +323,7 @@
         @if (canManageWorkspace(item.homeGroup.workspace) && !isPlanDisabled(board)) {
         <a class="ws-settings" [routerLink]="online() ? ['/b', board.id, 'settings'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" routerLinkActive="active" kTooltip="Board settings" i18n-kTooltip [attr.aria-label]="boardSettingsLabel(board.name)"
           (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
-          <i class="ti ti-settings"></i>
+          <i aria-hidden="true" class="ti ti-settings"></i>
         </a>
         }
       </div>
@@ -346,7 +346,7 @@
       @for (item of guestCollapsedBoards(org); track item.board.id) {
       <a class="board-link" [class.has-attention]="boardAttentionCount(item.board.id) > 0" [style.--board-attention-color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)" [routerLink]="['/b', item.board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(item.board)" (click)="clearBoardSearch()"
         (contextmenu)="openNavContextMenu($event, { label: item.board.name, url: '/b/' + item.board.id, canMarkAllRead: true, clearBoardSearch: true })">
-        <i [class]="'ti ti-' + (item.board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)"></i>
+        <i aria-hidden="true" [class]="'ti ti-' + (item.board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)"></i>
         <span class="nav-label">{{ item.board.name }}</span>
         @if (boardAttentionCount(item.board.id) > 0) {
         <span class="board-attention-dot" aria-hidden="true"></span>
@@ -358,7 +358,7 @@
     <div class="ws-group guest-org-group">
       <div class="ws-row">
       <button class="ws-toggle guest-org-toggle" (click)="toggle('guest-org:' + org.clientId)" [attr.aria-expanded]="!!boardSearchTerm() || !collapsed()['guest-org:' + org.clientId]">
-        <i [class]="!boardSearchTerm() && collapsed()['guest-org:' + org.clientId] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+        <i aria-hidden="true" [class]="!boardSearchTerm() && collapsed()['guest-org:' + org.clientId] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
         <span class="ws-name">{{ org.clientName }}</span>
       </button>
       </div>
@@ -367,7 +367,7 @@
       @for (container of org.containers; track container.kind + ':' + container.id) {
       <div class="guest-container">
         <button class="board-group-toggle" (click)="toggleBoardGroup('guest-container', container.id)" [attr.aria-expanded]="!!boardSearchTerm() || !isBoardGroupCollapsed('guest-container', container.id)">
-          <i [class]="!boardSearchTerm() && isBoardGroupCollapsed('guest-container', container.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+          <i aria-hidden="true" [class]="!boardSearchTerm() && isBoardGroupCollapsed('guest-container', container.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
           <span>{{ container.name }}</span>
         </button>
         @if (boardSearchTerm() || !isBoardGroupCollapsed('guest-container', container.id)) {
@@ -376,12 +376,12 @@
             @for (boardGroup of filteredBoardGroups(container.workspace); track boardGroup.id) {
             <div class="board-nav-group nested-board-group">
               <button class="board-group-toggle nested-board-group-toggle" (click)="toggleBoardGroup(container.id, boardGroup.id)" [attr.aria-expanded]="!!boardSearchTerm() || !isBoardGroupCollapsed(container.id, boardGroup.id)">
-                <i [class]="!boardSearchTerm() && isBoardGroupCollapsed(container.id, boardGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i><span>{{ boardGroup.title }}</span>
+                <i aria-hidden="true" [class]="!boardSearchTerm() && isBoardGroupCollapsed(container.id, boardGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i><span>{{ boardGroup.title }}</span>
               </button>
               @if (boardSearchTerm() || !isBoardGroupCollapsed(container.id, boardGroup.id)) {
               @for (board of boardGroup.boards; track board.id) {
               <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, container.workspace.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()" (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-                <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(board, container.workspace.workspace.id)"></i>
+                <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(board, container.workspace.workspace.id)"></i>
                 <span class="nav-label">{{ board.name }}</span>
                 @if (boardAttentionCount(board.id) > 0) { <span class="board-attention-dot" aria-hidden="true"></span><span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span> }
               </a>
@@ -391,7 +391,7 @@
             }
             @for (board of filteredUngroupedBoards(container.workspace); track board.id) {
             <a class="board-link guest-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, container.workspace.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()" (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-              <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(board, container.workspace.workspace.id)"></i>
+              <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(board, container.workspace.workspace.id)"></i>
               <span class="nav-label">{{ board.name }}</span>
               @if (boardAttentionCount(board.id) > 0) { <span class="board-attention-dot" aria-hidden="true"></span><span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span> }
             </a>
@@ -399,7 +399,7 @@
           } @else {
             @for (item of container.boards; track item.board.id) {
             <a class="board-link standalone-board-link guest-standalone-board-group" [class.has-attention]="boardAttentionCount(item.board.id) > 0" [style.--board-attention-color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)" [routerLink]="['/b', item.board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(item.board)" (click)="clearBoardSearch()" (contextmenu)="openNavContextMenu($event, { label: item.board.name, url: '/b/' + item.board.id, canMarkAllRead: true, clearBoardSearch: true })">
-              <i [class]="'ti ti-' + (item.board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)"></i>
+              <i aria-hidden="true" [class]="'ti ti-' + (item.board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)"></i>
               <span class="nav-label">{{ item.board.name }}</span>
               @if (boardAttentionCount(item.board.id) > 0) { <span class="board-attention-dot" aria-hidden="true"></span><span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(item.board.id) }}</span> }
             </a>
@@ -413,7 +413,7 @@
       <div class="guest-org-direct-boards">
       @for (item of org.ungroupedStandaloneBoards; track item.board.id) {
       <a class="board-link standalone-board-link guest-standalone-board-group" [class.has-attention]="boardAttentionCount(item.board.id) > 0" [style.--board-attention-color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)" [routerLink]="['/b', item.board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(item.board)" (click)="clearBoardSearch()" (contextmenu)="openNavContextMenu($event, { label: item.board.name, url: '/b/' + item.board.id, canMarkAllRead: true, clearBoardSearch: true })">
-        <i [class]="'ti ti-' + (item.board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)"></i>
+        <i aria-hidden="true" [class]="'ti ti-' + (item.board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)"></i>
         <span class="nav-label">{{ item.board.name }}</span>
         @if (boardAttentionCount(item.board.id) > 0) { <span class="board-attention-dot" aria-hidden="true"></span><span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(item.board.id) }}</span> }
       </a>
@@ -429,7 +429,7 @@
 
     @if (sidebarCollapsed() && isOrgAdmin()) {
     <button class="new-ws-icon ghost icon" [disabled]="!online()" (click)="newWorkspace()" (contextmenu)="!online() ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" i18n-kTooltip aria-label="New workspace" i18n-aria-label>
-      <i class="ti ti-plus"></i>
+      <i aria-hidden="true" class="ti ti-plus"></i>
     </button>
     }
   </nav>
@@ -451,7 +451,7 @@
         <div class="user-name">{{ user()?.displayName }}</div>
         @if (user()?.orgName) {
         <div class="user-org">
-          <i class="ti ti-building"></i>
+          <i aria-hidden="true" class="ti ti-building"></i>
           <span>{{ user()?.orgName }}</span>
         </div>
         }
@@ -479,7 +479,7 @@
           <div class="user-popover-email">{{ user()?.email }}</div>
           @if (user()?.orgName && !user()?.logoUrl) {
           <div class="user-popover-org">
-            <i class="ti ti-building"></i>
+            <i aria-hidden="true" class="ti ti-building"></i>
             <span>{{ user()?.orgName }}</span>
           </div>
           }
@@ -503,7 +503,7 @@
         </button>
         <button type="button" class="k-menu-item popover-item getting-started-remove" [disabled]="!online()" (click)="removeGettingStarted()" role="menuitem"
           aria-label="Remove getting started" i18n-aria-label="Account menu button: remove the getting started checklist for good" kTooltip="Remove for good" i18n-kTooltip="Tooltip: remove the getting started checklist for good">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       </div>
       <div class="k-menu-separator user-popover-divider"></div>
@@ -519,7 +519,7 @@
           @if (activeOrganisation()?.logoUrl) {
           <img class="organisation-avatar" [ngSrc]="activeOrganisation()!.logoUrl!" [alt]="activeOrganisation()!.name" width="24" height="24" />
           } @else {
-          <span class="organisation-avatar fallback"><i class="ti ti-building"></i></span>
+          <span class="organisation-avatar fallback"><i aria-hidden="true" class="ti ti-building"></i></span>
           }
           <span class="organisation-trigger-text">
             <span class="organisation-trigger-name">{{ activeOrganisation()?.name ?? user()?.orgName }}</span>
@@ -548,7 +548,7 @@
             @if (organisation.logoUrl) {
             <img class="organisation-avatar" [ngSrc]="organisation.logoUrl" [alt]="organisation.name" width="24" height="24" />
             } @else {
-            <span class="organisation-avatar fallback"><i class="ti ti-building"></i></span>
+            <span class="organisation-avatar fallback"><i aria-hidden="true" class="ti ti-building"></i></span>
             }
             <span class="organisation-name">{{ organisation.name }}</span>
             @if (organisation.clientId === activeClientId()) {
@@ -560,11 +560,11 @@
           }
           <div class="organisation-actions">
             <button type="button" class="k-menu-item popover-item organisation-action" [disabled]="!online() || !!switchingOrganisationId()" (click)="createOrganisation()" role="menuitem">
-              <i class="ti ti-building-plus"></i>
+              <i aria-hidden="true" class="ti ti-building-plus"></i>
               <span i18n="Menu item">Create organisation</span>
             </button>
             <button type="button" class="k-menu-item popover-item organisation-action" [disabled]="!online()" (click)="joinOrganisation()" role="menuitem">
-              <i class="ti ti-link-plus"></i>
+              <i aria-hidden="true" class="ti ti-link-plus"></i>
               <span i18n="Menu item">Join organisation</span>
             </button>
           </div>
@@ -575,11 +575,11 @@
       <div class="popover-group" role="group" aria-label="Account" i18n-aria-label="Account menu group">
         <div class="k-menu-heading popover-group-label" aria-hidden="true" i18n="Account menu group heading">Account</div>
         <a class="k-menu-item popover-item" [routerLink]="online() ? '/settings' : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" (click)="online() && closeUserMenu()" role="menuitem">
-          <i class="ti ti-user-circle"></i>
+          <i aria-hidden="true" class="ti ti-user-circle"></i>
           <span i18n="Menu item">Profile settings</span>
         </a>
         <a class="k-menu-item popover-item" [routerLink]="online() ? ['/settings', 'notifications'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" (click)="online() && closeUserMenu()" role="menuitem">
-          <i class="ti ti-bell"></i>
+          <i aria-hidden="true" class="ti ti-bell"></i>
           <span i18n="Menu item: notification settings">Notifications</span>
         </a>
       </div>
@@ -587,17 +587,17 @@
       <div class="popover-group" role="group" aria-label="Administration" i18n-aria-label="Account menu group">
         <div class="k-menu-heading popover-group-label" aria-hidden="true" i18n="Account menu group heading">Administration</div>
         <a class="k-menu-item popover-item" [routerLink]="online() ? ['/settings', 'users'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" (click)="online() && closeUserMenu()" role="menuitem">
-          <i class="ti ti-users"></i>
+          <i aria-hidden="true" class="ti ti-users"></i>
           <span i18n="Menu item">Manage users</span>
         </a>
         @if (isHosted()) {
         <a class="k-menu-item popover-item" [routerLink]="online() ? ['/settings', 'account-plan'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" (click)="online() && closeUserMenu()" role="menuitem">
-          <i class="ti ti-credit-card"></i>
+          <i aria-hidden="true" class="ti ti-credit-card"></i>
           <span i18n="Menu item: billing plan">Account plan</span>
         </a>
         }
         <a class="k-menu-item popover-item" [routerLink]="online() ? ['/settings', 'org'] : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" (click)="online() && closeUserMenu()" role="menuitem">
-          <i class="ti ti-building-skyscraper"></i>
+          <i aria-hidden="true" class="ti ti-building-skyscraper"></i>
           <span i18n="Menu item">Organisation settings</span>
         </a>
       </div>
@@ -607,29 +607,29 @@
         @if (!pwaInstall.installed()) {
         @if (pwaInstall.canPrompt()) {
         <button type="button" class="k-menu-item popover-item" [disabled]="!online()" (click)="installKanera()" role="menuitem">
-          <i class="ti ti-device-mobile-plus"></i>
+          <i aria-hidden="true" class="ti ti-device-mobile-plus"></i>
           <span i18n="Menu item: install the app">Install Kanera</span>
         </button>
         } @else {
         <a class="k-menu-item popover-item" [attr.href]="online() ? installGuideUrl : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" target="_blank" rel="noopener noreferrer" (click)="online() && closeUserMenu()" role="menuitem">
-          <i class="ti ti-device-mobile-plus"></i>
+          <i aria-hidden="true" class="ti ti-device-mobile-plus"></i>
           <span i18n="Menu item: link to install instructions">How to install Kanera</span>
         </a>
         }
         }
         <a class="k-menu-item popover-item" [attr.href]="online() ? docsUrl : null" [attr.aria-disabled]="!online() || null" [attr.tabindex]="online() ? null : -1" target="_blank" rel="noopener noreferrer" (click)="online() && closeUserMenu()" role="menuitem">
-          <i class="ti ti-help-circle"></i>
+          <i aria-hidden="true" class="ti ti-help-circle"></i>
           <span i18n="Menu item: link to documentation">Help &amp; docs</span>
         </a>
         @if (!touchOnly()) {
         <button type="button" class="k-menu-item popover-item" (click)="openShortcuts()" role="menuitem">
-          <i class="ti ti-keyboard"></i>
+          <i aria-hidden="true" class="ti ti-keyboard"></i>
           <span i18n="Menu item: open the shortcuts sheet">Keyboard shortcuts</span>
           <kbd class="k-kbd popover-kbd">?</kbd>
         </button>
         }
         <button type="button" class="k-menu-item popover-item danger" (click)="logout()" role="menuitem">
-          <i class="ti ti-logout"></i>
+          <i aria-hidden="true" class="ti ti-logout"></i>
           <span i18n="Menu item">Log out</span>
         </button>
       </div>
@@ -650,17 +650,17 @@
   >
     @if (!menu.isCurrentTarget) {
     <button type="button" class="k-menu-item nav-context-item" role="menuitem" (click)="openNavContextTarget()">
-      <i class="ti ti-arrow-up-right"></i>
+      <i aria-hidden="true" class="ti ti-arrow-up-right"></i>
       <span i18n="verb|Context menu item: open the link">Open</span>
     </button>
     }
     <button type="button" class="k-menu-item nav-context-item" role="menuitem" (click)="openNavContextTargetInNewTab()">
-      <i class="ti ti-external-link"></i>
+      <i aria-hidden="true" class="ti ti-external-link"></i>
       <span i18n="Context menu item">Open in new tab</span>
     </button>
     @if (menu.canMarkAllRead) {
     <button type="button" class="k-menu-item nav-context-item" role="menuitem" (click)="markAllNavContextRead()" [disabled]="!notificationsOnline()">
-      <i class="ti ti-mail-check"></i>
+      <i aria-hidden="true" class="ti ti-mail-check"></i>
       <span i18n="Context menu item: mark the board's notifications as read">Mark all as read</span>
     </button>
     }

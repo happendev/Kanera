@@ -19,10 +19,10 @@ import type { AnySeparator } from "./board-state";
       @if (canEditRole()) {
       <span class="separator-actions">
         <button type="button" class="ghost icon" [disabled]="!canEdit()" (click)="startEditing()" aria-label="Edit separator" i18n-aria-label>
-          <i class="ti ti-pencil"></i>
+          <i aria-hidden="true" class="ti ti-pencil"></i>
         </button>
         <button type="button" class="ghost icon danger" [disabled]="!canEdit()" (click)="deleteRequested.emit(separator().id)" aria-label="Delete separator" i18n-aria-label>
-          <i class="ti ti-trash"></i>
+          <i aria-hidden="true" class="ti ti-trash"></i>
         </button>
       </span>
       }
@@ -31,8 +31,8 @@ import type { AnySeparator } from "./board-state";
     <form class="separator-edit" (submit)="save($event)">
       <input type="text" [value]="draftTitle()" (input)="draftTitle.set($any($event.target).value)" placeholder="Separator title" i18n-placeholder autofocus />
       <k-color-picker [value]="draftColor()" (valueChange)="saveColor($event)" />
-      <button type="submit" class="sm"><i class="ti ti-check"></i></button>
-      <button type="button" class="ghost icon" (click)="editing.set(false)" aria-label="Cancel" i18n-aria-label><i class="ti ti-x"></i></button>
+      <button type="submit" class="sm"><i aria-hidden="true" class="ti ti-check"></i></button>
+      <button type="button" class="ghost icon" (click)="editing.set(false)" aria-label="Cancel" i18n-aria-label><i aria-hidden="true" class="ti ti-x"></i></button>
     </form>
     }
   `,

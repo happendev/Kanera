@@ -530,10 +530,6 @@
     background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   }
 
-  &.is-selected {
-    box-shadow: inset 3px 0 var(--accent);
-  }
-
   &.is-selected:hover,
   &.is-selected:hover .tv-title-cell {
     background: color-mix(in srgb, var(--accent) 16%, var(--surface));

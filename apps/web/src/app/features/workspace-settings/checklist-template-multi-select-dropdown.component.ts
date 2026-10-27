@@ -21,7 +21,7 @@ import type { PickerGroup } from "../../shared/picker-list.component";
       i18n-emptyLabel
       (pick)="toggleTemplate($event)"
     >
-      <i class="ti ti-list-check"></i>
+      <i aria-hidden="true" class="ti ti-list-check"></i>
     </k-multi-select-dropdown>
   `,
   styles: `

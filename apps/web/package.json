@@ -18,7 +18,7 @@
     "bundle:check": "pnpm build",
     "prelint": "node scripts/write-build-info.mjs && pnpm assets:generate",
     "test": "node scripts/test.mjs",
-    "lint": "tsc -p tsconfig.json --noEmit && eslint src && node scripts/i18n.mjs check",
+    "lint": "tsc -p tsconfig.json --noEmit && eslint src && node scripts/check-accent-stripes.mjs && node scripts/i18n.mjs check",
     "i18n:extract": "node scripts/i18n.mjs extract",
     "i18n:check": "node scripts/i18n.mjs check",
     "templates:messages": "node scripts/generate-template-messages.mjs"

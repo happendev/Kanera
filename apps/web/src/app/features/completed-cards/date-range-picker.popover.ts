@@ -51,11 +51,11 @@ function compareDateValue(a: string, b: string): number {
     <div class="drp-panel">
       <div class="drp-head">
         <button type="button" class="drp-icon-btn" (click)="previousMonth()" aria-label="Previous month" i18n-aria-label kTooltip="Previous month" i18n-kTooltip>
-          <i class="ti ti-chevron-left"></i>
+          <i aria-hidden="true" class="ti ti-chevron-left"></i>
         </button>
         <div class="drp-title" aria-live="polite">{{ monthLabel() }}</div>
         <button type="button" class="drp-icon-btn" (click)="nextMonth()" aria-label="Next month" i18n-aria-label kTooltip="Next month" i18n-kTooltip>
-          <i class="ti ti-chevron-right"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right"></i>
         </button>
       </div>
 

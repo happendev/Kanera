@@ -5,13 +5,13 @@
       <p i18n="Heading: the email list being unsubscribed from">Onboarding and account tips</p>
     </div>
     @if (done()) {
-      <div class="success-banner"><i class="ti ti-circle-check"></i> <ng-container i18n>You're unsubscribed from onboarding and account tips.</ng-container></div>
+      <div class="success-banner"><i aria-hidden="true" class="ti ti-circle-check"></i> <ng-container i18n>You're unsubscribed from onboarding and account tips.</ng-container></div>
       <p class="unsubscribe-help" i18n>You'll still get emails about your work, such as assignments, mentions and billing. To turn tips back on, go to Settings, then Notifications.</p>
     } @else {
       <form (submit)="unsubscribe($event)">
         <p class="unsubscribe-help" i18n>Stop receiving emails with setup suggestions and account check-ins. Emails about your work, such as assignments, mentions and billing, are not affected.</p>
         @if (error()) {
-          <div class="error-banner"><i class="ti ti-alert-circle"></i> {{ error() }}</div>
+          <div class="error-banner"><i aria-hidden="true" class="ti ti-alert-circle"></i> {{ error() }}</div>
         }
         <button type="submit" [disabled]="busy()" class="submit-btn" i18n="Button">Unsubscribe</button>
       </form>

@@ -33,15 +33,15 @@ import type { DueDateSlotSelection } from "./due-date.util";
   template: `
     <div kMenu class="cam-panel">
       <button type="button" class="k-menu-item cam-item" (click)="openInNewTab($event)">
-        <i class="ti ti-external-link"></i>
+        <i aria-hidden="true" class="ti ti-external-link"></i>
         <span i18n>Open in new tab</span>
       </button>
       <div class="cam-sep" role="separator"></div>
       <div class="cam-sub">
         <button type="button" class="k-menu-item cam-item" [class.is-active]="quickEditOpen()" (click)="toggleQuickEdit($event)">
-          <i class="ti ti-pencil"></i>
+          <i aria-hidden="true" class="ti ti-pencil"></i>
           <span i18n="Card menu item">Quick edit…</span>
-          <i class="ti ti-chevron-right cam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right cam-chev"></i>
         </button>
         @if (quickEditOpen()) {
           <k-card-quick-edit
@@ -58,7 +58,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
            belongs with the two that change the card rather than below the two that copy or follow
            it. -->
       <button type="button" class="k-menu-item cam-item" (click)="toggleCompletion($event)" [disabled]="savingCompletion()">
-        <i [class]="completedAt() ? 'ti ti-circle' : 'ti ti-circle-check'"></i>
+        <i aria-hidden="true" [class]="completedAt() ? 'ti ti-circle' : 'ti ti-circle-check'"></i>
         @if (completedAt()) {
         <span i18n="Card menu item">Mark incomplete</span>
         } @else {
@@ -71,7 +71,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
       }
       @if (showCardWatchAction()) {
       <button type="button" class="k-menu-item cam-item" (click)="toggleWatch($event)" [disabled]="savingWatch()">
-        <i [class]="isWatchingCard() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+        <i aria-hidden="true" [class]="isWatchingCard() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
         @if (isWatchingCard()) {
         <span i18n="Card menu item">Stop watching</span>
         } @else {
@@ -83,13 +83,13 @@ import type { DueDateSlotSelection } from "./due-date.util";
       @if (!archivedAt()) {
       <div class="cam-sub">
         <button type="button" class="k-menu-item cam-item" [class.is-active]="reminderOpen()" (click)="toggleReminder($event)">
-          <i class="ti ti-alarm"></i>
+          <i aria-hidden="true" class="ti ti-alarm"></i>
           @if (hasPendingReminder()) {
           <span i18n="Card menu item">Change reminder…</span>
           } @else {
           <span i18n="Card menu item">Remind me…</span>
           }
-          <i class="ti ti-chevron-right cam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right cam-chev"></i>
         </button>
         @if (reminderOpen()) {
           <!-- Beside the row like Quick edit; closing it (or saving) closes the whole menu. -->
@@ -105,9 +105,9 @@ import type { DueDateSlotSelection } from "./due-date.util";
       @if (!archivedAt()) {
       <div class="cam-sub">
         <button type="button" class="k-menu-item cam-item" [class.is-active]="relationsOpen()" (click)="toggleRelations($event)">
-          <i class="ti ti-git-merge"></i>
+          <i aria-hidden="true" class="ti ti-git-merge"></i>
           <span i18n="Card menu item: set what blocks this card, what it blocks and related cards">Dependencies…</span>
-          <i class="ti ti-chevron-right cam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right cam-chev"></i>
         </button>
         @if (relationsOpen()) {
           <k-card-relations-popover
@@ -125,7 +125,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
       }
       @if (allowDuplicate()) {
       <button type="button" class="k-menu-item cam-item" (click)="duplicate($event)" [disabled]="duplicating()">
-        <i class="ti ti-copy"></i>
+        <i aria-hidden="true" class="ti ti-copy"></i>
         <span i18n="Card menu item">Duplicate card</span>
       </button>
       }
@@ -133,9 +133,9 @@ import type { DueDateSlotSelection } from "./due-date.util";
         @if (allowCopyToBoard()) {
         <div class="cam-sub">
           <button type="button" class="k-menu-item cam-item" [class.is-active]="copyOpen()" (click)="toggleCopy($event)">
-            <i class="ti ti-copy-plus"></i>
+            <i aria-hidden="true" class="ti ti-copy-plus"></i>
             <span i18n="Card menu item">Copy to board…</span>
-            <i class="ti ti-chevron-right cam-chev"></i>
+            <i aria-hidden="true" class="ti ti-chevron-right cam-chev"></i>
           </button>
           @if (copyOpen()) {
             <k-board-picker
@@ -156,9 +156,9 @@ import type { DueDateSlotSelection } from "./due-date.util";
         @if (canMoveToBoard()) {
         <div class="cam-sub">
           <button type="button" class="k-menu-item cam-item" [class.is-active]="moveOpen()" (click)="toggleMove($event)">
-            <i class="ti ti-arrow-right"></i>
+            <i aria-hidden="true" class="ti ti-arrow-right"></i>
             <span i18n="Card menu item">Move to board…</span>
-            <i class="ti ti-chevron-right cam-chev"></i>
+            <i aria-hidden="true" class="ti ti-chevron-right cam-chev"></i>
           </button>
           @if (moveOpen()) {
             <k-board-picker
@@ -175,19 +175,19 @@ import type { DueDateSlotSelection } from "./due-date.util";
       }
       <div class="cam-sep" role="separator"></div>
       <button type="button" class="k-menu-item cam-item" (click)="copyCardLink($event)">
-        <i class="ti ti-link"></i>
+        <i aria-hidden="true" class="ti ti-link"></i>
         <span i18n="Card menu item">Copy card link</span>
       </button>
       @if (cardKey()) {
       <button type="button" class="k-menu-item cam-item" (click)="copyCardKey($event)">
-        <i class="ti ti-hash"></i>
+        <i aria-hidden="true" class="ti ti-hash"></i>
         <span i18n="Card menu item: copy the card's short key, such as DEV-12">Copy key</span>
       </button>
       }
       <div class="cam-sep" role="separator"></div>
       @if (archivedAt()) {
         <button type="button" class="k-menu-item cam-item" (click)="setArchived($event, false)" [disabled]="archiving()">
-          <i class="ti ti-archive-off"></i>
+          <i aria-hidden="true" class="ti ti-archive-off"></i>
           <span i18n="Card menu item">Unarchive card</span>
         </button>
       } @else if (confirmingDelete()) {
@@ -198,7 +198,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
         </div>
       } @else {
         <button type="button" class="k-menu-item cam-item danger" (click)="$event.preventDefault(); $event.stopPropagation(); confirmingDelete.set(true)">
-          <i class="ti ti-archive"></i>
+          <i aria-hidden="true" class="ti ti-archive"></i>
           <span i18n="Card menu item">Archive card</span>
         </button>
       }

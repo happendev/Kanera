@@ -31,7 +31,7 @@ import type { PickerGroup, PickerOption } from "../../../shared/picker-list.comp
           @if (selectedOption()?.dot) {
             <span class="asd-dot" [style.background]="optionColor(selectedOption())"></span>
           } @else {
-            <i class="ti ti-{{ selectedOption()?.icon ?? placeholderIcon() }}"></i>
+            <i aria-hidden="true" class="ti ti-{{ selectedOption()?.icon ?? placeholderIcon() }}"></i>
           }
         </span>
         <span class="asd-value">{{ selectedOption()?.label ?? placeholder() }}</span>

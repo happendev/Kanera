@@ -1,17 +1,17 @@
 <div class="settings-info-note">
-        <i class="ti ti-info-circle"></i>
+        <i aria-hidden="true" class="ti ti-info-circle"></i>
         <span i18n>Guests are people outside this organisation who have access to selected boards only. Their first board is free; access to a second board uses one purchased seat, and further boards reuse that seat.</span>
       </div>
       <k-docs-link class="spaced" path="guests" label="Learn more about guests" i18n-label />
       @if (!settings.guestsAllowed()) {
       <div class="upgrade-action-callout">
-        <span class="upgrade-action-icon"><i class="ti ti-users-group"></i></span>
+        <span class="upgrade-action-icon"><i aria-hidden="true" class="ti ti-users-group"></i></span>
         <span class="upgrade-action-copy">
           <strong i18n="Upgrade callout heading">Work with clients across projects</strong>
           <span i18n>Multi-board guest collaboration is available with Pro.</span>
         </span>
         <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('guest')">
-          <ng-container i18n="Upgrade button">Add guest</ng-container> <i class="ti ti-arrow-right"></i>
+          <ng-container i18n="Upgrade button">Add guest</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i>
         </button>
       </div>
       } @else {
@@ -29,30 +29,30 @@
         <label class="guest-assigned-toggle"><input type="checkbox" [checked]="settings.guestAssignedItemsOnly()" (input)="settings.guestAssignedItemsOnly.set($any($event.target).checked)" [disabled]="settings.guestBusy()" /> <span i18n="Checkbox: the guest only sees cards assigned to them">Assigned items only</span></label>
         <button class="sm" type="submit" [disabled]="settings.guestBusy() || !settings.guestBoardId() || !settings.guestEmail().trim() || settings.duplicatePendingGuestInvite()">
           @if (settings.guestBusy()) {
-          <i class="ti ti-loader-2 spin"></i> <ng-container i18n="Button while busy">Adding</ng-container>
+          <i aria-hidden="true" class="ti ti-loader-2 spin"></i> <ng-container i18n="Button while busy">Adding</ng-container>
           } @else {
-          <i class="ti ti-user-plus"></i> <ng-container i18n="Button">Add guest access</ng-container>
+          <i aria-hidden="true" class="ti ti-user-plus"></i> <ng-container i18n="Button">Add guest access</ng-container>
           }
         </button>
       </form>
       }
       @if (settings.guestError()) {
-      <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.guestError() }}</p>
+      <p class="form-error"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ settings.guestError() }}</p>
       } @else if (settings.duplicatePendingGuestInvite()) {
-      <p class="form-error"><i class="ti ti-alert-circle"></i><ng-container i18n>This pending invite already includes that board.</ng-container></p>
+      <p class="form-error"><i aria-hidden="true" class="ti ti-alert-circle"></i><ng-container i18n>This pending invite already includes that board.</ng-container></p>
       }
       @if (settings.createdGuestInviteUrl()) {
       <div class="guest-invite-link">
-        <i class="ti ti-link"></i>
+        <i aria-hidden="true" class="ti ti-link"></i>
         <div class="guest-invite-link-body">
           <span class="guest-invite-link-label" i18n>Share this link with the person you wish to invite.</span>
           <span class="guest-invite-link-url">{{ settings.createdGuestInviteUrl() }}</span>
         </div>
         <button class="ghost sm" (click)="settings.copyGuestInviteUrl(settings.createdGuestInviteUrl())" aria-label="Copy guest invite link" i18n-aria-label>
           @if (settings.guestInviteCopied()) {
-          <i class="ti ti-check text-success"></i> <ng-container i18n="Button state after copying">Copied</ng-container>
+          <i aria-hidden="true" class="ti ti-check text-success"></i> <ng-container i18n="Button state after copying">Copied</ng-container>
           } @else {
-          <i class="ti ti-copy"></i> <ng-container i18n="Button: copy to clipboard">Copy</ng-container>
+          <i aria-hidden="true" class="ti ti-copy"></i> <ng-container i18n="Button: copy to clipboard">Copy</ng-container>
           }
         </button>
       </div>
@@ -60,7 +60,7 @@
 
       <div class="guest-section">
         <div class="guest-section-head">
-          <i class="ti ti-users-group"></i>
+          <i aria-hidden="true" class="ti ti-users-group"></i>
           <span i18n="Section heading">External board guests</span>
         </div>
         <div class="guest-list accepted-guest-list">
@@ -94,7 +94,7 @@
               </select>
             </div>
             <button class="ghost icon danger" [disabled]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId" (click)="settings.removeGuest(guest.boardId, guest.userId)" aria-label="Remove guest" i18n-aria-label kTooltip="Remove guest" i18n-kTooltip>
-              <i [class]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
+              <i aria-hidden="true" [class]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
             </button>
           </div>
           } @empty {
@@ -105,7 +105,7 @@
 
       <div class="guest-section">
         <div class="guest-section-head">
-          <i class="ti ti-link"></i>
+          <i aria-hidden="true" class="ti ti-link"></i>
           <span i18n="Section heading">Pending board invitations</span>
         </div>
         <div class="guest-list">
@@ -125,10 +125,10 @@
             <span class="guest-role" data-label="Role" i18n-data-label="Column heading">@if (invite.assignedItemsOnly) { <ng-container i18n="Board role, lower case, and the guest only sees cards assigned to them">{ invite.role, select, editor {editor · assigned only} observer {observer · assigned only} other {{{ invite.role }} · assigned only} }</ng-container> } @else { <ng-container i18n="Board role, lower case">{ invite.role, select, editor {editor} observer {observer} other {{{ invite.role }}} }</ng-container> }</span>
             <div class="row-actions">
               @if (invite.url) {
-              <button class="ghost icon" (click)="settings.copyText(invite.url)" aria-label="Copy invite link" i18n-aria-label kTooltip="Copy invite link" i18n-kTooltip><i class="ti ti-copy"></i></button>
+              <button class="ghost icon" (click)="settings.copyText(invite.url)" aria-label="Copy invite link" i18n-aria-label kTooltip="Copy invite link" i18n-kTooltip><i aria-hidden="true" class="ti ti-copy"></i></button>
               }
               <button class="ghost icon danger" [disabled]="settings.guestRemovingId() === invite.id" (click)="settings.revokeGuestInvite(invite.id)" aria-label="Revoke invite" i18n-aria-label kTooltip="Revoke invite" i18n-kTooltip>
-                <i [class]="settings.guestRemovingId() === invite.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
+                <i aria-hidden="true" [class]="settings.guestRemovingId() === invite.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
               </button>
             </div>
           </div>

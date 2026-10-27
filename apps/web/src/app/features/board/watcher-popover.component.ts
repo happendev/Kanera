@@ -16,7 +16,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
     <div class="wp-panel">
       @if (showToggle()) {
       <button type="button" class="wp-toggle" (click)="toggleWatching()" [disabled]="toggling()">
-        <i [class]="isWatching() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+        <i aria-hidden="true" [class]="isWatching() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
         <span>{{ isWatching() ? stopLabel() : watchLabel() }}</span>
       </button>
       }

@@ -53,7 +53,7 @@ const UNTITLED = $localize`:Fallback title for a note without one:Untitled`;
             [attr.aria-selected]="activeTab() === 'personal'"
             [class.active]="activeTab() === 'personal'"
             (click)="setTab('personal')">
-            <i class="ti ti-user"></i>
+            <i aria-hidden="true" class="ti ti-user"></i>
             <span i18n="Notes tab: the viewer's private notes">My notes</span>
           </button>
           <button
@@ -63,7 +63,7 @@ const UNTITLED = $localize`:Fallback title for a note without one:Untitled`;
             [attr.aria-selected]="activeTab() === 'team'"
             [class.active]="activeTab() === 'team'"
             (click)="setTab('team')">
-            <i class="ti ti-users"></i>
+            <i aria-hidden="true" class="ti ti-users"></i>
             <span i18n="Notes tab: notes shared with the team">Team</span>
           </button>
         </div>
@@ -72,20 +72,20 @@ const UNTITLED = $localize`:Fallback title for a note without one:Untitled`;
         </div>
         <div class="nv-toolbar">
           <button class="nv-new-btn" type="button" (click)="createRoot()" [disabled]="!canEdit()" [kTooltip]="editRestrictionMessage()">
-            <i class="ti ti-plus"></i>
+            <i aria-hidden="true" class="ti ti-plus"></i>
             <span i18n="Button: create a note">New note</span>
           </button>
         </div>
         @if (editRestrictionMessage(); as message) {
           <div class="nv-readonly-notice" role="status">
-            <i class="ti ti-lock"></i>
+            <i aria-hidden="true" class="ti ti-lock"></i>
             <span>{{ message }}</span>
           </div>
         }
         <div class="nv-tree">
           @if (state.loading()) {
             <div class="nv-loading">
-              <i class="ti ti-loader-2"></i>
+              <i aria-hidden="true" class="ti ti-loader-2"></i>
               <span i18n="Loading indicator">Loading…</span>
             </div>
           } @else {
@@ -108,7 +108,7 @@ const UNTITLED = $localize`:Fallback title for a note without one:Untitled`;
           class="nv-sidebar-toggle"
           (click)="toggleSidebar()"
           [attr.aria-label]="sidebarOpen() ? closeSidebarLabel : openSidebarLabel">
-          <i [class]="sidebarOpen() ? 'ti ti-x' : 'ti ti-notes'"></i>
+          <i aria-hidden="true" [class]="sidebarOpen() ? 'ti ti-x' : 'ti ti-notes'"></i>
           @if (sidebarOpen()) {
             <span i18n="Button: close the notes sidebar">Close</span>
           } @else {

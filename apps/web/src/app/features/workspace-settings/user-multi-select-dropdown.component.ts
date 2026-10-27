@@ -34,7 +34,7 @@ export type UserMultiSelectOption = {
           }
         </span>
       } @else {
-        <i class="ti ti-users"></i>
+        <i aria-hidden="true" class="ti ti-users"></i>
       }
     </k-multi-select-dropdown>
   `,

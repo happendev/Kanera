@@ -35,7 +35,7 @@ const VISIBLE_LIMIT = 5;
         @for (row of visible(); track row.id) {
         <div class="reminder-row">
           <button type="button" class="reminder-open" (click)="open(row)">
-            <span class="reminder-icon"><i class="ti ti-alarm"></i></span>
+            <span class="reminder-icon"><i aria-hidden="true" class="ti ti-alarm"></i></span>
             <span class="reminder-main">
               <span class="reminder-title">
                 {{ row.card.title }}
@@ -43,7 +43,7 @@ const VISIBLE_LIMIT = 5;
               </span>
               @if (boardFor(row.card.boardId); as board) {
               <span class="reminder-board" [style.--board-color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : 'var(--text-muted)'">
-                <i class="ti ti-{{ board.icon || 'layout-kanban' }}"></i>
+                <i aria-hidden="true" class="ti ti-{{ board.icon || 'layout-kanban' }}"></i>
                 <span>{{ board.name }}</span>
               </span>
               }
@@ -52,7 +52,7 @@ const VISIBLE_LIMIT = 5;
           </button>
           <button type="button" class="reminder-clear" (click)="clear(row.cardId)" [disabled]="clearing() === row.cardId"
             aria-label="Clear reminder" i18n-aria-label="Button: clear the card reminder" kTooltip="Clear reminder" i18n-kTooltip="Button: clear the card reminder">
-            <i class="ti ti-x"></i>
+            <i aria-hidden="true" class="ti ti-x"></i>
           </button>
         </div>
         }

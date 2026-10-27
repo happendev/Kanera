@@ -1,5 +1,5 @@
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-credit-card"></i><span i18n="Settings section heading">Account Plan</span></h3>
+  <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-credit-card"></i><span i18n="Settings section heading">Account Plan</span></h3>
 
   @if (settings.planTier() === 'trial') {
   <div class="plan-trial-status">
@@ -30,16 +30,16 @@
         <span class="plan-price">{{ freePrice }}</span>
       </div>
       <ul class="plan-feature-list">
-        <li><i class="ti ti-users"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxOrgMembers(), plural, =1 {1 member} other {{{ settings.freePlanMaxOrgMembers() }} members} }</ng-container></li>
-        <li><i class="ti ti-briefcase"></i> <ng-container i18n="Plan feature">Unlimited workspaces</ng-container></li>
-        <li><i class="ti ti-layout-board"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxBoards(), plural, =1 {1 board} other {{{ settings.freePlanMaxBoards() }} boards} }</ng-container></li>
-        <li><i class="ti ti-settings-automation"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxEnabledAutomations(), plural, =1 {1 active automation} other {{{ settings.freePlanMaxEnabledAutomations() }} active automations} }</ng-container></li>
-        <li><i class="ti ti-bolt"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxAutomationExecutionsPerMonth(), plural, =1 {1 automation execution per month} other {{{ settings.freePlanMaxAutomationExecutionsPerMonth() }} automation executions per month} }</ng-container></li>
-        <li><i class="ti ti-palette"></i> <ng-container i18n="Plan feature">Custom fields, colors, and all views</ng-container></li>
-        <li><i class="ti ti-database"></i> <ng-container i18n="Plan feature">250 MiB shared storage</ng-container></li>
-        <li><i class="ti ti-sparkles"></i> <ng-container i18n="Plan feature">Connect Claude, ChatGPT, Cursor, and other AI agents</ng-container></li>
-        <li><i class="ti ti-code"></i> <ng-container i18n="Plan feature">MCP and personal API keys with fair-use limits</ng-container></li>
-        <li><i class="ti ti-lock"></i> <ng-container i18n="Plan feature">No guests, webhooks, or unattended agents</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-users"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxOrgMembers(), plural, =1 {1 member} other {{{ settings.freePlanMaxOrgMembers() }} members} }</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-briefcase"></i> <ng-container i18n="Plan feature">Unlimited workspaces</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-layout-board"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxBoards(), plural, =1 {1 board} other {{{ settings.freePlanMaxBoards() }} boards} }</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-settings-automation"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxEnabledAutomations(), plural, =1 {1 active automation} other {{{ settings.freePlanMaxEnabledAutomations() }} active automations} }</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-bolt"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxAutomationExecutionsPerMonth(), plural, =1 {1 automation execution per month} other {{{ settings.freePlanMaxAutomationExecutionsPerMonth() }} automation executions per month} }</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-palette"></i> <ng-container i18n="Plan feature">Custom fields, colors, and all views</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-database"></i> <ng-container i18n="Plan feature">250 MiB shared storage</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-sparkles"></i> <ng-container i18n="Plan feature">Connect Claude, ChatGPT, Cursor, and other AI agents</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-code"></i> <ng-container i18n="Plan feature">MCP and personal API keys with fair-use limits</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-lock"></i> <ng-container i18n="Plan feature">No guests, webhooks, or unattended agents</ng-container></li>
       </ul>
     </div>
     <div class="plan-card plan-card--pro" [class.plan-card--current]="settings.planTier() === 'paid'">
@@ -55,12 +55,12 @@
         <span class="plan-price">{{ settings.selectedProPriceLabel() }}</span>
       </div>
       <ul class="plan-feature-list">
-        <li><i class="ti ti-infinity"></i> <ng-container i18n="Plan feature">Unlimited members, boards, automations, and executions</ng-container></li>
-        <li><i class="ti ti-user-star"></i> <ng-container i18n="Plan feature">Guest collaboration</ng-container></li>
-        <li><i class="ti ti-database"></i> <ng-container i18n="Plan feature">200 GiB shared storage</ng-container></li>
-        <li><i class="ti ti-sparkles"></i> <ng-container i18n="Plan feature">Higher MCP and API limits</ng-container></li>
-        <li><i class="ti ti-code"></i> <ng-container i18n="Plan feature">Workspace API keys, webhooks, and unattended agents</ng-container></li>
-        <li><i class="ti ti-headset"></i> <ng-container i18n="Plan feature">Support</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-infinity"></i> <ng-container i18n="Plan feature">Unlimited members, boards, automations, and executions</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-user-star"></i> <ng-container i18n="Plan feature">Guest collaboration</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-database"></i> <ng-container i18n="Plan feature">200 GiB shared storage</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-sparkles"></i> <ng-container i18n="Plan feature">Higher MCP and API limits</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-code"></i> <ng-container i18n="Plan feature">Workspace API keys, webhooks, and unattended agents</ng-container></li>
+        <li><i aria-hidden="true" class="ti ti-headset"></i> <ng-container i18n="Plan feature">Support</ng-container></li>
       </ul>
     </div>
   </div>
@@ -99,9 +99,9 @@
     <div class="seat-picker">
       <span class="account-plan-label" i18n>Seats to purchase</span>
       <div class="seat-stepper">
-        <button type="button" (click)="settings.decDesiredSeats()" [disabled]="settings.desiredSeats() <= settings.usedSeats()" aria-label="Remove a seat" i18n-aria-label><i class="ti ti-minus"></i></button>
+        <button type="button" (click)="settings.decDesiredSeats()" [disabled]="settings.desiredSeats() <= settings.usedSeats()" aria-label="Remove a seat" i18n-aria-label><i aria-hidden="true" class="ti ti-minus"></i></button>
         <input type="number" [attr.min]="settings.usedSeats()" inputmode="numeric" [value]="settings.desiredSeats()" (input)="settings.setDesiredSeatsFromInput($event)" aria-label="Seats to purchase" i18n-aria-label />
-        <button type="button" (click)="settings.incDesiredSeats()" aria-label="Add a seat" i18n-aria-label><i class="ti ti-plus"></i></button>
+        <button type="button" (click)="settings.incDesiredSeats()" aria-label="Add a seat" i18n-aria-label><i aria-hidden="true" class="ti ti-plus"></i></button>
       </div>
       <p class="account-plan-note account-plan-note--muted">
         <ng-container i18n>{ settings.usedSeats(), plural, =1 {1 seat currently in use.} other {{{ settings.usedSeats() }} seats currently in use.} }</ng-container>
@@ -109,7 +109,7 @@
       </p>
     </div>
     <div class="price-summary">
-      <span class="billing-paid-icon"><i class="ti ti-arrow-up-circle"></i></span>
+      <span class="billing-paid-icon"><i aria-hidden="true" class="ti ti-arrow-up-circle"></i></span>
       <div class="price-summary-copy">
         <span class="price-summary-label" i18n>Checkout summary</span>
         <strong>{{ settings.checkoutTotalLabel() }}</strong>
@@ -125,7 +125,7 @@
         }
       </div>
       <button class="sm" type="button" (click)="settings.startUpgrade()" [disabled]="settings.upgradeBusy()">
-        <i class="ti ti-arrow-up-circle"></i> @if (settings.upgradeBusy()) { <ng-container i18n="Button state">Upgrading...</ng-container> } @else { <ng-container i18n="Button">Upgrade to Pro</ng-container> }
+        <i aria-hidden="true" class="ti ti-arrow-up-circle"></i> @if (settings.upgradeBusy()) { <ng-container i18n="Button state">Upgrading...</ng-container> } @else { <ng-container i18n="Button">Upgrade to Pro</ng-container> }
       </button>
     </div>
     @if (settings.upgradeError()) { <p class="form-error">{{ settings.upgradeError() }}</p> }
@@ -133,7 +133,7 @@
   } @else if (settings.planTier() === 'paid') {
   <div class="billing-action-panel billing-action-panel--paid">
     <div class="billing-paid-copy">
-      <span class="billing-paid-icon"><i class="ti ti-circle-check"></i></span>
+      <span class="billing-paid-icon"><i aria-hidden="true" class="ti ti-circle-check"></i></span>
       <div class="billing-paid-text">
         <p class="billing-paid-title" i18n>You're on Pro</p>
         <p class="billing-paid-note" i18n>Limits are unlocked for this organisation. You buy a pool of seats and assign them to members and guests; removing someone frees their seat without changing your bill.</p>
@@ -147,9 +147,9 @@
         <span class="seat-summary-count" i18n="Seats used out of purchased">{{ settings.usedSeats() // i18n(ph="used") }} of {{ settings.purchasedSeats() // i18n(ph="total") }} used</span>
       </div>
       <div class="seat-stepper">
-        <button type="button" (click)="settings.decDesiredSeats()" [disabled]="settings.seatBusy() || settings.desiredSeats() <= settings.usedSeats()" aria-label="Remove a seat" i18n-aria-label><i class="ti ti-minus"></i></button>
+        <button type="button" (click)="settings.decDesiredSeats()" [disabled]="settings.seatBusy() || settings.desiredSeats() <= settings.usedSeats()" aria-label="Remove a seat" i18n-aria-label><i aria-hidden="true" class="ti ti-minus"></i></button>
         <input type="number" [attr.min]="settings.usedSeats()" inputmode="numeric" [value]="settings.desiredSeats()" (input)="settings.setDesiredSeatsFromInput($event)" [disabled]="settings.seatBusy()" aria-label="Purchased seats" i18n-aria-label />
-        <button type="button" (click)="settings.incDesiredSeats()" [disabled]="settings.seatBusy()" aria-label="Add a seat" i18n-aria-label><i class="ti ti-plus"></i></button>
+        <button type="button" (click)="settings.incDesiredSeats()" [disabled]="settings.seatBusy()" aria-label="Add a seat" i18n-aria-label><i aria-hidden="true" class="ti ti-plus"></i></button>
         <button class="sm" type="button" (click)="settings.updateSeats(settings.desiredSeats())" [disabled]="settings.seatBusy() || settings.desiredSeats() === settings.purchasedSeats()">
           @if (settings.seatBusy()) { <ng-container i18n="Button state">Saving...</ng-container> } @else { <ng-container i18n="Button">Update seats</ng-container> }
         </button>
@@ -161,19 +161,19 @@
       }
       @if (settings.seatNotice(); as notice) {
       <div class="seat-payment-notice" [class.seat-payment-notice--success]="notice.kind === 'success'" [class.seat-payment-notice--warning]="notice.kind === 'warning'" [class.seat-payment-notice--error]="notice.kind === 'error'" [class.seat-payment-notice--info]="notice.kind === 'info'">
-        <i class="ti" [class.ti-circle-check]="notice.kind === 'success'" [class.ti-info-circle]="notice.kind === 'info'" [class.ti-alert-triangle]="notice.kind === 'warning'" [class.ti-circle-x]="notice.kind === 'error'"></i>
+        <i aria-hidden="true" class="ti" [class.ti-circle-check]="notice.kind === 'success'" [class.ti-info-circle]="notice.kind === 'info'" [class.ti-alert-triangle]="notice.kind === 'warning'" [class.ti-circle-x]="notice.kind === 'error'"></i>
         <span>{{ notice.message }}</span>
         @if (notice.action === 'refresh_status') {
         <button class="ghost sm" type="button" (click)="settings.refreshSeatPaymentStatus()" [disabled]="settings.seatBusy()">
-          <i class="ti ti-refresh"></i> @if (settings.seatBusy()) { <ng-container i18n="Button state">Checking...</ng-container> } @else { <ng-container i18n="Button">Refresh status</ng-container> }
+          <i aria-hidden="true" class="ti ti-refresh"></i> @if (settings.seatBusy()) { <ng-container i18n="Button state">Checking...</ng-container> } @else { <ng-container i18n="Button">Refresh status</ng-container> }
         </button>
         } @else if (notice.action === 'refresh_capacity') {
         <button class="ghost sm" type="button" (click)="settings.refreshSeatCapacityStatus()" [disabled]="settings.seatBusy()">
-          <i class="ti ti-refresh"></i> @if (settings.seatBusy()) { <ng-container i18n="Button state">Checking...</ng-container> } @else { <ng-container i18n="Button">Check status</ng-container> }
+          <i aria-hidden="true" class="ti ti-refresh"></i> @if (settings.seatBusy()) { <ng-container i18n="Button state">Checking...</ng-container> } @else { <ng-container i18n="Button">Check status</ng-container> }
         </button>
         } @else if (notice.action === 'payment_method') {
         <button class="ghost sm" type="button" (click)="settings.manageBilling('payment_method')" [disabled]="settings.billingPortalBusy() !== null">
-          <i class="ti ti-credit-card"></i> @if (settings.billingPortalBusy() === 'payment_method') { <ng-container i18n="Button state">Opening...</ng-container> } @else { <ng-container i18n="Button">Update payment method</ng-container> }
+          <i aria-hidden="true" class="ti ti-credit-card"></i> @if (settings.billingPortalBusy() === 'payment_method') { <ng-container i18n="Button state">Opening...</ng-container> } @else { <ng-container i18n="Button">Update payment method</ng-container> }
         </button>
         }
       </div>
@@ -181,10 +181,10 @@
     </div>
     <div class="billing-portal-actions">
       <button class="billing-portal-action" type="button" (click)="settings.manageBilling('invoices')" [disabled]="settings.billingPortalBusy() !== null">
-        <i class="ti ti-file-invoice"></i> @if (settings.billingPortalBusy() === 'invoices') { <ng-container i18n="Button state">Opening...</ng-container> } @else { <ng-container i18n="Button">Manage subscription &amp; invoices</ng-container> }
+        <i aria-hidden="true" class="ti ti-file-invoice"></i> @if (settings.billingPortalBusy() === 'invoices') { <ng-container i18n="Button state">Opening...</ng-container> } @else { <ng-container i18n="Button">Manage subscription &amp; invoices</ng-container> }
       </button>
       <button class="billing-portal-action" type="button" (click)="settings.manageBilling('payment_method')" [disabled]="settings.billingPortalBusy() !== null">
-        <i class="ti ti-credit-card"></i> @if (settings.billingPortalBusy() === 'payment_method') { <ng-container i18n="Button state">Opening...</ng-container> } @else { <ng-container i18n="Button">Payment method</ng-container> }
+        <i aria-hidden="true" class="ti ti-credit-card"></i> @if (settings.billingPortalBusy() === 'payment_method') { <ng-container i18n="Button state">Opening...</ng-container> } @else { <ng-container i18n="Button">Payment method</ng-container> }
       </button>
     </div>
     @if (settings.cancelError()) { <p class="form-error">{{ settings.cancelError() }}</p> }

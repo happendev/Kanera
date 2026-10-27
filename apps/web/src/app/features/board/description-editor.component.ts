@@ -365,7 +365,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
 
       @if (linkPopoverOpen()) {
         <div class="de-link-bar">
-          <i class="ti ti-link de-link-icon"></i>
+          <i aria-hidden="true" class="ti ti-link de-link-icon"></i>
           <input
             #linkInput
             class="de-link-input"
@@ -384,7 +384,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
 
       @if (uploader.uploading()) {
         <div class="de-uploading">
-          <i class="ti ti-loader-2"></i>&ngsp;<ng-container i18n="Status while a file uploads">Uploading…</ng-container>
+          <i aria-hidden="true" class="ti ti-loader-2"></i>&ngsp;<ng-container i18n="Status while a file uploads">Uploading…</ng-container>
         </div>
       }
       @if (uploader.error(); as err) {
@@ -425,7 +425,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
           @if (emojiMode() === 'picker') {
             <div class="de-emoji-header">
               <div class="de-emoji-search">
-                <i class="ti ti-search"></i>
+                <i aria-hidden="true" class="ti ti-search"></i>
                 <input
                   type="search"
                   placeholder="Search emoji"
@@ -437,7 +437,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
                 />
               </div>
               <button type="button" class="de-emoji-close" (click)="dismissEmojiPicker()" kTooltip="Close emoji picker" i18n-kTooltip>
-                <i class="ti ti-x"></i>
+                <i aria-hidden="true" class="ti ti-x"></i>
               </button>
             </div>
             @if (!emojiQuery().trim()) {
@@ -485,11 +485,11 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       @if (compact()) {
         <div class="de-compact-footer">
           <button type="button" class="de-tool" (click)="openEmojiPickerFromButton($event)" kTooltip="Insert emoji" i18n-kTooltip>
-            <i class="ti ti-mood-smile"></i>
+            <i aria-hidden="true" class="ti ti-mood-smile"></i>
           </button>
           @if (allowAttachments()) {
             <button type="button" class="de-tool" (click)="filePicker.click()" kTooltip="Attach file" i18n-kTooltip [disabled]="uploader.uploading()">
-              <i class="ti ti-paperclip"></i>
+              <i aria-hidden="true" class="ti ti-paperclip"></i>
             </button>
           }
           @if (showActions()) {
@@ -499,7 +499,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
             }
             <button type="button" class="primary sm" (click)="onSave()" [disabled]="saving() || uploader.uploading()">
               @if (saving()) {
-                <i class="ti ti-loader-2 kanera-spin"></i>
+                <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i>
               } @else {
                 {{ submitLabel() }}
               }
@@ -513,7 +513,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
           }
           <button type="button" class="primary sm" (click)="onSave()" [disabled]="saving() || uploader.uploading()">
             @if (saving()) {
-              <i class="ti ti-loader-2 kanera-spin"></i>&ngsp;<ng-container i18n="Button label while saving">Saving…</ng-container>
+              <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i>&ngsp;<ng-container i18n="Button label while saving">Saving…</ng-container>
             } @else {
               {{ submitLabel() }}
             }
@@ -651,6 +651,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       color: inherit;
     }
     .de-host .ProseMirror blockquote {
+      /* accent-stripe-ok: the conventional neutral quote rule on a blockquote, not an accent */
       border-left: 3px solid var(--border-strong);
       margin: 0 0 10px;
       padding: 2px 12px;

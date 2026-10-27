@@ -30,12 +30,12 @@ type SourceListOption = Pick<WireList, "id" | "name">;
       <div class="ap-head">
         @if (phase() === 'lists') {
           <button type="button" class="ap-icon-button" (click)="backToBoards($event)" aria-label="Back to boards" i18n-aria-label>
-            <i class="ti ti-arrow-left"></i>
+            <i aria-hidden="true" class="ti ti-arrow-left"></i>
           </button>
         }
         <span class="ap-title">{{ phase() === 'boards' ? title() : chooseListTitle }}</span>
         <button type="button" class="ap-icon-button" aria-label="Close" i18n-aria-label (click)="close.emit()">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       </div>
       @if (loading()) {

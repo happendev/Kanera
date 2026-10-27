@@ -65,14 +65,14 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
             </span>
             <span class="mp-name"><k-match-highlight [text]="m.userId === currentUserId() ? meLabel : m.displayName" [query]="query()" /></span>
             @if (selectedIds().includes(m.userId)) {
-              <i class="ti ti-check mp-check"></i>
+              <i aria-hidden="true" class="ti ti-check mp-check"></i>
             }
           </button>
         }
       </div>
       @if (allowClear() && selectedIds().length) {
         <button type="button" class="mp-clear" (click)="clear.emit()">
-          <i class="ti ti-user-x"></i>
+          <i aria-hidden="true" class="ti ti-user-x"></i>
           {{ clearLabel() }}
         </button>
       }

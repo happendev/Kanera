@@ -1,19 +1,19 @@
 <div class="settings-info-note">
-        <i class="ti ti-info-circle"></i>
+        <i aria-hidden="true" class="ti ti-info-circle"></i>
         <span i18n>Checklist templates are added automatically the first time a card is created in, or moved into, a selected list. A template is never added to the same card twice.</span>
       </div>
       <k-docs-link class="spaced" path="checklist-templates" label="Learn more about checklist templates" i18n-label />
       <form class="board-form" (submit)="settings.addTemplate($event)">
         <input name="template" placeholder="Template name (e.g. Design review)" i18n-placeholder [value]="settings.newTemplate()" (input)="settings.newTemplate.set($any($event.target).value)" required class="grow" />
-        <button class="sm compact-add-button" type="submit" aria-label="Add template" i18n-aria-label kTooltip="Add template" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add template</span></button>
+        <button class="sm compact-add-button" type="submit" aria-label="Add template" i18n-aria-label kTooltip="Add template" i18n-kTooltip><i aria-hidden="true" class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add template</span></button>
       </form>
       <div class="templates" cdkDropList [cdkDropListData]="settings.templates()" (cdkDropListDropped)="settings.dropTemplate($event)">
         @for (template of settings.templates(); track template.id) {
         <div cdkDrag class="template-tile">
           <div class="template-head">
-            <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+            <i aria-hidden="true" class="ti ti-grip-vertical grip" cdkDragHandle></i>
             <button class="ghost icon expander" (click)="settings.toggleTemplateExpanded(template.id)" [attr.aria-label]="settings.isTemplateExpanded(template.id) ? collapseLabel : expandLabel">
-              <i class="ti" [class.ti-chevron-down]="settings.isTemplateExpanded(template.id)" [class.ti-chevron-right]="!settings.isTemplateExpanded(template.id)"></i>
+              <i aria-hidden="true" class="ti" [class.ti-chevron-down]="settings.isTemplateExpanded(template.id)" [class.ti-chevron-right]="!settings.isTemplateExpanded(template.id)"></i>
             </button>
             @if (settings.editingTemplateId() === template.id) {
             <input class="inline-name-input grow" [value]="settings.editingTemplateName()" (input)="settings.editingTemplateName.set($any($event.target).value)" (blur)="settings.saveTemplateName(template.id)" (keydown.enter)="settings.saveTemplateName(template.id)"
@@ -22,17 +22,17 @@
             <button class="template-title" (click)="settings.startEditTemplate(template)" kTooltip="Click to rename" i18n-kTooltip>{{ template.title }}</button>
             }
             <span class="template-meta">
-              <span class="template-count" kTooltip="Checklist items" i18n-kTooltip><i class="ti ti-checkbox"></i> {{ template.items.length }}</span>
+              <span class="template-count" kTooltip="Checklist items" i18n-kTooltip><i aria-hidden="true" class="ti ti-checkbox"></i> {{ template.items.length }}</span>
             </span>
             <div class="row-actions">
-              <button class="ghost icon" (click)="settings.deleteTemplate(template.id)" aria-label="Delete template" i18n-aria-label kTooltip="Delete template" i18n-kTooltip><i class="ti ti-trash"></i></button>
+              <button class="ghost icon" (click)="settings.deleteTemplate(template.id)" aria-label="Delete template" i18n-aria-label kTooltip="Delete template" i18n-kTooltip><i aria-hidden="true" class="ti ti-trash"></i></button>
             </div>
           </div>
 
           @if (!settings.isTemplateExpanded(template.id)) {
           <div class="template-applied">
             <span class="applied-label" i18n="Label before the checklist item count">Checklist</span>
-            <span class="applied-chip"><i class="ti ti-checkbox"></i><ng-container i18n="Checklist item count">{ template.items.length, plural, =1 {1 item} other {{{ template.items.length }} items} }</ng-container></span>
+            <span class="applied-chip"><i aria-hidden="true" class="ti ti-checkbox"></i><ng-container i18n="Checklist item count">{ template.items.length, plural, =1 {1 item} other {{{ template.items.length }} items} }</ng-container></span>
           </div>
           }
 
@@ -42,14 +42,14 @@
             <div class="template-items" cdkDropList (cdkDropListDropped)="settings.dropTemplateItem($event, template.id)">
               @for (item of template.items; track item.id; let i = $index) {
               <div class="template-item" cdkDrag>
-                <i class="ti ti-grip-vertical item-grip" cdkDragHandle></i>
+                <i aria-hidden="true" class="ti ti-grip-vertical item-grip" cdkDragHandle></i>
                 <input [value]="item.text" (input)="settings.updateTemplateItemText(template.id, i, $any($event.target).value)" (blur)="settings.saveTemplateItem(template.id)" (keydown.enter)="$any($event.target).blur()" />
-                <button class="ghost icon" (click)="settings.removeTemplateItem(template.id, i)" aria-label="Remove item" i18n-aria-label kTooltip="Remove item" i18n-kTooltip><i class="ti ti-x"></i></button>
+                <button class="ghost icon" (click)="settings.removeTemplateItem(template.id, i)" aria-label="Remove item" i18n-aria-label kTooltip="Remove item" i18n-kTooltip><i aria-hidden="true" class="ti ti-x"></i></button>
               </div>
               }
             </div>
             <form class="template-item add-item" (submit)="settings.addTemplateItem($event, template.id)">
-              <i class="ti ti-plus add-ghost"></i>
+              <i aria-hidden="true" class="ti ti-plus add-ghost"></i>
               <input placeholder="Add an item" i18n-placeholder [value]="settings.newTemplateItemText(template.id)" (input)="settings.setNewTemplateItem(template.id, $any($event.target).value)" />
               <button class="ghost sm" type="submit" [disabled]="!settings.newTemplateItemText(template.id).trim()" i18n="Button: add a checklist item">Add</button>
             </form>

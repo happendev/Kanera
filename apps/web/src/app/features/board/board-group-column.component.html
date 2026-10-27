@@ -4,7 +4,7 @@
     @if (group().avatarUrl !== undefined && !group().icon) {
     <k-avatar [url]="group().avatarUrl ?? null" [name]="group().label" [size]="20" [workspaceId]="workspaceId()" />
     } @else {
-    <i [class]="'ti ti-' + (group().icon || 'square')"></i>
+    <i aria-hidden="true" [class]="'ti ti-' + (group().icon || 'square')"></i>
     }
     <span class="gc-name">{{ group().label }}</span>
   </h3>
@@ -12,7 +12,7 @@
   <!-- Always mounted rather than revealed on hover: a hover-only create button is invisible on
        touch, and it is the affordance that makes a grouped column worth pointing at. -->
   <button type="button" class="gc-add-btn" [disabled]="!canEdit()" (click)="addRequested.emit(group().key)" [attr.aria-label]="addCardLabel()" [kTooltip]="addCardLabel()">
-    <i class="ti ti-plus"></i>
+    <i aria-hidden="true" class="ti ti-plus"></i>
   </button>
   }
 </div>
