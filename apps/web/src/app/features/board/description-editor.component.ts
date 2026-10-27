@@ -2001,6 +2001,10 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   private focusEnd() {
     const editor = this.editor;
     if (!editor) return;
+    // Restore DOM focus before changing the selection. For an already-open composer, the browser
+    // still holds the caret from before the quote was prepended; deferred focus can restore it over
+    // the new end selection and put the reply inside the attribution.
+    editor.view.focus();
     const { doc } = editor.state;
     const chain = editor.chain();
     if (doc.lastChild?.type.name === "blockquote") {

@@ -392,8 +392,9 @@ test("the Blocked quick filter in Global Work keeps only cards waiting on an ope
 
     // Completing the blocker frees the card: the server no longer returns it for this filter.
     expect((await api.patch(`/api/cards/${blocker.id}/completion`, { data: { completed: true } })).ok()).toBe(true);
-    // The trigger reads "Filter · 1 active" while a filter is on.
-    await page.getByRole("button", { name: /^Filter/ }).click();
+    // Active filters add a count to the label; keep the prefix match inside the filter bar
+    // so workspace names beginning with "Filter" cannot match the same locator.
+    await page.locator("k-filter-bar").getByRole("button", { name: /^Filter/ }).click();
     await page.locator(".fb-row").filter({ hasText: /^Blocked/ }).click();
     await page.locator(".fb-row").filter({ hasText: /^Blocked/ }).click();
     await page.keyboard.press("Escape");
