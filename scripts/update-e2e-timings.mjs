@@ -1,5 +1,5 @@
 import { globSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, sep } from 'node:path';
+import { sep } from 'node:path';
 
 // Refresh only from a complete, successful, unsharded run. Partial reports would quietly bias
 // balancing toward whichever shard happened to run last.
@@ -23,7 +23,7 @@ function visit(suite) {
 }
 for (const suite of report.suites) visit(suite);
 const expected = globSync('**/*.spec.ts', { cwd: new URL('../e2e/', import.meta.url), exclude: ['artifacts/**', 'node_modules/**'] })
-  .filter(file => !basename(file).startsWith('seed-')).map(file => file.split(sep).join('/')).sort();
+  .map(file => file.split(sep).join('/')).sort();
 if (JSON.stringify(Object.keys(files).sort()) !== JSON.stringify(expected)) throw new Error('Report must cover every current behavior spec');
 writeFileSync(new URL('../e2e/timings.json', import.meta.url), JSON.stringify({
   measuredAt: report.stats.startTime,

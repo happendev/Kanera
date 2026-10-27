@@ -6108,7 +6108,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             }
 
             if (!completedAt && cardSeed.dueOffsetDays !== undefined && cardSeed.dueOffsetDays < 0) {
-              const overdueCreatedAt = addHours(addDays(baseDate, cardSeed.dueOffsetDays), 18);
+              // Apply the clock offset before weekend projection: Sunday's overnight reminder
+              // belongs to Monday, rather than being pulled back to Friday before adding hours.
+              const overdueCreatedAt = addHours(calendarDays(baseDate, cardSeed.dueOffsetDays), 18);
               await tx.insert(activityEvents).values({
                 boardId: board!.id,
                 workspaceId: workspace!.id,
@@ -6261,7 +6263,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                     boardId: board!.id,
                     workspaceId: workspace!.id,
                     reason: "checklist_item_overdue" as const,
-                    createdAt: addHours(addDays(baseDate, itemSeed.dueOffsetDays), 18),
+                    createdAt: addHours(calendarDays(baseDate, itemSeed.dueOffsetDays), 18),
                   }];
                 });
                 if (overdueChecklistNotifications.length > 0) {
