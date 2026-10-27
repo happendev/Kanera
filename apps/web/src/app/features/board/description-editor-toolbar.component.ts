@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, input, output } from "@angular/core";
 import type { Editor } from "@tiptap/core";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
@@ -47,7 +47,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
         <i class="ti ti-quote"></i>
       </button>
       <span class="de-sep"></span>
-      <button type="button" class="de-tool" [class.is-active]="isActiveLink()" (click)="promptLink()" kTooltip="Link" i18n-kTooltip="Editor toolbar button: insert or edit a link">
+      <button type="button" class="de-tool" [class.is-active]="isActiveLink()" (click)="linkRequested.emit()" kTooltip="Link" i18n-kTooltip="Editor toolbar button: insert or edit a link">
         <i class="ti ti-link"></i>
       </button>
       @if (!compact()) {
@@ -68,23 +68,6 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
         <i class="ti ti-arrow-forward-up"></i>
       </button>
     </div>
-
-    @if (linkPopoverOpen()) {
-      <div class="de-link-bar">
-        <i class="ti ti-link de-link-icon"></i>
-        <input
-          class="de-link-input"
-          type="url"
-          placeholder="https://example.com"
-          [value]="linkUrl()"
-          (input)="linkUrl.set($any($event.target).value)"
-          (keydown)="onLinkKeydown($event)"
-          autofocus
-        />
-        <button type="button" class="de-link-apply" (click)="applyLink()" i18n="Button: apply the link URL">Apply</button>
-        <button type="button" class="ghost xs" (click)="cancelLink()" i18n>Cancel</button>
-      </div>
-    }
   `,
   styles: `
     .de-toolbar {
@@ -109,48 +92,6 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
       background: var(--border);
       margin: 0 4px;
     }
-
-    .de-link-bar {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 8px;
-      background: var(--surface-2);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .de-link-icon {
-      font-size: var(--text-md);
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-
-    .de-link-input {
-      flex: 1;
-      height: 28px;
-      padding: 0 8px;
-      font-size: var(--text-base);
-      background: var(--surface);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm, 4px);
-      color: var(--text);
-      outline: none;
-      &:focus { border-color: var(--accent); }
-    }
-
-    .de-link-apply {
-      height: 28px;
-      padding: 0 10px;
-      font-size: var(--text-sm);
-      font-weight: 500;
-      background: var(--accent);
-      border: 1px solid var(--accent);
-      border-radius: var(--radius-sm, 4px);
-      color: #fff;
-      cursor: pointer;
-      white-space: nowrap;
-      &:hover { opacity: 0.9; }
-    }
   `,
 })
 export class DescriptionEditorToolbarComponent {
@@ -164,8 +105,7 @@ export class DescriptionEditorToolbarComponent {
   readonly emojiRequested = output<MouseEvent>();
   readonly codeBlockRequested = output<void>();
 
-  readonly linkPopoverOpen = signal(false);
-  readonly linkUrl = signal("");
+  readonly linkRequested = output<void>();
 
   // Each toolbar button reads tick() so OnPush re-runs the binding when the editor
   // selection changes. Wrapping in computed() keeps the dependency obvious.
@@ -201,35 +141,5 @@ export class DescriptionEditorToolbarComponent {
   private isActiveHeading(level: number): boolean {
     this.tick();
     return this.editor()?.isActive("heading", { level }) ?? false;
-  }
-
-  promptLink() {
-    const editor = this.editor();
-    if (!editor) return;
-    const current = (editor.getAttributes("link")["href"] as string | undefined) ?? "";
-    this.linkUrl.set(current);
-    this.linkPopoverOpen.set(true);
-  }
-
-  applyLink() {
-    const editor = this.editor();
-    if (!editor) return;
-    const url = this.linkUrl().trim();
-    if (url === "") {
-      editor.chain().focus().extendMarkRange("link").unsetLink().run();
-    } else {
-      editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-    }
-    this.linkPopoverOpen.set(false);
-  }
-
-  cancelLink() {
-    this.linkPopoverOpen.set(false);
-    this.editor()?.commands.focus();
-  }
-
-  onLinkKeydown(event: KeyboardEvent) {
-    if (event.key === "Enter") { event.preventDefault(); this.applyLink(); }
-    if (event.key === "Escape") { event.preventDefault(); this.cancelLink(); }
   }
 }

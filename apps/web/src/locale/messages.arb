@@ -6006,7 +6006,6 @@
       "src/app/features/board/card-composer.dialog.html",
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-relations.component.ts",
-      "src/app/features/board/description-editor-toolbar.component.ts",
       "src/app/features/board/description-editor.component.ts",
       "src/app/features/board/separator.component.ts",
       "src/app/features/dependencies/dependency-map.component.html",
@@ -9649,7 +9648,7 @@
     "x-files": [
       "src/app/features/board/bulk-custom-fields.dialog.ts",
       "src/app/features/board/date-picker.popover.ts",
-      "src/app/features/board/description-editor-toolbar.component.ts",
+      "src/app/features/board/description-editor.component.ts",
       "src/app/features/completed-cards/date-range-picker.popover.ts"
     ]
   },

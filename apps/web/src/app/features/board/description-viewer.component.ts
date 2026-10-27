@@ -36,7 +36,8 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
 });
 
 const ALLOWED_TAGS = [
-  "p", "br", "strong", "em", "s", "code", "pre", "blockquote",
+  // marked emits <del> for strikethrough; the editor's HTML uses <s>.
+  "p", "br", "strong", "em", "s", "del", "code", "pre", "blockquote",
   "h1", "h2", "h3", "h4", "h5", "h6",
   "ul", "ol", "li",
   "table", "thead", "tbody", "tr", "th", "td",
