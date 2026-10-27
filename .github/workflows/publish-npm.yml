@@ -12,8 +12,6 @@ on:
 
 permissions:
   contents: read
-  # npm provenance attestation is signed with the workflow's OIDC identity.
-  id-token: write
 
 concurrency:
   group: publish-npm
@@ -24,7 +22,7 @@ jobs:
     # Workspace releases are tagged vX.Y.Z. MCP registry metadata has its own mcp-vX.Y.Z tags and
     # its own workflow, so those releases must not republish the npm packages.
     if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v') }}
-    runs-on: ubuntu-24.04
+    runs-on: sasuke-1
     timeout-minutes: 20
     env:
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run && '--dry-run' || '' }}
@@ -65,8 +63,8 @@ jobs:
       - name: Publish @kanera/sdk and @kanera/cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          # Attach provenance so installs can verify the tarball was built from this repository.
-          NPM_CONFIG_PROVENANCE: "true"
+          # npm provenance requires a cloud-hosted runner; this builder uses NPM_TOKEN instead.
+          NPM_CONFIG_PROVENANCE: "false"
         run: |
           if [ -z "${NODE_AUTH_TOKEN}" ]; then
             echo "The NPM_TOKEN repository secret is required."

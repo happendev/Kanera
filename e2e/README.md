@@ -15,7 +15,8 @@ It never touches the development database. You need Docker and a Playwright Chro
 
 ## Concurrent CI runs
 
-CI splits the suite into three duration-balanced shards on separate GitHub-hosted runners. Each shard
+CI splits the suite into three duration-balanced shards. The matrix
+runs one job at a time because the builder shares fixed ports and Docker resources. Each shard
 starts its own freshly migrated and seeded Postgres, Valkey, API, worker, MCP server and web app.
 Tests remain sequential within that stack (`workers: 1`, `fullyParallel: false`): seeded users,
 boards, settings and realtime rooms must not be shared by concurrently executing tests.
@@ -32,9 +33,8 @@ unsharded invocation. Run them alone with `pnpm test:e2e -- --project=seed`. Whe
 repeating only behavior tests, `--project=behavior --no-deps` omits that already-verified dependency.
 
 A fourth matrix job runs `realtime-compression.spec.ts` with
-`REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true` in parallel with the three shards. The normal shards
-exercise the default-off setting. Compression still uses a fresh stack, but its startup no longer
-extends shard 3's critical path. This requires capacity for four concurrent CI runners.
+`REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true`. The normal shards exercise the default-off setting.
+Compression uses a fresh stack and runs serially with the other matrix jobs on the same builder.
 CI caches the pnpm package store by lockfile and Chromium by Playwright version. Every runner still
 performs a frozen-lockfile install and installs browser system dependencies.
 
@@ -48,7 +48,7 @@ REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true pnpm test:e2e -- realtime-compressio
 ```
 
 Run those commands one at a time on a local checkout: its fixed E2E ports, Docker Compose project
-and database are protected by the runner's lock. CI concurrency comes from separate machines.
+and database are protected by the runner's lock. The CI matrix also runs them one at a time.
 Do not increase `--workers` against a shared stack without first isolating its test fixtures.
 Playwright's native `--shard=1/3` remains available for count-based partitioning; do not combine it
 with `KANERA_E2E_SHARD`, which would shard an already restricted file set and omit tests.
@@ -57,8 +57,8 @@ All shards finish even if one fails, and upload separate `e2e-results-<index>-of
 traces, screenshots, service logs, reports and the command/environment in `REPRODUCE.txt`.
 The compression job uploads `e2e-results-compression`.
 The existing `e2e` CI check passes only when every shard passes, so branch protection can continue
-requiring that check. Sharding repeats stack setup on each runner, trading more runner minutes
-for a shorter wait; it does not skip tests or retry failures.
+requiring that check. Sharding repeats stack setup for each job and keeps its results separate;
+it does not skip tests or retry failures.
 
 ## Topology the suite depends on
 
