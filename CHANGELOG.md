@@ -25,6 +25,10 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
+- Saving unchanged card titles, descriptions, checklist titles/items or custom fields no longer inflates activity change counts or updates saved timestamps. Repeated empty clears are ignored, and unchanged custom fields do not retrigger automations.
+
+- Adding checklist items in quick succession no longer lets an earlier save response erase the next item's draft.
+
 - Deleting a cover attachment hides the card header immediately, with Undo restoring it. Original upload activity now indicates when the attachment has since been deleted.
 
 - **OAuth setup:** malformed authorization and client-registration requests return validation errors instead of internal server errors.

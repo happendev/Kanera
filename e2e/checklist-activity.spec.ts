@@ -50,7 +50,43 @@ test("checklist items added from card detail collapse into one live activity row
   await addItems(launch, ["Draft release note"]);
   await expect(activityRows(viewerDetail, "added checklist item Draft release note")).toHaveCount(1);
 
-  await addItems(launch, ["Tag the release", "Publish the build"]);
+  const launchChecklist = detail.locator(`.checklist-block[data-checklist-id="${checklistIds.get(launch)}"]`);
+  const nextItemInput = launchChecklist.getByPlaceholder("Add an item…");
+  let releaseResponse!: () => void;
+  const pendingResponse = new Promise<void>((resolve) => { releaseResponse = resolve; });
+  const endpoint = `/api/cards/${cardId}/checklists/${checklistIds.get(launch)}/items`;
+  await page.route(`**${endpoint}`, async (route) => {
+    if (route.request().method() !== "POST" || (route.request().postDataJSON() as { text: string }).text !== "Tag the release") {
+      await route.continue();
+      return;
+    }
+    // Commit the item and deliver its realtime echo before its HTTP acknowledgement, matching CI.
+    const response = await route.fetch();
+    await pendingResponse;
+    await route.fulfill({ response });
+  });
+  try {
+    await addItems(launch, ["Tag the release"]);
+    await nextItemInput.fill("Publish the build");
+    const acknowledged = page.waitForResponse((response) => response.url().endsWith(endpoint)
+      && response.request().method() === "POST" && (response.request().postDataJSON() as { text: string }).text === "Tag the release");
+    releaseResponse();
+    await (await acknowledged).finished();
+    // Let the released fetch's signal update render before checking the next draft.
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expect(nextItemInput).toHaveValue("Publish the build");
+    await page.screenshot({ path: test.info().outputPath("next-checklist-draft-desktop.png") });
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(nextItemInput).toHaveValue("Publish the build");
+    await nextItemInput.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath("next-checklist-draft-phone.png") });
+    if (viewport) await page.setViewportSize(viewport);
+  } finally {
+    releaseResponse();
+  }
+  await nextItemInput.press("Enter");
+  await expect(launchChecklist.getByText("Publish the build", { exact: true })).toBeVisible();
   await addItems(followUp, ["Announce"]);
 
   for (const pane of [viewerDetail, detail]) {

@@ -1725,41 +1725,45 @@ export async function cardRoutes(
       );
       if (startDatePatch.kind === "rejected") throw badRequest(startDatePatch.reason);
       const startDateLocalDate = startDatePatch.kind === "write" ? startDatePatch.startDateLocalDate : undefined;
-      const hasStartDateUpdate = body.startDateLocalDate !== undefined || startDateLocalDate !== undefined;
+      const titleChanged = body.title !== undefined && body.title !== current.title;
+      const descriptionChanged = description !== undefined && (description ?? "") !== (current.description ?? "");
+      const dueDateChanged = dueDateLocalDate !== undefined && (
+        dueDateLocalDate !== current.dueDateLocalDate || dueDateSlot !== current.dueDateSlot || dueDateTimezone !== current.dueDateTimezone
+      );
+      const startDateChanged = startDateLocalDate !== undefined && startDateLocalDate !== current.startDateLocalDate;
+      // Explicit Save and API retries can submit the current value. Only real changes belong in
+      // activity bursts; a no-op also leaves timestamps, mentions and realtime untouched.
+      if (!titleChanged && !descriptionChanged && !dueDateChanged && !startDateChanged) {
+        return { card: current, previous: current, activity: null, linkFanout: EMPTY_LINK_FANOUT };
+      }
 
       const activityPayload = {
-        ...body,
-        ...(description !== undefined && { description }),
-        ...(description !== undefined && {
+        ...(titleChanged && { title: body.title }),
+        ...(descriptionChanged && { description }),
+        ...(descriptionChanged && {
           // Description history is audit-facing: keep the raw markdown before and
           // after the edit so clients can show an exact diff for any update shape.
           fromValue: current.description,
           toValue: description,
         }),
-        ...(dueDateLocalDate !== undefined && {
+        ...(dueDateChanged && {
           dueDateLocalDate,
           dueDateSlot,
           dueDateTimezone,
         }),
         // A clamped start was not in the body, yet it did change; the history must say so. A drag on
         // the Timeline sends both dates and lands here as one "rescheduled" row, not two.
-        ...(startDateLocalDate !== undefined && { startDateLocalDate }),
+        ...(startDateChanged && { startDateLocalDate }),
       };
       // Description saves and card renames are often repeated while someone is drafting.
       // Keep each field in its own burst so mixed edits and date history stay precise.
-      const isDescriptionOnlyUpdate = body.description !== undefined
-        && body.title === undefined
-        && !hasDueDateUpdate
-        && !hasStartDateUpdate;
-      const isTitleOnlyUpdate = body.title !== undefined
-        && body.description === undefined
-        && !hasDueDateUpdate
-        && !hasStartDateUpdate;
+      const isDescriptionOnlyUpdate = descriptionChanged && !titleChanged && !dueDateChanged && !startDateChanged;
+      const isTitleOnlyUpdate = titleChanged && !descriptionChanged && !dueDateChanged && !startDateChanged;
       const [card] = await tx
         .update(cards)
         .set({
-          ...(body.title !== undefined && { title: body.title }),
-          ...(description !== undefined && { description }),
+          ...(titleChanged && { title: body.title }),
+          ...(descriptionChanged && { description }),
           ...(dueDateLocalDate !== undefined && { dueDateLocalDate }),
           ...(dueDateSlot !== undefined && { dueDateSlot }),
           ...(dueDateTimezone !== undefined && { dueDateTimezone }),
@@ -1772,7 +1776,7 @@ export async function cardRoutes(
       if (dueDateLocalDate !== undefined || startDateLocalDate !== undefined) await requestScheduleRecheckForCards(tx, [id]);
 
       let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
-      if (body.description !== undefined) {
+      if (descriptionChanged) {
         await replaceCardMentions({
           tx,
           boardId: current.boardId,
@@ -1818,6 +1822,7 @@ export async function cardRoutes(
         : await recordActivity(tx, activityInput);
       return { card: card!, previous: current, activity, linkFanout };
     });
+    if (!activity) return toWireCard(card, req.auth.cid);
     if (hasDueDateUpdate || card.startDateLocalDate !== current.startDateLocalDate) {
       await enqueueDueDateChangedEmails({
         tx: db,
@@ -2519,6 +2524,10 @@ export async function cardRoutes(
     // Validate the value against the field type and build the all-null-plus-one columns.
     const cols = await buildCustomFieldValueColumns(field, body, { workspaceId: ctx.workspaceId });
 
+    // Card-detail inputs save on blur, including when their value is unchanged. Match bulk
+    // writes: a no-op must not inflate activity counts or trigger change automations.
+    if (currentValue && customFieldValueEquals(field.type, currentValue, cols)) return currentValue;
+
     // Resolve human-readable strings for the activity feed (option labels / user names).
     const fromValue = await describeCustomFieldValue(field, currentValue);
     const toValue = await describeCustomFieldValue(field, cols);
@@ -2837,6 +2846,8 @@ export async function cardRoutes(
     assertCardActive(card);
     const current = await loadChecklistForCard(id, checklistId);
     if (!current) throw notFound("checklist not found");
+    // Return the same checklist response shape without extending a rename burst on a retry.
+    if (body.title === current.title) return (await loadChecklistsForCard(id)).find((entry) => entry.id === checklistId)!;
 
     const { checklist, activity } = await db.transaction(async (tx) => {
       const [updated] = await tx
@@ -3345,6 +3356,7 @@ export async function cardRoutes(
     previousAssigneeName: string | null;
   };
   type WrittenChecklistItemUpdate = {
+    changed: boolean;
     item: typeof cardChecklistItems.$inferSelect;
     activities: CoalescedActivityResult[];
     assigneeActivity: CoalescedActivityResult | null;
@@ -3478,6 +3490,17 @@ export async function cardRoutes(
     const id = card.id;
     const checklistId = checklist.id;
     const itemId = current.id;
+    const textChanged = body.text !== undefined && nextText !== current.text;
+    const descriptionChanged = body.description !== undefined && (prepared.nextDescription ?? "") !== (current.description ?? "");
+    const dueDateChanged = dueDateLocalDate !== undefined && (
+      dueDateLocalDate !== current.dueDateLocalDate || dueDateSlot !== current.dueDateSlot || dueDateTimezone !== current.dueDateTimezone
+    );
+    const completionChanged = body.completed !== undefined && body.completed !== Boolean(current.completedAt);
+    // Shared by single-item, item-addressed and selected-item edits. Unchanged fields in a mixed
+    // patch must not inflate their own activity counts, and an entirely unchanged patch is inert.
+    if (!textChanged && !descriptionChanged && !dueDateChanged && !completionChanged && !prepared.assigneeChanged) {
+      return { changed: false, item: current, activities: [], assigneeActivity: null, dueDateActivity: null, automationEffects: { effects: [] }, hiddenChecklistCompletionId: null };
+    }
     // Completing an item can fire checklist automations, which take the dependency graph lock. Take
     // it before the card row is touched below, in the same order as every other automation-running
     // transaction (lock, then card writes), or a concurrent completion of this card can deadlock.
@@ -3495,13 +3518,13 @@ export async function cardRoutes(
       .set({
         // Preparation can overlap another request. PATCH must only write supplied fields or a
         // completion toggle can silently restore an older title, description, or assignee.
-        ...(body.text !== undefined && { text: nextText }),
-        ...(body.description !== undefined && { description: prepared.nextDescription }),
+        ...(textChanged && { text: nextText }),
+        ...(descriptionChanged && { description: prepared.nextDescription }),
         ...(body.assigneeId !== undefined && { assigneeId: nextAssigneeId }),
         ...(dueDateLocalDate !== undefined && { dueDateLocalDate }),
         ...(dueDateSlot !== undefined && { dueDateSlot }),
         ...(dueDateTimezone !== undefined && { dueDateTimezone }),
-        ...(body.completed !== undefined && { completedAt: prepared.nextCompletedAt, completedById: prepared.nextCompletedById }),
+        ...(completionChanged && { completedAt: prepared.nextCompletedAt, completedById: prepared.nextCompletedById }),
         updatedAt: new Date(),
       })
       .where(eq(cardChecklistItems.id, itemId))
@@ -3518,7 +3541,7 @@ export async function cardRoutes(
     const activities: CoalescedActivityResult[] = [];
     let assigneeActivity: CoalescedActivityResult | null = null;
     let dueDateActivity: CoalescedActivityResult | null = null;
-    if (body.text !== undefined) {
+    if (textChanged) {
       activities.push(await recordCoalescedActivity(tx, {
         boardId: card.boardId,
         workspaceId: ctx.workspaceId,
@@ -3533,7 +3556,7 @@ export async function cardRoutes(
         payload: { checklistId, checklistTitle: checklist.title, itemId, fromValue: current.text, toValue: body.text },
       }));
     }
-    if (body.description !== undefined) {
+    if (descriptionChanged) {
       activities.push(await recordCoalescedActivity(tx, {
         boardId: card.boardId,
         workspaceId: ctx.workspaceId,
@@ -3586,7 +3609,7 @@ export async function cardRoutes(
         },
       });
     }
-    if (prepared.hasDueDateUpdate) {
+    if (dueDateChanged) {
       dueDateActivity = await recordCoalescedActivity(tx, {
         boardId: card.boardId,
         workspaceId: ctx.workspaceId,
@@ -3687,10 +3710,11 @@ export async function cardRoutes(
         triggerActorId: actorId,
       })
       : { effects: [] };
-    return { item: item!, activities, assigneeActivity, dueDateActivity, automationEffects, hiddenChecklistCompletionId };
+    return { changed: true, item: item!, activities, assigneeActivity, dueDateActivity, automationEffects, hiddenChecklistCompletionId };
   }
 
   async function emitChecklistItemUpdate(prepared: PreparedChecklistItemUpdate, written: WrittenChecklistItemUpdate) {
+    if (!written.changed) return;
     const { card, checklist, current } = prepared;
     const id = card.id;
     for (const activity of written.activities) await emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
@@ -3904,6 +3928,9 @@ export async function cardRoutes(
       .from(cardCustomFieldValues)
       .where(and(eq(cardCustomFieldValues.cardId, id), eq(cardCustomFieldValues.fieldId, fieldId)))
       .limit(1);
+    // Repeated blurs of an empty input must not record another clear or trigger automations.
+    if (!currentValue) return reply.code(204).send();
+
     // Clearing a checkbox returns it to the visible "No" state, which describe collapses
     // to "false"; scalar/select/user clear to null.
     const fromValue = await describeCustomFieldValue(field, currentValue);
