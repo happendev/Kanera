@@ -48,11 +48,8 @@ export default defineConfig({
   testDir: __dirname,
   testMatch: "*.spec.ts",
   projects: [
-    // Exact authored-data checks need the freshly seeded database. Run them as a dependency on
-    // every shard, before any behavior spec can add cards or change shared list configuration.
-    { name: "seed", testMatch: "seed-*.spec.ts" },
     {
-      name: "behavior", testIgnore: "seed-*.spec.ts", dependencies: ["seed"],
+      name: "behavior",
       ...(balancedShard ? { testMatch: balancedFiles(__dirname, balancedShard) } : {}),
     },
   ],

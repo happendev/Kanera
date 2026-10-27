@@ -25,11 +25,8 @@ New specs are discovered automatically with an estimated weight; the timing file
 Refresh weights after a successful full run with
 `node scripts/update-e2e-timings.mjs e2e/artifacts/<run>/results.json` and commit the updated JSON.
 
-The `seed` project runs the `seed-*.spec.ts` files against the pristine database before the
-`behavior` project on every shard. These are curated demo-data checks with small UI rendering
-checks, not prerequisites that depend on a behavior test's mutations. They also run first in an
-unsharded invocation. Run them alone with `pnpm test:e2e -- --project=seed`. When deliberately
-repeating only behavior tests, `--project=behavior --no-deps` omits that already-verified dependency.
+The `behavior` project runs directly on every shard. Seeding remains part of stack startup so
+behavioral tests have their accounts and fixture data; there is no separate seed-validation project.
 
 The three shards exercise the default-off compression setting, including
 `realtime-compression.spec.ts`. The compression-enabled setting can be checked manually with
@@ -43,7 +40,7 @@ Reproduce an individual shard or manually check compression locally:
 KANERA_E2E_SHARD=1/3 pnpm test:e2e
 KANERA_E2E_SHARD=2/3 pnpm test:e2e
 KANERA_E2E_SHARD=3/3 pnpm test:e2e
-REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true pnpm test:e2e -- realtime-compression.spec.ts --project=behavior --no-deps
+REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true pnpm test:e2e -- realtime-compression.spec.ts --project=behavior
 ```
 
 Run those commands one at a time on a local checkout: its fixed E2E ports, Docker Compose project

@@ -1,5 +1,5 @@
 import { globSync } from "node:fs";
-import { basename, sep } from "node:path";
+import { sep } from "node:path";
 import timings from "../timings.json";
 
 /** Keep whole files together, assigning the slowest remaining file to the lightest stack. */
@@ -9,7 +9,6 @@ export function balancedFiles(directory: string, shard: string): string[] {
   const index = Number(match[1]);
   const total = Number(match[2]);
   const files = globSync("**/*.spec.ts", { cwd: directory, exclude: ["artifacts/**", "node_modules/**"] })
-    .filter((file) => !basename(file).startsWith("seed-"))
     .map((file) => file.split(sep).join("/"));
   if (index > total || total > files.length) throw new Error("E2E shard index/total would leave a missing or empty shard");
   const weights: Record<string, number> = timings.files;
