@@ -14,20 +14,6 @@ on:
   schedule:
     # Mondays, shortly after Dependabot's weekly run, so a finding and its bump PR arrive together.
     - cron: "17 6 * * 1"
-  pull_request:
-    paths:
-      - "docker-compose*.yml"
-      - "**/Dockerfile"
-      - "scripts/scan-image-updates.py"
-      - ".github/workflows/image-scan.yml"
-  push:
-    branches:
-      - main
-    paths:
-      - "docker-compose*.yml"
-      - "**/Dockerfile"
-      - "scripts/scan-image-updates.py"
-      - ".github/workflows/image-scan.yml"
   workflow_dispatch:
 
 concurrency:
@@ -39,7 +25,7 @@ permissions:
 
 jobs:
   scan:
-    runs-on: sasuke-1
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6

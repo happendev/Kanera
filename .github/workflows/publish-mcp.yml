@@ -17,7 +17,7 @@ jobs:
     # Registry versions are immutable, so publish only from an mcp-vX.Y.Z release or an explicit
     # manual dispatch rather than on every application deployment.
     if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'mcp-v') }}
-    runs-on: sasuke-1
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       MCP_PUBLISHER_VERSION: v1.7.9
@@ -58,12 +58,7 @@ jobs:
 
       - name: Install MCP publisher
         run: |
-          case "${{ runner.arch }}" in
-            X64) arch=amd64 ;;
-            ARM64) arch=arm64 ;;
-            *) echo "Unsupported runner architecture: ${{ runner.arch }}"; exit 1 ;;
-          esac
-          archive="mcp-publisher_linux_${arch}.tar.gz"
+          archive="mcp-publisher_linux_amd64.tar.gz"
           version="${MCP_PUBLISHER_VERSION#v}"
           checksums="registry_${version}_checksums.txt"
           base_url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
