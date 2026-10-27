@@ -11,7 +11,7 @@
     <option value="member" i18n="Workspace role">Member</option>
     <option value="admin" i18n="Workspace role">Admin</option>
   </select>
-  <button class="sm compact-add-button" type="submit" [disabled]="!settings.addMemberUserId()" aria-label="Add member" i18n-aria-label kTooltip="Add member" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button: add a member">Add</span></button>
+  <button class="sm compact-add-button" type="submit" [disabled]="!settings.addMemberUserId()" aria-label="Add member" i18n-aria-label kTooltip="Add member" i18n-kTooltip><i aria-hidden="true" class="ti ti-plus"></i><span class="mobile-hide" i18n="Button: add a member">Add</span></button>
 </form>
 }
 @if (settings.members().length > 0) {
@@ -39,7 +39,7 @@
     <div class="org-user-actions-cell">
       @if (member.userId !== settings.currentUserId() && !settings.isInheritedWorkspaceAdmin(member)) {
       <button class="ghost icon danger" (click)="settings.removeMember(member.userId)" aria-label="Remove" i18n-aria-label="Button: remove the member" kTooltip="Remove from workspace" i18n-kTooltip>
-        <i class="ti ti-trash"></i>
+        <i aria-hidden="true" class="ti ti-trash"></i>
       </button>
       }
     </div>

@@ -61,7 +61,7 @@ class PreviewTooLargeError extends Error {}
         kTooltip="Previous attachment"
         i18n-kTooltip
       >
-        <i class="ti ti-chevron-left"></i>
+        <i aria-hidden="true" class="ti ti-chevron-left"></i>
       </button>
       <button
         type="button"
@@ -72,7 +72,7 @@ class PreviewTooLargeError extends Error {}
         kTooltip="Next attachment"
         i18n-kTooltip
       >
-        <i class="ti ti-chevron-right"></i>
+        <i aria-hidden="true" class="ti ti-chevron-right"></i>
       </button>
       <div class="lb-position" (click)="$event.stopPropagation()">{{ positionLabel() }}</div>
       }
@@ -100,7 +100,7 @@ class PreviewTooLargeError extends Error {}
         ></video>
         } @else if (isAudio()) {
         <div class="lb-file-card lb-audio-card" (click)="$event.stopPropagation()">
-          <i class="ti ti-file-music lb-file-icon"></i>
+          <i aria-hidden="true" class="ti ti-file-music lb-file-icon"></i>
           <span class="lb-file-card-name">{{ activeImage().fileName || audioFallbackName }}</span>
           <audio [src]="activeImage().src" controls autoplay preload="metadata"></audio>
         </div>
@@ -114,7 +114,7 @@ class PreviewTooLargeError extends Error {}
           ></iframe>
           } @else {
           <div class="lb-file-card" (click)="$event.stopPropagation()">
-            <i class="ti ti-file-type-pdf lb-file-icon"></i>
+            <i aria-hidden="true" class="ti ti-file-type-pdf lb-file-icon"></i>
             <span class="lb-file-card-name">{{ activeImage().fileName || pdfFallbackName }}</span>
             @if (pdfLoading()) {
             <span class="lb-file-hint" i18n>Loading preview…</span>
@@ -129,7 +129,7 @@ class PreviewTooLargeError extends Error {}
             <k-description-viewer [value]="value" emptyLabel="This Markdown file is empty." i18n-emptyLabel emptyIcon="markdown" [showCopy]="true" />
             } @else {
             <div class="lb-file-card lb-markdown-state">
-              <i class="ti ti-markdown lb-file-icon"></i>
+              <i aria-hidden="true" class="ti ti-markdown lb-file-icon"></i>
               <span class="lb-file-card-name">{{ activeImage().fileName || markdownFallbackName }}</span>
               @if (markdownLoading()) {
               <span class="lb-file-hint" i18n>Rendering preview…</span>
@@ -145,7 +145,7 @@ class PreviewTooLargeError extends Error {}
             <pre class="lb-text-body">{{ value }}</pre>
             } @else {
             <div class="lb-file-card lb-markdown-state">
-              <i class="ti ti-file-text lb-file-icon"></i>
+              <i aria-hidden="true" class="ti ti-file-text lb-file-icon"></i>
               <span class="lb-file-card-name">{{ activeImage().fileName || textFallbackName }}</span>
               @if (markdownLoading()) {
               <span class="lb-file-hint" i18n>Loading preview…</span>
@@ -174,24 +174,24 @@ class PreviewTooLargeError extends Error {}
       <div class="lb-controls" (click)="$event.stopPropagation()">
         @if (hasMultiple()) {
         <button type="button" class="lb-ctrl-btn" (click)="showPrevious()" aria-label="Previous attachment" i18n-aria-label>
-          <i class="ti ti-chevron-left"></i>
+          <i aria-hidden="true" class="ti ti-chevron-left"></i>
         </button>
         }
         @if (isImage()) {
         <button type="button" class="lb-ctrl-btn" (click)="zoomOut()" [disabled]="scale() <= minScale" aria-label="Zoom out" i18n-aria-label>
-          <i class="ti ti-zoom-out"></i>
+          <i aria-hidden="true" class="ti ti-zoom-out"></i>
         </button>
         <span class="lb-zoom-pct">{{ zoomLabel() }}</span>
         <button type="button" class="lb-ctrl-btn" (click)="zoomIn()" [disabled]="scale() >= maxScale" aria-label="Zoom in" i18n-aria-label>
-          <i class="ti ti-zoom-in"></i>
+          <i aria-hidden="true" class="ti ti-zoom-in"></i>
         </button>
         <button type="button" class="lb-ctrl-btn" (click)="resetZoom()" aria-label="Reset zoom" i18n-aria-label kTooltip="Reset zoom (0)" i18n-kTooltip="Tooltip; (0) is the keyboard shortcut">
-          <i class="ti ti-arrows-maximize"></i>
+          <i aria-hidden="true" class="ti ti-arrows-maximize"></i>
         </button>
         }
         @if (hasMultiple()) {
         <button type="button" class="lb-ctrl-btn" (click)="showNext()" aria-label="Next attachment" i18n-aria-label>
-          <i class="ti ti-chevron-right"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right"></i>
         </button>
         }
         @if (isImage() || hasMultiple()) {
@@ -205,7 +205,7 @@ class PreviewTooLargeError extends Error {}
           [attr.aria-label]="textCopied() ? copiedTextLabel : copyTextLabel"
           [kTooltip]="textCopied() ? copiedLabel : copyTextLabel"
         >
-          <i class="ti" [class.ti-copy]="!textCopied()" [class.ti-copy-check]="textCopied()"></i>
+          <i aria-hidden="true" class="ti" [class.ti-copy]="!textCopied()" [class.ti-copy-check]="textCopied()"></i>
         </button>
         }
         <button
@@ -217,10 +217,10 @@ class PreviewTooLargeError extends Error {}
           kTooltip="Download"
           i18n-kTooltip="Button: download the attachment"
         >
-          <i class="ti ti-download"></i>
+          <i aria-hidden="true" class="ti ti-download"></i>
         </button>
         <button type="button" class="lb-ctrl-btn" (click)="close()" aria-label="Close" i18n-aria-label="Button: close the preview">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       </div>
 

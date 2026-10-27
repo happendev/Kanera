@@ -1,5 +1,5 @@
 <section class="work-done-view">
-  @if (offlineCopyLabel()) { <div class="offline-banner" role="status"><i class="ti ti-cloud-off"></i>{{ offlineCopyLabel() }}</div> }
+  @if (offlineCopyLabel()) { <div class="offline-banner" role="status"><i aria-hidden="true" class="ti ti-cloud-off"></i>{{ offlineCopyLabel() }}</div> }
   <div class="wd-toolbar" (click)="$event.stopPropagation()">
     <div class="wd-toolbar-left">
       <!-- Presets cover the common reads; the range picker handles anything else. -->
@@ -23,7 +23,7 @@
           i18n-kTooltip
           (click)="shiftRange(-1)"
         >
-          <i class="ti ti-chevron-left"></i>
+          <i aria-hidden="true" class="ti ti-chevron-left"></i>
         </button>
         <!-- Must stay the popover's parent element for anchored positioning. -->
         <div class="menu-anchor">
@@ -36,9 +36,9 @@
             i18n-aria-label
             (click)="$event.stopPropagation(); rangePickerOpen.set(!rangePickerOpen())"
           >
-            <i class="ti ti-calendar-event"></i>
+            <i aria-hidden="true" class="ti ti-calendar-event"></i>
             <span class="wd-range-label">{{ rangeLabel() }}</span>
-            <i class="ti ti-selector"></i>
+            <i aria-hidden="true" class="ti ti-selector"></i>
           </button>
           @if (rangePickerOpen()) {
           <k-date-range-picker
@@ -60,7 +60,7 @@
           i18n-kTooltip
           (click)="shiftRange(1)"
         >
-          <i class="ti ti-chevron-right"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right"></i>
         </button>
       </div>
     </div>
@@ -79,7 +79,7 @@
         i18n-kTooltip
         (click)="copyRange()"
       >
-        <i class="ti ti-clipboard-text"></i>
+        <i aria-hidden="true" class="ti ti-clipboard-text"></i>
       </button>
       }
     </div>

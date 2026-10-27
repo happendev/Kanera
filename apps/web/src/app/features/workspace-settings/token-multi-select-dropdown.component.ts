@@ -42,7 +42,7 @@ export type TokenMultiSelectOption = {
           }
         </span>
       } @else {
-        <i [class]="'ti ' + icon()"></i>
+        <i aria-hidden="true" [class]="'ti ' + icon()"></i>
       }
     </k-multi-select-dropdown>
   `,

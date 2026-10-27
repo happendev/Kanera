@@ -1,4 +1,5 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
+import { users } from "./support/env";
 import { expect, test } from "./support/fixtures";
 import { boardHref } from "./support/ui";
 
@@ -352,17 +353,13 @@ test("Team overview focuses one teammate with their Up next docked, curated from
   for (const toggle of await sectionToggles.all()) await expect(toggle).toHaveAttribute("aria-expanded", "true");
 });
 
-test("Team overview hides guests from other organisations on request, and remembers it", async ({ page, signIn }) => {
+test("Team overview hides guests from other organisations by default, and remembers the toggle", async ({ page, signIn }) => {
   // Maya is a cross-organisation guest on Mobile Experience; Marcus is a member of Amelia's organisation.
   await signIn(page, "amelia");
   await page.goto("/team-cards");
   await page.getByRole("button", { name: "Team overview" }).click();
   const strip = page.locator("k-team-overview .person-strip");
   const toggle = strip.getByRole("button", { name: "Hide guests" });
-  await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toBeVisible();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
-
-  await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toHaveCount(0);
   await expect(page.locator("k-team-overview .person-name", { hasText: "Maya Chen" })).toHaveCount(0);
@@ -379,5 +376,54 @@ test("Team overview hides guests from other organisations on request, and rememb
   await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toHaveCount(0);
 
   await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toBeVisible();
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toBeVisible();
+
+  // Hiding a focused guest returns focus to everyone still visible.
+  await strip.locator(".strip-chip", { hasText: "Maya" }).click();
+  await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toHaveAttribute("aria-pressed", "true");
+  await toggle.click();
+  await expect(strip.locator(".strip-everyone")).toHaveAttribute("aria-pressed", "true");
+  await expect(strip.locator(".strip-chip", { hasText: "Maya" })).toHaveCount(0);
+});
+
+test("Team overview hides hosts of boards the viewer visits as a guest", async ({ page, signIn, apiAs, testWorkspace, uniqueName }) => {
+  const owner = await apiAs("amelia");
+  const granted = await owner.post(`/api/workspaces/${testWorkspace.id}/guests/invitations`, {
+    data: { boardId: testWorkspace.boardId, email: users.maya.email, role: "editor" },
+  });
+  expect(granted.ok(), await granted.text()).toBe(true);
+  const title = uniqueName("E2E guest host work");
+  const card = await owner.post(`/api/boards/${testWorkspace.boardId}/lists/${testWorkspace.lists.get("Backlog")}/cards`, { data: {
+    title, assigneeIds: [await userId(await apiAs("marcus"))],
+  } });
+  expect(card.ok(), await card.text()).toBe(true);
+
+  await signIn(page, "maya", "/team-cards");
+  await page.getByRole("button", { name: "Team overview" }).click();
+  const strip = page.locator("k-team-overview .person-strip");
+  const toggle = strip.getByRole("button", { name: "Hide guests" });
+  // Explicitly enable hiding before checking the reverse relationship, so the regression also
+  // catches host misclassification independently of the default preference.
+  if (await toggle.getAttribute("aria-pressed") === "false") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(strip.locator(".strip-chip", { hasText: "Marcus" })).toHaveCount(0);
+  await expect(personPanel(page, "Marcus Cole")).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath("team-overview-guest-hosts.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await toggle.scrollIntoViewIfNeeded();
+  await expect(toggle).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath("team-overview-guest-hosts-phone.png") });
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  await toggle.click();
+  await expect(strip.locator(".strip-chip", { hasText: "Marcus" })).toBeVisible();
+  await expect(row(personPanel(page, "Marcus Cole"), title)).toBeVisible();
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(strip.locator(".strip-chip", { hasText: "Marcus" })).toBeVisible();
 });

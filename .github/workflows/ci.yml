@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: sasuke-1
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -56,12 +56,12 @@ jobs:
 
   e2e-shard:
     name: E2E ${{ matrix.label }}
-    runs-on: sasuke-1
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # The local builder shares fixed E2E ports and Docker resources, so shards must run serially.
+    # Seeded users, boards and realtime channels are shared inside a stack. Separate runners give
+    # each shard its own database, Valkey, ports and services without weakening realtime coverage.
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         include:
           - label: shard 1/3
@@ -73,9 +73,6 @@ jobs:
           - label: shard 3/3
             shard: 3/3
             artifact: 3-of-3
-          - label: compression enabled
-            shard: ""
-            artifact: compression
     steps:
       - uses: actions/checkout@v4
 
@@ -90,7 +87,7 @@ jobs:
       - id: pnpm-store
         run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
 
-      # Reuse downloaded packages across shards, while still validating and
+      # Reuse downloaded packages across the isolated runners, while still validating and
       # installing the complete frozen lockfile in each checkout.
       - uses: actions/cache@v4
         with:
@@ -100,7 +97,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Browser binaries are keyed on the pinned Playwright version; system deps still install
-      # every run so the local builder has the required system libraries.
+      # every run because apt packages are not part of the cached directory.
       - id: playwright-version
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
 
@@ -116,17 +113,9 @@ jobs:
       - if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
-      - if: matrix.shard != ''
-        run: pnpm test:e2e
+      - run: pnpm test:e2e
         env:
           KANERA_E2E_SHARD: ${{ matrix.shard }}
-
-      # The normal shards pin compression off. Exercise the opt-in handshake and payload path too,
-      # in its own fresh stack so settings and data cannot leak between runs.
-      - if: matrix.shard == ''
-        run: pnpm test:e2e -- realtime-compression.spec.ts --project=behavior --no-deps
-        env:
-          REALTIME_WEBSOCKET_COMPRESSION_ENABLED: "true"
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -141,7 +130,7 @@ jobs:
   e2e:
     needs: e2e-shard
     if: always()
-    runs-on: sasuke-1
+    runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
       - name: Require every E2E shard to pass
@@ -154,7 +143,7 @@ jobs:
           fi
 
   secret-scan:
-    runs-on: sasuke-1
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read

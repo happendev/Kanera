@@ -58,7 +58,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
          Escape still bubbles so the panel's dismissal sees it. -->
     <div class="rp-panel" role="dialog" aria-label="Remind me" i18n-aria-label (keydown)="$event.key === 'Escape' || $event.stopPropagation()" (click)="$event.stopPropagation()">
       <div class="rp-head">
-        <i class="ti ti-alarm"></i>
+        <i aria-hidden="true" class="ti ti-alarm"></i>
         <span class="rp-title" i18n="Popover heading for setting a personal card reminder">Remind me</span>
         @if (reminder(); as current) {
         <span class="rp-current" [class.is-fired]="current.firedAt">
@@ -80,11 +80,11 @@ function instantFor(dayKey: string, minutes: number): Date | null {
         <section class="rp-calendar" aria-label="Pick a day" i18n-aria-label>
           <div class="rp-month">
             <button type="button" class="rp-icon-btn" (click)="previousMonth()" [disabled]="!canGoBack()" aria-label="Previous month" i18n-aria-label kTooltip="Previous month" i18n-kTooltip>
-              <i class="ti ti-chevron-left"></i>
+              <i aria-hidden="true" class="ti ti-chevron-left"></i>
             </button>
             <div class="rp-month-label" aria-live="polite">{{ monthLabel() }}</div>
             <button type="button" class="rp-icon-btn" (click)="nextMonth()" [disabled]="!canGoForward()" aria-label="Next month" i18n-aria-label kTooltip="Next month" i18n-kTooltip>
-              <i class="ti ti-chevron-right"></i>
+              <i aria-hidden="true" class="ti ti-chevron-right"></i>
             </button>
           </div>
           <div class="rp-weekdays" aria-hidden="true">
@@ -112,10 +112,10 @@ function instantFor(dayKey: string, minutes: number): Date | null {
         <section class="rp-time" aria-label="Pick a time" i18n-aria-label>
           <div class="rp-clock">
             <button type="button" class="rp-icon-btn" (click)="step(-1)" aria-label="15 minutes earlier" i18n-aria-label kTooltip="15 minutes earlier" i18n-kTooltip>
-              <i class="ti ti-minus"></i>
+              <i aria-hidden="true" class="ti ti-minus"></i>
             </button>
             <label class="rp-clock-field">
-              <i class="ti ti-clock"></i>
+              <i aria-hidden="true" class="ti ti-clock"></i>
               <input
                 class="rp-clock-input"
                 type="text"
@@ -135,7 +135,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
               />
             </label>
             <button type="button" class="rp-icon-btn" (click)="step(1)" aria-label="15 minutes later" i18n-aria-label kTooltip="15 minutes later" i18n-kTooltip>
-              <i class="ti ti-plus"></i>
+              <i aria-hidden="true" class="ti ti-plus"></i>
             </button>
           </div>
         </section>

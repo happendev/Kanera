@@ -43,7 +43,7 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
       <div class="bg-head">
         <span class="bg-title">{{ title() }}</span>
         <button type="button" class="bg-clear" [disabled]="!value()" (click)="select(null)">
-          <i class="ti ti-ban"></i> <ng-container i18n="Button: remove the board background">Clear</ng-container>
+          <i aria-hidden="true" class="ti ti-ban"></i> <ng-container i18n="Button: remove the board background">Clear</ng-container>
         </button>
       </div>
       <div class="bg-group-title" i18n="Heading for gradient board backgrounds">Gradients</div>
@@ -60,7 +60,7 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
           >
             <span class="bg-label">{{ label(token) }}</span>
             @if (token === value()) {
-              <i class="ti ti-check bg-check"></i>
+              <i aria-hidden="true" class="ti ti-check bg-check"></i>
             }
           </button>
         }
@@ -79,7 +79,7 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
           >
             <span class="bg-label">{{ label(token) }}</span>
             @if (token === value()) {
-              <i class="ti ti-check bg-check"></i>
+              <i aria-hidden="true" class="ti ti-check bg-check"></i>
             }
           </button>
         }

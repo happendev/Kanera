@@ -44,7 +44,7 @@ const COLOR_LABELS: Record<ColorToken, string> = {
         @if (value()) {
           <span class="cp-swatch" [style.background]="'var(--color-' + value() + ')'"></span>
         } @else {
-          <span class="cp-none"><i class="ti ti-square"></i></span>
+          <span class="cp-none"><i aria-hidden="true" class="ti ti-square"></i></span>
         }
       </button>
 
@@ -65,7 +65,7 @@ const COLOR_LABELS: Record<ColorToken, string> = {
               i18n-kTooltip="Colour picker option that clears the colour"
               (click)="select(null)"
             >
-              <i class="ti ti-square"></i>
+              <i aria-hidden="true" class="ti ti-square"></i>
             </button>
             @for (token of tokens; track token) {
               <button

@@ -62,7 +62,7 @@ import { byPosition } from "../../shared/position-sort";
               <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="22" [userId]="member.userId" />
               <span>{{ member.userId === currentUserId() ? meLabel : member.displayName }}</span>
               @if (assigneeIds().includes(member.userId)) {
-                <i class="ti ti-check"></i>
+                <i aria-hidden="true" class="ti ti-check"></i>
               }
             </button>
           }
@@ -80,7 +80,7 @@ import { byPosition } from "../../shared/position-sort";
               <span class="cqe-dot" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"></span>
               <span>{{ label.name }}</span>
               @if (labelIds().includes(label.id)) {
-                <i class="ti ti-check"></i>
+                <i aria-hidden="true" class="ti ti-check"></i>
               }
             </button>
           }
@@ -90,7 +90,7 @@ import { byPosition } from "../../shared/position-sort";
       <div class="cqe-section cqe-due-wrap">
         <span class="cqe-label" i18n="Card due date section label">Due date</span>
         <button type="button" class="cqe-due-btn" [class.is-active]="datePickerOpen()" (click)="$event.preventDefault(); toggleDatePicker($event)">
-          <i class="ti ti-calendar-event"></i>
+          <i aria-hidden="true" class="ti ti-calendar-event"></i>
           <span>{{ dueDateText() }}</span>
         </button>
         @if (datePickerOpen()) {

@@ -22,18 +22,18 @@ const STANDALONE_BOARDS = $localize`:Group label in a board picker:Standalone bo
             <h2>{{ dialogTitle() }}</h2>
             <p>{{ dialogSubtitle() }}</p>
           </div>
-          <button type="button" class="ghost icon" (click)="dismissed.emit()" aria-label="Close" i18n-aria-label="Button: close the dialog"><i class="ti ti-x"></i></button>
+          <button type="button" class="ghost icon" (click)="dismissed.emit()" aria-label="Close" i18n-aria-label="Button: close the dialog"><i aria-hidden="true" class="ti ti-x"></i></button>
         </header>
         <div class="direction-rule">
-          <i class="ti ti-arrow-right"></i>
+          <i aria-hidden="true" class="ti ti-arrow-right"></i>
           <div><strong i18n>One-way board mirror</strong><span>{{ directionCopy() }}</span></div>
         </div>
         @if (loading()) {
-          <p class="state"><i class="ti ti-loader-2 kanera-spin"></i> @if (inboundMode()) { <ng-container i18n>Loading source boards…</ng-container> } @else { <ng-container i18n>Loading target boards…</ng-container> }</p>
+          <p class="state"><i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i> @if (inboundMode()) { <ng-container i18n>Loading source boards…</ng-container> } @else { <ng-container i18n>Loading target boards…</ng-container> }</p>
         } @else if (step() === 1) {
           @if (sourceBlockedByIncomingMirror()) {
             <div class="topology-error" role="alert">
-              <i class="ti ti-ban"></i>
+              <i aria-hidden="true" class="ti ti-ban"></i>
               <div><strong i18n>This board is already a mirror target.</strong><span i18n>A mirror target cannot also be a mirror source. Delete its incoming mirror relationship first.</span></div>
             </div>
           } @else {
@@ -50,12 +50,12 @@ const STANDALONE_BOARDS = $localize`:Group label in a board picker:Standalone bo
               </select>
             </label>
             @if (targetGroups().length === 0) {
-              <p class="state"><i class="ti ti-info-circle"></i> @if (inboundMode()) { <ng-container i18n>No eligible source boards are available.</ng-container> } @else { <ng-container i18n>No eligible target boards are available.</ng-container> }</p>
+              <p class="state"><i aria-hidden="true" class="ti ti-info-circle"></i> @if (inboundMode()) { <ng-container i18n>No eligible source boards are available.</ng-container> } @else { <ng-container i18n>No eligible target boards are available.</ng-container> }</p>
             } @else {
-              <p class="eligibility-note"><i class="ti ti-shield-check"></i>{{ eligibilityCopy() }}</p>
+              <p class="eligibility-note"><i aria-hidden="true" class="ti ti-shield-check"></i>{{ eligibilityCopy() }}</p>
             }
-            @if (error(); as message) { <p id="mirror-create-error" class="error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p> }
-            <footer><button type="button" class="ghost" (click)="dismissed.emit()" i18n="Button: dismiss the dialog">Cancel</button><button type="button" (click)="step.set(2)" [disabled]="!targetBoardId()"><ng-container i18n="Button: go to the next step">Continue</ng-container> <i class="ti ti-arrow-right"></i></button></footer>
+            @if (error(); as message) { <p id="mirror-create-error" class="error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p> }
+            <footer><button type="button" class="ghost" (click)="dismissed.emit()" i18n="Button: dismiss the dialog">Cancel</button><button type="button" (click)="step.set(2)" [disabled]="!targetBoardId()"><ng-container i18n="Button: go to the next step">Continue</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i></button></footer>
           }
         } @else {
           <div class="step-copy">
@@ -83,8 +83,8 @@ const STANDALONE_BOARDS = $localize`:Group label in a board picker:Standalone bo
               </div>
             }
           </div>
-          @if (error(); as message) { <p class="error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p> }
-          <footer><button type="button" class="ghost" (click)="step.set(1)"><i class="ti ti-arrow-left"></i> <ng-container i18n="Button: go to the previous step">Back</ng-container></button><button type="button" (click)="create()" [disabled]="saving()">@if (saving()) { <i class="ti ti-loader-2 kanera-spin"></i> } <ng-container i18n="Button: create the board mirror">Create mirror</ng-container></button></footer>
+          @if (error(); as message) { <p class="error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p> }
+          <footer><button type="button" class="ghost" (click)="step.set(1)"><i aria-hidden="true" class="ti ti-arrow-left"></i> <ng-container i18n="Button: go to the previous step">Back</ng-container></button><button type="button" (click)="create()" [disabled]="saving()">@if (saving()) { <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i> } <ng-container i18n="Button: create the board mirror">Create mirror</ng-container></button></footer>
         }
       </section>
     </div>

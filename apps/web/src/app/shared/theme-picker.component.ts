@@ -46,7 +46,7 @@ const THEME_OPTIONS: readonly { value: Theme; label: string; icon: string }[] = 
             <span class="tp-tile"><span class="tp-line"></span><span class="tp-line is-short"></span></span>
           </span>
         </span>
-        <span class="tp-label"><i [class]="'ti ti-' + option.icon"></i>{{ option.label }}</span>
+        <span class="tp-label"><i aria-hidden="true" [class]="'ti ti-' + option.icon"></i>{{ option.label }}</span>
       </button>
       }
     </div>

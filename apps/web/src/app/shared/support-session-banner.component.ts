@@ -11,7 +11,7 @@ import { AuthService } from "../core/auth/auth.service";
   template: `
     @if (auth.supportSession(); as session) {
     <div class="support-banner" role="alert">
-      <i class="ti ti-shield-lock"></i>
+      <i aria-hidden="true" class="ti ti-shield-lock"></i>
       <span class="support-banner__text">
         <ng-container i18n="Banner during a staff support session; the placeholder is the customer organisation">Support session — acting as <strong>{{ session.orgName // i18n(ph="organisation") }}</strong>. Changes are attributed to this session.</ng-container>
       </span>

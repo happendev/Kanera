@@ -132,9 +132,8 @@
   // Engaged toggle. The arrow becomes an ✕, so the way out of the filter is always visible rather
   // than only on hover.
   &.is-active {
-    background: var(--surface-2);
-    border-color: var(--border-strong);
-    box-shadow: inset 2px 0 0 var(--accent);
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 
     .stat-tile-go {
       opacity: 1;

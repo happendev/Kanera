@@ -22,7 +22,7 @@ import { PickerListComponent, type PickerGroup } from "./picker-list.component";
       <button #trigger type="button" class="msd-trigger" [class.is-open]="open()" [class.is-empty]="empty()" (click)="toggleOpen()" [attr.aria-expanded]="open()" aria-haspopup="listbox" [attr.aria-label]="ariaLabel()">
         <ng-content />
         <span class="msd-label">{{ label() }}</span>
-        <i class="ti ti-chevron-down msd-chevron"></i>
+        <i aria-hidden="true" class="ti ti-chevron-down msd-chevron"></i>
       </button>
 
       @if (open()) {

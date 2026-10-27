@@ -9,7 +9,7 @@
         @for (item of scatter; track $index) {
         <span class="hero-scatter-item" [class]="'hero-scatter-item is-' + item.kind + ' is-' + item.accent" [style.left.%]="item.x" [style.top.%]="item.y" [style.--scatter-size.px]="item.size"
           [style.--scatter-rotate.deg]="item.rotate ?? 0" [style.--scatter-delay.s]="-(($index * 1.7) % 9)">
-          @if (item.kind === 'check') { <i class="ti ti-check"></i> }
+          @if (item.kind === 'check') { <i aria-hidden="true" class="ti ti-check"></i> }
         </span>
         }
       </div>
@@ -61,7 +61,7 @@
     @if (invitations.pending().length > 0) {
     <section class="invitation-panel" aria-labelledby="pending-invitations-heading">
       <div class="invitation-heading">
-        <i class="ti ti-mail-opened"></i>
+        <i aria-hidden="true" class="ti ti-mail-opened"></i>
         <div>
           <h2 id="pending-invitations-heading" i18n="Section heading">Pending invitations</h2>
           <p i18n="Pending invitations section subtitle">Board access waiting for you.</p>
@@ -76,16 +76,16 @@
           </div>
           <button type="button" class="sm" [disabled]="acceptingInvitationId() !== null" (click)="acceptInvitation(invitation.id)">
             @if (acceptingInvitationId() === invitation.id) {
-            <i class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n="Button state while accepting an invitation">Accepting…</ng-container>
+            <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n="Button state while accepting an invitation">Accepting…</ng-container>
             } @else {
-            <i class="ti ti-check"></i> <ng-container i18n="Button: accept an invitation">Accept</ng-container>
+            <i aria-hidden="true" class="ti ti-check"></i> <ng-container i18n="Button: accept an invitation">Accept</ng-container>
             }
           </button>
         </div>
         }
       </div>
       @if (invitationError()) {
-      <p class="invitation-error" role="alert"><i class="ti ti-alert-circle"></i>{{ invitationError() }}</p>
+      <p class="invitation-error" role="alert"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ invitationError() }}</p>
       }
     </section>
     }
@@ -94,9 +94,9 @@
     <section class="guest-affordances" aria-label="Guest organisations" i18n-aria-label="Section label">
       @for (organisation of invitations.guestOrgs(); track organisation.clientId) {
       <a [routerLink]="['/b', organisation.firstBoardId]">
-        <i class="ti ti-users-group"></i>
+        <i aria-hidden="true" class="ti ti-users-group"></i>
         <span i18n="Link to boards in another organisation you are a guest of">You're a guest on <strong>{{ organisation.orgName // i18n(ph="organisation") }}</strong> — view boards</span>
-        <i class="ti ti-arrow-right"></i>
+        <i aria-hidden="true" class="ti ti-arrow-right"></i>
       </a>
       }
     </section>
@@ -147,18 +147,18 @@
       <div class="no-boards-actions" [class.is-single]="!hasNoWorkspace()">
         @if (hasNoWorkspace()) {
         <div class="start-card">
-          <div class="start-card-icon"><i class="ti ti-layout-grid"></i></div>
+          <div class="start-card-icon"><i aria-hidden="true" class="ti ti-layout-grid"></i></div>
           <h3 i18n="Getting-started option heading">Workspace</h3>
           <p i18n="Getting-started option: workspace">Several boards that share one set of lists and fields. Best for a team.</p>
           <div class="start-card-actions">
             <button type="button" class="action-workspace" (click)="newWorkspace()">
-              <i class="ti ti-plus"></i> <ng-container i18n="Button">Create workspace</ng-container>
+              <i aria-hidden="true" class="ti ti-plus"></i> <ng-container i18n="Button">Create workspace</ng-container>
             </button>
           </div>
         </div>
         }
         <div class="start-card">
-          <div class="start-card-icon"><i class="ti ti-layout-kanban"></i></div>
+          <div class="start-card-icon"><i aria-hidden="true" class="ti ti-layout-kanban"></i></div>
           @if (hasNoWorkspace()) {
           <h3 i18n="Getting-started option heading">Standalone board</h3>
           <p i18n="Getting-started option: standalone board">One board with its own lists and fields. Best for a single project.</p>
@@ -168,7 +168,7 @@
           }
           <div class="start-card-actions">
             <button type="button" class="action-standalone" (click)="newStandaloneBoard()">
-              <i class="ti ti-plus"></i> <ng-container i18n="Button">New standalone board</ng-container>
+              <i aria-hidden="true" class="ti ti-plus"></i> <ng-container i18n="Button">New standalone board</ng-container>
             </button>
             @if (!hasNoWorkspace()) {
             <button type="button" class="secondary action-workspace" (click)="newWorkspace()" i18n="Button">New workspace</button>
@@ -178,7 +178,7 @@
       </div>
       @if (createLimitMessage(); as message) {
       <p class="workspace-limit-feedback" role="alert">
-        <i class="ti ti-lock"></i>
+        <i aria-hidden="true" class="ti ti-lock"></i>
         <span>{{ message }}</span>
       </p>
       }
@@ -192,12 +192,12 @@
     } @else {
     @if (state.cachedAt(); as cachedAt) {
     <div class="offline-banner" role="status">
-      <i class="ti ti-cloud-off"></i>
+      <i aria-hidden="true" class="ti ti-cloud-off"></i>
       <span i18n="Offline banner on the home page">Showing your last saved day from {{ formatTime(cachedAt) // i18n(ph="time") }}. Reconnect to refresh.</span>
     </div>
     } @else if (!state.online()) {
     <div class="offline-banner" role="status">
-      <i class="ti ti-wifi-off"></i>
+      <i aria-hidden="true" class="ti ti-wifi-off"></i>
       @if (state.lastSyncedAt(); as syncedAt) {
       <span i18n="Offline banner on the home page">Connection lost. Showing the last loaded day from {{ formatTime(syncedAt) // i18n(ph="time") }}. Changes will refresh after reconnecting.</span>
       } @else {
@@ -242,7 +242,7 @@
               <strong>{{ state.completedThisWeek() }}</strong>
               <span class="progress-caption" i18n="Caption under the number of cards completed">{ state.completedThisWeek(), plural, =1 {card completed in the last 7 days} other {cards completed in the last 7 days} }</span>
               <span class="progress-delta" [class.is-up]="state.weekDelta() > 0" [class.is-level]="state.weekDelta() === 0">
-                <i class="ti ti-{{ state.weekDelta() > 0 ? 'trending-up' : state.weekDelta() < 0 ? 'trending-down' : 'minus' }}"></i>
+                <i aria-hidden="true" class="ti ti-{{ state.weekDelta() > 0 ? 'trending-up' : state.weekDelta() < 0 ? 'trending-down' : 'minus' }}"></i>
                 @if (state.weekDelta() === 0) {
                 <ng-container i18n="Progress compared with last week">Level with last week</ng-container>
                 } @else {
@@ -266,13 +266,13 @@
         <section class="priorities-section">
           <h2 class="section-title">
             <ng-container i18n="Section heading: the user's priority queue">Up next</ng-container>
-            <a class="agenda-see-all" routerLink="/my-cards"><ng-container i18n="Link to the full list">See all</ng-container> <i class="ti ti-arrow-narrow-right"></i></a>
+            <a class="agenda-see-all" routerLink="/my-cards"><ng-container i18n="Link to the full list">See all</ng-container> <i aria-hidden="true" class="ti ti-arrow-narrow-right"></i></a>
           </h2>
           @if (prioritiesOffline()) {
-          <p class="priorities-hint"><i class="ti ti-wifi-off"></i>{{ myPriorities.offlineMessage() }}</p>
+          <p class="priorities-hint"><i aria-hidden="true" class="ti ti-wifi-off"></i>{{ myPriorities.offlineMessage() }}</p>
           }
           @if (priorityError(); as message) {
-          <p class="priorities-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+          <p class="priorities-error"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p>
           }
           <!-- The same rows the shell drawer and the My Cards dock render, so the top of the queue reads
                identically wherever it is seen — and reordering here is the same gesture there. Capped at
@@ -283,7 +283,7 @@
           </div>
         </section>
         } @else if (prioritiesOffline()) {
-        <p class="priorities-hint"><i class="ti ti-wifi-off"></i>{{ myPriorities.offlineMessage() }}</p>
+        <p class="priorities-hint"><i aria-hidden="true" class="ti ti-wifi-off"></i>{{ myPriorities.offlineMessage() }}</p>
         } @else if (showPrioritiesHint()) {
         <!-- One muted line, shown only to someone who has assigned work but no queue. No illustration
              and no dismissal state: this is discoverability, not an empty state worth designing. -->
@@ -319,15 +319,15 @@
             <h2 class="section-title" i18n="Section heading: the agenda">Your week</h2>
             @if (focusFilterLabel(); as filterLabel) {
             <button type="button" class="focus-clear" (click)="clearFocus()">
-              <i class="ti ti-filter"></i>
+              <i aria-hidden="true" class="ti ti-filter"></i>
               {{ filterLabel }}
-              <span class="focus-clear-x"><i class="ti ti-x"></i></span>
+              <span class="focus-clear-x"><i aria-hidden="true" class="ti ti-x"></i></span>
             </button>
             }
           </div>
           @if (state.isAllClear()) {
           <div class="agenda-panel agenda-clear">
-            <i class="ti ti-confetti"></i>
+            <i aria-hidden="true" class="ti ti-confetti"></i>
             <strong i18n="Agenda empty state title">You're all clear</strong>
             <span i18n="Agenda empty state text">Nothing assigned to you is due this week.</span>
           </div>
@@ -339,7 +339,7 @@
             <!-- A filter can outlive the work it matched (a realtime refresh empties the bucket), so
                  say so and offer the way out rather than reading as "all clear". -->
             <div class="agenda-clear">
-              <i class="ti ti-filter-off"></i>
+              <i aria-hidden="true" class="ti ti-filter-off"></i>
               <strong i18n="Agenda empty state when a filter matches nothing">Nothing left in this filter</strong>
               <button type="button" class="secondary sm" (click)="clearFocus()" i18n="Button: clear the agenda filter">Show everything</button>
             </div>

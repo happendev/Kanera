@@ -1,5 +1,5 @@
 <section class="timeline-view" (keydown)="onKeydown($event)" (click)="clearSelection()">
-  @if (offlineCopyLabel()) { <div class="offline-banner" role="status"><i class="ti ti-cloud-off"></i>{{ offlineCopyLabel() }}</div> }
+  @if (offlineCopyLabel()) { <div class="offline-banner" role="status"><i aria-hidden="true" class="ti ti-cloud-off"></i>{{ offlineCopyLabel() }}</div> }
   <div class="timeline-toolbar" kFitLabels (click)="$event.stopPropagation()">
     <div class="timeline-toolbar-left">
       <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label" (click)="scrollToToday()" kTooltip="Scroll to today" i18n-kTooltip="Tooltip on the Timeline view's Today button">

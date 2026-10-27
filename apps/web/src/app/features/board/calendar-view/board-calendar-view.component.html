@@ -9,14 +9,14 @@
   <div class="calendar-toolbar" (click)="$event.stopPropagation()">
     <div class="calendar-toolbar-left">
       <button type="button" class="k-toolbar-icon-btn" (click)="previous()" aria-label="Previous" i18n-aria-label="Button - go to the previous month or week" kTooltip="Previous" i18n-kTooltip="Button - go to the previous month or week">
-        <i class="ti ti-chevron-left"></i>
+        <i aria-hidden="true" class="ti ti-chevron-left"></i>
       </button>
       <button type="button" class="k-toolbar-btn" (click)="today()">
-        <i class="ti ti-calendar-event"></i>
+        <i aria-hidden="true" class="ti ti-calendar-event"></i>
         <span i18n="Button - jump the calendar to today">Today</span>
       </button>
       <button type="button" class="k-toolbar-icon-btn" (click)="next()" aria-label="Next" i18n-aria-label="Button - go to the next month or week" kTooltip="Next" i18n-kTooltip="Button - go to the next month or week">
-        <i class="ti ti-chevron-right"></i>
+        <i aria-hidden="true" class="ti ti-chevron-right"></i>
       </button>
       <span class="cal-toolbar-title">{{ title() }}</span>
     </div>
@@ -308,11 +308,11 @@
       <span class="cal-card-title">
         @if (card.completedAt) {
           <!-- Same green tick a completed k-card carries, so "done" reads the same everywhere. -->
-          <i class="ti ti-circle-check cal-complete-icon" kTooltip="Completed" i18n-kTooltip="Tooltip on the tick shown beside a completed card's title"></i>
+          <i aria-hidden="true" class="ti ti-circle-check cal-complete-icon" kTooltip="Completed" i18n-kTooltip="Tooltip on the tick shown beside a completed card's title"></i>
         } @else if (listFor(card); as list) {
           <!-- The list's own icon in its colour, the same mark the lane header and table status cell
                carry, so a tile says where the card stands without a chip of its own. -->
-          <i class="cal-list-icon" [class]="'ti ti-' + (list.icon || 'list') + ' cal-list-icon'" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null" [kTooltip]="list.name"></i>
+          <i aria-hidden="true" class="cal-list-icon" [class]="'ti ti-' + (list.icon || 'list') + ' cal-list-icon'" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null" [kTooltip]="list.name"></i>
         }
         <span class="cal-card-title-text">{{ card.title }}</span>
       </span>
@@ -325,7 +325,7 @@
         }
         @if (boardSummaryFor(card); as board) {
         <span class="cal-board" [kTooltip]="board.name">
-          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           <span class="cal-board-name">{{ board.name }}</span>
         </span>
         }
@@ -334,7 +334,7 @@
       @if (hasMetaContent(card)) {
       <span class="cal-meta-row">
         @if (summary(card).hasDescription) {
-        <span class="cal-indicator" kTooltip="Has description" i18n-kTooltip="Tooltip - the card has a description"><i class="ti ti-align-left"></i></span>
+        <span class="cal-indicator" kTooltip="Has description" i18n-kTooltip="Tooltip - the card has a description"><i aria-hidden="true" class="ti ti-align-left"></i></span>
         }
         @if (summary(card).checklistTotalCount) {
         <span
@@ -342,13 +342,13 @@
           [class.is-complete]="summary(card).checklistDoneCount === summary(card).checklistTotalCount"
           [kTooltip]="checklistTooltip(card)"
         >
-          <i class="ti ti-checkbox"></i>
+          <i aria-hidden="true" class="ti ti-checkbox"></i>
           <span class="cal-indicator-count">{{ summary(card).checklistDoneCount }}/{{ summary(card).checklistTotalCount }}</span>
         </span>
         }
         @if (summary(card).attachmentCount) {
         <span class="cal-indicator" [kTooltip]="attachmentsTooltip(card)">
-          <i class="ti ti-paperclip"></i>
+          <i aria-hidden="true" class="ti ti-paperclip"></i>
           <span class="cal-indicator-count">{{ summary(card).attachmentCount }}</span>
         </span>
         }

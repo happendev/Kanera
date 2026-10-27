@@ -32,7 +32,7 @@ const KIND_ICONS: Record<HomeActivityKind, string> = {
         <div class="activity-panel">
           @for (item of items(); track item.id) {
             <button type="button" class="activity-row" (click)="opened.emit(item)">
-              <span class="activity-icon is-{{ item.kind }}" aria-hidden="true"><i class="ti ti-{{ icons[item.kind] }}"></i></span>
+              <span class="activity-icon is-{{ item.kind }}" aria-hidden="true"><i aria-hidden="true" class="ti ti-{{ icons[item.kind] }}"></i></span>
               <span class="activity-body">
                 <span class="activity-text">
                   @switch (item.kind) {

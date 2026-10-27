@@ -12,35 +12,35 @@
     <div class="ob-stepper">
       <div class="ob-step" [class.is-active]="step() === 1" [class.is-done]="step() > 1">
         <div class="ob-step-dot">
-          @if (step() > 1) { <i class="ti ti-check"></i> } @else { 1 }
+          @if (step() > 1) { <i aria-hidden="true" class="ti ti-check"></i> } @else { 1 }
         </div>
         <span class="ob-step-label" i18n="Onboarding step: workspace introduction">Info</span>
       </div>
       <div class="ob-step-track" [class.is-done]="step() > 1"></div>
       <div class="ob-step" [class.is-active]="step() === 2" [class.is-done]="step() > 2">
         <div class="ob-step-dot">
-          @if (step() > 2) { <i class="ti ti-check"></i> } @else { 2 }
+          @if (step() > 2) { <i aria-hidden="true" class="ti ti-check"></i> } @else { 2 }
         </div>
         <span class="ob-step-label" i18n="Onboarding step: choose a template">Type</span>
       </div>
       <div class="ob-step-track" [class.is-done]="step() > 2"></div>
       <div class="ob-step" [class.is-active]="step() === 3" [class.is-done]="step() > 3">
         <div class="ob-step-dot">
-          @if (step() > 3) { <i class="ti ti-check"></i> } @else { 3 }
+          @if (step() > 3) { <i aria-hidden="true" class="ti ti-check"></i> } @else { 3 }
         </div>
         <span class="ob-step-label" i18n="Onboarding step: name the workspace">Workspace</span>
       </div>
       <div class="ob-step-track" [class.is-done]="step() > 3"></div>
       <div class="ob-step" [class.is-active]="step() === 4" [class.is-done]="step() > 4">
         <div class="ob-step-dot">
-          @if (step() > 4) { <i class="ti ti-check"></i> } @else { 4 }
+          @if (step() > 4) { <i aria-hidden="true" class="ti ti-check"></i> } @else { 4 }
         </div>
         <span class="ob-step-label" i18n="Onboarding step: lists">Lists</span>
       </div>
       <div class="ob-step-track" [class.is-done]="step() > 4"></div>
       <div class="ob-step" [class.is-active]="step() === 5" [class.is-done]="step() > 5">
         <div class="ob-step-dot">
-          @if (step() > 5) { <i class="ti ti-check"></i> } @else { 5 }
+          @if (step() > 5) { <i aria-hidden="true" class="ti ti-check"></i> } @else { 5 }
         </div>
         <span class="ob-step-label" i18n="Onboarding step: custom fields">Fields</span>
       </div>
@@ -60,29 +60,29 @@
 
     <div class="ob-kind-grid">
       <button type="button" class="ob-kind-option is-primary" (click)="chooseSetupKind('board')">
-        <span class="ob-kind-icon"><i class="ti ti-layout-kanban"></i></span>
+        <span class="ob-kind-icon"><i aria-hidden="true" class="ti ti-layout-kanban"></i></span>
         <span class="ob-kind-copy">
           <span class="ob-kind-title" i18n="Setup choice heading">Create a board</span>
           <span class="ob-kind-description" i18n>One independent board with its own lists, fields, labels, automations, and permissions.</span>
           <span class="ob-kind-fit" i18n>A simple start for one project, client, or personal workflow.</span>
         </span>
-        <span class="ob-kind-action"><ng-container i18n="Button">Create board</ng-container> <i class="ti ti-arrow-right"></i></span>
+        <span class="ob-kind-action"><ng-container i18n="Button">Create board</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i></span>
       </button>
 
       <button type="button" class="ob-kind-option" (click)="chooseSetupKind('workspace')">
-        <span class="ob-kind-icon"><i class="ti ti-building"></i></span>
+        <span class="ob-kind-icon"><i aria-hidden="true" class="ti ti-building"></i></span>
         <span class="ob-kind-copy">
           <span class="ob-kind-title" i18n="Setup choice heading">Create a workspace</span>
           <span class="ob-kind-description" i18n>Several boards sharing lists, fields, labels, automations, and members.</span>
           <span class="ob-kind-fit" i18n>Best for teams running the same process across multiple boards.</span>
         </span>
-        <span class="ob-kind-action"><ng-container i18n="Button">Set up workspace</ng-container> <i class="ti ti-arrow-right"></i></span>
+        <span class="ob-kind-action"><ng-container i18n="Button">Set up workspace</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i></span>
       </button>
     </div>
     @if (canSkip()) {
     <p class="ob-skip-row">
       <span i18n>Not ready to decide? You can create boards, or connect an AI agent to set things up for you, from Home.</span>
-      <button type="button" class="ghost sm" (click)="skip()"><ng-container i18n="Button: leave onboarding without creating anything">Skip for now</ng-container> <i class="ti ti-arrow-right"></i></button>
+      <button type="button" class="ghost sm" (click)="skip()"><ng-container i18n="Button: leave onboarding without creating anything">Skip for now</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i></button>
     </p>
     }
     }
@@ -112,13 +112,13 @@
     <div class="ob-template-grid">
       @for (template of templates; track template.id) {
       <button type="button" class="ob-template-option" [class.is-selected]="boardTemplateId() === template.id" (click)="selectBoardTemplate(template.id)">
-        <span class="ob-template-icon"><i [class]="'ti ti-' + template.icon"></i></span>
+        <span class="ob-template-icon"><i aria-hidden="true" [class]="'ti ti-' + template.icon"></i></span>
         <span class="ob-template-copy">
           <span class="ob-template-name">{{ template.name }}</span>
           <span class="ob-template-description">{{ template.description }}</span>
         </span>
         @if (boardTemplateId() === template.id) {
-        <i class="ti ti-check ob-template-check"></i>
+        <i aria-hidden="true" class="ti ti-check ob-template-check"></i>
         }
       </button>
       }
@@ -126,25 +126,25 @@
 
     @if (error(); as message) {
     <div class="ob-error" role="alert">
-      <i class="ti ti-alert-circle"></i>
+      <i aria-hidden="true" class="ti ti-alert-circle"></i>
       <span>{{ message }}</span>
     </div>
     }
 
     <div class="ob-footer">
-      <button class="ghost" [disabled]="busy()" (click)="returnToSetupChoice()"><i class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
+      <button class="ghost" [disabled]="busy()" (click)="returnToSetupChoice()"><i aria-hidden="true" class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
       @if (canSkip()) {
       <button class="ghost" [disabled]="busy()" (click)="skip()" i18n="Button: leave onboarding without creating anything">Skip for now</button>
       }
       @if (boardLimitReached()) {
       <div class="ob-error ob-footer-alert" role="alert">
-        <i class="ti ti-lock"></i>
+        <i aria-hidden="true" class="ti ti-lock"></i>
         <span>{{ boardLimitMessage() }}</span>
       </div>
       }
       <button [disabled]="busy() || !canCreateStandaloneBoard()" (click)="finishStandaloneBoard()">
         @if (busy()) {
-        <i class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n="Button label while the board is being created">Creating…</ng-container>
+        <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n="Button label while the board is being created">Creating…</ng-container>
         } @else {
         <ng-container i18n="Button">Create board</ng-container>
         }
@@ -165,16 +165,16 @@
     <section class="ob-model" aria-label="How Kanera workspaces work" i18n-aria-label>
       <div class="ob-model-workspace">
         <div class="ob-model-workspace-head">
-          <i class="ti ti-building"></i>
+          <i aria-hidden="true" class="ti ti-building"></i>
           <span i18n="Diagram heading: a workspace">Workspace</span>
         </div>
         <div class="ob-model-shared">
           <span class="ob-model-shared-label" i18n="Diagram label: setup shared by every board in a workspace">Shared setup</span>
           <div class="ob-model-shared-chips">
-            <span><i class="ti ti-list"></i> <ng-container i18n="Diagram chip">Lists</ng-container></span>
-            <span><i class="ti ti-forms"></i> <ng-container i18n="Diagram chip">Custom fields</ng-container></span>
-            <span><i class="ti ti-tags"></i> <ng-container i18n="Diagram chip">Labels</ng-container></span>
-            <span><i class="ti ti-bolt"></i> <ng-container i18n="Diagram chip">Automations</ng-container></span>
+            <span><i aria-hidden="true" class="ti ti-list"></i> <ng-container i18n="Diagram chip">Lists</ng-container></span>
+            <span><i aria-hidden="true" class="ti ti-forms"></i> <ng-container i18n="Diagram chip">Custom fields</ng-container></span>
+            <span><i aria-hidden="true" class="ti ti-tags"></i> <ng-container i18n="Diagram chip">Labels</ng-container></span>
+            <span><i aria-hidden="true" class="ti ti-bolt"></i> <ng-container i18n="Diagram chip">Automations</ng-container></span>
           </div>
         </div>
       </div>
@@ -182,9 +182,9 @@
       <div class="ob-model-connector" aria-hidden="true"></div>
 
       <div class="ob-model-boards">
-        <div class="ob-model-board"><i class="ti ti-layout-kanban"></i> <ng-container i18n="Example board name in a diagram">Client A</ng-container></div>
-        <div class="ob-model-board"><i class="ti ti-layout-kanban"></i> <ng-container i18n="Example board name in a diagram">Client B</ng-container></div>
-        <div class="ob-model-board is-ghost"><i class="ti ti-plus"></i> <ng-container i18n="Diagram: placeholder for another board">New board</ng-container></div>
+        <div class="ob-model-board"><i aria-hidden="true" class="ti ti-layout-kanban"></i> <ng-container i18n="Example board name in a diagram">Client A</ng-container></div>
+        <div class="ob-model-board"><i aria-hidden="true" class="ti ti-layout-kanban"></i> <ng-container i18n="Example board name in a diagram">Client B</ng-container></div>
+        <div class="ob-model-board is-ghost"><i aria-hidden="true" class="ti ti-plus"></i> <ng-container i18n="Diagram: placeholder for another board">New board</ng-container></div>
       </div>
 
       <p class="ob-model-note" i18n>Because every board matches, you can see assigned work, filter, and report across the whole workspace at once.</p>
@@ -192,7 +192,7 @@
 
     <div class="ob-footer">
       @if (canReturnToSetupChoice()) {
-      <button class="ghost" (click)="returnToSetupChoice()"><i class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
+      <button class="ghost" (click)="returnToSetupChoice()"><i aria-hidden="true" class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
       }
       @if (canCancel()) {
       <button class="ghost" (click)="cancel()" i18n="Button: leave onboarding">Cancel</button>
@@ -201,11 +201,11 @@
       }
       @if (boardLimitReached()) {
       <div class="ob-error ob-footer-alert" role="alert">
-        <i class="ti ti-lock"></i>
+        <i aria-hidden="true" class="ti ti-lock"></i>
         <span>{{ boardLimitMessage() }}</span>
       </div>
       }
-      <button [disabled]="!canUseOnboarding()" (click)="step.set(2)"><ng-container i18n="Button">Set up workspace</ng-container> <i class="ti ti-arrow-right"></i></button>
+      <button [disabled]="!canUseOnboarding()" (click)="step.set(2)"><ng-container i18n="Button">Set up workspace</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i></button>
     </div>
     }
 
@@ -219,13 +219,13 @@
     <div class="ob-template-grid">
       @for (template of templates; track template.id) {
       <button type="button" class="ob-template-option" [class.is-selected]="selectedTemplateId() === template.id" (click)="selectTemplate(template.id)">
-        <span class="ob-template-icon"><i [class]="'ti ti-' + template.icon"></i></span>
+        <span class="ob-template-icon"><i aria-hidden="true" [class]="'ti ti-' + template.icon"></i></span>
         <span class="ob-template-copy">
           <span class="ob-template-name">{{ template.name }}</span>
           <span class="ob-template-description">{{ template.description }}</span>
         </span>
         @if (selectedTemplateId() === template.id) {
-        <i class="ti ti-check ob-template-check"></i>
+        <i aria-hidden="true" class="ti ti-check ob-template-check"></i>
         }
       </button>
       }
@@ -237,8 +237,8 @@
       } @else if (canSkip()) {
       <button class="ghost" (click)="skip()" i18n="Button: leave onboarding without creating anything">Skip for now</button>
       }
-      <button class="ghost" (click)="step.set(1)"><i class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
-      <button [disabled]="!canUseOnboarding()" (click)="step.set(3)"><ng-container i18n="Button: next onboarding step">Continue</ng-container> <i class="ti ti-arrow-right"></i></button>
+      <button class="ghost" (click)="step.set(1)"><i aria-hidden="true" class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
+      <button [disabled]="!canUseOnboarding()" (click)="step.set(3)"><ng-container i18n="Button: next onboarding step">Continue</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i></button>
     </div>
     }
 
@@ -265,8 +265,8 @@
       } @else if (canSkip()) {
       <button class="ghost" (click)="skip()" i18n="Button: leave onboarding without creating anything">Skip for now</button>
       }
-      <button class="ghost" (click)="step.set(2)"><i class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
-      <button [disabled]="!canUseOnboarding()" (click)="step.set(4)"><ng-container i18n="Button: next onboarding step">Continue</ng-container> <i class="ti ti-arrow-right"></i></button>
+      <button class="ghost" (click)="step.set(2)"><i aria-hidden="true" class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
+      <button [disabled]="!canUseOnboarding()" (click)="step.set(4)"><ng-container i18n="Button: next onboarding step">Continue</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i></button>
     </div>
     }
 
@@ -280,8 +280,8 @@
     <div cdkDropList [cdkDropListData]="lists()" (cdkDropListDropped)="dropList($event)" class="ob-items">
       @for (list of lists(); track $index; let index = $index) {
       <div cdkDrag class="ob-item">
-        <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
-        <i [class]="'ob-icon ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+        <i aria-hidden="true" class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
+        <i aria-hidden="true" [class]="'ob-icon ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
         <span>{{ list.name }}</span>
         @if (inProgressEnabled()) {
         <button
@@ -293,12 +293,12 @@
           [kTooltip]="inProgressToggleTooltip(list)"
           (click)="toggleListInProgress(index)"
         >
-          <i class="ti ti-progress"></i>
+          <i aria-hidden="true" class="ti ti-progress"></i>
           <ng-container i18n="Toggle on an onboarding workflow stage - marks the list as one where work is actively happening">In progress</ng-container>
         </button>
         }
         <button type="button" class="ghost icon ob-item-action" (click)="removeList(index)" [attr.aria-label]="deleteItemLabel(list.name)" [kTooltip]="deleteItemLabel(list.name)">
-          <i class="ti ti-trash"></i>
+          <i aria-hidden="true" class="ti ti-trash"></i>
         </button>
       </div>
       }
@@ -306,7 +306,7 @@
 
     <form class="ob-add-row" (submit)="$event.preventDefault(); addList()">
       <input name="list" placeholder="New list name" i18n-placeholder [value]="newList()" (input)="newList.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" [disabled]="!canUseOnboarding()" />
-      <button type="submit" class="sm icon ob-add-icon-button" aria-label="Add list" i18n-aria-label="Button" kTooltip="Add list" i18n-kTooltip="Button tooltip" [disabled]="!canUseOnboarding()"><i class="ti ti-plus"></i></button>
+      <button type="submit" class="sm icon ob-add-icon-button" aria-label="Add list" i18n-aria-label="Button" kTooltip="Add list" i18n-kTooltip="Button tooltip" [disabled]="!canUseOnboarding()"><i aria-hidden="true" class="ti ti-plus"></i></button>
     </form>
 
     @if (boardLimitReached()) {
@@ -322,8 +322,8 @@
       } @else if (canSkip()) {
       <button class="ghost" (click)="skip()" i18n="Button: leave onboarding without creating anything">Skip for now</button>
       }
-      <button class="ghost" (click)="step.set(3)"><i class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
-      <button [disabled]="!canUseOnboarding() || !canContinueFromLists()" (click)="continueFromLists()"><ng-container i18n="Button: next onboarding step">Continue</ng-container> <i class="ti ti-arrow-right"></i></button>
+      <button class="ghost" (click)="step.set(3)"><i aria-hidden="true" class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
+      <button [disabled]="!canUseOnboarding() || !canContinueFromLists()" (click)="continueFromLists()"><ng-container i18n="Button: next onboarding step">Continue</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i></button>
     </div>
     }
 
@@ -338,7 +338,7 @@
       @for (field of fields(); track field.id; let index = $index) {
       <div cdkDrag class="ob-item ob-field-tile">
         <div class="ob-field-head">
-          <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
+          <i aria-hidden="true" class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
           <k-icon-picker [value]="field.icon ?? 'forms'" (valueChange)="setFieldIcon(index, $event)" />
           @if (editingFieldId() === field.id) {
           <input class="ob-inline-name-input" [value]="editingFieldName()" (input)="editingFieldName.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" (blur)="saveFieldName(field.id)"
@@ -354,11 +354,11 @@
             @if (field.type === 'select' || field.type === 'user') {
             <button type="button" class="ghost icon" (click)="toggleFieldAllowMultiple(field.id)" [kTooltip]="multipleValuesTooltip(field.allowMultiple)"
               [attr.aria-label]="multipleValuesAriaLabel(field.allowMultiple)">
-              <i class="ti" [class.ti-checkbox]="field.allowMultiple" [class.ti-square]="!field.allowMultiple"></i>
+              <i aria-hidden="true" class="ti" [class.ti-checkbox]="field.allowMultiple" [class.ti-square]="!field.allowMultiple"></i>
             </button>
             }
             <button type="button" class="ghost icon" (click)="removeField(index)" [attr.aria-label]="deleteItemLabel(field.name)" [kTooltip]="deleteItemLabel(field.name)">
-              <i class="ti ti-trash"></i>
+              <i aria-hidden="true" class="ti ti-trash"></i>
             </button>
           </div>
         </div>
@@ -367,12 +367,12 @@
           <div cdkDropList [cdkDropListData]="field.options ?? []" (cdkDropListDropped)="dropOption(field.id, $event)">
             @for (option of field.options ?? []; track option.id) {
             <div cdkDrag class="ob-option-row">
-              <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
+              <i aria-hidden="true" class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
               <k-color-picker [value]="option.color ?? null" (valueChange)="recolorOption(field.id, option.id, $event)" />
               <input class="ob-option-input" [value]="option.label" (blur)="renameOption(field.id, option.id, $any($event.target).value)"
                 (keydown.enter)="renameOption(field.id, option.id, $any($event.target).value); $any($event.target).blur()" />
               <button type="button" class="ghost icon" (click)="deleteOption(field.id, option.id)" aria-label="Delete option" i18n-aria-label="Button: delete a select option" kTooltip="Delete option" i18n-kTooltip="Button tooltip: delete a select option">
-                <i class="ti ti-x"></i>
+                <i aria-hidden="true" class="ti ti-x"></i>
               </button>
             </div>
             }
@@ -381,7 +381,7 @@
             <k-color-picker [value]="optionDraftColor(field.id)" (valueChange)="setNewOptionColor(field.id, $event)" />
             <input class="ob-option-input" placeholder="Add option" i18n-placeholder="Input placeholder: new select option" [value]="optionDraft(field.id)" (input)="setNewOptionLabel(field.id, $any($event.target).value)" (keydown.enter)="addOption(field.id)" />
             <button type="button" class="ghost icon" (click)="addOption(field.id)" aria-label="Add option" i18n-aria-label="Button: add a select option" kTooltip="Add option" i18n-kTooltip="Button tooltip: add a select option">
-              <i class="ti ti-plus"></i>
+              <i aria-hidden="true" class="ti ti-plus"></i>
             </button>
           </div>
         </div>
@@ -408,7 +408,7 @@
         <ng-container i18n="Checkbox: the new custom field accepts multiple values">Multiple</ng-container>
       </label>
       }
-      <button type="submit" class="sm icon ob-add-icon-button" [disabled]="!!customFieldValidation()" aria-label="Add field" i18n-aria-label="Button: add a custom field" kTooltip="Add field" i18n-kTooltip="Button tooltip: add a custom field"><i class="ti ti-plus"></i></button>
+      <button type="submit" class="sm icon ob-add-icon-button" [disabled]="!!customFieldValidation()" aria-label="Add field" i18n-aria-label="Button: add a custom field" kTooltip="Add field" i18n-kTooltip="Button tooltip: add a custom field"><i aria-hidden="true" class="ti ti-plus"></i></button>
     </form>
 
     @if (customFieldValidation()) {
@@ -421,8 +421,8 @@
       } @else if (canSkip()) {
       <button class="ghost" (click)="skip()" i18n="Button: leave onboarding without creating anything">Skip for now</button>
       }
-      <button class="ghost" (click)="step.set(4)"><i class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
-      <button [disabled]="!canUseOnboarding()" (click)="step.set(6)"><ng-container i18n="Button: next onboarding step">Continue</ng-container> <i class="ti ti-arrow-right"></i></button>
+      <button class="ghost" (click)="step.set(4)"><i aria-hidden="true" class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
+      <button [disabled]="!canUseOnboarding()" (click)="step.set(6)"><ng-container i18n="Button: next onboarding step">Continue</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i></button>
     </div>
     }
 
@@ -436,11 +436,11 @@
     <div cdkDropList [cdkDropListData]="labels()" (cdkDropListDropped)="dropLabel($event)" class="ob-items">
       @for (label of labels(); track $index; let index = $index) {
       <div cdkDrag class="ob-item">
-        <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
+        <i aria-hidden="true" class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
         <k-color-picker [value]="label.color" (valueChange)="setLabelColor(index, $event)" />
         <span>{{ label.name }}</span>
         <button type="button" class="ghost icon ob-item-action" (click)="removeLabel(index)" [attr.aria-label]="deleteItemLabel(label.name)" [kTooltip]="deleteItemLabel(label.name)">
-          <i class="ti ti-trash"></i>
+          <i aria-hidden="true" class="ti ti-trash"></i>
         </button>
       </div>
       }
@@ -449,12 +449,12 @@
     <form class="ob-add-row" (submit)="$event.preventDefault(); addLabel()">
       <k-color-picker [value]="newLabelColor()" (valueChange)="newLabelColor.set($event)" />
       <input name="label" placeholder="New label name" i18n-placeholder [value]="newLabel()" (input)="newLabel.set($any($event.target).value)" [maxLength]="labelNameMaxLength" />
-      <button type="submit" class="sm icon ob-add-icon-button" aria-label="Add label" i18n-aria-label="Button" kTooltip="Add label" i18n-kTooltip="Button tooltip"><i class="ti ti-plus"></i></button>
+      <button type="submit" class="sm icon ob-add-icon-button" aria-label="Add label" i18n-aria-label="Button" kTooltip="Add label" i18n-kTooltip="Button tooltip"><i aria-hidden="true" class="ti ti-plus"></i></button>
     </form>
 
     @if (error(); as message) {
     <div class="ob-error" role="alert">
-      <i class="ti ti-alert-circle"></i>
+      <i aria-hidden="true" class="ti ti-alert-circle"></i>
       <span>{{ message }}</span>
     </div>
     }
@@ -465,10 +465,10 @@
       } @else if (canSkip()) {
       <button class="ghost" [disabled]="busy()" (click)="skip()" i18n="Button: leave onboarding without creating anything">Skip for now</button>
       }
-      <button class="ghost" (click)="step.set(5)"><i class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
+      <button class="ghost" (click)="step.set(5)"><i aria-hidden="true" class="ti ti-arrow-left"></i> <ng-container i18n="Button: previous onboarding step">Back</ng-container></button>
       <button [disabled]="busy() || !canUseOnboarding()" (click)="finish()">
         @if (busy()) {
-        <i class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n="Button label while the workspace is being created">Setting up…</ng-container>
+        <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n="Button label while the workspace is being created">Setting up…</ng-container>
         } @else {
         <ng-container i18n="Button">Finish setup</ng-container>
         }

@@ -24,7 +24,7 @@ interface DenialContext {
   template: `
     <main class="consent-card">
       @if (denial(); as denied) {
-        <i class="ti ti-circle-x consent-icon"></i>
+        <i aria-hidden="true" class="ti ti-circle-x consent-icon"></i>
         <h1 i18n>Access not granted</h1>
         <p i18n>This client was not given access to your Kanera account.</p>
         <p class="destination-label" i18n>If you return to the client, your browser will open:</p>
@@ -34,7 +34,7 @@ interface DenialContext {
           <button type="button" (click)="stayInKanera()" i18n="Button">Stay in Kanera</button>
         </div>
       } @else {
-        <i class="ti ti-plug-connected consent-icon"></i>
+        <i aria-hidden="true" class="ti ti-plug-connected consent-icon"></i>
         @if (context()?.clientName; as clientName) {
           <h1 i18n="Heading: connect an AI agent">Connect {{ clientName // i18n(ph="client") }}</h1>
         } @else {
@@ -47,12 +47,12 @@ interface DenialContext {
         } @else {
           <p i18n>This agent will act as you in Kanera. It will be able to:</p>
           <ul>
-            <li><i class="ti ti-eye"></i> <span i18n="Permission granted to a connected agent">Read boards, cards, notes, comments, and activity you can access</span></li>
+            <li><i aria-hidden="true" class="ti ti-eye"></i> <span i18n="Permission granted to a connected agent">Read boards, cards, notes, comments, and activity you can access</span></li>
             @if (canWrite()) {
-              <li><i class="ti ti-edit"></i> <span i18n="Permission granted to a connected agent">Create and update board content wherever you are an editor</span></li>
-              <li><i class="ti ti-settings"></i> <span i18n="Permission granted to a connected agent">Create and administer workspaces wherever you are an administrator</span></li>
+              <li><i aria-hidden="true" class="ti ti-edit"></i> <span i18n="Permission granted to a connected agent">Create and update board content wherever you are an editor</span></li>
+              <li><i aria-hidden="true" class="ti ti-settings"></i> <span i18n="Permission granted to a connected agent">Create and administer workspaces wherever you are an administrator</span></li>
             }
-            <li><i class="ti ti-lock"></i> <span i18n="Permission granted to a connected client">Stay limited to your current Kanera permissions</span></li>
+            <li><i aria-hidden="true" class="ti ti-lock"></i> <span i18n="Permission granted to a connected client">Stay limited to your current Kanera permissions</span></li>
           </ul>
           <p class="destination-label" i18n>After approval, the authorization result will be sent to:</p>
           <code class="destination">{{ context()?.redirectOrigin }}</code>

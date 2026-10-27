@@ -271,10 +271,10 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
           <span class="aaf-label" i18n>When the field already has a value</span>
           <div class="aaf-choice">
             <button type="button" class="aaf-choice-option" [class.is-active]="settings.automationPopulatePolicyValue(a) === 'empty'" (click)="settings.updateAutomationPopulatePolicy(automationId(), index(), 'empty')" [attr.aria-pressed]="settings.automationPopulatePolicyValue(a) === 'empty'">
-              <i class="ti ti-shield-check"></i> <ng-container i18n="Option: keep the existing custom field value">Leave it alone</ng-container>
+              <i aria-hidden="true" class="ti ti-shield-check"></i> <ng-container i18n="Option: keep the existing custom field value">Leave it alone</ng-container>
             </button>
             <button type="button" class="aaf-choice-option" [class.is-active]="settings.automationPopulatePolicyValue(a) === 'overwrite'" (click)="settings.updateAutomationPopulatePolicy(automationId(), index(), 'overwrite')" [attr.aria-pressed]="settings.automationPopulatePolicyValue(a) === 'overwrite'">
-              <i class="ti ti-pencil"></i> <ng-container i18n="Option: replace the existing custom field value">Overwrite it</ng-container>
+              <i aria-hidden="true" class="ti ti-pencil"></i> <ng-container i18n="Option: replace the existing custom field value">Overwrite it</ng-container>
             </button>
           </div>
         </div>
@@ -312,7 +312,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
     } @else {
       <!-- clear_due_date, move_to_top, move_to_bottom: no configuration. Say so rather than
            rendering the old literal "No target" placeholder in the middle of the row. -->
-      <p class="aaf-no-config"><i class="ti ti-check"></i> <ng-container i18n>Runs as-is — nothing to configure.</ng-container></p>
+      <p class="aaf-no-config"><i aria-hidden="true" class="ti ti-check"></i> <ng-container i18n>Runs as-is — nothing to configure.</ng-container></p>
     }
   `,
   styleUrl: "./automation-action-fields.component.scss",

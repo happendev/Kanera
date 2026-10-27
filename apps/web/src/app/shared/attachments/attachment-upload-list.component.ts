@@ -16,7 +16,7 @@ import type { UploadItem } from "./attachment-upload-queue.service";
     <ul class="upl-list">
       @for (item of items(); track item.id) {
       <li class="upl-row" [class.is-error]="item.status === 'error'">
-        <i [class]="item.status === 'error' ? 'ti ti-alert-circle' : 'ti ' + item.icon"></i>
+        <i aria-hidden="true" [class]="item.status === 'error' ? 'ti ti-alert-circle' : 'ti ' + item.icon"></i>
         <div class="upl-body">
           <div class="upl-name-row">
             <span class="upl-name" [title]="item.fileName">{{ item.fileName }}</span>
@@ -35,11 +35,11 @@ import type { UploadItem } from "./attachment-upload-queue.service";
         @if (item.status === 'error') {
         @if (item.retryable) {
         <button type="button" class="upl-btn" (click)="retry.emit(item.id)" title="Retry upload" i18n-title>
-          <i class="ti ti-refresh"></i> <ng-container i18n="Button: retry a failed upload">Retry</ng-container>
+          <i aria-hidden="true" class="ti ti-refresh"></i> <ng-container i18n="Button: retry a failed upload">Retry</ng-container>
         </button>
         }
         <button type="button" class="upl-btn icon" (click)="dismiss.emit(item.id)" title="Dismiss" i18n-title="Button: remove a failed upload from the list">
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
         }
       </li>

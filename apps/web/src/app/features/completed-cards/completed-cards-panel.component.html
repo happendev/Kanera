@@ -2,14 +2,14 @@
 <aside class="completed-panel" [class.closing]="closing()" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" aria-label="Completed cards" i18n-aria-label>
   <header class="completed-header">
     <div class="completed-title">
-      <i class="ti ti-circle-check"></i>
+      <i aria-hidden="true" class="ti ti-circle-check"></i>
       <span i18n>Completed cards</span>
     </div>
     <div class="completed-header-actions">
       @if (canExport()) {
       <div class="completed-export-wrap">
         <button #exportTrigger class="ghost icon completed-export-btn" type="button" [class.is-active]="exportMenuOpen()" [disabled]="exporting()" (click)="toggleExportMenu()" aria-label="Export completed cards" i18n-aria-label kTooltip="Export completed cards" i18n-kTooltip>
-          <i [class]="exporting() ? 'ti ti-loader-2 spin' : 'ti ti-download'"></i>
+          <i aria-hidden="true" [class]="exporting() ? 'ti ti-loader-2 spin' : 'ti ti-download'"></i>
         </button>
         @if (exportMenuOpen()) {
         <div
@@ -20,11 +20,11 @@
           (apDismissed)="exportMenuOpen.set(false)"
         >
           <button type="button" class="completed-export-item" (click)="exportExcel()">
-            <i class="ti ti-file-spreadsheet"></i>
+            <i aria-hidden="true" class="ti ti-file-spreadsheet"></i>
             <span i18n="Export format menu item">Excel</span>
           </button>
           <button type="button" class="completed-export-item" (click)="exportJson()">
-            <i class="ti ti-braces"></i>
+            <i aria-hidden="true" class="ti ti-braces"></i>
             <span>JSON</span>
           </button>
         </div>
@@ -32,24 +32,24 @@
       </div>
       }
       <button class="ghost icon" type="button" (click)="close()" aria-label="Close completed cards" i18n-aria-label kTooltip="Close" i18n-kTooltip="Tooltip: close the panel">
-        <i class="ti ti-x"></i>
+        <i aria-hidden="true" class="ti ti-x"></i>
       </button>
     </div>
   </header>
 
   <div class="completed-filters">
     <div class="bf-search completed-search">
-      <i class="ti ti-search"></i>
+      <i aria-hidden="true" class="ti ti-search"></i>
       <input type="search" class="bf-search-input" placeholder="Search completed cards..." i18n-placeholder aria-label="Search completed cards" i18n-aria-label [value]="searchQuery()" (input)="setSearchQuery($any($event.target).value)" />
       @if (searchQuery()) {
       <button class="bf-search-clear" type="button" (click)="clearSearchQuery()" aria-label="Clear search" i18n-aria-label>
-        <i class="ti ti-x"></i>
+        <i aria-hidden="true" class="ti ti-x"></i>
       </button>
       }
     </div>
     <div class="completed-date-filter">
       <button class="completed-date-btn" type="button" [class.is-open]="dateRangeOpen()" [class.has-range]="!!from() || !!to()" (click)="toggleDateRange($event)" [attr.aria-label]="dateFilterAriaLabel()">
-        <i class="ti ti-calendar-week"></i>
+        <i aria-hidden="true" class="ti ti-calendar-week"></i>
         <span>{{ dateRangeLabel() }}</span>
       </button>
       @if (dateRangeOpen()) {
@@ -77,7 +77,7 @@
   <div class="completed-body">
     @if (loading()) {
     <div class="k-loading" role="status" aria-live="polite">
-      <i class="ti ti-loader-2"></i>
+      <i aria-hidden="true" class="ti ti-loader-2"></i>
       <span i18n>Loading completed cards…</span>
     </div>
     } @else if (error()) {
@@ -115,7 +115,7 @@
     </div>
     <div #sentinel class="completed-sentinel">
       @if (loadingMore()) {
-      <i class="ti ti-loader-2 spin"></i>
+      <i aria-hidden="true" class="ti ti-loader-2 spin"></i>
       } @else if (nextCursor()) {
       <button class="ghost sm" type="button" (click)="loadMore()" i18n="Button: load the next page">Load more</button>
       }

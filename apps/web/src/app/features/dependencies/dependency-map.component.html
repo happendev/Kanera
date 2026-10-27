@@ -270,7 +270,7 @@
       @let state = stepState(step);
       <li class="dm-step" [class]="'dm-step is-' + state">
         <span class="dm-step-marker" aria-hidden="true">
-          @if (state === 'done') { <i class="ti ti-check"></i> } @else { {{ index + 1 }} }
+          @if (state === 'done') { <i aria-hidden="true" class="ti ti-check"></i> } @else { {{ index + 1 }} }
         </span>
         <span class="dm-sr">{{ stepLabel(index) }}</span>
         <ul class="dm-rows">

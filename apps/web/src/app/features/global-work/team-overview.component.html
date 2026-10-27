@@ -1,11 +1,11 @@
 @if (offlineMessage(); as message) {
-  <p class="overview-offline" role="status"><i class="ti ti-cloud-off"></i>{{ message }}</p>
+  <p class="overview-offline" role="status"><i aria-hidden="true" class="ti ti-cloud-off"></i>{{ message }}</p>
 }
 @if (unownedError()) {
   <p class="overview-error" i18n>We couldn’t load every card. Try refreshing the page.</p>
 }
 @if (activityError(); as message) {
-  <p class="overview-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  <p class="overview-error"><i aria-hidden="true" class="ti ti-alert-circle"></i>{{ message }}</p>
 }
 
 <!-- Picks one teammate to look at: their panel alone, with their Up next docked beside it. A
@@ -19,7 +19,7 @@
       [attr.aria-pressed]="!focusedOverview()"
       (click)="focusChanged.emit(null)"
     >
-      <i class="ti ti-users-group"></i>
+      <i aria-hidden="true" class="ti ti-users-group"></i>
       <span i18n="Team overview person strip: show every teammate">Everyone</span>
     </button>
     @for (person of stripPeople(); track person.userId) {
@@ -46,7 +46,7 @@
         [kTooltip]="hideGuestsTooltip()"
         (click)="toggleHideGuests()"
       >
-        <i class="ti ti-user-off"></i>
+        <i aria-hidden="true" class="ti ti-user-off"></i>
         <span i18n="Team overview person strip toggle leaving guests out">Hide guests</span>
       </button>
     }
@@ -58,7 +58,7 @@
     <!-- Every other panel is a person; in-progress work with no assignee would otherwise vanish. -->
     <section class="person unowned" aria-label="In progress with no assignee" i18n-aria-label>
       <header class="person-head">
-        <span class="unowned-icon" aria-hidden="true"><i class="ti ti-user-question"></i></span>
+        <span class="unowned-icon" aria-hidden="true"><i aria-hidden="true" class="ti ti-user-question"></i></span>
         <div class="person-id">
           <strong class="person-name" i18n="Team overview panel for unassigned work">No assignee</strong>
           <span class="person-active" i18n>In progress, but nobody owns it</span>
@@ -70,7 +70,7 @@
           kTooltip="Open cards in In progress lists with no assignee, longest time in progress first"
           i18n-kTooltip
         >
-          <span class="section-icon"><i class="ti ti-progress"></i></span><ng-container i18n="Team overview section">In progress</ng-container><span class="section-count">{{ unowned.rows.length + unowned.more }}</span>
+          <span class="section-icon"><i aria-hidden="true" class="ti ti-progress"></i></span><ng-container i18n="Team overview section">In progress</ng-container><span class="section-count">{{ unowned.rows.length + unowned.more }}</span>
         </h4>
         @for (row of unowned.rows; track row.card.id) {
           <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
@@ -107,7 +107,7 @@
           [kTooltip]="allSectionsCollapsed() ? expandAllLabel : collapseAllLabel"
           (click)="toggleAllSections()"
         >
-          <i class="ti" [class.ti-chevrons-down]="allSectionsCollapsed()" [class.ti-chevrons-up]="!allSectionsCollapsed()"></i>
+          <i aria-hidden="true" class="ti" [class.ti-chevrons-down]="allSectionsCollapsed()" [class.ti-chevrons-up]="!allSectionsCollapsed()"></i>
         </button>
         <button
           type="button"
@@ -116,7 +116,7 @@
           [kTooltip]="openCardsLabel(item.person.displayName)"
           [disabled]="!canNavigate()" (click)="personFocused.emit(item.person.userId)"
         >
-          <i class="ti ti-arrow-up-right"></i>
+          <i aria-hidden="true" class="ti ti-arrow-up-right"></i>
         </button>
       </header>
 
@@ -147,7 +147,7 @@
       @if (item.drillDown; as drill) {
         <div class="section drill-down" [class]="'tone-' + drill.tone">
           <h4 class="section-title">
-            <span class="section-icon"><i [class]="'ti ti-' + drill.icon"></i></span>{{ drill.label }}<span class="section-count">{{ drill.rows.length + drill.more }}</span>
+            <span class="section-icon"><i aria-hidden="true" [class]="'ti ti-' + drill.icon"></i></span>{{ drill.label }}<span class="section-count">{{ drill.rows.length + drill.more }}</span>
             <button
               type="button"
               class="section-close"
@@ -157,7 +157,7 @@
               i18n-kTooltip
               (click)="toggleStat(item.person.userId, drill.stat)"
             >
-              <i class="ti ti-x"></i>
+              <i aria-hidden="true" class="ti ti-x"></i>
             </button>
           </h4>
           @for (row of drill.rows; track row.card.id) {
@@ -183,8 +183,8 @@
               i18n-kTooltip
               (click)="toggleSection('inProgress')"
             >
-              <i class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('inProgress')" [class.ti-chevron-down]="!isCollapsed('inProgress')"></i>
-              <span class="section-icon"><i class="ti ti-progress"></i></span><ng-container i18n="Team overview section">In progress</ng-container>
+              <i aria-hidden="true" class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('inProgress')" [class.ti-chevron-down]="!isCollapsed('inProgress')"></i>
+              <span class="section-icon"><i aria-hidden="true" class="ti ti-progress"></i></span><ng-container i18n="Team overview section">In progress</ng-container>
             </button>
           </h4>
           @if (!isCollapsed("inProgress")) {
@@ -214,8 +214,8 @@
               [kTooltip]="recentTooltip"
               (click)="toggleSection('recent')"
             >
-              <i class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('recent')" [class.ti-chevron-down]="!isCollapsed('recent')"></i>
-              <span class="section-icon"><i class="ti ti-activity"></i></span><ng-container i18n="Team overview section">Recently active</ng-container>
+              <i aria-hidden="true" class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('recent')" [class.ti-chevron-down]="!isCollapsed('recent')"></i>
+              <span class="section-icon"><i aria-hidden="true" class="ti ti-activity"></i></span><ng-container i18n="Team overview section">Recently active</ng-container>
             </button>
             </h4>
             @if (!isCollapsed("recent")) {
@@ -235,8 +235,8 @@
               [attr.aria-expanded]="!isCollapsed('upNext')"
               (click)="toggleSection('upNext')"
             >
-              <i class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('upNext')" [class.ti-chevron-down]="!isCollapsed('upNext')"></i>
-              <span class="section-icon"><i class="ti ti-list-numbers"></i></span><ng-container i18n="Team overview section">Up next</ng-container>
+              <i aria-hidden="true" class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('upNext')" [class.ti-chevron-down]="!isCollapsed('upNext')"></i>
+              <span class="section-icon"><i aria-hidden="true" class="ti ti-list-numbers"></i></span><ng-container i18n="Team overview section">Up next</ng-container>
             </button><span class="section-count">{{ upNext.total }}</span>
               <!-- The way into curating this person's queue: the page docks it beside the overview. -->
               <button
@@ -247,7 +247,7 @@
                 [attr.aria-label]="upNextActionLabel(item.person.displayName, isDocked(item.person.userId))"
                 (click)="upNextToggled.emit(item.person.userId)"
               >
-                <i class="ti ti-layout-sidebar-right"></i>
+                <i aria-hidden="true" class="ti ti-layout-sidebar-right"></i>
                 @if (isDocked(item.person.userId)) {
                   <span i18n="Button on a teammate's Up next section while the panel shows it">Close</span>
                 } @else {
@@ -284,8 +284,8 @@
               i18n-kTooltip
               (click)="toggleSection('assigned')"
             >
-              <i class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('assigned')" [class.ti-chevron-down]="!isCollapsed('assigned')"></i>
-              <span class="section-icon"><i class="ti ti-user-check"></i></span><ng-container i18n="Team overview section">Assigned</ng-container>
+              <i aria-hidden="true" class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('assigned')" [class.ti-chevron-down]="!isCollapsed('assigned')"></i>
+              <span class="section-icon"><i aria-hidden="true" class="ti ti-user-check"></i></span><ng-container i18n="Team overview section">Assigned</ng-container>
             </button>
           </h4>
           @if (!isCollapsed("assigned")) {
@@ -309,8 +309,8 @@
               [attr.aria-expanded]="!isCollapsed('done')"
               (click)="toggleSection('done')"
             >
-              <i class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('done')" [class.ti-chevron-down]="!isCollapsed('done')"></i>
-              <span class="section-icon"><i class="ti ti-circle-check"></i></span><ng-container i18n="Team overview section">Recently done</ng-container>
+              <i aria-hidden="true" class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('done')" [class.ti-chevron-down]="!isCollapsed('done')"></i>
+              <span class="section-icon"><i aria-hidden="true" class="ti ti-circle-check"></i></span><ng-container i18n="Team overview section">Recently done</ng-container>
             </button>
             </h4>
             @if (!isCollapsed("done")) {
@@ -325,7 +325,7 @@
   } @empty {
     @if (quietPeople().length === 0) {
       <div class="overview-empty">
-        <i class="ti ti-users"></i>
+        <i aria-hidden="true" class="ti ti-users"></i>
         <strong i18n>No teammates to show</strong>
         <span i18n>Teammates on the boards in this scope appear here with their open and recent work.</span>
       </div>
@@ -336,7 +336,7 @@
 @if (quietPeople().length) {
   <section class="quiet">
     <button type="button" class="quiet-toggle" [attr.aria-expanded]="showQuiet()" (click)="showQuiet.set(!showQuiet())">
-      <i class="ti" [class.ti-chevron-right]="!showQuiet()" [class.ti-chevron-down]="showQuiet()"></i>
+      <i aria-hidden="true" class="ti" [class.ti-chevron-right]="!showQuiet()" [class.ti-chevron-down]="showQuiet()"></i>
       <span i18n="Team overview row collapsing teammates with nothing to show">{quietPeople().length, plural, one {{{ quietPeople().length }} teammate has no open cards or recent activity} other {{{ quietPeople().length }} teammates have no open cards or recent activity}}</span>
       <span class="quiet-avatars" aria-hidden="true">
         @for (item of quietPeople().slice(0, 8); track item.person.userId) {
@@ -393,12 +393,12 @@
           }
           @if (row.time; as time) {
             <span class="row-chip row-time" [class.is-running]="time.running" [class.is-aging]="time.alert" [kTooltip]="time.label" [attr.aria-label]="time.label">
-              <i class="ti" [class.ti-progress]="time.running" [class.ti-clock]="!time.running"></i>{{ time.text }}
+              <i aria-hidden="true" class="ti" [class.ti-progress]="time.running" [class.ti-clock]="!time.running"></i>{{ time.text }}
             </span>
           }
           @if (row.due; as due) {
             <span class="row-chip row-due" [class.overdue]="due.tone === 'overdue'" [class.due-soon]="due.tone === 'soon'">
-              <i class="ti ti-calendar-due"></i>{{ due.text }}
+              <i aria-hidden="true" class="ti ti-calendar-due"></i>{{ due.text }}
             </span>
           }
           @if (row.note) {

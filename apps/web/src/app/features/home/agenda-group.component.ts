@@ -24,7 +24,7 @@ const COLLAPSED_LIMIT = 8;
         <span class="agenda-count" [class.is-danger]="bucket() === 'overdue'">{{ count() }}</span>
         @if (truncated()) {
           <!-- The server capped the merged list, so the rest genuinely is not here to expand. -->
-          <a class="agenda-see-all" routerLink="/my-cards"><ng-container i18n="Link to the full list">See all</ng-container> <i class="ti ti-arrow-narrow-right"></i></a>
+          <a class="agenda-see-all" routerLink="/my-cards"><ng-container i18n="Link to the full list">See all</ng-container> <i aria-hidden="true" class="ti ti-arrow-narrow-right"></i></a>
         }
       </header>
       <div class="agenda-rows">

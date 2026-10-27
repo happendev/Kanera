@@ -46,7 +46,7 @@
                  no grid change. Deliberately not in `.row-tools`, which is hover-revealed: "done"
                  has to be visible at rest. -->
             @if (card.completedAt) {
-              <i class="ti ti-circle-check row-complete-icon"></i>
+              <i aria-hidden="true" class="ti ti-circle-check row-complete-icon"></i>
             }
             {{ card.title }}
           </span>
@@ -100,18 +100,18 @@
                 [kTooltip]="card.completedAt ? markIncompleteLabel : markCompleteLabel"
                 (click)="onQuickComplete(card, $event)"
               >
-                <i class="ti ti-circle-check"></i>
+                <i aria-hidden="true" class="ti ti-circle-check"></i>
               </button>
             }
             @if (isDraggable(row.entry)) {
               <button type="button" [disabled]="$first" aria-label="Move up" i18n-aria-label="Button: move this card one place earlier in the queue" kTooltip="Move up" i18n-kTooltip="Button: move this card one place earlier in the queue" (click)="moveBy(row.entry, -1)">
-                <i class="ti ti-chevron-up"></i>
+                <i aria-hidden="true" class="ti ti-chevron-up"></i>
               </button>
               <button type="button" [disabled]="isLastInQueue(row.entry)" aria-label="Move down" i18n-aria-label="Button: move this card one place later in the queue" kTooltip="Move down" i18n-kTooltip="Button: move this card one place later in the queue" (click)="moveBy(row.entry, 1)">
-                <i class="ti ti-chevron-down"></i>
+                <i aria-hidden="true" class="ti ti-chevron-down"></i>
               </button>
               <button type="button" class="row-remove" aria-label="Remove from Up next" i18n-aria-label="Button; Up next is the personal priority queue" kTooltip="Remove from Up next" i18n-kTooltip="Button; Up next is the personal priority queue" (click)="removed.emit({ priorityId: row.entry.id })">
-                <i class="ti ti-x"></i>
+                <i aria-hidden="true" class="ti ti-x"></i>
               </button>
             }
           </span>
@@ -121,7 +121,7 @@
              placeholder, never a draggable row, and numbered with the run's first rank so the
              numbers either side still read true. -->
         <span class="row-locked">
-          <i class="ti ti-lock"></i>
+          <i aria-hidden="true" class="ti ti-lock"></i>
           <span i18n="Placeholder row for one or more queued cards the viewer cannot see">{ row.entries.length, plural, =1 {A card you don’t have access to} other {{{ row.entries.length }} cards you don’t have access to} }</span>
         </span>
       }
@@ -129,7 +129,7 @@
   } @empty {
     @if (showEmptyState()) {
       <div class="panel-empty">
-        <i class="ti ti-list-numbers"></i>
+        <i aria-hidden="true" class="ti ti-list-numbers"></i>
         <strong i18n="Empty state; Up next is the personal priority queue">Nothing in Up next yet</strong>
         @if (canReorder() && emptyHint(); as hint) {
           <span>{{ hint }}</span>
@@ -156,7 +156,7 @@
     <div class="panel-add-anchor">
       @if (atCapacity()) {
         <p class="panel-note">
-          <i class="ti ti-alert-circle"></i>
+          <i aria-hidden="true" class="ti ti-alert-circle"></i>
           <ng-container i18n="Queue at capacity">{ maxEntries(), plural, =1 {Full at 1 card. Remove one before adding another.} other {Full at {{ maxEntries() }} cards. Remove one before adding another.} }</ng-container>
         </p>
       } @else {
@@ -167,7 +167,7 @@
           [kTooltip]="addableCards().length === 0 ? allAddedTooltip : addCardTooltip"
           (click)="toggleAdd('list')"
         >
-          <i class="ti ti-plus"></i>
+          <i aria-hidden="true" class="ti ti-plus"></i>
           <span i18n="Button: add a card to the Up next queue">Add card</span>
         </button>
         @if (addOpenAt() === "list") {
@@ -192,7 +192,7 @@
            Shown at capacity too, where dragging a row out is exactly how a slot gets freed. -->
       @if (showDragHint()) {
         <p class="panel-drag-hint">
-          <i class="ti ti-drag-drop"></i>
+          <i aria-hidden="true" class="ti ti-drag-drop"></i>
           <span i18n="Hint; Up next is the personal priority queue">Drag cards in to add them to Up next, or drag a row out to remove it.</span>
         </p>
       }

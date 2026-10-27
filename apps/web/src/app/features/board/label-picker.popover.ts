@@ -76,7 +76,7 @@ const CREATE_KEY = "__create__";
             ></span>
             <span class="lp-name"><k-match-highlight [text]="label.name" [query]="query()" /></span>
             @if (selectedIds().includes(label.id)) {
-              <i class="ti ti-check lp-check"></i>
+              <i aria-hidden="true" class="ti ti-check lp-check"></i>
             }
           </button>
         }
@@ -92,7 +92,7 @@ const CREATE_KEY = "__create__";
             (click)="submitCreate()"
             (pointermove)="nav.hover(createKey, $event)"
           >
-            <i class="ti ti-plus lp-create-icon"></i>
+            <i aria-hidden="true" class="ti ti-plus lp-create-icon"></i>
             <span class="lp-name" i18n="Label picker row that creates a new workspace label from the search text and adds it to the card">Create label “{{ name // i18n(ph="name") }}”</span>
           </button>
         }

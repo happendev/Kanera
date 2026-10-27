@@ -49,7 +49,7 @@ interface ShortcutGroup {
           }
         </label>
         <button type="button" class="ghost icon ks-close" (click)="closed.emit()" aria-label="Close" i18n-aria-label>
-          <i class="ti ti-x"></i>
+          <i aria-hidden="true" class="ti ti-x"></i>
         </button>
       </header>
       <div id="ks-results" class="ks-results">
