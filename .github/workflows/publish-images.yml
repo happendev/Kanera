@@ -1,9 +1,9 @@
 name: Publish Docker images
 
 # Builds the Kanera images for each release, pushes them to GHCR, and attaches the standalone
-# docker-compose.yml and env.example that self-hosters download. Images are built natively on
-# amd64 and arm64 runners (QEMU would make the Angular build take far longer), pushed by digest,
-# then joined into one multi-arch tag per image.
+# docker-compose.yml and env.example that self-hosters download. The local sasuke-1 builder uses
+# QEMU for the non-native architecture, pushes amd64 and arm64 images by digest, then joins them
+# into one multi-arch tag per image.
 
 on:
   release:
@@ -38,10 +38,10 @@ jobs:
           - { name: kanera-mcp, dockerfile: apps/mcp/Dockerfile }
           - { name: kanera-db-backup, dockerfile: docker/db-backup/Dockerfile }
         platform:
-          - { arch: amd64, runner: ubuntu-24.04 }
-          - { arch: arm64, runner: ubuntu-24.04-arm }
-    runs-on: ${{ matrix.platform.runner }}
-    timeout-minutes: 45
+          - { arch: amd64 }
+          - { arch: arm64 }
+    runs-on: sasuke-1
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: write
@@ -49,6 +49,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TAG }}
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64,arm64
 
       - uses: docker/setup-buildx-action@v3
 
@@ -83,7 +87,7 @@ jobs:
 
   manifest:
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: sasuke-1
     timeout-minutes: 10
     permissions:
       contents: read
@@ -92,10 +96,11 @@ jobs:
       matrix:
         image: [kanera-api, kanera-web, kanera-mcp, kanera-db-backup]
     steps:
+      # Self-hosted workspaces persist: keep downloaded digests separate for every image and run.
       - uses: actions/download-artifact@v4
         with:
           pattern: digest-${{ matrix.image }}-*
-          path: digests
+          path: ${{ runner.temp }}/digests-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.image }}
 
       - uses: docker/setup-buildx-action@v3
 
@@ -108,12 +113,14 @@ jobs:
       # vX.Y.Z publishes X.Y.Z, X.Y and X so operators can choose how closely to follow releases.
       # The release compose file always pins the exact X.Y.Z. There is deliberately no `latest`.
       - name: Create multi-arch tags
+        env:
+          DIGESTS: ${{ runner.temp }}/digests-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.image }}
         run: |
           version="${TAG#v}"
           minor="${version%.*}"
           major="${version%%.*}"
           image="$REGISTRY/${{ matrix.image }}"
-          sources=$(cat digests/*/digest.txt | sed "s|^|$image@|" | tr '\n' ' ')
+          sources=$(cat "$DIGESTS"/*/digest.txt | sed "s|^|$image@|" | tr '\n' ' ')
           docker buildx imagetools create \
             -t "$image:$version" -t "$image:$minor" -t "$image:$major" \
             $sources
@@ -121,7 +128,7 @@ jobs:
 
   release-assets:
     needs: manifest
-    runs-on: ubuntu-24.04
+    runs-on: sasuke-1
     timeout-minutes: 10
     permissions:
       contents: write
