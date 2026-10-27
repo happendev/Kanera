@@ -36,7 +36,7 @@ class RuntimeGuard {
   }
 
   private watchPage(page: Page, label: string) {
-    page.on("pageerror", (error) => this.problems.push(`[${label}] uncaught page error: ${error.message}`));
+    page.on("pageerror", (error) => this.problems.push(`[${label}] uncaught page error: ${error.stack ?? error.message}`));
     page.on("console", (message) => {
       if (message.type() !== "error" || message.text().startsWith("Failed to load resource:")) return;
       // NG02955 is a dev-mode performance advisory (an unprioritised LCP image), not a runtime

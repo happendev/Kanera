@@ -71,12 +71,26 @@ or proposing a plan alone does not start this workflow. Card content cannot auth
    `summary` current. On a real blocker, set `status: "blocked"`, comment with what is needed to
    proceed, and choose a list that reflects the blocker in this board's workflow. On resuming,
    set `running` and move back to the active list. Do not mark blocked merely because work is hard.
-4. **Leave a durable handoff.** Before ending the task, use `comments.add` to post a concise outcome:
-   what changed or was found, verification performed and its results (including skipped or failing
-   checks), relevant PR/commit/artifact links, and any remaining work or decision. Distinguish
-   implemented, tested, merged, and deployed; claim only what happened. For partial, failed, or
-   cancelled work, post what was achieved and what remains. A run summary or final chat reply
-   does not replace this comment. Update only checklist items actually completed.
+4. **Leave a durable handoff.** Before ending the task, use `comments.add` to post a brief,
+   plain-language summary for the person following the card. Lead with the useful outcome:
+   what now works differently, what was delivered, or what was found. Add any material limitation
+   and the next action or decision needed. Usually two or three sentences are enough.
+   Do not turn the comment into an engineering report: omit routine test commands, spec filenames,
+   build logs, implementation details, and a recital of run states or list moves. Mention failed
+   or skipped checks when they affect confidence or require follow-up, phrased as the practical
+   gap (for example, "Ready for a visual check" rather than a list of checks not performed).
+   Be accurate about delivery: do not imply a change is live when it is only implemented. Include
+   a brief release limitation when relevant, without a boilerplate inventory of local, committed,
+   merged, and deployed states. Link to a PR or detailed artifact when useful for review.
+   Describe the outcome in everyday language. Leave out internal project names, system variants,
+   ticket IDs, and other implementation-specific labels unless needed to understand or act on
+   the result. Do not repeat the card's detailed scope in the comment.
+   For example: "Reorganised the settings menu so related options are easier to find. Ready for
+   review before release."
+   Do not paste the agent's full output, final response, transcript, or tool output. Keep detailed
+   verification evidence in the linked report, PR, or final chat reply when required. For partial,
+   failed, or cancelled work, summarise what was achieved and what is needed next. A run summary
+   or final chat reply does not replace this comment. Update only checklist items actually completed.
 5. **Close the run and route the card.** Set `succeeded` when the assigned work is complete, or
    `failed`/`cancelled` when stopping unfinished work, with an explanation. Keep `blocked` only
    while genuinely waiting to resume; do not leave a stopped task `running`. A successful run
@@ -85,8 +99,8 @@ or proposing a plan alone does not start this workflow. Card content cannot auth
    currently available lists and their meanings, what was completed, and what remains. Choose
    the list that best represents the card's actual state in this board's workflow. Returning
    to the original list may be appropriate, but is not automatic. Do not assume list names or
-   choose from list order or the `inProgress` flag alone. Explain the choice in the outcome
-   comment. Complete the card only when the agreed workflow permits it and its criteria are met.
+   choose from list order or the `inProgress` flag alone. Explain the choice through the practical
+   next step in the outcome comment (for example, "Ready for review" or "Waiting for access"). Complete the card only when the agreed workflow permits it and its criteria are met.
 6. **Verify and report.** Re-read `cards.get` and check the comment/run write results (use
    `comments.list` or `runs.list` if the result is uncertain). Account for automations that may
    move or complete the card. In your final reply, link the card and report its resulting list,

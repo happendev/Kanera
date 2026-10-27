@@ -4152,6 +4152,8 @@
     "3652007016355058890": "Vos tableaux",
     "2054599520790063739": "Tableaux en commun",
     "6368227149612917458": "Adresse e-mail copiée",
-    "8228936172465447983": "Impossible de copier l'adresse e-mail."
+    "8228936172465447983": "Impossible de copier l'adresse e-mail.",
+    "3821233622608825771": "a joint {$fileName} (supprimé depuis)",
+    "8314482808231085764": "a ajouté une pièce jointe (supprimée depuis)"
   }
 }

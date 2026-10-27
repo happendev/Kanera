@@ -4152,6 +4152,8 @@
     "3652007016355058890": "Seus quadros",
     "2054599520790063739": "Quadros em comum",
     "6368227149612917458": "Endereço de e-mail copiado",
-    "8228936172465447983": "Não foi possível copiar o endereço de e-mail."
+    "8228936172465447983": "Não foi possível copiar o endereço de e-mail.",
+    "3821233622608825771": "anexou {$fileName} (excluído posteriormente)",
+    "8314482808231085764": "adicionou um anexo (excluído posteriormente)"
   }
 }

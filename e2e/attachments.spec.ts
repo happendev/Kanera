@@ -172,3 +172,43 @@ test("description and comment attachments preview or download by file type", asy
     await expect(detail.locator("li.attach-row").filter({ hasText: file.name })).toHaveCount(1);
   }
 });
+
+test("deleting a cover hides it immediately, supports undo, and labels the original upload", async ({ page, testWorkspace, signIn, pageAs, uniqueName }) => {
+  const title = uniqueName("E2E deleted cover");
+  const file = upload("image", "deleted-cover");
+  await signIn(page, "amelia");
+  await openBoard(page, testWorkspace.boardName);
+  await createCard(page, title);
+  const detail = await openCard(page, title);
+  const reviewer = await pageAs("marcus");
+  await openBoard(reviewer, testWorkspace.boardName);
+  const otherDetail = await openCard(reviewer, title);
+  // Delete a teammate's upload: same-actor upload/delete within the mistake window deliberately
+  // coalesces away both history entries, leaving no original activity to label.
+  await otherDetail.locator(".attach-upload input[type=file]").setInputFiles(file);
+  await expect(detail.locator(".panel-cover")).toBeVisible();
+  await expect(otherDetail.locator(".panel-cover")).toBeVisible();
+  const original = detail.locator(".activity-item").filter({ hasText: `attached ${file.name}` });
+  await expect(original).toBeVisible();
+  const remove = detail.locator(".attach-row").filter({ hasText: file.name }).locator("button").filter({ has: page.locator(".ti-trash") });
+  await remove.click();
+  await expect(detail.locator(".panel-cover")).toHaveCount(0, { timeout: 1000 });
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(detail.locator(".panel-cover")).toBeVisible();
+  await expect(original).not.toContainText("has since been deleted");
+  await remove.click();
+  await expect(detail.locator(".panel-cover")).toHaveCount(0, { timeout: 1000 });
+  await expect(original).toContainText("has since been deleted", { timeout: 15000 });
+  await expect(otherDetail.locator(".panel-cover")).toHaveCount(0);
+  await expect(otherDetail.locator(".activity-item").filter({ hasText: `attached ${file.name}` })).toContainText("has since been deleted");
+  await page.screenshot({ path: test.info().outputPath("deleted-cover-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await detail.getByRole("button", { name: "Activity", exact: true }).click();
+  await expect(original).toContainText("has since been deleted");
+  await page.screenshot({ path: test.info().outputPath("deleted-cover-phone.png") });
+  await page.reload();
+  const reopened = page.getByRole("dialog", { name: `Card detail: ${title}` });
+  await expect(reopened.locator(".panel-cover")).toHaveCount(0);
+  await reopened.getByRole("button", { name: "Activity", exact: true }).click();
+  await expect(reopened.locator(".activity-item").filter({ hasText: `attached ${file.name}` })).toContainText("has since been deleted");
+});

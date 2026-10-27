@@ -534,6 +534,9 @@ export class CardDetailComponent {
   readonly coverUrl = computed((): string | null => {
     const card = this.card();
     const coverId = card.coverAttachmentId;
+    // The summary still holds the old URL while deletion waits for Undo. Do not resurrect it
+    // through the fallback after hiding the attachment locally.
+    if (coverId && this.pendingDeletedAttachmentIds().has(coverId)) return null;
     const summaryCoverUrl = "coverUrl" in card ? card.coverUrl : null;
     const resolved = coverId ? (this.visibleAttachments().find((a) => a.id === coverId)?.url ?? summaryCoverUrl) : summaryCoverUrl;
     // Suppress a cover whose signed token has already expired (e.g. from a
@@ -1803,10 +1806,13 @@ export class CardDetailComponent {
 
   async createChecklistItem(checklistId: string, event?: Event) {
     event?.preventDefault();
-    const text = this.newItemText().trim();
+    const draft = this.newItemText();
+    const text = draft.trim();
     if (!text) return;
     await this.api.post(`/cards/${this.card().id}/checklists/${checklistId}/items`, { text });
-    // Keep the form open for batch entry — just clear and refocus
+    // Realtime can reveal the saved item before this response arrives. Only clear the submitted
+    // draft, since the user may already be typing the next item or have opened another checklist.
+    if (this.addingItemChecklistId() !== checklistId || this.newItemText() !== draft) return;
     this.newItemText.set("");
     this.addItemInput()?.nativeElement.focus();
   }

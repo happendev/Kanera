@@ -4152,6 +4152,8 @@
     "3652007016355058890": "Your boards",
     "2054599520790063739": "Boards you share",
     "6368227149612917458": "Email copied",
-    "8228936172465447983": "Couldn't copy the email address."
+    "8228936172465447983": "Couldn't copy the email address.",
+    "3821233622608825771": "attached {$fileName} (has since been deleted)",
+    "8314482808231085764": "added an attachment (has since been deleted)"
   }
 }

@@ -10678,6 +10678,20 @@
       "src/app/features/board/card-activity.component.ts"
     ]
   },
+  "3821233622608825771": "attached {$fileName} (has since been deleted)",
+  "@3821233622608825771": {
+    "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "8314482808231085764": "added an attachment (has since been deleted)",
+  "@8314482808231085764": {
+    "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
   "3043118067331815518": "added an attachment",
   "@3043118067331815518": {
     "description": "Card activity after a person's name",
