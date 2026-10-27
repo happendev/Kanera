@@ -358,6 +358,19 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       && person.boardIds.some((boardId) => scopedBoardIds.has(boardId))
     );
   });
+  readonly teamGuestUserIds = computed(() => {
+    const scopedBoardIds = new Set(this.state.scopedBoards().map((board) => board.id));
+    const viewer = this.peopleById().get(this.state.auth.user()?.id ?? "");
+    const viewerGuestBoardIds = new Set(viewer?.guestBoardIds ?? []);
+    return this.teamPeople().filter((person) => {
+      // Board access alone does not make someone part of the viewer's team. Both people must be
+      // organisation members on at least one shared board in scope; either side can be the guest.
+      // Use catalog memberships, not users' storage organisations, for multi-organisation users.
+      return person.boardIds.filter((boardId) => scopedBoardIds.has(boardId)).every((boardId) =>
+        viewerGuestBoardIds.has(boardId) || person.guestBoardIds.includes(boardId)
+      );
+    }).map((person) => person.userId);
+  });
   /** Everyone on a board in scope, the viewer included: the pool for filter and table pickers. */
   readonly scopedPeople = computed(() => {
     const scopedBoardIds = new Set(this.state.scopedBoards().map((board) => board.id));
