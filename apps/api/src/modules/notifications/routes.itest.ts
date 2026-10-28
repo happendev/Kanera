@@ -480,6 +480,20 @@ void test("the Agent tab: agentOnly filters to agent-attributed activity and age
   });
   assert.equal(groups.statusCode, 200);
   assert.deepEqual(groups.json().groups, [{ key: `agent:Claude:${f.owner.id}`, count: 2 }]);
+
+  // Mark all read from the Agent tab clears only agent rows; the human unread stays for the inbox.
+  const agentReadAll = await f.app.inject({
+    method: "POST",
+    url: "/notifications/read-all",
+    headers: { authorization: `Bearer ${f.memberToken}` },
+    payload: { agentOnly: true },
+  });
+  assert.equal(agentReadAll.statusCode, 200);
+  assert.deepEqual(agentReadAll.json().readIds, [agentUnread!.id]);
+  const [humanUnread] = await db.select().from(notifications).where(eq(notifications.id, f.unread.id)).limit(1);
+  assert.equal(humanUnread?.readAt, null);
+  const afterCounts = await f.app.inject({ method: "GET", url: "/notifications/agent-counts", headers: { authorization: `Bearer ${f.memberToken}` } });
+  assert.deepEqual(afterCounts.json(), { total: 2, unread: 0 });
 });
 
 void test("keyset pagination does not skip notifications that share a createdAt across a page boundary", async () => {

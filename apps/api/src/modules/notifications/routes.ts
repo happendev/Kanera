@@ -1,7 +1,7 @@
 import { dto } from "@kanera/shared";
 import type { ListNotificationsQuery, NotificationGroupCountsResponse, NotificationWorkspaceRule, NotificationsPage, PersonalNotificationTestResponse, PushTestResponse, WatcherUser } from "@kanera/shared/dto";
 import { activityEvents, boards, boardWatchers, cardChecklistItems, cardKeyPrefixReservations, cards, cardWatchers, lists, notificationSettings, notifications, PUSH_QUEUE_STATUS, pushQueue, userNotificationWorkspaceRules, users } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, ilike, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -776,15 +776,31 @@ export async function notificationsRoutes(app: FastifyInstance) {
   });
 
   app.post("/notifications/read-all", async (req) => {
+    const body = dto.markAllNotificationsReadBody.parse(req.body ?? {});
     const readAt = new Date();
+    const conditions: SQL[] = [eq(notifications.userId, req.auth.sub), isNull(notifications.readAt)];
+    // Same agent test as the Agent feed in notificationFeedConditions: the triggering activity's actor.
+    if (body.agentOnly) {
+      conditions.push(exists(
+        db.select({ id: activityEvents.id }).from(activityEvents)
+          .where(and(eq(activityEvents.id, notifications.activityId), eq(activityEvents.actorKind, "agent"))),
+      ));
+    }
     const updated = await db
       .update(notifications)
       .set({ readAt })
-      .where(and(eq(notifications.userId, req.auth.sub), isNull(notifications.readAt)))
+      .where(and(...conditions))
       .returning({ id: notifications.id });
+    const readIds = updated.map((r) => r.id);
+    if (body.agentOnly) {
+      // Per-id read event, like the board-scoped read, so sibling tabs re-sync every badge and
+      // keep the user's other unread notifications.
+      if (readIds.length > 0) emitToUser(req.auth.sub, "notification:read", { notificationIds: readIds, readAt: readAt.toISOString() });
+      return { readIds };
+    }
     // Exact ids preserve notifications created after this UPDATE but before its event is delivered.
-    emitToUser(req.auth.sub, "notification:allRead", { readAt: readAt.toISOString(), notificationIds: updated.map((row) => row.id) });
-    return { readIds: updated.map((r) => r.id) };
+    emitToUser(req.auth.sub, "notification:allRead", { readAt: readAt.toISOString(), notificationIds: readIds });
+    return { readIds };
   });
 
   app.get("/card-watches", async (req) => {

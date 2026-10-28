@@ -25,6 +25,10 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
+- The notification read dot now sits in the same spot on every notification, grouped or not, so you can clear the unread list by clicking down it without moving the pointer and accidentally opening a card. The timestamp moves onto the same line, beside the dot.
+
+- **Mark all read** on the notifications Agent tab now clears only agent notifications, leaving the rest of your unread inbox alone.
+
 - Saving unchanged card titles, descriptions, checklist titles/items or custom fields no longer inflates activity change counts or updates saved timestamps. Repeated empty clears are ignored, and unchanged custom fields do not retrigger automations.
 
 - Adding checklist items in quick succession no longer lets an earlier save response erase the next item's draft.

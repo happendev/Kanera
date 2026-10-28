@@ -19,10 +19,12 @@ test("a created card reaches another workspace member and survives reload", asyn
 
 test("workspace lists reach another board without a refresh", async ({ page, testWorkspace, signIn, pageAs, uniqueName }) => {
   const name = uniqueName("E2E shared list");
-  await signIn(page, "amelia");
-  const member = await pageAs("marcus");
+  // This test covers list fanout. Set up both boards before the sidebars load, so opening the
+  // target cannot race the initial board catalogue and the board-created subscription.
   const otherBoard = uniqueName("Other board");
   await testWorkspace.addBoard(otherBoard);
+  await signIn(page, "amelia");
+  const member = await pageAs("marcus");
   await openBoard(member, otherBoard);
 
   const settingsHref = await workspaceSettingsHref(page, testWorkspace.boardName);
