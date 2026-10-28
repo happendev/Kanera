@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { APIResponse } from "@playwright/test";
 import ports from "./ports.json";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, expectBoardLoaded, expectCardTileMounted, openBoard, openCard, workspaceSettingsHref } from "./support/ui";
 
 async function json<T>(response: APIResponse): Promise<T> {
@@ -14,9 +14,9 @@ async function json<T>(response: APIResponse): Promise<T> {
 test("MCP blocked and unblocked automations follow dependency boundaries live", async ({ page, signIn, apiAs, playwright, uniqueName }) => {
   await signIn(page, "amelia");
   const api = await apiAs("amelia");
-  const boardId = await boardIdOf(page, "Platform Delivery");
-  const blockerBoardId = await boardIdOf(page, "Mobile Experience");
-  const settingsHref = await workspaceSettingsHref(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
+  const blockerBoardId = await boardIdOf(page, "E2E secondary board");
+  const settingsHref = await workspaceSettingsHref(page, "E2E primary board");
   const meta = await (await api.get(`/api/boards/${boardId}?includeCards=false`)).json() as { board: { workspaceId: string }; lists: { id: string }[] };
   const workspaceId = meta.board.workspaceId;
   const listId = meta.lists[0]!.id;
@@ -56,7 +56,7 @@ test("MCP blocked and unblocked automations follow dependency boundaries live", 
 
     // See the new trigger and both help messages on desktop and phone.
     await page.goto(`${settingsHref}/automations`);
-    // Other specs create dependency rules in this workspace too; pick ours by id, not by trigger label.
+    // Address each rule by the ID returned by its creation.
     const blockedRule = page.locator(`.automation-card[data-automation-id="${ruleIds[0]}"]`);
     await blockedRule.locator(".ac-identity").click();
     await expect(blockedRule.locator(".ac-trigger-note")).toContainText("first active blocker");
@@ -69,7 +69,7 @@ test("MCP blocked and unblocked automations follow dependency boundaries live", 
     const readyRule = page.locator(`.automation-card[data-automation-id="${ruleIds[1]}"]`);
     await readyRule.locator(".ac-identity").click();
     await expect(readyRule.locator(".ac-trigger-note")).toContainText("integrations and automations");
-    await openBoard(page, "Platform Delivery");
+    await openBoard(page, "E2E primary board");
     await expectCardTileMounted(page, title);
     const detail = await openCard(page, title);
     await detail.getByRole("button", { name: "Activity", exact: false }).click();

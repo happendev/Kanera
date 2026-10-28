@@ -198,7 +198,7 @@ test("comment submission waits for every concurrent dropped upload", async ({ pa
     }
     await route.continue();
   });
-  const image = readFileSync(path.join(__dirname, "..", "dev-db-seed-content/attachments/images/access-review-symbol.png")).toString("base64");
+  const image = readFileSync(path.join(__dirname, "fixtures/sample.png")).toString("base64");
   try {
     await editor.locator(".tiptap").evaluate((element, base64) => {
       const transfer = new DataTransfer();

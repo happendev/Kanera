@@ -1,12 +1,12 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import { users } from "./support/env";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardHref, expectBoardDenied, openBoard, workspaceSettingsHref } from "./support/ui";
 
 // Each test grants Maya (a user in another organisation) access to a board it creates, so revoking
 // access in one test cannot change what another test sees.
 async function boardSharedWithMaya(owner: Page, api: APIRequestContext, boardName: string) {
-  const workspaceId = (await workspaceSettingsHref(owner, "Platform Delivery")).split("/")[2]!;
+  const workspaceId = (await workspaceSettingsHref(owner, "E2E primary board")).split("/")[2]!;
   const created = await api.post(`/api/workspaces/${workspaceId}/boards`, { data: { name: boardName } });
   expect(created.ok(), await created.text()).toBe(true);
   const board = (await created.json()) as { id: string };
@@ -23,14 +23,14 @@ test("a cross-organisation guest sees only the invited board", async ({ page, si
   const boardName = uniqueName("E2E guest board");
   await signIn(page, "amelia");
   await boardSharedWithMaya(page, await apiAs("amelia"), boardName);
-  const platformHref = await boardHref(page, "Platform Delivery");
+  const platformHref = await boardHref(page, "E2E primary board");
 
   const guest = await pageAs("maya");
-  await expect(guest.locator("a.board-link").filter({ hasText: "Platform Delivery" })).toHaveCount(0);
+  await expect(guest.locator("a.board-link").filter({ hasText: "E2E primary board" })).toHaveCount(0);
   await openBoard(guest, boardName);
 
   await guest.goto(platformHref);
-  await expectBoardDenied(guest, "Platform Delivery");
+  await expectBoardDenied(guest, "E2E primary board");
 });
 
 test("removing a live board guest ejects their open board and blocks cached reopening", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {

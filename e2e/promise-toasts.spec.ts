@@ -171,12 +171,12 @@ test("Trello import settles its loading toast after the real import", async ({ p
       buffer: Buffer.from(JSON.stringify({ name: "Imported", lists: [{ id: "todo", name: "Todo" }], cards: [{ id: "one", idList: "todo", name: "Imported card", closed: false }] })),
     });
     await wizard.locator('button[type="submit"]').click();
-    for (let step = 0; step < 8 && !(await wizard.locator(".import-action button").isVisible()); step++) {
-      const heading = wizard.getByRole("heading", { level: 3 });
-      const previous = await heading.innerText();
-      await wizard.getByRole("button", { name: "Next", exact: false }).click();
-      await expect(heading).not.toHaveText(previous);
+    // Wait for each actual step, including analysis completing, before advancing it.
+    for (const title of ["Mapping Lists", "Mapping Labels", "Mapping Custom Fields", "Mapping Members"]) {
+      await expect(wizard.getByRole("heading", { level: 3 })).toContainText(title);
+      await wizard.getByRole("button", { name: "Next", exact: true }).click();
     }
+    await expect(wizard.getByRole("heading", { level: 3 })).toContainText("Review Options");
     const commit = gate();
     await page.route("**/imports/*/commit", async (route) => {
       const response = await route.fetch();

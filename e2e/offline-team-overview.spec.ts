@@ -22,6 +22,11 @@ test("Team overview and a teammate's queue survive offline reloads, stay read-on
     const make = async (suffix: string, assigneeIds: string[]) => result<{ id: string; title: string }>(await teammate.post(`/api/boards/${workspace.initialBoard.id}/lists/${board.lists[0]!.id}/cards`, { data: { title: `${title} ${suffix}`, assigneeIds } }));
     const queued = await make("queued", [person.id]);
     const active = await make("recently active", [person.id]);
+    // Focusing a teammate requires multiple people in the cached overview. Supply the other
+    // person explicitly instead of relying on unrelated demo assignments to show the strip.
+    const other = await result<{ id: string }>(await (await apiAs("marcus")).get("/api/me"));
+    await result(await api.post(`/api/workspaces/${workspace.id}/members`, { data: { userId: other.id, role: "admin" } }));
+    await make("other teammate work", [other.id]);
     await result(await api.patch(`/api/lists/${board.lists[1]!.id}`, { data: { inProgress: true } }));
     const unowned = await make("unowned", []);
     await result(await teammate.post(`/api/cards/${unowned.id}/move`, { data: { listId: board.lists[1]!.id, afterCardId: null } }));

@@ -1,5 +1,5 @@
 import type { APIResponse } from "@playwright/test";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { webOrigin } from "./support/env";
 import { boardIdOf, expectBoardLoaded, openCard } from "./support/ui";
 
@@ -43,8 +43,8 @@ test("websocket compression follows configuration and delivers small and large p
     if (compressionEnabled) expect(value).toContain("server_no_context_takeover");
   }
   const api = await apiAs("amelia");
-  const seedBoard = await boardIdOf(page, "Platform Delivery");
-  const context = await result<{ board: { workspaceId: string }; lists: { id: string }[] }>(await api.get(`/api/boards/${seedBoard}?includeCards=false`));
+  const scenarioBoard = await boardIdOf(page, "E2E primary board");
+  const context = await result<{ board: { workspaceId: string }; lists: { id: string }[] }>(await api.get(`/api/boards/${scenarioBoard}?includeCards=false`));
   const boardName = uniqueName("Compression delivery");
   const board = await result<{ id: string }>(await api.post(`/api/workspaces/${context.board.workspaceId}/boards`, { data: { name: boardName } }));
   let keyId: string | undefined;

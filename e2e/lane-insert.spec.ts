@@ -86,9 +86,9 @@ test("a card inserted between two tied cross-board cards in My Cards lands there
   const title = uniqueName("E2E My Cards insert");
   await signIn(page, "amelia", "/my-cards");
   await page.getByRole("button", { name: "Board view" }).click();
+  // A single-workspace view omits the heading; scope by its stable workspace ID.
   const lane = page
-    .locator("section.workspace-board")
-    .filter({ hasText: testWorkspace.name })
+    .locator(`#workspace-board-${testWorkspace.id}`)
     .locator("k-list")
     .filter({ hasText: "Backlog" });
   await expect(lane.locator("k-card")).toHaveCount(3);

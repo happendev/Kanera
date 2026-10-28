@@ -2,8 +2,8 @@
 
 This file describes the user flows and failures covered by each E2E spec. Update it when adding or changing coverage.
 
-The `seed` Playwright project validates authored fixture content and its UI smoke cases before any
-`behavior` tests mutate the database, on every shard. Cross-view realtime tests remain separate
+The `behavior` project runs without the demo seed. Every test receives fresh identities and
+organisations; scenario fixtures create their own boards and content. Cross-view realtime tests remain separate
 because their mounted state consumers can regress independently. See README.md for browser, touch,
 offline/PWA, billing and screenshot coverage boundaries; API-only assertions are service-level
 coverage even when they share the E2E topology. Concurrent request bursts do not replace deterministic
@@ -23,7 +23,7 @@ database race tests.
 | `angular-editor-races.spec.ts` | Editing a submitted description while its save is pending losing newer text; a rejected description save discarding or freezing the draft; rapid detail select/user clicks losing selections or failing to clear them; a successful text-field write being permanently memoized so a later remote edit cannot be changed back; comment submission becoming enabled before all concurrent dropped uploads finish; late note-lock acquisition opening the wrong note's editor or retaining a lock after navigation or teardown; an earlier note's save acknowledgement closing or discarding the next note's draft. Retains screenshots and verifies saved values/locks through the API. Ctrl+Enter in the card composer description (which hides the editor's actions and owns submission) leaving the description inert and non-editable because nothing answers the editor's save; a note save whose response arrives while the tab is hidden being discarded, leaving the editor open on a stale base so the next save is refused as stale. Retains screenshots of the composer after the shortcut and the note after returning. |
 | `angular-settings-races.spec.ts` | An automation's earlier socket echo or HTTP response replacing newer action text, or overlapping action writes persisting out of order; scratchpad reconnect refreshing service state while leaving a clean mounted editor stale, causing the next keystroke to overwrite remote text. Holds only the first mutation, flushes the second draft on blur and asserts that the application does not dispatch it until the first acknowledgement; uses a proven socket outage; retains screenshots and JSON evidence for write order and convergence. Ctrl+Enter in a scratchpad page freezing the autosaving editor; a foreground scratchpad refresh rewriting a clean editor whose serialisation differs cosmetically from the stored body (emoji shortcodes) and losing the caret. Retains screenshots of the scratchpad after the shortcut and after the refresh. |
 | `auth.spec.ts` | Password login broken; the refresh cookie not reaching `/api/auth/refresh` through the same-origin path rewrite, which signs users out on reload; log out leaving a session; wrong password creating one. |
-| `board.spec.ts` | Card creation not persisted; `board:*` room fanout missing a second member; workspace-list fanout not reaching a *different* board; stale hydration after reload. |
+| `board.spec.ts` | Card creation not persisted; `board:*` room fanout missing a second member; workspace-list fanout not reaching a *different* board; stale hydration after reload. An explicit 80-card fixture also catches a live appended card being lost beyond the initial 15-tile render cap, before and after reload. |
 | `guest-access.spec.ts` | A cross-organisation guest seeing an uninvited board (checked by the loaded board heading, not the canvas); revocation not ejecting a live guest; a cached route or sidebar entry reopening a revoked board. |
 | `card-move.spec.ts` | List and board moves diverging between Kanban and table; duplicated or misplaced activity after a board transfer. |
 | `correctness-scan.spec.ts` | Simultaneous refreshes forking one cookie into multiple replacement sessions; concurrent checklist PATCHes overwriting omitted fields; board transfers retaining checklist-only owners or watchers without destination access, while preserving eligible observer watches; bulk and cross-board move responses returning pre-automation state; deleting a workspace list leaving ghost cards in an open board table; agent-run lists leaking unassigned cards, run access surviving a card's move to a private board, and concurrent heartbeats reopening a finished run. Retains JSON evidence, browser traces and screenshots. |
@@ -92,7 +92,7 @@ Global Work performance follow-up: the deep-table realtime burst test now verifi
 
 - `promise-toasts.spec.ts`: real bulk move/archive and Trello import, board JSON downloads and rejected exports settle one mounted toast from loading to success/error, restore archived cards through the supported per-card endpoint (the former bulk restore request returned 400), keep saved card state, preserve dismissed loading toasts after late completion, and render at desktop/phone widths. `toast.service.spec.ts` covers exact loading/expiry/undo timer boundaries, concurrent settlement and dismissal/teardown races, and original rejection/value propagation that browser scheduling cannot reliably force.
 
-Team overview fixtures archive their cards after each test, including the distant agenda dates that would otherwise distort subsequent timeline fitting and dragging.
+Team overview tests create their own queue, workflow and guest grants. Fresh accounts and workspace teardown prevent distant agenda dates or queues from affecting subsequent timeline fitting and dragging.
 
 Timeline planning regressions (`timeline.spec.ts`): filtered blockers retain conflicts and critical paths; off-board date changes refresh live; observer bars open with mouse, keyboard and coarse-pointer touch; 100–2,000 cards keep a bounded row DOM and remain scrollable/searchable.
 
@@ -110,12 +110,13 @@ Timeline planning regressions (`timeline.spec.ts`): filtered blockers retain con
   committed audio/video fixtures also have to decode and advance playback in every surface.
 - The board, lane insertion, drag, card follow, live edit, attachment, public API, MCP event and CLI
   board flows use `testWorkspace`; their cards, lists and workspace credentials cannot accumulate
-  in seed lanes. Workspace teardown runs after failures too. Personal CLI API keys and OAuth connections are
+  across tests. All standard test accounts and their organisations are also removed after each test,
+  including work created by specs outside `testWorkspace`. Teardown runs after failures too. Personal CLI API keys and OAuth connections are
   revoked in cleanup; storage cleanup also uses `finally`.
 - `angular-editor-races.spec.ts` checks the next note's existing draft before appending more text;
   replacing the lost draft with `fill()` can no longer conceal an old acknowledgement clearing it.
 - `user-profile.spec.ts` checks exact open/completed count deltas from its own changes, rather than
-  accepting any nonzero seeded count.
+  accepting any nonzero count. Its shared guest board is explicitly granted by the test.
 - Pagination's single-edit retention check remains distinct from the 201-card burst/coalescing
   budget: one verifies retained identities and rendered rows; the other also limits query count/size.
 

@@ -1,6 +1,6 @@
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import { users, webOrigin } from "./support/env";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, expectBoardLoaded, openCard } from "./support/ui";
 
 type Card = { id: string; title: string; key: string; organisationKey: string };
@@ -13,7 +13,7 @@ async function result<T>(response: APIResponse): Promise<T> {
 }
 
 async function createBoard(page: Page, api: APIRequestContext, name: string) {
-  const existing = await boardIdOf(page, "Platform Delivery");
+  const existing = await boardIdOf(page, "E2E primary board");
   const context = await result<{ board: { workspaceId: string }; lists: { id: string }[] }>(await api.get(`/api/boards/${existing}?includeCards=false`));
   const board = await result<{ id: string }>(await api.post(`/api/workspaces/${context.board.workspaceId}/boards`, { data: { name } }));
   return { ...board, workspaceId: context.board.workspaceId, listId: context.lists[0]!.id };

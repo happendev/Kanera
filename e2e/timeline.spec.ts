@@ -1,5 +1,5 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { contextDefaults, users } from "./support/env";
 import { boardIdOf, openBoard } from "./support/ui";
 
@@ -31,7 +31,7 @@ function plusDays(date: Date, days: number): Date {
 }
 
 async function createScheduledCard(page: Page, api: APIRequestContext, title: string, start: Date, due: Date): Promise<CreatedCard> {
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
   const board = await api.get(`/api/boards/${boardId}?includeCards=false`);
   const { lists } = (await board.json()) as { lists: { id: string; name: string }[] };
   const backlog = lists.find((list) => list.name === "Backlog") ?? lists[0]!;
@@ -65,7 +65,7 @@ async function openTimeline(page: Page) {
 
 test("timeline Hide completed stays in sync with Filter and reacts to completion live", async ({ page, signIn, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
   const monday = nextPlanningMonday();
   const prefix = uniqueName("E2E timeline completion");
@@ -146,7 +146,7 @@ test("timeline Hide completed stays in sync with Filter and reacts to completion
 for (const lens of ["my", "team"] as const) {
   test(`${lens === "my" ? "My" : "Team"} Cards timeline Hide completed shares the query filter`, async ({ page, signIn, apiAs, uniqueName }) => {
     await signIn(page, "amelia");
-    await openBoard(page, "Platform Delivery");
+    await openBoard(page, "E2E primary board");
     const api = await apiAs("amelia");
     const monday = nextPlanningMonday();
     const card = await createScheduledCard(page, api, uniqueName(`E2E ${lens} timeline completed`), monday, plusDays(monday, 2));
@@ -185,9 +185,9 @@ for (const lens of ["my", "team"] as const) {
 
 test("the timeline draws bars, reschedules by drag, flags conflicts and draws dependencies, live for a second member", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
   const monday = nextPlanningMonday();
   // first: Mon–Wed; second: Thu–Fri of the same week and waiting on first; third: the next Monday.
   const first = await createScheduledCard(page, api, uniqueName("E2E timeline first"), monday, plusDays(monday, 2));
@@ -198,26 +198,27 @@ test("the timeline draws bars, reschedules by drag, flags conflicts and draws de
   try {
     const link = await api.post(`/api/cards/${second.id}/relations`, { data: { targetCardId: first.id, direction: "blocked_by" } });
     expect(link.status(), await link.text()).toBe(201);
-    // The seed workspace carries an "Issue / Bug" label; the first card wears it so the chart has a chip to show.
+    // This scenario owns the label as well as the cards and dependency.
     const { board } = (await (await api.get(`/api/boards/${boardId}?includeCards=false`)).json()) as { board: { workspaceId: string } };
-    const workspace = await api.get(`/api/workspaces/${board.workspaceId}`);
-    const bugLabel = ((await workspace.json()) as { cardLabels: { id: string; name: string }[] }).cardLabels.find((label) => label.name === "Issue / Bug")!;
-    expect(bugLabel, "seed label Issue / Bug").toBeTruthy();
+    const labelResponse = await api.post(`/api/workspaces/${board.workspaceId}/card-labels`, { data: { name: "Timeline label", color: "red" } });
+    expect(labelResponse.ok(), await labelResponse.text()).toBe(true);
+    const bugLabel = await labelResponse.json() as { id: string; name: string };
     expect((await api.put(`/api/cards/${first.id}/labels`, { data: { labelIds: [bugLabel.id] } })).ok()).toBe(true);
 
     // A second member watches the same chart; nothing below reloads their page.
     const viewer = await pageAs("marcus");
-    await openBoard(viewer, "Platform Delivery");
+    await openBoard(viewer, "E2E primary board");
     await openTimeline(viewer);
     await expect(bar(viewer, first)).toBeVisible();
     const viewerBefore = (await bar(viewer, first).boundingBox())!;
     // The chart opens fitted to the plan, so the scale depends on the board; read it off the
     // three-day bar rather than assuming one.
     const viewerPxPerDay = viewerBefore.width / 3;
-    // The seed board has blocking links of its own, so wire counts are relative to what is there.
+    // The only initial wire is the dependency created above.
     const wires = viewer.locator("k-board-timeline-view .tl-wire-hit");
     await expect(wireBetween(viewer, first, second)).toHaveCount(1);
-    const baselineWires = await wires.count();
+    await expect(wires).toHaveCount(1);
+    const baselineWires = 1;
     await expect(bar(viewer, second)).not.toHaveClass(/has-conflict/);
 
     await openTimeline(page);
@@ -317,9 +318,9 @@ test("the timeline draws bars, reschedules by drag, flags conflicts and draws de
 
 test("off-board constraints refresh live and observers can open bars with mouse, keyboard and touch", async ({ page, browser, runtimeGuard, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
-  const existing = await boardIdOf(page, "Platform Delivery");
+  const existing = await boardIdOf(page, "E2E primary board");
   const { board, lists } = await (await api.get(`/api/boards/${existing}?includeCards=false`)).json() as { board: { workspaceId: string }; lists: { id: string }[] };
   const createdBoards: string[] = [];
   const monday = nextPlanningMonday();
@@ -383,9 +384,9 @@ test("off-board constraints refresh live and observers can open bars with mouse,
 
 test("large timelines window rows while preserving scrolling and filters", async ({ page, signIn, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
   const monday = nextPlanningMonday();
   const prototype = await createScheduledCard(page, api, uniqueName("Virtual row"), monday, plusDays(monday, 4));
   // Only the board-open response is enlarged. Real endpoints and normal Angular inputs render it;
@@ -432,10 +433,13 @@ test("large timelines window rows while preserving scrolling and filters", async
 
 test("the chart zooms around the pointer with ctrl+wheel and the buttons, and pans by dragging its background", async ({ page, signIn, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
   const monday = nextPlanningMonday();
   const card = await createScheduledCard(page, api, uniqueName("E2E timeline zoom"), monday, plusDays(monday, 4));
+  // Fit must start below the maximum zoom, and panning needs a plan wider than one short bar.
+  // Give the scenario its own distant card instead of borrowing the demo's planning horizon.
+  const horizon = await createScheduledCard(page, api, uniqueName("E2E timeline horizon"), plusDays(monday, 84), plusDays(monday, 88));
   try {
     await openTimeline(page);
     const scroller = page.locator("k-board-timeline-view .tl-scroller");
@@ -510,38 +514,53 @@ test("the chart zooms around the pointer with ctrl+wheel and the buttons, and pa
     await page.getByRole("button", { name: "Fit all", exact: true }).click();
     await expect.poll(allBarsInChart, { timeout: 5000 }).toBe(true);
   } finally {
-    expect((await api.patch(`/api/cards/${card.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
+    for (const scheduled of [card, horizon]) {
+      expect((await api.patch(`/api/cards/${scheduled.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
+    }
   }
 });
 
 test("Team Cards offers the Timeline over every board, grouped by board, live for a second member", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
   const monday = nextPlanningMonday();
   const card = await createScheduledCard(page, api, uniqueName("E2E team timeline"), monday, plusDays(monday, 2));
+  // Fixed boundaries keep the chart's date axis stable while the middle card moves. All three
+  // share the search prefix, so filtering does not discard the anchors and refit the chart.
+  const earlier = await createScheduledCard(page, api, `${card.title} earlier boundary`, plusDays(monday, -28), plusDays(monday, -24));
+  const later = await createScheduledCard(page, api, `${card.title} later boundary`, plusDays(monday, 56), plusDays(monday, 60));
+  const scheduled = [card, earlier, later];
   // Team Cards is the team's assigned work minus the viewer's own, so the card belongs to a third
   // teammate before either member's chart shows it.
   const priya = (await (await (await apiAs("priya")).get("/api/me")).json()) as { id?: string; user?: { id: string } };
-  expect((await api.put(`/api/cards/${card.id}/assignees`, { data: { userIds: [priya.user?.id ?? priya.id!] } })).ok()).toBe(true);
+  for (const assigned of scheduled) {
+    expect((await api.put(`/api/cards/${assigned.id}/assignees`, { data: { userIds: [priya.user?.id ?? priya.id!] } })).ok()).toBe(true);
+  }
 
   try {
     // A second member keeps the Team Cards Timeline open; the date change below reaches it live.
     const viewer = await pageAs("marcus");
     await viewer.goto("/team-cards");
     await viewer.getByRole("button", { name: "Timeline view", exact: true }).click();
-    // The chart windows its rows, so narrow both charts to the card rather than scrolling for it.
+    // Keep both charts scoped to the moving card and its two date boundaries.
     await viewer.getByRole("searchbox", { name: "Search cards", exact: true }).fill(card.title);
     await expect(bar(viewer, card)).toBeVisible();
-    const viewerBefore = (await bar(viewer, card).boundingBox())!;
-    const viewerPxPerDay = viewerBefore.width / 3;
+    // Measure against the unchanged boundary, so initial auto-fit/scroll cannot masquerade as
+    // a date change. The moving bar spans three inclusive days at the chart's current scale.
+    const offsetDays = async () => {
+      const moving = (await bar(viewer, card).boundingBox())!;
+      const boundary = (await bar(viewer, earlier).boundingBox())!;
+      return (moving.x - boundary.x) / (moving.width / 3);
+    };
+    await expect.poll(offsetDays).toBeCloseTo(28, 1);
 
     await page.goto("/team-cards");
     await page.getByRole("button", { name: "Timeline view", exact: true }).click();
     await page.getByRole("searchbox", { name: "Search cards", exact: true }).fill(card.title);
     // Across boards the chart opens grouped by board, and the card sits under its board's heading.
     const groups = page.locator("k-board-timeline-view .tl-group-name");
-    await expect(groups.filter({ hasText: "Platform Delivery" })).toHaveCount(1);
+    await expect(groups.filter({ hasText: "E2E primary board" })).toHaveCount(1);
     await expect(bar(page, card)).toBeVisible();
     await page.screenshot({ path: test.info().outputPath("team-cards-timeline-desktop.png") });
 
@@ -549,18 +568,20 @@ test("Team Cards offers the Timeline over every board, grouped by board, live fo
     await page.getByRole("button", { name: "By list", exact: true }).click();
     await expect(groups.filter({ hasText: "Backlog" })).toHaveCount(1);
     await page.getByRole("button", { name: "By board", exact: true }).click();
-    await expect(groups.filter({ hasText: "Platform Delivery" })).toHaveCount(1);
+    await expect(groups.filter({ hasText: "E2E primary board" })).toHaveCount(1);
 
     // Rescheduling from the API moves the other member's bar without a reload.
     const moved = await api.patch(`/api/cards/${card.id}`, { data: { startDateLocalDate: isoDate(plusDays(monday, 2)), dueDateLocalDate: isoDate(plusDays(monday, 4)) } });
     expect(moved.ok(), await moved.text()).toBe(true);
-    await expect.poll(async () => (await bar(viewer, card).boundingBox())!.x - viewerBefore.x).toBeCloseTo(viewerPxPerDay * 2, 0);
+    await expect.poll(offsetDays).toBeCloseTo(30, 1);
 
     // A phone keeps the chart; the grouping switch folds to icons with the rest of the query bar.
     await viewer.setViewportSize({ width: 390, height: 900 });
     await expect(bar(viewer, card)).toBeVisible();
     await viewer.screenshot({ path: test.info().outputPath("team-cards-timeline-phone.png") });
   } finally {
-    expect((await api.patch(`/api/cards/${card.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
+    for (const owned of scheduled) {
+      expect((await api.patch(`/api/cards/${owned.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
+    }
   }
 });

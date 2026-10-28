@@ -1,4 +1,4 @@
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { SocketLink } from "./support/socket";
 import { cardTile, createCard, expectBoardLoaded, expectCardTileMounted, openBoard, openCard } from "./support/ui";
 
@@ -12,8 +12,8 @@ test("a disconnected board converges on the latest card after its socket reconne
       link = await SocketLink.install(context);
     },
   });
-  await openBoard(page, "Platform Delivery");
-  await openBoard(second, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
+  await openBoard(second, "E2E primary board");
 
   await createCard(page, original);
   await expectCardTileMounted(second, original);
@@ -38,7 +38,7 @@ test("a disconnected board converges on the latest card after its socket reconne
   await expectCardTileMounted(second, updated);
   await expect(cardTile(second, original).filter({ hasNotText: "updated" })).toHaveCount(0);
   await second.reload();
-  await expectBoardLoaded(second, "Platform Delivery");
+  await expectBoardLoaded(second, "E2E primary board");
   // A reload resets the lane's render window, so mount the tile again before counting it.
   await expectCardTileMounted(second, updated);
 });

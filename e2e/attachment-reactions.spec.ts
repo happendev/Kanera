@@ -1,21 +1,21 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { createCard, openBoard, openCard } from "./support/ui";
 
-const screenshot = readFileSync(path.join(__dirname, "..", "dev-db-seed-content", "attachments", "images", "access-review-symbol.png"));
+const screenshot = readFileSync(path.join(__dirname, "fixtures/sample.png"));
 
 test("a teammate can thumbs-up and comment on an uploaded screenshot, and the uploader is told live", async ({ page, signIn, pageAs, uniqueName }) => {
   const title = uniqueName("E2E screenshot feedback card");
   const fileName = "e2e-built-it.png";
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   await createCard(page, title);
   const uploaderDetail = await openCard(page, title);
 
   // The reviewer has the card open before the upload, so the row and its actions must arrive live.
   const reviewer = await pageAs("marcus");
-  await openBoard(reviewer, "Platform Delivery");
+  await openBoard(reviewer, "E2E primary board");
   const reviewerDetail = await openCard(reviewer, title);
 
   await uploaderDetail.locator(".attach-upload input[type=file]").setInputFiles({ name: fileName, mimeType: "image/png", buffer: screenshot });

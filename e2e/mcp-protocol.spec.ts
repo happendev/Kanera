@@ -5,7 +5,7 @@ import path from "node:path";
 import { Client, ProtocolError, StreamableHTTPClientTransport, type Transport, type VersionNegotiationOptions } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import ports from "./ports.json";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, cardTile, createWorkspaceApiKey, expectCardTileMounted, openBoard, workspaceSettingsHref } from "./support/ui";
 
 const mcpUrl = `http://localhost:${ports.mcp}/mcp`;
@@ -141,12 +141,12 @@ test("OAuth discovery is public and malformed setup requests are client errors",
 
 test("both protocol eras work over HTTP and stdio: discovery, reads, writes, resources, prompts, cancellation and errors", async ({ page, signIn, uniqueName }, testInfo) => {
   await signIn(page, "amelia");
-  const boardId = await boardIdOf(page, "Platform Delivery");
-  const settings = await workspaceSettingsHref(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
+  const settings = await workspaceSettingsHref(page, "E2E primary board");
   const apiKey = await createWorkspaceApiKey(page, settings, uniqueName("MCP protocol key"));
 
   // The board stays open for the whole matrix, so each cell's write must arrive live.
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const probe = new Client({ name: "kanera-e2e-probe", version: "1" }, { versionNegotiation: negotiation.legacy });
   await probe.connect(httpTransport(apiKey));
   const opened = await probe.callTool({ name: "boards.get", arguments: { boardId } });

@@ -1,6 +1,6 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { webOrigin } from "./support/env";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, expectCardTileMounted, openBoard, openCard } from "./support/ui";
 
 // Two-way card links: a link written in one card's description is recorded server-side and listed
@@ -10,7 +10,7 @@ import { boardIdOf, expectCardTileMounted, openBoard, openCard } from "./support
 type CreatedCard = { id: string; key: string; organisationKey: string; title: string };
 
 async function createCardViaApi(page: Page, api: APIRequestContext, title: string): Promise<CreatedCard> {
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
   const board = await api.get(`/api/boards/${boardId}?includeCards=false`);
   const { lists } = (await board.json()) as { lists: { id: string; name: string }[] };
   const backlog = lists.find((list) => list.name === "Backlog")!;
@@ -41,7 +41,7 @@ async function writeDescription(detail: Locator, text: string) {
 test("copy card link opens the same card on desktop and phone", async ({ page, signIn, apiAs, uniqueName }) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
   const card = await createCardViaApi(page, api, uniqueName("E2E copied card link"));
   const expectedUrl = `${webOrigin}/o/${card.organisationKey}/c/${card.key}`;
@@ -67,7 +67,7 @@ test("copy card link opens the same card on desktop and phone", async ({ page, s
 
 test("a card link shows on both cards live, and linked items open the other card in-app", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
   const source = await createCardViaApi(page, api, uniqueName("E2E link source"));
   const target = await createCardViaApi(page, api, uniqueName("E2E link target"));
@@ -75,7 +75,7 @@ test("a card link shows on both cards live, and linked items open the other card
 
   // A second member already has the target card open and has never been told about the link.
   const viewer = await pageAs("marcus");
-  await openBoard(viewer, "Platform Delivery");
+  await openBoard(viewer, "E2E primary board");
   await expectCardTileMounted(viewer, target.title);
   const viewerDetail = await openCard(viewer, target.title);
   await expect(linkedItems(viewerDetail)).toHaveCount(0);
@@ -141,9 +141,9 @@ test("a card link shows on both cards live, and linked items open the other card
 
 test("notes and cards link both ways live: backlinks, linked items, renames and in-app clicks", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
   const card = await createCardViaApi(page, api, uniqueName("E2E note-linked card"));
   const noteCreated = await api.post(`/api/boards/${boardId}/notes`, { data: { scope: "team", title: uniqueName("E2E linked note") } });
   expect(noteCreated.ok(), await noteCreated.text()).toBe(true);
@@ -158,7 +158,7 @@ test("notes and cards link both ways live: backlinks, linked items, renames and 
   await page.evaluate(() => { (window as { __noReload?: boolean }).__noReload = true; });
 
   const viewer = await pageAs("marcus");
-  await openBoard(viewer, "Platform Delivery");
+  await openBoard(viewer, "E2E primary board");
   await expectCardTileMounted(viewer, card.title);
   const cardDetail = await openCard(viewer, card.title);
   await expect(linkedItems(cardDetail)).toHaveCount(0);

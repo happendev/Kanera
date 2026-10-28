@@ -4,8 +4,16 @@ import { expectBoardLoaded, openCard } from "./support/ui";
 // Settings → Organisation → Storage is an admin cleanup tool. Deleting a file there must behave like
 // deleting it on the card: the file leaves the card for everyone, live, through the same realtime
 // path (card route echo → outbox → worker → Valkey → other clients).
-test("an admin deletes a card file from Storage and an open card loses it live", async ({ page, signIn, pageAs, apiAs, uniqueName }, testInfo) => {
+test("an admin deletes a card file from Storage and an open card loses it live", async ({ page, signIn, pageAs, apiAs, uniqueName, testWorkspace }, testInfo) => {
   const api = await apiAs("amelia");
+  // The workspace filter needs files in two workspaces; do not borrow demo attachments.
+  const otherCard = await api.post(`/api/boards/${testWorkspace.boardId}/lists/${testWorkspace.lists.get("Backlog")!}/cards`, { data: { title: uniqueName("Other workspace file") } });
+  expect(otherCard.ok(), await otherCard.text()).toBe(true);
+  const { id: otherCardId } = await otherCard.json() as { id: string };
+  const otherFile = await api.post(`/api/cards/${otherCardId}/attachments`, {
+    multipart: { file: { name: "other-workspace.txt", mimeType: "text/plain", buffer: Buffer.from("Keep this file") } },
+  });
+  expect(otherFile.ok(), await otherFile.text()).toBe(true);
   const name = uniqueName("E2E storage cleanup");
   const created = await api.post("/api/workspaces", {
     data: { name, initialBoard: { name }, listNames: ["To do", "Done"], customFields: [] },
@@ -39,6 +47,7 @@ test("an admin deletes a card file from Storage and an open card loses it live",
     await expect(tabs.getByRole("link", { name: "Storage" })).toHaveClass(/\bactive\b/);
     await expect(page.locator(".storage-usage-used")).toBeVisible();
 
+    await expect(page.locator(".storage-file")).toHaveCount(2);
     await page.getByRole("combobox", { name: "Workspace" }).selectOption({ label: name });
     const row = page.locator(".storage-file").filter({ hasText: fileName });
     await expect(row).toHaveCount(1);

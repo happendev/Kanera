@@ -22,7 +22,7 @@ test("Global Work table folds survive saving a view, reloading and realtime refr
     await page.goto("/my-cards");
     await page.getByRole("button", { name: "Table view", exact: true }).click();
     // Search is deliberately transient across reloads; use the persisted workspace scope so
-    // this group stays in the first query page even when earlier specs have created many cards.
+    // the grouping remains scoped to this workspace after reload.
     await page.getByRole("button", { name: /All boards/ }).click();
     await page.locator("k-anchored-picker").getByRole("option", { name: new RegExp(`${workspaceName} 1$`) }).click();
     const row = page.locator(`.tv-row[data-card-id="${card.id}"]`);

@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import { contextDefaults, SEED_PASSWORD } from "./support/env";
+import { contextDefaults, TEST_PASSWORD } from "./support/env";
 import { expect, test } from "./support/fixtures";
 import { totpCode } from "./support/totp";
 import { expectBoardLoaded } from "./support/ui";
@@ -10,8 +10,7 @@ import { expectBoardLoaded } from "./support/ui";
 // account signing up through the invite and an existing account accepting it), each of which used
 // to issue a full session, letting the member open and edit boards until a later refresh refused.
 //
-// Everything runs in organisations created inside the test: enabling the policy on a seeded
-// organisation would break every other spec's API sign-in.
+// Create the organisations through signup so both invitation entry points exercise real accounts.
 
 function emailFor(name: string) {
   return `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@kanera.test`;
@@ -22,8 +21,8 @@ async function signUpOwner(page: Page, name: string) {
   await page.locator("#cname").fill(name);
   await page.locator("#dn").fill(name);
   await page.locator("#email").fill(emailFor(name));
-  await page.locator("#password").fill(SEED_PASSWORD);
-  await page.locator("#confirm-password").fill(SEED_PASSWORD);
+  await page.locator("#password").fill(TEST_PASSWORD);
+  await page.locator("#confirm-password").fill(TEST_PASSWORD);
   await page.locator("form").getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/onboarding/);
 }
@@ -40,7 +39,7 @@ async function createStandaloneBoard(page: Page, boardName: string): Promise<str
 // The policy and the invite are set up through the API as the owner, who signed in before the policy
 // existed; the owner's own enrollment is covered by the API login tests and is not the subject here.
 async function requireMfaAndInvite(page: Page, ownerEmail: string): Promise<string> {
-  const login = await page.request.post("/api/auth/login", { data: { email: ownerEmail, password: SEED_PASSWORD } });
+  const login = await page.request.post("/api/auth/login", { data: { email: ownerEmail, password: TEST_PASSWORD } });
   expect(login.status()).toBe(200);
   const { accessToken } = (await login.json()) as { accessToken: string };
   const headers = { authorization: `Bearer ${accessToken}` };
@@ -88,8 +87,8 @@ test("joining an organisation that requires MFA through an invite withholds the 
     await expect(newcomer.locator(".invite-banner")).toContainText("You've been invited to join");
     await newcomer.locator("#dn").fill(newcomerName);
     await newcomer.locator("#email").fill(emailFor(newcomerName));
-    await newcomer.locator("#password").fill(SEED_PASSWORD);
-    await newcomer.locator("#confirm-password").fill(SEED_PASSWORD);
+    await newcomer.locator("#password").fill(TEST_PASSWORD);
+    await newcomer.locator("#confirm-password").fill(TEST_PASSWORD);
     await newcomer.locator("form").getByRole("button", { name: "Continue" }).click();
 
     await expectEnrollmentRequired(newcomer);
