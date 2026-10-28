@@ -115,7 +115,7 @@ test("the account language follows the person to a new device, with dates and AP
     }
 
   } finally {
-    // Seed users are shared across the suite; put Priya back in the source language.
+    // Restore the account language before this test's fixture teardown.
     await priya.patch("/api/auth/me", { data: { locale: "en-GB" } });
   }
 });

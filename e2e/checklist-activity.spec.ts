@@ -1,5 +1,5 @@
 import type { Locator } from "@playwright/test";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, openBoard, openCard } from "./support/ui";
 
 // Items added one Enter at a time fold into a single "added N checklist items" activity row per
@@ -16,7 +16,7 @@ test("checklist items added from card detail collapse into one live activity row
   const followUp = uniqueName("Follow-up");
   await signIn(page, "amelia");
   const api = await apiAs("amelia");
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
   const board = (await (await api.get(`/api/boards/${boardId}?includeCards=false`)).json()) as { lists: { id: string; name: string }[] };
   const backlog = board.lists.find((list) => list.name === "Backlog")!;
   const created = await api.post(`/api/boards/${boardId}/lists/${backlog.id}/cards`, { data: { title } });
@@ -30,10 +30,10 @@ test("checklist items added from card detail collapse into one live activity row
   }
 
   const viewer = await pageAs("marcus");
-  await openBoard(viewer, "Platform Delivery");
+  await openBoard(viewer, "E2E primary board");
   const viewerDetail = await openCard(viewer, title);
 
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const detail = await openCard(page, title);
   const addItems = async (checklistTitle: string, texts: string[]) => {
     const checklist = detail.locator(`.checklist-block[data-checklist-id="${checklistIds.get(checklistTitle)}"]`);

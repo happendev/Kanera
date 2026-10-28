@@ -1,9 +1,9 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardHref, openBoard } from "./support/ui";
 
 async function cardForKeyboardReview(page: Page, api: APIRequestContext, title: string) {
-  const href = await boardHref(page, "Platform Delivery");
+  const href = await boardHref(page, "E2E primary board");
   const board = await api.get(`/api/boards/${href.split("/")[2]}?includeCards=false`);
   expect(board.ok()).toBe(true);
   const { lists } = await board.json() as { lists: { id: string }[] };
@@ -42,7 +42,7 @@ test("search over a card keeps Tab focus inside the top dialog", async ({ page, 
 
 test("shortcut help suspends background board and card actions", async ({ page, signIn, apiAs, uniqueName }) => {
   await signIn(page, "priya");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   await page.keyboard.press("?");
   const help = page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true });
   await expect(help.getByRole("searchbox")).toBeFocused();
@@ -98,7 +98,7 @@ test("the title shortcut focuses the input on boards and Team Cards", async ({ p
 
 test("a pending navigation sequence cannot consume input text", async ({ page, signIn }) => {
   await signIn(page, "priya");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const url = page.url();
   await page.keyboard.press("g");
   const search = page.getByRole("searchbox", { name: "Search cards", exact: true });

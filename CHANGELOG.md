@@ -7,6 +7,7 @@ All notable changes to Kanera are documented here.
 ### Added
 
 - **Timeline view:** a Gantt-style board view with one bar per card from its start date to its due date, grouped by list, assignee or label. Zoom smoothly from days to years with the zoom buttons, the slider, Ctrl + scroll or a trackpad pinch, **Fit all** to show every scheduled card at once (how the chart opens until you pick a zoom of your own), and drag the chart's background to pan. Each row shows the card's labels in full on a line under its title, so a blocking bug is visible without regrouping; drag the edge of the names column to widen it for long titles (double-click to reset). Drag a bar to reschedule it keeping its working-day length, pull an end to change its length, click an empty lane to place an unscheduled card, and drag from a bar's end onto another card to make it wait on the first. **Critical path** highlights the chain with no slack and shows how far each other card could slip; prerequisites planned to finish after their dependents start are flagged as scheduling conflicts. Keyboard shortcut `7`.
+- **My overview:** My Cards has an **Overview** display like Team Cards', for just your own work: what you have in progress and for how long, what you recently touched, the head of your Up next, the rest of your open cards and what you finished in the last 7 days. The stats open each set of cards in full.
 - **Timeline on My Cards and Team Cards:** the Timeline view is also a display on My Cards and Team Cards, over every board in scope. Rows group by board until you choose another grouping; dependency wires and the critical path follow chains within each workspace, and a card can be rescheduled or linked wherever you can edit its board.
 - **Start dates:** cards can carry a planned start date next to the due date, shown in card detail with the working-day length, in a hidden-by-default **Start date** table column and sort, in exports and activity. A start can never sit after its due date: moving a due date earlier pulls the start along.
 - **Automations:** new **Start date arrives**, **Scheduling conflict appears** and **Critical path slips** triggers, and `{{card.startDate}}`, `{{schedule.blocker}}` and `{{schedule.days}}` in comment templates. The scheduling triggers fire once per boundary: a card that gains its first conflict, or a critical-path card whose slip moves the board's projected finish.
@@ -24,6 +25,15 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+
+- Offline, My Cards and Team Cards now say once that you're looking at a saved copy, in the page's banner, instead of repeating it inside Overview, Timeline, Dependencies and Work done.
+- Cards completed by an automation (for example, moving a card to Done) now count as done for their assignees on the My Cards and Team Cards overviews and their Work done timelines, instead of disappearing from **Recently done** and the **Done** count.
+- A teammate's change that arrives while you're searching on My Cards or Team Cards now shows up in the overview, Work done and Dependencies straight away, instead of waiting for the next change.
+- On a board, a teammate's change made while archived cards, a completed date range or **Clear all** was reloading the board no longer gets reverted on your screen.
+- Dragging several selected cards onto **Up next** on My Cards or Team Cards now queues them all where you drop them, in the order the view sorts them, instead of only the card you grabbed.
+- The notification read dot now sits in the same spot on every notification, grouped or not, so you can clear the unread list by clicking down it without moving the pointer and accidentally opening a card. The timestamp moves onto the same line, beside the dot.
+
+- **Mark all read** on the notifications Agent tab now clears only agent notifications, leaving the rest of your unread inbox alone.
 
 - Saving unchanged card titles, descriptions, checklist titles/items or custom fields no longer inflates activity change counts or updates saved timestamps. Repeated empty clears are ignored, and unchanged custom fields do not retrigger automations.
 

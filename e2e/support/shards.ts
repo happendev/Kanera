@@ -25,6 +25,6 @@ export function balancedFiles(directory: string, shard: string): string[] {
     lightest.duration += weight(file);
   }
   const selected = buckets[index - 1]!;
-  console.log(`E2E shard ${shard}: ${selected.files.length} behavior files, estimated ${Math.round(selected.duration / 1000)}s plus seed/startup`);
+  console.log(`E2E shard ${shard}: ${selected.files.length} behavior files, estimated ${Math.round(selected.duration / 1000)}s plus startup`);
   return selected.files.map((file) => `**/${file}`);
 }

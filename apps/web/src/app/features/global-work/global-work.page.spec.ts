@@ -1164,13 +1164,13 @@ describe("GlobalWorkPage toolbar state", () => {
     });
   });
 
-  it("places the team overview immediately after Board, with no Up next display", () => {
+  it("places the team overview first, ahead of Board, with no Up next display", () => {
     return mount().then(({ fixture }) => {
       fixture.componentRef.setInput("lens", "team");
       TestBed.tick();
 
       expect(fixture.componentInstance.displayOptions().map((option) => option.id))
-        .toEqual(["board", "overview", "table", "calendar", "timeline", "dependencies", "history"]);
+        .toEqual(["overview", "board", "table", "calendar", "timeline", "dependencies", "history"]);
       expect(fixture.componentInstance.showTeammateFilter()).toBe(true);
       expect(fixture.componentInstance.showUpNextControl()).toBe(true);
 
@@ -1233,6 +1233,52 @@ describe("GlobalWorkPage toolbar state", () => {
       expect(page.upNextOpen()).toBe(false);
       page.setOverviewFocus(null);
       expect(setOverviewFocus).toHaveBeenLastCalledWith(null);
+
+      fixture.destroy();
+    });
+  });
+
+  it("queues every selected card when one of them is dropped onto Up next", () => {
+    return mount().then(async ({ fixture, priorityTargetId, priorityCandidateCard, addTeamPriority, state }) => {
+      const secondCandidate = {
+        ...priorityCandidateCard,
+        id: "40000000-0000-4000-8000-000000000004",
+        number: 4,
+        key: "WORK-4",
+        title: "Then this",
+        position: "4000.0000000000",
+      };
+      // Candidates carry assignees; the fixture's board cards are typed with none.
+      state.cards.set([...state.cards(), priorityCandidateCard, secondCandidate] as never);
+      state.teamPriorityCandidateCards.set([priorityCandidateCard, secondCandidate]);
+      fixture.componentRef.setInput("lens", "team");
+      state.definition.update((current) => ({ ...current, display: "overview" }));
+      TestBed.tick();
+      const page = fixture.componentInstance;
+      page.setOverviewFocus(priorityTargetId);
+      TestBed.tick();
+      // The first card is already queued, so it stays put rather than failing the whole drop.
+      page.bulkSelectedCardIds.set(new Set([state.cards()[0]!.id, priorityCandidateCard.id, secondCandidate.id]));
+      const flush = () => new Promise((resolve) => setTimeout(resolve));
+
+      // Dropped before an entry: the view's order, each just before it.
+      page.onUpNextAddFromPanel({ cardId: secondCandidate.id, dropped: true, beforeId: "70000000-0000-4000-8000-000000000002" });
+      await flush();
+      expect(addTeamPriority.mock.calls).toEqual([
+        [priorityTargetId, priorityCandidateCard.id, { beforeId: "70000000-0000-4000-8000-000000000002" }],
+        [priorityTargetId, secondCandidate.id, { beforeId: "70000000-0000-4000-8000-000000000002" }],
+      ]);
+
+      // Dropped after an entry: each add lands directly after it, so the last card goes in first.
+      addTeamPriority.mockClear();
+      page.onUpNextAddFromPanel({ cardId: priorityCandidateCard.id, dropped: true, afterId: null });
+      await flush();
+      expect(addTeamPriority.mock.calls.map((call) => (call as unknown[])[1])).toEqual([secondCandidate.id, priorityCandidateCard.id]);
+
+      // A pick from the Add card menu is one card, whatever the board has selected.
+      addTeamPriority.mockClear();
+      page.onUpNextAddFromPanel({ cardId: priorityCandidateCard.id, beforeId: null });
+      expect(addTeamPriority.mock.calls).toEqual([[priorityTargetId, priorityCandidateCard.id, { beforeId: null }]]);
 
       fixture.destroy();
     });

@@ -136,6 +136,9 @@ type Touch = { at: string; verb: TouchVerb };
  * The card-derived sections follow the page's scope, search and filters; the queue does not, for
  * the same reason as the lanes display (rank must not lie because a filter hides a card), so its
  * numbers are the person's true ranks.
+ *
+ * My Cards shows the same panel for the viewer alone (`lens="my"`): no person strip, no unowned
+ * panel (nobody to hand work out to), activity read through the My lens, and copy that says "you".
  */
 @Component({
   selector: "k-team-overview",
@@ -151,7 +154,21 @@ export class TeamOverviewComponent {
   private readonly clock = inject(MinuteClockService);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   protected readonly rankHeat = priorityRankHeat;
-  protected readonly recentTooltip = $localize`:Team overview section tooltip:Other open cards they moved, created or ticked items on in the last ${OVERVIEW_ACTIVITY_DAYS}:days: days`;
+
+  /** "my" is the viewer's own overview on My Cards; see the class comment. */
+  readonly lens = input<"my" | "team">("team");
+  readonly solo = computed(() => this.lens() === "my");
+
+  /* Section tooltips speak about the person: "their" on Team Cards, "your" on My Cards. */
+  readonly recentTooltip = computed(() => this.solo()
+    ? $localize`:My overview section tooltip:Other open cards you moved, created or ticked items on in the last ${OVERVIEW_ACTIVITY_DAYS}:days: days`
+    : $localize`:Team overview section tooltip:Other open cards they moved, created or ticked items on in the last ${OVERVIEW_ACTIVITY_DAYS}:days: days`);
+  readonly inProgressTooltip = computed(() => this.solo()
+    ? $localize`:My overview section tooltip:Your open cards in In progress lists, longest time in progress first`
+    : $localize`:Team overview section tooltip:Their open cards in In progress lists, longest time in progress first`);
+  readonly assignedTooltip = computed(() => this.solo()
+    ? $localize`:My overview section tooltip:Your other open cards, soonest due first`
+    : $localize`:Team overview section tooltip:Their other open cards, soonest due first`);
 
   readonly people = input<WorkCatalogPerson[]>([]);
   /** People connected only through guest access by either side, resolved within the page's scope. */
@@ -170,7 +187,10 @@ export class TeamOverviewComponent {
   private readonly activityCachedAt = signal<string | null>(null);
   private readonly unownedCachedAt = signal<string | null>(null);
   readonly unownedError = signal(false);
+  /** The host page's own offline banner already says the view is a saved copy; don't repeat it. */
+  readonly hostShowsOffline = input(false);
   readonly offlineMessage = computed(() => {
+    if (this.hostShowsOffline()) return "";
     const time = [this.activityCachedAt(), this.unownedCachedAt()].filter((value): value is string => !!value).sort()[0];
     return time ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(time)}:time:` : "";
   });
@@ -277,6 +297,7 @@ export class TeamOverviewComponent {
       this.filters();
       this.queries.online();
       this.refreshVersion();
+      this.lens();
       void this.loadActivity();
       void this.loadUnowned();
     });
@@ -334,15 +355,24 @@ export class TeamOverviewComponent {
     const touches = new Map<string, Map<string, Touch & { card: WireCardSummary }>>();
     const completions = new Map<string, Map<string, { at: string; card: WireCardSummary }>>();
     const lastActive = new Map<string, string>();
+    const addCompletion = (userId: string, event: WorkDoneEvent) => {
+      const done = completions.get(userId) ?? new Map<string, { at: string; card: WireCardSummary }>();
+      if (!done.has(event.card.id)) done.set(event.card.id, { at: event.at, card: event.card });
+      completions.set(userId, done);
+    };
     for (const event of this.events()) {
+      // Nobody did this by hand (typically a "move to Done" automation): the card is still its
+      // assignees' delivery, so credit them. It is not their activity, so lastActive is untouched.
+      if (event.type === "completed" && !event.actorUserId && !event.agentName) {
+        for (const userId of event.card.assigneeIds) addCompletion(userId, event);
+        continue;
+      }
       const actorId = event.type === "checklistItemCompleted" ? event.completedByUserId : event.actorUserId;
       // Agent output is not the person's own effort (see WorkDoneCardEventBase.agentName).
       if (!actorId || ("agentName" in event && event.agentName)) continue;
       if (!lastActive.has(actorId) || lastActive.get(actorId)! < event.at) lastActive.set(actorId, event.at);
       if (event.type === "completed") {
-        const done = completions.get(actorId) ?? new Map<string, { at: string; card: WireCardSummary }>();
-        if (!done.has(event.card.id)) done.set(event.card.id, { at: event.at, card: event.card });
-        completions.set(actorId, done);
+        addCompletion(actorId, event);
         continue;
       }
       const byCard = touches.get(actorId) ?? new Map<string, Touch & { card: WireCardSummary }>();
@@ -414,7 +444,8 @@ export class TeamOverviewComponent {
           || String(b.card.updatedAt).localeCompare(String(a.card.updatedAt))
         );
 
-      // Completions count whoever the card was assigned to: closing it is this person's work.
+      // Whoever closed the card, whoever it was assigned to: closing it is this person's work. An
+      // automation's completion counts for the card's assignees instead (see activity above).
       const doneAll = [...(completions.get(person.userId)?.values() ?? [])]
         .sort((a, b) => b.at.localeCompare(a.at));
 
@@ -467,7 +498,9 @@ export class TeamOverviewComponent {
           label: $localize`:card state|Team overview stat, count of their open cards:Open`,
           value: counts.open,
           tone: null,
-          tooltip: $localize`:Team overview stat tooltip:All their open cards`,
+          tooltip: this.solo()
+            ? $localize`:My overview stat tooltip:All your open cards`
+            : $localize`:Team overview stat tooltip:All their open cards`,
         },
         {
           key: "inProgress",
@@ -476,21 +509,27 @@ export class TeamOverviewComponent {
           tone: inProgressTooLong ? "aging" : counts.inProgress ? "active" : null,
           tooltip: inProgressTooLong
             ? icu($localize`:Team overview stat tooltip:{count, plural, one {# in progress longer than the workspace alert} other {# in progress longer than the workspace alert}}`, { count: inProgressTooLong })
-            : $localize`:Team overview stat tooltip:Their open cards in In progress lists`,
+            : this.solo()
+              ? $localize`:My overview stat tooltip:Your open cards in In progress lists`
+              : $localize`:Team overview stat tooltip:Their open cards in In progress lists`,
         },
         {
           key: "overdue",
           label: $localize`:Team overview stat:Overdue`,
           value: counts.overdue,
           tone: counts.overdue ? "alert" : null,
-          tooltip: $localize`:Team overview stat tooltip:Their open cards past due`,
+          tooltip: this.solo()
+            ? $localize`:My overview stat tooltip:Your open cards past due`
+            : $localize`:Team overview stat tooltip:Their open cards past due`,
         },
         {
           key: "done",
           label: $localize`:Team overview stat, cards completed in the last N days:Done ${OVERVIEW_ACTIVITY_DAYS}:days:d`,
           value: counts.done,
           tone: null,
-          tooltip: $localize`:Team overview stat tooltip:Cards they completed in the last ${OVERVIEW_ACTIVITY_DAYS}:days: days`,
+          tooltip: this.solo()
+            ? $localize`:My overview stat tooltip:Cards you completed in the last ${OVERVIEW_ACTIVITY_DAYS}:days: days`
+            : $localize`:Team overview stat tooltip:Cards they completed in the last ${OVERVIEW_ACTIVITY_DAYS}:days: days`,
         },
       ];
 
@@ -591,6 +630,11 @@ export class TeamOverviewComponent {
 
   upNextActionLabel(name: string, open: boolean): string {
     if (!open && !this.canNavigate()) return $localize`:Tooltip, open the Up next panel:Open Up next`;
+    if (this.solo()) {
+      return open
+        ? $localize`:Button on My overview closing the Up next panel:Close your Up next`
+        : $localize`:Button on My overview opening the Up next panel to change it:Edit your Up next`;
+    }
     return open
       ? $localize`:Button closing the Up next panel for one teammate:Close Up next for ${name}:person:`
       : $localize`:Button opening the Up next panel to change one teammate's queue:Edit Up next for ${name}:person:`;
@@ -636,6 +680,12 @@ export class TeamOverviewComponent {
 
   private async loadUnowned(): Promise<void> {
     const seq = ++this.unownedSeq;
+    if (this.solo()) {
+      this.unowned.set(null);
+      this.unownedCachedAt.set(null);
+      this.unownedError.set(false);
+      return;
+    }
     const filters = this.filters();
     try {
       const { response, cachedAt } = await this.queries.read<WorkQueryResponse>({ url: "/work/cards/query", body: {
@@ -665,7 +715,7 @@ export class TeamOverviewComponent {
     const seq = ++this.loadSeq;
     const today = startOfLocalDay(new Date());
     const body = {
-      lens: "team" as const,
+      lens: this.lens(),
       scope: this.scope() ?? undefined,
       filters: this.filters() ?? undefined,
       from: addDays(today, -(OVERVIEW_ACTIVITY_DAYS - 1)).toISOString(),

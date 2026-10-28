@@ -1,9 +1,8 @@
-import { SEED_PASSWORD } from "./support/env";
+import { TEST_PASSWORD } from "./support/env";
 import { expect, test } from "./support/fixtures";
 import { cardTile, createCard, expectBoardLoaded, signUp } from "./support/ui";
 
-// A fresh account per run: closing the checklist is permanent for the account, so a seeded user
-// would only ever show it once per database.
+// Exercise the checklist from a real signup, including its initial onboarding state.
 test("the getting started checklist guides step by step, ticks itself off, hides to the account menu and can be removed", async ({ page, uniqueName }, testInfo) => {
   const boardName = uniqueName("E2E Checklist board");
   const email = await signUp(page, uniqueName("E2E checklist signup"));
@@ -51,7 +50,7 @@ test("the getting started checklist guides step by step, ticks itself off, hides
 
   // A step done somewhere else (the API here, as another tab or the CLI would) ticks when the user
   // comes back to the tab, with nothing marked by hand.
-  const login = await page.request.post("/api/auth/login", { data: { email, password: SEED_PASSWORD } });
+  const login = await page.request.post("/api/auth/login", { data: { email, password: TEST_PASSWORD } });
   expect(login.status()).toBe(200);
   const { accessToken } = (await login.json()) as { accessToken: string };
   const invite = await page.request.post("/api/clients/me/invites", {

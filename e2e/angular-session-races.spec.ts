@@ -1,5 +1,5 @@
 import type { APIResponse, Page, WebSocketRoute } from "@playwright/test";
-import { SEED_PASSWORD, users, type SeedUser } from "./support/env";
+import { TEST_PASSWORD, users, type TestUser } from "./support/env";
 import { expect, test } from "./support/fixtures";
 
 function deferred() {
@@ -13,7 +13,7 @@ async function result<T>(response: APIResponse): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function logout(page: Page, user: SeedUser) {
+async function logout(page: Page, user: TestUser) {
   await page.getByRole("button", { name: users[user].name, exact: true }).click();
   const response = page.waitForResponse((res) => new URL(res.url()).pathname === "/api/auth/logout");
   await page.getByRole("menuitem", { name: "Log out" }).click();
@@ -21,11 +21,11 @@ async function logout(page: Page, user: SeedUser) {
   await expect(page).toHaveURL(/\/login/);
 }
 
-async function loginInSameDocument(page: Page, user: SeedUser) {
+async function loginInSameDocument(page: Page, user: TestUser) {
   // A full navigation would recreate root services and hide these lifecycle failures, so this
   // regression intentionally uses the form for the second session in the existing document.
   await page.locator("#email").fill(users[user].email);
-  await page.locator("#password").fill(SEED_PASSWORD);
+  await page.locator("#password").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.locator("k-app-shell")).toBeVisible();
   await expect(page.getByRole("button", { name: users[user].name, exact: true })).toBeVisible();

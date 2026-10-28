@@ -1,11 +1,11 @@
-import { test, expect } from "./support/fixtures";
+import { test, expect } from "./support/scenario";
 import { SocketLink } from "./support/socket";
 import { openBoard } from "./support/ui";
 
 test("offline navigation disables server actions and restores them on reconnect", async ({ page, signIn }, testInfo) => {
   const socket = await SocketLink.install(page.context());
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   await expect.poll(() => socket.connectionCount).toBeGreaterThan(0);
   // The production service worker prefetches JS; this dev-server suite must warm lazy help first.
   await page.keyboard.press("?");
@@ -44,7 +44,12 @@ test("offline navigation disables server actions and restores them on reconnect"
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       const sidebar = page.locator("aside.sidebar");
-      if (width === 390) await page.keyboard.press("[");
+      if (width === 390) {
+        // The resize handler collapses the sidebar asynchronously; wait before expanding it.
+        await expect(sidebar).toHaveClass(/collapsed/);
+        await page.getByRole("button", { name: "Expand sidebar", exact: true }).click();
+        await expect(sidebar).not.toHaveClass(/collapsed/);
+      }
       await expect(searchButton).toBeVisible();
       await expect(searchButton).toBeDisabled();
       await expect(sidebar.getByRole("button", { name: "New workspace", exact: true })).toBeDisabled();
@@ -89,19 +94,21 @@ test("offline navigation disables server actions and restores them on reconnect"
       await menu.getByRole("menuitem", { name: "Keyboard shortcuts" }).click();
       await expect(page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true })).toBeVisible();
       await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true })).toHaveCount(0);
     }
 
     await page.setViewportSize({ width: 1280, height: 900 });
-    if (await page.locator("aside.sidebar").evaluate((el) => el.classList.contains("collapsed"))) {
-      await page.keyboard.press("[");
-    }
+    // Desktop restores the expanded preference saved above. Wait for that resize before toggling.
+    await expect(page.locator("aside.sidebar")).not.toHaveClass(/collapsed/);
     // Compact sidebar settings must also lose their destination.
-    await page.keyboard.press("[");
+    await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
+    await expect(page.locator("aside.sidebar")).toHaveClass(/collapsed/);
     const compactSettings = page.locator("aside.sidebar a.ws-icon-link");
-    expect(await compactSettings.count()).toBeGreaterThan(0);
+    await expect(compactSettings.first()).toBeVisible();
     await expect(compactSettings.first()).toHaveAttribute("aria-disabled", "true");
     await expect(compactSettings.first()).not.toHaveAttribute("href");
-    await page.keyboard.press("[");
+    await page.getByRole("button", { name: "Expand sidebar", exact: true }).click();
+    await expect(page.locator("aside.sidebar")).not.toHaveClass(/collapsed/);
   } finally {
     socket.restore();
     await page.context().setOffline(false);

@@ -54,7 +54,10 @@ async function openGlobalWork(page: Page, path: "/my-cards" | "/team-cards", dis
   await page.goto(path);
   await page.getByRole("button", { name: display }).click();
   const ready = { "Board view": "section.workspace-board", "Table view": "k-board-table-view", "Work done": "k-work-done-view" }[display];
-  await expect(page.locator(ready).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: display, exact: true })).toHaveAttribute("aria-pressed", "true");
+  const content = page.locator(ready).first();
+  // Fresh accounts legitimately have no board sections until their first assigned card arrives.
+  await expect(display === "Board view" ? content.or(page.getByRole("status", { name: "No cards found", exact: true })) : content).toBeVisible();
 }
 
 test("board detail, Kanban, table and work done follow another member's card edits live", async ({ page, testWorkspace, signIn, pageAs, apiAs, uniqueName }) => {
@@ -121,10 +124,12 @@ test("Global Work lenses follow another user's card edits live", async ({ page, 
   // cards assigned to the viewer (Marcus); Team Cards shows them to a teammate (Priya).
   const myBoard = await pageAs("marcus");
   await openGlobalWork(myBoard, "/my-cards", "Board view");
+  await expect(myBoard.getByRole("status", { name: "No cards found", exact: true })).toBeVisible();
   const myTable = await pageAs("marcus");
   await openGlobalWork(myTable, "/my-cards", "Table view");
   const teamBoard = await pageAs("priya");
   await openGlobalWork(teamBoard, "/team-cards", "Board view");
+  await expect(teamBoard.getByRole("status", { name: "No cards found", exact: true })).toBeVisible();
   // Work done is actor-scoped: My Cards lists what the viewer did, Team Cards what teammates did.
   // Amelia's edits therefore appear in Priya's Team Cards history, not in Marcus's My Cards one.
   const teamWorkDone = await pageAs("priya");

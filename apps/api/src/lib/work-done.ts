@@ -74,6 +74,12 @@ export interface LoadWorkDoneOptions {
   actorUserId?: string;
   /** When set, only include historical actions performed by these users. */
   actorUserIds?: string[];
+  /**
+   * With an actor filter, also include completions an automation made on cards currently assigned
+   * to those users. An automation has no person behind it, so "what did they get done" credits the
+   * card's owners; strict "performed by" readers leave this off.
+   */
+  automatedCompletionsForAssignees?: boolean;
   /** Inclusive lower bound (start of the selected local day). */
   from: Date;
   /** Exclusive upper bound (start of the day after the last day in the window). */
@@ -174,9 +180,24 @@ function workDoneActivityPredicates(opts: LoadWorkDoneOptions): (SQL | undefined
     )` : undefined,
     ...workDoneCardNarrowing(opts),
     workDoneVisibilityPredicate(opts),
-    opts.actorUserId ? eq(activityEvents.actorId, opts.actorUserId) : undefined,
-    opts.actorUserIds ? inArray(activityEvents.actorId, opts.actorUserIds) : undefined,
+    workDoneActorPredicate(opts),
   ];
+}
+
+function workDoneActorPredicate(opts: LoadWorkDoneOptions): SQL | undefined {
+  const actorIds = opts.actorUserId ? [opts.actorUserId] : opts.actorUserIds;
+  if (!actorIds) return undefined;
+  const byActor = inArray(activityEvents.actorId, actorIds);
+  if (!opts.automatedCompletionsForAssignees) return byActor;
+  return or(byActor, and(
+    eq(activityEvents.actorKind, "system"),
+    activityCompletedPredicate(),
+    sql`exists (
+      select 1 from card_assignee work_done_completion_assignee
+      where work_done_completion_assignee.card_id = ${cards.id}
+        and work_done_completion_assignee.user_id = any(${sql.param(actorIds)}::uuid[])
+    )`,
+  ));
 }
 
 /** The same scope/window/visibility boundary for the checklist-completion half. */

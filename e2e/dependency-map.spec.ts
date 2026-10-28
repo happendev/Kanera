@@ -1,10 +1,10 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, openBoard } from "./support/ui";
 import { contextDefaults } from "./support/env";
 
-// The Dependencies view. The blocker lives on Mobile Experience and the chain is viewed from
-// Platform Delivery, so the map can only learn about it by walking across boards, and a second
+// The Dependencies view. The blocker lives on E2E secondary board and the chain is viewed from
+// E2E primary board, so the map can only learn about it by walking across boards, and a second
 // member's open map can only change through realtime from boards it joined for the walk.
 
 type CreatedCard = { id: string; key: string; title: string; workspaceId: string };
@@ -30,29 +30,30 @@ function mapTile(page: Page, title: string) {
 
 test("the dependencies view maps a cross-board chain, updates live and opens cards", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
-  const blocker = await createCardOnBoard(page, api, "Mobile Experience", uniqueName("E2E map upstream"));
-  const blocked = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E map launch"));
+  const blocker = await createCardOnBoard(page, api, "E2E secondary board", uniqueName("E2E map upstream"));
+  const blocked = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E map launch"));
   const created: CreatedCard[] = [blocker, blocked];
 
   try {
     await block(api, blocker, blocked);
 
     const viewer = await pageAs("marcus");
-    await openBoard(viewer, "Platform Delivery");
+    await openBoard(viewer, "E2E primary board");
     await viewer.getByRole("button", { name: "Dependencies view", exact: true }).click();
     await expect(viewer).toHaveURL(/view=dependencies/);
 
     // The board's card, and the blocker pulled in from the other board as dashed context.
     await expect(mapTile(viewer, blocked.title)).toHaveClass(/is-blocked/);
     await expect(mapTile(viewer, blocker.title)).toHaveClass(/is-context/);
-    await expect(mapTile(viewer, blocker.title)).toContainText("Mobile Experience");
+    await expect(mapTile(viewer, blocker.title)).toContainText("E2E secondary board");
     await expect(mapTile(viewer, blocked.title)).toHaveAttribute("aria-label", new RegExp(`Waiting on ${blocker.key}`));
 
     // Tiles carry labels like board cards do, and a label set elsewhere shows up without a reload.
-    const workspace = await api.get(`/api/workspaces/${blocked.workspaceId}`);
-    const label = ((await workspace.json()) as { cardLabels: { id: string; name: string }[] }).cardLabels[0]!;
+    const labelResponse = await api.post(`/api/workspaces/${blocked.workspaceId}/card-labels`, { data: { name: "Map label", color: "purple" } });
+    expect(labelResponse.ok(), await labelResponse.text()).toBe(true);
+    const label = await labelResponse.json() as { id: string; name: string };
     expect((await api.put(`/api/cards/${blocked.id}/labels`, { data: { labelIds: [label.id] } })).ok()).toBe(true);
     await expect(mapTile(viewer, blocked.title).locator(".dm-labels")).toContainText(label.name);
 
@@ -66,7 +67,7 @@ test("the dependencies view maps a cross-board chain, updates live and opens car
     await expect(mapTile(viewer, blocked.title).locator(".dm-labels")).toContainText(label.name);
 
     // A new dependent added elsewhere joins the chain on the open map without a reload.
-    const followUp = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E map follow-up"));
+    const followUp = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E map follow-up"));
     created.push(followUp);
     await block(api, blocked, followUp);
     await expect(mapTile(viewer, followUp.title)).toBeVisible();
@@ -107,22 +108,30 @@ test("the dependencies view maps a cross-board chain, updates live and opens car
 
 test("the dependencies map adds and removes dependencies in place, with critical path and timeline", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
   // Two separate chains: first → middle, and other → last. Dragging first onto last joins them.
-  const first = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E edit first"));
-  const middle = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E edit middle"));
-  const other = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E edit other"));
-  const last = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E edit last"));
-  const created = [first, middle, other, last];
+  const first = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E edit first"));
+  const middle = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E edit middle"));
+  const other = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E edit other"));
+  const last = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E edit last"));
+  const separateStart = await createCardOnBoard(page, api, "E2E primary board", uniqueName("Separate chain start"));
+  const separateEnd = await createCardOnBoard(page, api, "E2E primary board", uniqueName("Separate chain end"));
+  const created = [first, middle, other, last, separateStart, separateEnd];
 
   try {
     await block(api, first, middle);
     await block(api, other, last);
+    // Preserve the multiple-chain/calendar-gap regression without borrowing demo dependencies.
+    await block(api, separateStart, separateEnd);
+    for (const [card, dueDateLocalDate] of [[separateStart, "2098-01-06"], [separateEnd, "2098-01-13"]] as const) {
+      const dated = await api.patch(`/api/cards/${card.id}`, { data: { dueDateLocalDate, dueDateSlot: "anyTime" } });
+      expect(dated.ok(), await dated.text()).toBe(true);
+    }
 
     // A second member keeps the map open; every change below reaches it through realtime alone.
     const viewer = await pageAs("marcus");
-    await openBoard(viewer, "Platform Delivery");
+    await openBoard(viewer, "E2E primary board");
     await viewer.getByRole("button", { name: "Dependencies view", exact: true }).click();
     await expect(mapTile(viewer, last.title)).toBeVisible();
 
@@ -182,10 +191,11 @@ test("the dependencies map adds and removes dependencies in place, with critical
     await page.getByRole("group", { name: "Dependencies layout", exact: true }).getByRole("button", { name: "Timeline", exact: true }).click();
     await expect(chain.locator(".dm-step-label").first()).toHaveText("No due date");
     // One calendar for every chain: each lane has the same week headings in the same places, and
-    // the years of empty weeks before 2099 collapse behind a dashed marker.
+    // the empty weeks between the two dated chains collapse behind a dashed marker.
+    await expect(map.locator(".dm-chain")).toHaveCount(2);
     const headings = await map.locator(".dm-chain").evaluateAll((chains) =>
       chains.map((lane) => Array.from(lane.querySelectorAll<HTMLElement>(".dm-step-label")).map((label) => `${label.textContent?.trim()}@${label.style.left}`).join("|")));
-    expect(headings.length).toBeGreaterThan(1);
+    expect(headings).toHaveLength(2);
     expect(new Set(headings).size).toBe(1);
     await expect(chain.locator(".dm-week-gap").first()).toBeAttached();
     await expect(mapTile(page, last.title)).toHaveClass(/is-risk/);
@@ -212,11 +222,11 @@ test("dependency layouts keep titles, badges and touch controls usable across sc
   const created: CreatedCard[] = [];
   try {
     await signIn(page, "priya");
-    await openBoard(page, "Platform Delivery");
+    await openBoard(page, "E2E primary board");
     const boardUrl = page.url();
-    const first = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("Responsive dependency blocker"));
+    const first = await createCardOnBoard(page, api, "E2E primary board", uniqueName("Responsive dependency blocker"));
     created.push(first);
-    const last = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("Responsive dependency goal"));
+    const last = await createCardOnBoard(page, api, "E2E primary board", uniqueName("Responsive dependency goal"));
     created.push(last);
     const me = await (await api.get("/api/me")).json() as { id?: string; user?: { id: string } };
     const teammateApi = await apiAs("marcus");

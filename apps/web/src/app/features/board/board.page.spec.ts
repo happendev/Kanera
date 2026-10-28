@@ -509,6 +509,32 @@ describe("BoardPage", () => {
     expect(component.searchInputValue()).toBe("ship");
   });
 
+  // E2E cannot hold a filter reload's response open while a teammate's event lands. Without the
+  // re-check, the reload's older snapshot reverts the live edit and nothing corrects it.
+  it("re-converges when a live card event lands while a filter reload is in flight", async () => {
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    await vi.waitFor(() => expect(boardState(component).board()).not.toBeNull());
+    const title = () => boardState(component).cards().find((entry) => entry.id === "card-2")?.title;
+    const openCalls = () => api.post.mock.calls.filter(([path]) => String(path).startsWith("/boards/board-1/open")).length;
+    const initialOpens = openCalls();
+
+    let releaseStale: (() => void) | null = null;
+    const stale = boardPayload();
+    api.post.mockImplementationOnce(() => new Promise((resolve) => (releaseStale = () => resolve(stale))));
+    const reload = component.applyCompletedRange({ from: "2026-05-01", to: "2026-05-31" });
+
+    const renamed = card({ id: "card-2", title: "Renamed live", position: "2000.0000000000" });
+    api.post.mockImplementation(() => Promise.resolve({ ...boardPayload(), cards: [boardPayload().cards[0]!, renamed] }));
+    socket.trigger("card:updated", { boardId: "board-1", card: renamed, blockedByCount: 0 });
+    expect(title()).toBe("Renamed live");
+
+    releaseStale!();
+    await reload;
+    await vi.waitFor(() => expect(title()).toBe("Renamed live"));
+    expect(openCalls()).toBe(initialOpens + 2);
+  });
+
   it("sets the loaded board name as the title when no card detail is open", () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { webOrigin } from "./support/env";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { createCard, openBoard, openCard } from "./support/ui";
 
 // Deployed clients reach the public API through the web origin (nginx /public-api/ -> :3001).
@@ -48,7 +48,7 @@ test("a file PUT to an agent's upload link appears live in open card detail", as
   const { secret } = await minted.json() as { secret: string };
 
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const created = page.waitForResponse((response) => response.request().method() === "POST" && /\/lists\/[^/]+\/cards$/.test(new URL(response.url()).pathname) && response.ok());
   await createCard(page, title);
   const { id: cardId } = await (await created).json() as { id: string };

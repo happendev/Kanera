@@ -174,8 +174,10 @@ export class BoardTimelineViewComponent implements OnInit {
   private readonly queries = inject(CachedViewService);
   readonly cachedAt = signal<string | null>(null);
   readonly editingEnabled = computed(() => this.canEdit() && this.sockets.online() && !this.cachedAt());
+  /** The host page's own offline banner already says the view is a saved copy; don't repeat it. */
+  readonly hostShowsOffline = input(false);
   readonly offlineCopyLabel = computed(() => {
-    const time = this.cachedAt();
+    const time = this.hostShowsOffline() ? null : this.cachedAt();
     return time ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(time)}:time:` : "";
   });
   /**

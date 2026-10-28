@@ -1,9 +1,9 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, cardTile, completeCard, expectCardTileMounted, openBoard, openCard } from "./support/ui";
 
-// Card dependencies across boards of one workspace. The blocker lives on Mobile Experience and the
-// blocked card on Platform Delivery, so the viewer's badge can only change through the
+// Card dependencies across boards of one workspace. The blocker lives on E2E secondary board and the
+// blocked card on E2E primary board, so the viewer's badge can only change through the
 // dependents fanout (`card:updated` with `blockedByCount` on the *dependent's* board), never
 // through an event the blocker's own board room carries. Nothing here reloads.
 
@@ -21,20 +21,20 @@ async function createCardOnBoard(page: Page, api: APIRequestContext, boardName: 
 
 test("a dependency added in card detail blocks a card on another board until its blocker completes, live", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
-  const blocked = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E blocked launch"));
-  const boardMeta = await (await api.get(`/api/boards/${await boardIdOf(page, "Platform Delivery")}?includeCards=false`)).json() as { board: { workspaceId: string } };
+  const blocked = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E blocked launch"));
+  const boardMeta = await (await api.get(`/api/boards/${await boardIdOf(page, "E2E primary board")}?includeCards=false`)).json() as { board: { workspaceId: string } };
   const keyResponse = await api.post(`/api/workspaces/${boardMeta.board.workspaceId}/api-keys`, { data: { name: uniqueName("Deps key"), scope: "write" } });
   expect(keyResponse.status(), await keyResponse.text()).toBe(201);
   const key = await keyResponse.json() as { id: string; secret: string };
-  const blocker = await createCardOnBoard(page, api, "Mobile Experience", uniqueName("E2E blocking migration"));
+  const blocker = await createCardOnBoard(page, api, "E2E secondary board", uniqueName("E2E blocking migration"));
   let label: { id: string } | null = null;
 
   try {
     // A second member watches the blocked card's board and has been told nothing.
     const viewer = await pageAs("marcus");
-    await openBoard(viewer, "Platform Delivery");
+    await openBoard(viewer, "E2E primary board");
     await expectCardTileMounted(viewer, blocked.title);
     const viewerTile = cardTile(viewer, blocked.title);
     await expect(viewerTile.locator(".card-blocked")).toHaveCount(0);
@@ -68,7 +68,7 @@ test("a dependency added in card detail blocks a card on another board until its
     await expect(liveDetail.getByRole("button", { name: /Blocked by 1 active card/ })).toBeVisible();
     // Completing the blocker on the *other* board clears the badge on this one, without a reload.
     await page.keyboard.press("Escape");
-    await openBoard(page, "Mobile Experience");
+    await openBoard(page, "E2E secondary board");
     await expectCardTileMounted(page, blocker.title);
     const completed = await api.patch(`/public-api/api/v1/cards/${blocker.id}/completion`, {
       headers: { authorization: `Bearer ${key.secret}` }, data: { completed: true },
@@ -80,7 +80,7 @@ test("a dependency added in card detail blocks a card on another board until its
     await viewer.keyboard.press("Escape");
     // The blocked card's own detail now says it has no active blockers.
     await page.keyboard.press("Escape");
-    await openBoard(page, "Platform Delivery");
+    await openBoard(page, "E2E primary board");
     const doneDetail = await openCard(page, blocked.title);
     await expect(doneDetail.getByRole("button", { name: /No active blockers/ })).toBeVisible();
     await expect(doneDetail.locator("k-card-relations .cr-row.is-closed")).toContainText("Completed");
@@ -129,13 +129,13 @@ test("a dependency added in card detail blocks a card on another board until its
 
 test("the board and table right-click menus set dependencies, and the blocked card's watcher is told live", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
-  const blocked = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E menu blocked"));
-  const blocker = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E menu blocker"));
-  const related = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E menu related"));
+  const blocked = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E menu blocked"));
+  const blocker = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E menu blocker"));
+  const related = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E menu related"));
   // A label on the blocker, so its dependency row shows what kind of work it is.
-  const { board } = (await (await api.get(`/api/boards/${await boardIdOf(page, "Platform Delivery")}?includeCards=false`)).json()) as { board: { workspaceId: string } };
+  const { board } = (await (await api.get(`/api/boards/${await boardIdOf(page, "E2E primary board")}?includeCards=false`)).json()) as { board: { workspaceId: string } };
   const labelCreated = await api.post(`/api/workspaces/${board.workspaceId}/card-labels`, { data: { name: uniqueName("E2E dep label"), color: "purple" } });
   expect(labelCreated.ok(), await labelCreated.text()).toBe(true);
   const label = (await labelCreated.json()) as { id: string; name: string };
@@ -146,7 +146,7 @@ test("the board and table right-click menus set dependencies, and the blocked ca
     const marcusApi = await apiAs("marcus");
     expect((await marcusApi.put(`/api/cards/${blocked.id}/watch`, { data: { watching: true } })).ok()).toBe(true);
     const watcher = await pageAs("marcus");
-    await openBoard(watcher, "Platform Delivery");
+    await openBoard(watcher, "E2E primary board");
     await watcher.getByRole("button", { name: /^Notifications/ }).click();
 
     // Board tile: right-click → Dependencies… → Blocked by → pick the blocker.
@@ -223,11 +223,11 @@ test("the board and table right-click menus set dependencies, and the blocked ca
 
 test("completing a card's last blocker hands it to its assignee live: inbox entry and card activity", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
-  const waiting = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E handoff waiting"));
-  const first = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E handoff first"));
-  const last = await createCardOnBoard(page, api, "Mobile Experience", uniqueName("E2E handoff last"));
+  const waiting = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E handoff waiting"));
+  const first = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E handoff first"));
+  const last = await createCardOnBoard(page, api, "E2E secondary board", uniqueName("E2E handoff last"));
 
   try {
     const marcusApi = await apiAs("marcus");
@@ -240,14 +240,14 @@ test("completing a card's last blocker hands it to its assignee live: inbox entr
 
     // Marcus, the assignee, has his inbox open on another board.
     const assignee = await pageAs("marcus");
-    await openBoard(assignee, "Platform Delivery");
+    await openBoard(assignee, "E2E primary board");
     await assignee.getByRole("button", { name: /^Notifications/ }).click();
     const handoff = assignee.locator(".notif-item").filter({ hasText: "cleared the last blocker on this card" }).filter({ hasText: waiting.title });
 
     // One blocker done, one still open: no handoff yet.
     expect((await api.patch(`/api/cards/${first.id}/completion`, { data: { completed: true } })).ok()).toBe(true);
     // Amelia closes the last one by hand, from its own board.
-    await openBoard(page, "Mobile Experience");
+    await openBoard(page, "E2E secondary board");
     await expectCardTileMounted(page, last.title);
     await completeCard(await openCard(page, last.title));
 
@@ -273,11 +273,11 @@ test("completing a card's last blocker hands it to its assignee live: inbox entr
 
 test("blocked completion is optional and removing the final blocker runs the handoff with history on both cards", async ({ page, signIn, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
-  const blocked = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("Warning waiting"));
-  const blocker = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("Warning blocker"));
-  const meta = await (await api.get(`/api/boards/${await boardIdOf(page, "Platform Delivery")}?includeCards=false`)).json() as { board: { workspaceId: string } };
+  const blocked = await createCardOnBoard(page, api, "E2E primary board", uniqueName("Warning waiting"));
+  const blocker = await createCardOnBoard(page, api, "E2E primary board", uniqueName("Warning blocker"));
+  const meta = await (await api.get(`/api/boards/${await boardIdOf(page, "E2E primary board")}?includeCards=false`)).json() as { board: { workspaceId: string } };
   const workspaceId = meta.board.workspaceId;
   const relationResponse = await api.post(`/api/cards/${blocked.id}/relations`, { data: { targetCardId: blocker.id, direction: "blocked_by" } });
   expect(relationResponse.status()).toBe(201);
@@ -325,20 +325,35 @@ test("blocked completion is optional and removing the final blocker runs the han
 
 test("dependency search excludes existing links before limiting results and refreshes when the direction changes", async ({ page, signIn, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
-  const blocked = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("Search owner"));
+  const blocked = await createCardOnBoard(page, api, "E2E primary board", uniqueName("Search owner"));
   const query = uniqueName("Dependency candidate");
   const candidates: CreatedCard[] = [];
   try {
     for (let i = 0; i < 12; i++) {
-      const card = await createCardOnBoard(page, api, "Platform Delivery", `${query} ${query} ${i}`);
+      const card = await createCardOnBoard(page, api, "E2E primary board", `${query} ${query} ${i}`);
       candidates.push(card);
       expect((await api.post(`/api/cards/${blocked.id}/relations`, { data: { targetCardId: card.id, direction: "blocked_by" } })).ok()).toBe(true);
     }
     // More relevant hits in another workspace must not consume the current workspace's limit.
-    for (let i = 0; i < 2; i++) candidates.push(await createCardOnBoard(page, api, "Autumn Campaign Launch", `${query} ${query} ${query} foreign ${i}`));
-    const eligible = await createCardOnBoard(page, api, "Platform Delivery", `${query} eligible`);
+    const foreignResponse = await api.post("/api/workspaces", { data: {
+      name: uniqueName("Dependency search other workspace"), initialBoard: { name: uniqueName("Foreign candidates") },
+      lists: [{ name: "Backlog" }, { name: "Done" }], customFields: [], labels: [],
+    } });
+    expect(foreignResponse.ok(), await foreignResponse.text()).toBe(true);
+    const foreign = await foreignResponse.json() as { initialBoard: { id: string } };
+    const foreignBoard = await api.get(`/api/boards/${foreign.initialBoard.id}?includeCards=false`);
+    expect(foreignBoard.ok(), await foreignBoard.text()).toBe(true);
+    const { lists } = await foreignBoard.json() as { lists: { id: string }[] };
+    for (let i = 0; i < 2; i++) {
+      const created = await api.post(`/api/boards/${foreign.initialBoard.id}/lists/${lists[0]!.id}/cards`, {
+        data: { title: `${query} ${query} ${query} foreign ${i}` },
+      });
+      expect(created.ok(), await created.text()).toBe(true);
+      candidates.push(await created.json() as CreatedCard);
+    }
+    const eligible = await createCardOnBoard(page, api, "E2E primary board", `${query} eligible`);
     candidates.push(eligible);
     await expectCardTileMounted(page, blocked.title);
     const detail = await openCard(page, blocked.title);
@@ -362,13 +377,13 @@ test("dependency search excludes existing links before limiting results and refr
 // chip and the filter must agree on the same definition: open blockers only, hidden ones included.
 test("the Blocked quick filter in Global Work keeps only cards waiting on an open blocker", async ({ page, signIn, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
   const me = (await (await api.get("/api/me")).json()) as { id?: string; user?: { id: string } };
   const ameliaId = me.user?.id ?? me.id!;
-  const waiting = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E waiting on migration"));
-  const free = await createCardOnBoard(page, api, "Platform Delivery", uniqueName("E2E free to start"));
-  const blocker = await createCardOnBoard(page, api, "Mobile Experience", uniqueName("E2E global blocker"));
+  const waiting = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E waiting on migration"));
+  const free = await createCardOnBoard(page, api, "E2E primary board", uniqueName("E2E free to start"));
+  const blocker = await createCardOnBoard(page, api, "E2E secondary board", uniqueName("E2E global blocker"));
   for (const card of [waiting, free]) {
     expect((await api.put(`/api/cards/${card.id}/assignees`, { data: { userIds: [ameliaId] } })).ok()).toBe(true);
   }

@@ -82,21 +82,25 @@
     </section>
   }
   @for (item of activePeople(); track item.person.userId) {
-    <section class="person" [class.is-docked]="isDocked(item.person.userId)" [attr.aria-label]="item.person.displayName">
+    <section class="person" [class.is-docked]="!solo() && isDocked(item.person.userId)" [attr.aria-label]="item.person.displayName">
       <header class="person-head">
         <!-- The avatar opens their profile card, as avatars do across the app; the name is the
              shortcut into "just this person", and again back to everyone. -->
         <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="32" [userId]="item.person.userId" [profile]="true" />
         <div class="person-id">
-          <button
-            type="button"
-            class="person-focus"
-            [attr.aria-pressed]="focusedOverview() !== null"
-            [kTooltip]="personChipLabel(item.person.displayName, focusedOverview() !== null)"
-            (click)="focusChanged.emit(focusedOverview() ? null : item.person.userId)"
-          >
+          @if (solo()) {
             <strong class="person-name">{{ item.person.displayName }}</strong>
-          </button>
+          } @else {
+            <button
+              type="button"
+              class="person-focus"
+              [attr.aria-pressed]="focusedOverview() !== null"
+              [kTooltip]="personChipLabel(item.person.displayName, focusedOverview() !== null)"
+              (click)="focusChanged.emit(focusedOverview() ? null : item.person.userId)"
+            >
+              <strong class="person-name">{{ item.person.displayName }}</strong>
+            </button>
+          }
           <span class="person-active" [class.is-idle]="!item.lastActiveAt">{{ lastActiveLabel(item) }}</span>
         </div>
         <!-- Folds apply to every panel, so this one button folds or unfolds the whole overview. -->
@@ -109,15 +113,18 @@
         >
           <i aria-hidden="true" class="ti" [class.ti-chevrons-down]="allSectionsCollapsed()" [class.ti-chevrons-up]="!allSectionsCollapsed()"></i>
         </button>
-        <button
-          type="button"
-          class="person-open"
-          [attr.aria-label]="openCardsLabel(item.person.displayName)"
-          [kTooltip]="openCardsLabel(item.person.displayName)"
-          [disabled]="!canNavigate()" (click)="personFocused.emit(item.person.userId)"
-        >
-          <i aria-hidden="true" class="ti ti-arrow-up-right"></i>
-        </button>
+        <!-- On My Cards the display switch above already is the way to the viewer's board. -->
+        @if (!solo()) {
+          <button
+            type="button"
+            class="person-open"
+            [attr.aria-label]="openCardsLabel(item.person.displayName)"
+            [kTooltip]="openCardsLabel(item.person.displayName)"
+            [disabled]="!canNavigate()" (click)="personFocused.emit(item.person.userId)"
+          >
+            <i aria-hidden="true" class="ti ti-arrow-up-right"></i>
+          </button>
+        }
       </header>
 
       <!-- The stats are toggles: each swaps the summary below for that whole set of cards. -->
@@ -167,7 +174,11 @@
           }
           @if (drill.more) {
             <button type="button" class="section-more is-link" [disabled]="!canNavigate()" (click)="personFocused.emit(item.person.userId)">
-              <ng-container i18n>+{{ drill.more // i18n(ph="count") }} more — open their cards</ng-container>
+              @if (solo()) {
+                <ng-container i18n="My overview drill-down link to the board display">+{{ drill.more // i18n(ph="count") }} more — open Board view</ng-container>
+              } @else {
+                <ng-container i18n>+{{ drill.more // i18n(ph="count") }} more — open their cards</ng-container>
+              }
             </button>
           }
         </div>
@@ -179,8 +190,7 @@
               type="button"
               class="section-toggle"
               [attr.aria-expanded]="!isCollapsed('inProgress')"
-              kTooltip="Their open cards in In progress lists, longest time in progress first"
-              i18n-kTooltip
+              [kTooltip]="inProgressTooltip()"
               (click)="toggleSection('inProgress')"
             >
               <i aria-hidden="true" class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('inProgress')" [class.ti-chevron-down]="!isCollapsed('inProgress')"></i>
@@ -211,7 +221,7 @@
               type="button"
               class="section-toggle"
               [attr.aria-expanded]="!isCollapsed('recent')"
-              [kTooltip]="recentTooltip"
+              [kTooltip]="recentTooltip()"
               (click)="toggleSection('recent')"
             >
               <i aria-hidden="true" class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('recent')" [class.ti-chevron-down]="!isCollapsed('recent')"></i>
@@ -245,9 +255,10 @@
                 [class.is-open]="isDocked(item.person.userId)"
                 [attr.aria-pressed]="isDocked(item.person.userId)"
                 [attr.aria-label]="upNextActionLabel(item.person.displayName, isDocked(item.person.userId))"
+                [kTooltip]="upNextActionLabel(item.person.displayName, isDocked(item.person.userId))"
                 (click)="upNextToggled.emit(item.person.userId)"
               >
-                <i aria-hidden="true" class="ti ti-layout-sidebar-right"></i>
+                <i aria-hidden="true" class="ti" [class.ti-pencil]="!isDocked(item.person.userId)" [class.ti-x]="isDocked(item.person.userId)"></i>
                 @if (isDocked(item.person.userId)) {
                   <span i18n="Button on a teammate's Up next section while the panel shows it">Close</span>
                 } @else {
@@ -268,7 +279,11 @@
               }
             }
             @if (upNext.total > upNext.rows.length && upNext.rows.length) {
-              <p class="section-more" i18n>+{{ upNext.total - upNext.rows.length // i18n(ph="count") }} more in their queue</p>
+              @if (solo()) {
+                <p class="section-more" i18n>+{{ upNext.total - upNext.rows.length // i18n(ph="count") }} more in your queue</p>
+              } @else {
+                <p class="section-more" i18n>+{{ upNext.total - upNext.rows.length // i18n(ph="count") }} more in their queue</p>
+              }
             }
             }
           </div>
@@ -280,8 +295,7 @@
               type="button"
               class="section-toggle"
               [attr.aria-expanded]="!isCollapsed('assigned')"
-              kTooltip="Their other open cards, soonest due first"
-              i18n-kTooltip
+              [kTooltip]="assignedTooltip()"
               (click)="toggleSection('assigned')"
             >
               <i aria-hidden="true" class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('assigned')" [class.ti-chevron-down]="!isCollapsed('assigned')"></i>

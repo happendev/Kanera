@@ -1,6 +1,6 @@
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import { users } from "./support/env";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, expectBoardLoaded, expectCardTileMounted, moveCardToBoard, openCard } from "./support/ui";
 
 type WireCard = { id: string; title: string; listId: string; position: string; completedAt: string | null };
@@ -15,7 +15,7 @@ async function result<T>(response: APIResponse): Promise<T> {
 }
 
 async function workspace(page: Page, api: APIRequestContext) {
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
   return result<{ board: { workspaceId: string }; lists: { id: string; name: string }[] }>(
     await api.get(`/api/boards/${boardId}?includeCards=false`),
   );
@@ -179,7 +179,7 @@ test("concurrent checklist edits preserve changes to different fields", async ({
   await signIn(page, "amelia");
   const api = await apiAs("amelia");
   const { lists } = await workspace(page, api);
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
   const title = uniqueName("Concurrent checklist");
   const card = await result<WireCard>(await api.post(`/api/boards/${boardId}/lists/${lists[0]!.id}/cards`, { data: { title } }));
   await result(await api.post(`/api/cards/${card.id}/checklists`, { data: { title: "Concurrent edits", items: [{ text: "Original" }] } }));
@@ -193,7 +193,7 @@ test("concurrent checklist edits preserve changes to different fields", async ({
   expect(after.checklists[0]!.items[0]).toMatchObject({ text: "Renamed concurrently", description: "Independent description" });
   expect(after.checklists[0]!.items[0]!.completedAt).not.toBeNull();
   await page.goto(`/b/${boardId}`);
-  await expectBoardLoaded(page, "Platform Delivery");
+  await expectBoardLoaded(page, "E2E primary board");
   await expectCardTileMounted(page, title, card.listId);
   const detail = await openCard(page, title);
   await expect(detail.locator(".checklist-item-text").filter({ hasText: "Renamed concurrently" })).toHaveClass(/is-done/);
@@ -231,7 +231,7 @@ test("concurrent agent heartbeats cannot reopen a finished run", async ({ page, 
   await signIn(page, "amelia");
   const api = await apiAs("amelia");
   const { lists } = await workspace(page, api);
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
   const card = await result<WireCard>(await api.post(`/api/boards/${boardId}/lists/${lists[0]!.id}/cards`, { data: { title: uniqueName("Run race") } }));
   const run = await result<{ id: string }>(await api.post(`/api/cards/${card.id}/agent-runs`, { data: { title: "Finishing" } }));
   const responses = await Promise.all([{ status: "succeeded" }, ...Array.from({ length: 10 }, () => ({}))].map((data) => api.patch(`/api/agent-runs/${run.id}`, { data })));

@@ -8,7 +8,7 @@ async function json<T>(response: APIResponse): Promise<T> {
 }
 
 // Use owned fixtures for live writes: a broken copy loop, stale source edits or a lost internal
-// note must be caught without changing the curated recording boards for later seed checks.
+// note must be caught using this test's own boards and workspace.
 test("client comments and files arrive live while delivery discussion stays internal", async ({ page, apiAs, signIn, testWorkspace, uniqueName }, testInfo) => {
   const api = await apiAs("amelia");
   const targetName = uniqueName("Internal delivery");

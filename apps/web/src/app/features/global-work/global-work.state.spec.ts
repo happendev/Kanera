@@ -1058,6 +1058,36 @@ describe("GlobalWorkState", () => {
     }
   });
 
+  // E2E cannot land an event in this window reliably: search applies its filter (and Work Done
+  // re-reads) at once but queries cards 260 ms later, so an event's 180 ms reconcile can be in
+  // flight when that query cancels it. Without the hand-off, Recently done and History miss it.
+  it("advances the History query version once when a foreground query supersedes an in-flight reconcile", async () => {
+    const gate: { release: (() => void) | null } = { release: null };
+    let holdNextQuery = false;
+    const f = setup({
+      cardsQuery: async () => {
+        if (holdNextQuery) {
+          holdNextQuery = false;
+          await new Promise<void>((resolve) => (gate.release = resolve));
+        }
+        return response;
+      },
+    });
+    await f.state.initialize("my");
+    const initialVersion = f.state.reconciliationVersion();
+
+    holdNextQuery = true;
+    f.socket.trigger("card:created", {});
+    await vi.waitFor(() => expect(gate.release).not.toBeNull());
+    await f.state.queryFirstPage();
+    expect(f.state.reconciliationVersion()).toBe(initialVersion + 1);
+
+    // The cancelled reconcile settles afterwards and must not count a second time.
+    gate.release?.();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(f.state.reconciliationVersion()).toBe(initialVersion + 1);
+  });
+
   it("reconciles on foreground resume even without a queued realtime event", async () => {
     vi.useFakeTimers();
     try {

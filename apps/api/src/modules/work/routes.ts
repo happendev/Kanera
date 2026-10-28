@@ -1740,6 +1740,9 @@ export async function workRoutes(app: FastifyInstance) {
         ...(query.lens === "my"
           ? { actorUserId: req.auth.sub }
           : { actorUserIds }),
+        // The overview's "Recently done" reads this: a card a "move to Done" automation closed is
+        // still its assignees' delivery, and otherwise it would vanish from every person's panel.
+        automatedCompletionsForAssignees: true,
         // Historical activity must obey the same card-level boundary as the live global views.
         visibilityUserId: req.auth.sub,
         visibilityRestrictedBoardIds: restrictedBoardIds,

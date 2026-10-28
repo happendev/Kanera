@@ -189,8 +189,10 @@ export class DependencyMapComponent implements OnInit {
   readonly response = signal<DependencyGraphResponse | null>(null);
   /** Set while the map is an offline snapshot; cleared by the next successful read. */
   readonly cachedAt = signal<string | null>(null);
+  /** The host page's own offline banner already says the view is a saved copy; don't repeat it. */
+  readonly hostShowsOffline = input(false);
   readonly offlineCopyLabel = computed(() => {
-    const cachedAt = this.cachedAt();
+    const cachedAt = this.hostShowsOffline() ? null : this.cachedAt();
     return cachedAt ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(cachedAt)}:time:` : "";
   });
   readonly loading = signal(false);

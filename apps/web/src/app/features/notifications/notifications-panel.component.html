@@ -82,7 +82,7 @@
         (valueChange)="setSearchQuery($event)"
       />
     </div>
-    <button type="button" class="ghost mark-all-btn" (click)="markAllRead()" [disabled]="unreadCount() === 0 || !online()" [kTooltip]="online() ? markAllReadLabel : offlineTitle">
+    <button type="button" class="ghost mark-all-btn" (click)="markAllRead()" [disabled]="markAllUnreadCount() === 0 || !online()" [kTooltip]="online() ? markAllReadLabel : offlineTitle">
       <i aria-hidden="true" class="ti ti-checks"></i>
       <ng-container i18n="Button: mark every notification as read">Mark all read</ng-container>
     </button>

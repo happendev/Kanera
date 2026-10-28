@@ -300,12 +300,10 @@ export function sanitizeGlobalWorkDefinition(
   };
   const hasExplicitScope =
     scope.organisationIds.length > 0 || scope.workspaceIds.length > 0 || scope.boardIds.length > 0;
-  // The overview is per-teammate, so it only exists where there are teammates. The timeline exists
-  // while some board in reach has start dates and the Timeline on (a workspace feature).
+  // The timeline exists while some board in reach has start dates and the Timeline on (a
+  // workspace feature).
   const timelineEnabled = catalog.boards.some((board) => board.timelineEnabled);
-  const allowedDisplays = lens === "team"
-    ? new Set(["board", "table", "calendar", ...(timelineEnabled ? ["timeline"] : []), "overview", "dependencies", "history"])
-    : new Set(["board", "table", "calendar", ...(timelineEnabled ? ["timeline"] : []), "dependencies", "history"]);
+  const allowedDisplays = new Set(["board", "table", "calendar", ...(timelineEnabled ? ["timeline"] : []), "overview", "dependencies", "history"]);
   // The retired team Up next lanes display lands on its successor: the overview, whose dock now
   // curates each teammate's queue. Saved views and remembered preferences may still name it.
   const requestedDisplay = lens === "team" && definition.display === "priorities" ? "overview" : definition.display;

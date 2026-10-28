@@ -7,14 +7,14 @@ import { createCard, openBoard, openCard } from "./support/ui";
 // Product rule (CLAUDE.md): attachments behave the same in the description, comments, the
 // attachment list and activity rows. Images, video, audio and PDFs open the shared lightbox; any
 // format it cannot render downloads instead. One file per behaviour class runs through each surface.
-const seedContent = path.join(__dirname, "..", "dev-db-seed-content", "attachments");
+const fixtureDirectory = path.join(__dirname, "fixtures");
 const fixtures = {
-  image: { file: "images/access-review-symbol.png", mimeType: "image/png", ext: "png", opens: "image" },
-  pdf: { file: "pdfs/api-rollout-plan.pdf", mimeType: "application/pdf", ext: "pdf", opens: "pdf" },
+  image: { file: "sample.png", mimeType: "image/png", ext: "png", opens: "image" },
+  pdf: { file: "sample.pdf", mimeType: "application/pdf", ext: "pdf", opens: "pdf" },
   audio: { file: path.join(__dirname, "fixtures/preview.wav"), mimeType: "audio/wav", ext: "wav", opens: "audio" },
   video: { file: path.join(__dirname, "fixtures/preview.webm"), mimeType: "video/webm", ext: "webm", opens: "video" },
   docx: {
-    file: "docx/release-readiness-template.docx",
+    file: "sample.docx",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ext: "docx",
     opens: "download",
@@ -28,7 +28,7 @@ function upload(kind: Kind, surface: string) {
   return {
     name: `e2e-${surface}-${kind}.${fixture.ext}`,
     mimeType: fixture.mimeType,
-    buffer: readFileSync(path.resolve(seedContent, fixture.file)),
+    buffer: readFileSync(path.resolve(fixtureDirectory, fixture.file)),
   };
 }
 
@@ -47,7 +47,7 @@ async function expectLightbox(detail: Locator, kind: "image" | "pdf" | "audio" |
     // Chromium's PDF viewer against the uploaded fixture, including its complete byte sequence.
     const bytes = await lightbox.locator(".lb-pdf").evaluate(async (frame: HTMLIFrameElement) =>
       Array.from(new Uint8Array(await (await fetch(frame.src)).arrayBuffer())));
-    expect(Buffer.from(bytes)).toEqual(readFileSync(path.join(seedContent, fixtures.pdf.file)));
+    expect(Buffer.from(bytes)).toEqual(readFileSync(path.join(fixtureDirectory, fixtures.pdf.file)));
   } else {
     // A mounted player is not proof its source loaded or decoded. Both fixtures are half a second
     // long; a decoded frame plus advancing playback catches bad URLs, MIME handling and bad bytes.
@@ -83,7 +83,7 @@ async function expectDownload(page: Page, fileName: string, trigger: () => Promi
   expect(await result.failure()).toBeNull();
   const downloaded = await result.path();
   expect(downloaded).not.toBeNull();
-  expect(readFileSync(downloaded!)).toEqual(readFileSync(path.join(seedContent, fixtures.docx.file)));
+  expect(readFileSync(downloaded!)).toEqual(readFileSync(path.join(fixtureDirectory, fixtures.docx.file)));
   await expect(page.locator("k-image-lightbox")).toHaveCount(0);
 }
 

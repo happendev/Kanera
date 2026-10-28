@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { SEED_PASSWORD, webOrigin } from "./env";
+import { TEST_PASSWORD, webOrigin } from "./env";
 
 /**
  * Creates a brand-new account and organisation through the signup form and stops at onboarding.
@@ -11,8 +11,8 @@ export async function signUp(page: Page, name: string): Promise<string> {
   await page.locator("#cname").fill(name);
   await page.locator("#dn").fill(name);
   await page.locator("#email").fill(email);
-  await page.locator("#password").fill(SEED_PASSWORD);
-  await page.locator("#confirm-password").fill(SEED_PASSWORD);
+  await page.locator("#password").fill(TEST_PASSWORD);
+  await page.locator("#confirm-password").fill(TEST_PASSWORD);
   await page.locator("form").getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/onboarding/);
   return email;
@@ -94,8 +94,8 @@ export async function createCard(page: Page, title: string) {
 /**
  * Waits for a card tile to be rendered, scrolling the receiving lane so the tile mounts.
  *
- * Lanes render only their first fifteen cards until scrolled (`INITIAL_RENDER_CAP`), and a full-suite
- * run appends many cards to the seed boards' first lists. A tile that exists in state but is beyond
+ * Lanes render only their first fifteen cards until scrolled (`INITIAL_RENDER_CAP`). In scenarios
+ * that deliberately create more cards, a tile that exists in state but is beyond
  * the window would otherwise fail a plain visibility check on any page observing the board, not just
  * the one that created the card. Without `listId` every lane is nudged.
  */

@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { users } from "./support/env";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, cardTile, createCard, openBoard, openCard, workspaceSettingsHref } from "./support/ui";
 
 type Member = { userId: string; displayName: string; role: string };
@@ -19,7 +19,7 @@ async function json<T>(response: Awaited<ReturnType<APIRequestContext["get"]>>):
 }
 
 async function workspaceMembers(page: Page, api: APIRequestContext): Promise<{ workspaceId: string; members: Member[] }> {
-  const workspaceId = (await workspaceSettingsHref(page, "Platform Delivery")).split("/")[2]!;
+  const workspaceId = (await workspaceSettingsHref(page, "E2E primary board")).split("/")[2]!;
   return { workspaceId, members: await json<Member[]>(await api.get(`/api/workspaces/${workspaceId}/members`)) };
 }
 
@@ -30,11 +30,11 @@ function memberId(members: Member[], name: string): string {
 }
 
 /**
- * Creates a card on Platform Delivery, opens it, and returns its id. The id comes from the create
+ * Creates a card on E2E primary board, opens it, and returns its id. The id comes from the create
  * response: the detail route carries the human card key, which the card API does not accept.
  */
-async function cardOnPlatformDelivery(page: Page, title: string): Promise<string> {
-  await openBoard(page, "Platform Delivery");
+async function createScenarioCard(page: Page, title: string): Promise<string> {
+  await openBoard(page, "E2E primary board");
   const created = page.waitForResponse((response) =>
     response.request().method() === "POST" && /\/boards\/[^/]+\/lists\/[^/]+\/cards$/.test(new URL(response.url()).pathname) && response.ok(),
   );
@@ -47,7 +47,7 @@ async function cardOnPlatformDelivery(page: Page, title: string): Promise<string
 test("a card-tile avatar opens the person's profile instead of the card, and View cards focuses Team Cards on them", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
   const title = uniqueName("E2E profile card");
   await signIn(page, "amelia");
-  const cardId = await cardOnPlatformDelivery(page, title);
+  const cardId = await createScenarioCard(page, title);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: `Card detail: ${title}` })).toHaveCount(0);
 
@@ -62,7 +62,7 @@ test("a card-tile avatar opens the person's profile instead of the card, and Vie
   const marcus = await apiAs("marcus");
   await json(await marcus.post(`/api/cards/${cardId}/comments`, { data: { body: "Picking this up today." } }));
   const doneTitle = uniqueName("E2E profile completed");
-  const doneId = await cardOnPlatformDelivery(page, doneTitle);
+  const doneId = await createScenarioCard(page, doneTitle);
   await page.keyboard.press("Escape");
   await json(await marcus.patch(`/api/cards/${doneId}/completion`, { data: { completed: true } }));
 
@@ -136,7 +136,7 @@ test("a card-tile avatar opens the person's profile instead of the card, and Vie
 test("in card detail the assignee's profile opens above the drawer and its Unassign action persists", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
   const title = uniqueName("E2E profile unassign");
   await signIn(page, "amelia");
-  const cardId = await cardOnPlatformDelivery(page, title);
+  const cardId = await createScenarioCard(page, title);
   const amelia = await apiAs("amelia");
   const { members } = await workspaceMembers(page, amelia);
   await json(await amelia.put(`/api/cards/${cardId}/assignees`, { data: { userIds: [memberId(members, users.marcus.name)] } }));
@@ -175,13 +175,16 @@ test("profiles are scoped to shared work: a cross-organisation guest sees no ema
   const maya = await apiAs("maya");
   const { workspaceId, members } = await workspaceMembers(page, amelia);
   const ameliaId = memberId(members, users.amelia.name);
-  const platformId = await boardIdOf(page, "Platform Delivery");
+  const platformId = await boardIdOf(page, "E2E primary board");
   const profileOf = (api: APIRequestContext, userId: string) =>
     api.get(`/api/users/${userId}/profile?workspaceId=${workspaceId}`).then((response) => json<Profile>(response));
-  // Maya already shares the seeded Mobile Experience board with Amelia (and, in a full run, guest
-  // boards other specs created), so shared-board assertions compare totals rather than the preview,
-  // which lists only the first few boards.
+  // Keep one explicit shared board after revocation so the profile remains reachable.
+  const secondaryId = await boardIdOf(page, "E2E secondary board");
+  await json(await amelia.post(`/api/workspaces/${workspaceId}/guests/invitations`, {
+    data: { boardId: secondaryId, email: users.maya.email, role: "editor" },
+  }));
   const mayaBeforeGrant = await profileOf(maya, ameliaId);
+  expect(mayaBeforeGrant.sharedBoards.total).toBe(1);
   const board = await json<{ id: string }>(await amelia.post(`/api/workspaces/${workspaceId}/boards`, { data: { name: uniqueName("E2E profile guest board") } }));
   const granted = await json<{ status: string }>(await amelia.post(`/api/workspaces/${workspaceId}/guests/invitations`, {
     data: { boardId: board.id, email: users.maya.email, role: "editor" },
@@ -197,7 +200,7 @@ test("profiles are scoped to shared work: a cross-organisation guest sees no ema
 
   // New work for Amelia on a board Maya cannot open: Amelia's own view counts it, Maya's must not.
   const hiddenTitle = uniqueName("E2E profile hidden work");
-  const hiddenCardId = await cardOnPlatformDelivery(page, hiddenTitle);
+  const hiddenCardId = await createScenarioCard(page, hiddenTitle);
   await json(await amelia.put(`/api/cards/${hiddenCardId}/assignees`, { data: { userIds: [ameliaId] } }));
   const selfAfter = await profileOf(amelia, ameliaId);
   const mayaAfter = await profileOf(maya, ameliaId);
@@ -225,8 +228,7 @@ test("profiles are scoped to shared work: a cross-organisation guest sees no ema
   expect(mayaSeenByAmelia.user.email).toBeNull();
   expect(mayaSeenByAmelia.user.homeOrganisationName).toBeTruthy();
 
-  // Revoking the guest narrows their view on the very next request. They still share the seeded
-  // Mobile Experience board with Amelia, so the profile stays reachable without the revoked board.
+  // Revoking the new grant leaves only the explicitly shared secondary board.
   const removed = await amelia.delete(`/api/workspaces/${workspaceId}/guests/${board.id}/${mayaId}`);
   expect(removed.ok(), await removed.text()).toBe(true);
   const revoked = await profileOf(maya, ameliaId);

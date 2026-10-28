@@ -1,9 +1,16 @@
+import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { promisify } from "node:util";
 import { test as base, expect, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
-import { contextDefaults, SEED_PASSWORD, users, webOrigin, type SeedUser } from "./env";
+import { contextDefaults, TEST_PASSWORD, users, webOrigin, type TestUser } from "./env";
 
 type LoginResult = { status: string; accessToken?: string };
 
 type Fixtures = {
+  accounts: void;
+  workspaceOptions: { boardName?: string; lists?: { name: string; inProgress?: boolean }[] };
   /** An empty workspace owned by this test, removed even when an assertion fails. */
   testWorkspace: {
     id: string; name: string; boardId: string; boardName: string;
@@ -11,14 +18,14 @@ type Fixtures = {
     addBoard: (name: string) => Promise<string>;
   };
   /** Signs in through the API and opens the destination directly, avoiding an unused Home boot. */
-  signIn: (page: Page, user: SeedUser, destination?: string) => Promise<void>;
+  signIn: (page: Page, user: TestUser, destination?: string) => Promise<void>;
   /**
-   * A signed-in page for another seeded user, in its own browser context (closed after the test).
+   * A signed-in page for another test user, in its own browser context (closed after the test).
    * `beforeSignIn` runs on the fresh context first, for routes that must exist before the app loads.
    */
-  pageAs: (user: SeedUser, options?: { beforeSignIn?: (context: BrowserContext) => Promise<void> }) => Promise<Page>;
+  pageAs: (user: TestUser, options?: { beforeSignIn?: (context: BrowserContext) => Promise<void> }) => Promise<Page>;
   /** An authenticated app-API client for setup that is not the subject of the test; paths start with `/api/`. */
-  apiAs: (user: SeedUser) => Promise<APIRequestContext>;
+  apiAs: (user: TestUser) => Promise<APIRequestContext>;
   /** A name unique to this test and repeat, so `--repeat-each` and shared titles never collide. */
   uniqueName: (label: string) => string;
   runtimeGuard: RuntimeGuard;
@@ -50,8 +57,8 @@ class RuntimeGuard {
   }
 }
 
-async function login(request: APIRequestContext, user: SeedUser): Promise<string> {
-  const response = await request.post("/api/auth/login", { data: { email: users[user].email, password: SEED_PASSWORD } });
+async function login(request: APIRequestContext, user: TestUser): Promise<string> {
+  const response = await request.post("/api/auth/login", { data: { email: users[user].email, password: TEST_PASSWORD } });
   expect(response.status(), `login as ${user}`).toBe(200);
   const body = (await response.json()) as LoginResult;
   expect(body.status, `login as ${user} should not need MFA`).toBe("authenticated");
@@ -59,15 +66,35 @@ async function login(request: APIRequestContext, user: SeedUser): Promise<string
 }
 
 export const test = base.extend<Fixtures>({
-  testWorkspace: async ({ apiAs }, use, testInfo) => {
+  accounts: [async ({}, use, testInfo) => {
+    const manifestPath = testInfo.outputPath("accounts.json");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(manifestPath, JSON.stringify({
+      clientIds: [randomUUID(), randomUUID()], password: TEST_PASSWORD,
+      users: Object.entries(users).map(([key, person]) => ({
+        ...person, external: key === "maya", role: key === "amelia" || key === "maya" ? "owner" : key === "marcus" ? "admin" : "member",
+      })),
+    }));
+    const run = (action: string) => promisify(execFile)("pnpm", ["--filter", "@kanera/api", "exec", "tsx", "src/scripts/e2e-accounts.ts", action, manifestPath], {
+      cwd: path.resolve(__dirname, "../.."), timeout: 30_000,
+    });
+    try {
+      await run("create");
+      await use();
+    } finally {
+      await run("delete");
+    }
+  }, { auto: true }],
+  workspaceOptions: [{}, { option: true }],
+  testWorkspace: async ({ apiAs, workspaceOptions }, use, testInfo) => {
     const api = await apiAs("amelia");
     // Keep fixture names independent of the test's naming counter and short credential labels.
     const suffix = `${testInfo.testId.slice(0, 6)}-${testInfo.repeatEachIndex}`;
     const name = `E2E owned workspace ${suffix}`;
-    const boardName = `E2E owned board ${suffix}`;
+    const boardName = workspaceOptions.boardName ?? `E2E owned board ${suffix}`;
     const created = await api.post("/api/workspaces", { data: {
       name, initialBoard: { name: boardName, iconColor: "blue" },
-      lists: [{ name: "Backlog" }, { name: "Wishlist" }, { name: "In Progress", inProgress: true }, { name: "Done" }],
+      lists: workspaceOptions.lists ?? [{ name: "Backlog" }, { name: "Wishlist" }, { name: "In Progress", inProgress: true }, { name: "Done" }],
       customFields: [], labels: [], timeZone: "UTC",
     } });
     expect(created.ok(), await created.text()).toBe(true);
@@ -102,7 +129,7 @@ export const test = base.extend<Fixtures>({
     }
   },
   runtimeGuard: [
-    async ({ context }, use, testInfo) => {
+    async ({ context, accounts: _accounts }, use, testInfo) => {
       const guard = new RuntimeGuard();
       guard.watchContext(context, "page");
       await use(guard);
@@ -114,7 +141,7 @@ export const test = base.extend<Fixtures>({
     { auto: true },
   ],
 
-  signIn: async ({}, use) => {
+  signIn: async ({ accounts: _accounts }, use) => {
     await use(async (page, user, destination = "/") => {
       // Password login through the form is covered once in auth.spec.ts. Everything else signs in
       // through the API: /auth/login is rate limited per IP, and a UI login per user per test made
@@ -139,12 +166,12 @@ export const test = base.extend<Fixtures>({
     for (const context of contexts) await context.close();
   },
 
-  apiAs: async ({ playwright }, use) => {
+  apiAs: async ({ playwright, accounts: _accounts }, use) => {
     const clients: APIRequestContext[] = [];
     // Setup calls for one user in one test share a session. Never share across tests or with
     // browser contexts: fresh-device, refresh-cookie and logout behavior still need real logins.
-    const sessions = new Map<SeedUser, Promise<APIRequestContext>>();
-    const createClient = async (user: SeedUser) => {
+    const sessions = new Map<TestUser, Promise<APIRequestContext>>();
+    const createClient = async (user: TestUser) => {
       const anonymous = await playwright.request.newContext({ baseURL: webOrigin });
       clients.push(anonymous);
       const accessToken = await login(anonymous, user);

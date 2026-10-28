@@ -4,7 +4,7 @@ Run `pnpm test:e2e` from the repository root, or pass spec names after `--` to r
 
 The runner:
 
-- starts isolated Postgres and Valkey containers (`docker-compose.e2e.yml`), then migrates and seeds them;
+- starts isolated Postgres and Valkey containers (`docker-compose.e2e.yml`), then runs migrations without the demo seed;
 - starts the API, public API, worker, MCP server, and web app as separate processes on E2E-only ports (`e2e/ports.json`), so a local dev stack on 3000–3003 and 4200 can keep running;
 - builds the `kanera` CLI bundle that CLI specs execute;
 - runs Chromium with the timezone pinned to UTC and the locale to en-GB.
@@ -16,17 +16,18 @@ It never touches the development database. You need Docker and a Playwright Chro
 ## Concurrent CI runs
 
 CI splits the suite into three duration-balanced shards on separate GitHub-hosted runners. Each shard
-starts its own freshly migrated and seeded Postgres, Valkey, API, worker, MCP server and web app.
-Tests remain sequential within that stack (`workers: 1`, `fullyParallel: false`): seeded users,
-boards, settings and realtime rooms must not be shared by concurrently executing tests.
+starts its own freshly migrated Postgres, Valkey, API, worker, MCP server and web app.
+Tests remain sequential within that stack (`workers: 1`, `fullyParallel: false`): the per-test
+accounts reuse stable login aliases, so setup/teardown cannot overlap. Every test receives new
+user and organisation IDs, isolating global views, preferences, notifications and credentials.
 `support/shards.ts` assigns whole spec files, slowest first, to the lightest shard using the recorded
 file durations in `timings.json`. Files stay together and execute in Playwright's normal order.
 New specs are discovered automatically with an estimated weight; the timing file is not an allowlist.
 Refresh weights after a successful full run with
 `node scripts/update-e2e-timings.mjs e2e/artifacts/<run>/results.json` and commit the updated JSON.
 
-The `behavior` project runs directly on every shard. Seeding remains part of stack startup so
-behavioral tests have their accounts and fixture data; there is no separate seed-validation project.
+The `behavior` project runs directly on every shard. The demo seed is never loaded. There is no
+seed-validation project; demo authoring is independent of behavioural regression coverage.
 
 The three shards exercise the default-off compression setting, including
 `realtime-compression.spec.ts`. The compression-enabled setting can be checked manually with
@@ -45,7 +46,7 @@ REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true pnpm test:e2e -- realtime-compressio
 
 Run those commands one at a time on a local checkout: its fixed E2E ports, Docker Compose project
 and database are protected by the runner's lock. CI concurrency comes from separate machines.
-Do not increase `--workers` against a shared stack without first isolating its test fixtures.
+Do not increase `--workers` against a shared stack without first giving each worker distinct account aliases.
 Playwright's native `--shard=1/3` remains available for count-based partitioning; do not combine it
 with `KANERA_E2E_SHARD`, which would shard an already restricted file set and omit tests.
 
@@ -63,7 +64,12 @@ for a shorter wait; it does not skip tests or retry failures.
 
 ## Writing tests
 
-Import `test` and `expect` from `./support/fixtures`, not from `@playwright/test`.
+Import `test` and `expect` from `./support/fixtures`, not from `@playwright/test`. For scenarios
+requiring two boards in a shared workspace, import from `./support/scenario` instead: it opts into
+an empty `E2E primary board` and `E2E secondary board` before the test, using `testWorkspace`.
+Neither fixture creates cards, labels, custom fields, automations or guest grants. Create those
+explicitly through the API in the scenario that needs them; exercise the behaviour under test
+through the browser or integration transport.
 
 | Fixture | Use it for |
 |---|---|
@@ -71,6 +77,7 @@ Import `test` and `expect` from `./support/fixtures`, not from `@playwright/test
 | `pageAs("marcus", { beforeSignIn })` | A second signed-in user in their own context, closed automatically. `beforeSignIn` installs routes, such as `SocketLink`, before the app loads. |
 | `apiAs("amelia")` | Authenticated app-API client for setup that is not the subject of the test. Paths start with `/api/`. Reused per user within the test; disposed afterward. Browser sessions still authenticate independently. |
 | `uniqueName("E2E card")` | Names that are unique per test and per repeat, so `--repeat-each` and shared titles never collide. |
+| `accounts` (automatic) | Fresh Amelia (owner), Marcus (admin), Priya (member), and Maya (external owner), with two organisations and empty home workspaces. Teardown removes these organisations and their identities, including work created outside `testWorkspace`. |
 | `testWorkspace` | An empty workspace/board with Backlog, Wishlist, In Progress and Done, accessible to Amelia, Marcus and Priya. Includes `addBoard(name)`; teardown deletes the workspace even after an assertion failure. |
 | `runtimeGuard` (automatic) | Fails the test on an uncaught page error, a `console.error`, or any HTTP 5xx seen by any tracked page. |
 
@@ -79,11 +86,15 @@ Import `test` and `expect` from `./support/fixtures`, not from `@playwright/test
 - `Failed to load resource`: access-denial flows expect 4xx responses, and 5xx responses are caught separately.
 - Angular's dev-mode `NG02955` LCP-image advisory: it is layout-dependent, so it made results flaky.
 
-Seeded users are in `support/env.ts`. All share the password `Abc12345`.
+Test identities are defined in `support/env.ts`, independently of demo accounts. All share the
+test-only password `Abc12345`. `apps/api/src/scripts/e2e-accounts.ts` provisions them directly in the
+fixed isolated database; it rejects other database destinations. Each test retains an `accounts.json`
+manifest for diagnosis. Empty home workspaces prevent ordinary logins from entering onboarding;
+signup tests still create their own accounts through the application.
 
 - `amelia`: owner.
 - `marcus`: admin.
-- `priya`: Development admin, and a teammate for Team Cards.
+- `priya`: organisation member; workspace admin in `testWorkspace`.
 - `maya`: a user in another organisation, for guest tests.
 
 Shared helpers:
@@ -95,10 +106,10 @@ Rules that keep results trustworthy:
 
 - **Wait for data, not for a route.** Use `expectBoardLoaded(page, name)`: the board `h1` appears only once the board has loaded. `k-board` and the page header render before the access check, so a denied user passes a check on either of them.
 - **Own the state you change.** A test that revokes access, deletes something, or changes shared settings creates its own board, card, or field first. It must not depend on which spec ran before it.
-- **Unique names are not cleanup.** Use `testWorkspace` for ordinary board behavior; keep explicit `finally` cleanup for personal keys, reminders and webhook receivers. Remove webhook subscriptions before closing a local receiver. If historical state cannot be created through today's API, scope direct database setup to test-owned IDs in the fixed E2E Docker project; never mutate the shared seed to manufacture it.
+- **Unique names are not cleanup.** Use `testWorkspace` for ordinary board behavior; keep explicit `finally` cleanup for personal keys, reminders and webhook receivers. Remove webhook subscriptions before closing a local receiver. If historical state cannot be created through today's API, scope direct database setup to test-owned IDs in the fixed E2E Docker project; never depend on demo content to manufacture it.
 - **Prove the negative before relying on it.** If a test disconnects something, assert that the disconnection happened, as `reconnect.spec.ts` does with `refusedAttempts` and a bounded check that nothing arrived.
 - **Check a new assertion can fail.** When adding a check for a bug, run it once against the unfixed behaviour and confirm it fails.
-- **Mind the lane render cap.** A lane mounts only its first 15 cards (`INITIAL_RENDER_CAP` in `list.component.ts`). By late in a full run, seed lists exceed that, so a newly created tile can be in state but not in an observing page's DOM. Assert late tiles with `expectCardTileMounted(page, title, listId?)`. A realtime spec that fails only in the full suite and only for the newest cards is usually this, not a fanout regression.
+- **Mind the lane render cap.** A lane mounts only its first 15 cards (`INITIAL_RENDER_CAP` in `list.component.ts`). Tests that exercise crowded lanes must create that volume themselves; a later tile can be in state but not in an observing page's DOM. Assert late tiles with `expectCardTileMounted(page, title, listId?)`. Do not remove crowded-lane or pagination coverage when simplifying fixtures.
 - **Record coverage.** Add each new spec's caught failures to `COVERAGE.md`.
 
 ## Artifacts
@@ -109,7 +120,7 @@ Each run writes `e2e/artifacts/<UTC timestamp>-<pid>/`, and the newest 10 runs a
 - `worktree.patch` and `untracked.tar.gz`, when the tree was dirty;
 - `results.json` and an HTML report (`report/`);
 - per-test traces and screenshots (`test-results/`);
-- logs for every service (`api`, `public-api`, `worker`, `mcp`, `web`) plus the migrate, seed, CLI build and Docker logs.
+- logs for every service (`api`, `public-api`, `worker`, `mcp`, `web`) plus the migration, CLI build and Docker logs.
 
 Open a trace with `pnpm exec playwright show-trace <path>/trace.zip`.
 

@@ -53,8 +53,8 @@ export default defineConfig({
       ...(balancedShard ? { testMatch: balancedFiles(__dirname, balancedShard) } : {}),
     },
   ],
-  // CI parallelizes isolated stacks with KANERA_E2E_SHARD. Within one stack tests share seeded users and
-  // boards, so keep file/test execution sequential rather than racing on those fixtures.
+  // CI parallelizes isolated stacks with KANERA_E2E_SHARD. Per-test accounts reuse stable login
+  // aliases inside one stack, so their setup/teardown must remain sequential.
   fullyParallel: false,
   workers: 1,
   retries: 0,

@@ -1,0 +1,92 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 3 /Kids [4 0 R 6 0 R 8 0 R] >>
+endobj
+3 0 obj
+<< /Length 237 >>
+stream
+BT
+/F1 14 Tf
+72 770 Td
+(API Rollout Plan) Tj
+0 -22 Td
+(Feature: attachment preview service) Tj
+0 -22 Td
+(Goal: ship image, PDF, DOCX, and SVG metadata through one endpoint) Tj
+0 -22 Td
+(Audience: web app, mobile app, admin tooling) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+5 0 obj
+<< /Length 361 >>
+stream
+BT
+/F1 14 Tf
+72 770 Td
+(Milestones) Tj
+0 -22 Td
+(1. Add versioned response contract and backward-compatible parser) Tj
+0 -22 Td
+(2. Run shadow traffic against staging and compare payload diffs) Tj
+0 -22 Td
+(3. Enable the new endpoint for internal users behind a flag) Tj
+0 -22 Td
+(4. Roll out by workspace cohort with monitoring on error rate and latency) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 369 >>
+stream
+BT
+/F1 14 Tf
+72 770 Td
+(Risk Review) Tj
+0 -22 Td
+(- Preview generators may disagree on page count for malformed PDFs) Tj
+0 -22 Td
+(- DOCX metadata extraction can fail on unexpected embedded relationships) Tj
+0 -22 Td
+(- SVG logos should be sanitized before any inline rendering path) Tj
+0 -22 Td
+(- Keep raw download links available when preview generation fails) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+10 0 obj
+<< /Title (API Rollout Plan) /Producer (seed-bundle-builder) >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000000148 00000 n 
+0000000436 00000 n 
+0000000562 00000 n 
+0000000974 00000 n 
+0000001100 00000 n 
+0000001520 00000 n 
+0000001646 00000 n 
+0000001695 00000 n 
+trailer
+<< /Size 11 /Root 9 0 R /Info 10 0 R >>
+startxref
+1775
+%%EOF
