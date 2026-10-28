@@ -580,6 +580,24 @@ describe("NotificationsService", () => {
     expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25");
   });
 
+  it("on the Agent tab, marks only agent notifications read", async () => {
+    const agentRow = notification({ id: "agent-1", activity: { actorKind: "agent" } as NotificationRow["activity"] });
+    const humanRow = notification({ id: "human-1", cardId: "card-2" });
+    seedFeed(service, [agentRow, humanRow]);
+    service.feedMode.set("agent");
+    seedFeed(service, [agentRow]);
+    service.unreadCount.set(2);
+    service.agentCounts.set({ total: 1, unread: 1 });
+
+    await service.markAllRead();
+
+    expect(api.post).toHaveBeenCalledWith("/notifications/read-all", { agentOnly: true });
+    expect(api.get).toHaveBeenCalledWith("/notifications/agent-counts");
+    expect(service.items().find((n) => n.id === "agent-1")?.readAt).toBeTruthy();
+    service.feedMode.set("unread");
+    expect(service.items().map((n) => n.id)).toEqual(["human-1"]);
+  });
+
   it("marks only one board's notifications read", async () => {
     seedFeed(service, [
       notification(),

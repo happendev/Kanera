@@ -679,13 +679,6 @@
   align-items: start;
   gap: 12px;
   padding: 10px 12px 9px;
-
-  // The dot rides the title bar's first line rather than the stacked column a row uses for
-  // time-over-dot: stacked, it floated down beside the breadcrumb with nothing to align to.
-  .notif-aside {
-    flex-direction: row;
-    align-items: center;
-  }
 }
 
 // The day's updates as one run beneath the title bar — the shape Trello's inbox uses. Full width of
@@ -1085,14 +1078,20 @@
   }
 }
 
+// Time and dot share the first line, and the aside is a fixed height so the dot lands on exactly the
+// same spot in a plain row (time + dot) and a block's title bar (dot alone). People clear the unread
+// feed by clicking the dot down the list without moving the pointer; a dot stacked under the time
+// sat lower on rows than on blocks, so the next click opened the card instead.
 .notif-aside {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  height: 18px;
   flex-shrink: 0;
   // Optically centres the timestamp on the first text line of .notif-body.
   padding-top: 2px;
+  box-sizing: content-box;
 }
 
 // Opens the notification body on its own line, matching the board card tile's placement and tone.

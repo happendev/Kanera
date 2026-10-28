@@ -610,6 +610,9 @@ export class NotificationsService {
 
   async markAllRead(): Promise<void> {
     if (!this.online()) return;
+    // On the Agent tab, "Mark all read" means the agent notifications the tab lists, never the
+    // person-to-person ones the user hasn't seen yet.
+    if (this.feedMode() === "agent") return this.markAgentNotificationsRead();
     const readAt = new Date().toISOString();
     const unreadIds = this.allKnownNotifications().filter((n) => !n.readAt).map((n) => n.id);
     this.applyReadLocal(unreadIds, readAt);
@@ -632,6 +635,31 @@ export class NotificationsService {
       ]);
       await this.loadFirstPage();
     }
+  }
+
+  private async markAgentNotificationsRead(): Promise<void> {
+    const unreadIds = this.allKnownNotifications().filter((n) => !n.readAt && isAgentNotification(n)).map((n) => n.id);
+    this.applyReadLocal(unreadIds, new Date().toISOString());
+    this.agentCounts.update((counts) => ({ ...counts, unread: 0 }));
+
+    const session = this.sessionVersion;
+    try {
+      await this.postReadChange(`/notifications/read-all`, { agentOnly: true });
+      if (session !== this.sessionVersion) return;
+      this.scheduleGroupCountRefresh();
+    } catch {
+      if (session !== this.sessionVersion) return;
+      await this.loadFirstPage().catch(() => undefined);
+    }
+    // Agent notifications can sit on unloaded pages, so the bell and per-board/card counts are
+    // re-read rather than derived from the rows in the drawer.
+    await Promise.all([
+      this.refreshUnreadCount().catch(() => undefined),
+      this.refreshAgentCounts().catch(() => undefined),
+      this.refreshBoardUnreadCounts().catch(() => undefined),
+      this.refreshCardUnreadCounts().catch(() => undefined),
+      this.refreshOrganisationUnreadCounts().catch(() => undefined),
+    ]);
   }
 
   async markBoardNotificationsRead(boardId: string): Promise<void> {

@@ -230,6 +230,13 @@ export const markNotificationsReadBody = z.object({
 });
 export type MarkNotificationsReadBody = z.infer<typeof markNotificationsReadBody>;
 
+export const markAllNotificationsReadBody = z.object({
+  // The drawer's Agent tab clears only notifications for changes an AI agent made, matching the
+  // feed's `agentOnly` filter; every other tab clears the whole inbox.
+  agentOnly: z.boolean().default(false),
+});
+export type MarkAllNotificationsReadBody = z.infer<typeof markAllNotificationsReadBody>;
+
 export interface NotificationCardThumbnail {
   id: string;
   url: string;

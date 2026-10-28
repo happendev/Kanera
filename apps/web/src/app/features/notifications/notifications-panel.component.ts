@@ -96,6 +96,8 @@ export class NotificationsPanelComponent {
   readonly includeRead = this.notifications.includeRead;
   readonly feedMode = this.notifications.feedMode;
   readonly agentCounts = this.notifications.agentCounts;
+  /** What "Mark all read" would clear: only agent notifications on the Agent tab. */
+  readonly markAllUnreadCount = computed(() => (this.feedMode() === "agent" ? this.agentCounts().unread : this.unreadCount()));
   readonly online = this.notifications.online;
   readonly loading = this.notifications.loading;
   readonly loadError = this.notifications.loadError;
