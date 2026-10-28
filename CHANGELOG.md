@@ -27,6 +27,7 @@ All notable changes to Kanera are documented here.
 ### Fixed
 
 - Offline, My Cards and Team Cards now say once that you're looking at a saved copy, in the page's banner, instead of repeating it inside Overview, Timeline, Dependencies and Work done.
+- Cards completed by an automation (for example, moving a card to Done) now count as done for their assignees on the My Cards and Team Cards overviews and their Work done timelines, instead of disappearing from **Recently done** and the **Done** count.
 - Dragging several selected cards onto **Up next** on My Cards or Team Cards now queues them all where you drop them, in the order the view sorts them, instead of only the card you grabbed.
 - The notification read dot now sits in the same spot on every notification, grouped or not, so you can clear the unread list by clicking down it without moving the pointer and accidentally opening a card. The timestamp moves onto the same line, beside the dot.
 

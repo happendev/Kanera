@@ -355,15 +355,24 @@ export class TeamOverviewComponent {
     const touches = new Map<string, Map<string, Touch & { card: WireCardSummary }>>();
     const completions = new Map<string, Map<string, { at: string; card: WireCardSummary }>>();
     const lastActive = new Map<string, string>();
+    const addCompletion = (userId: string, event: WorkDoneEvent) => {
+      const done = completions.get(userId) ?? new Map<string, { at: string; card: WireCardSummary }>();
+      if (!done.has(event.card.id)) done.set(event.card.id, { at: event.at, card: event.card });
+      completions.set(userId, done);
+    };
     for (const event of this.events()) {
+      // Nobody did this by hand (typically a "move to Done" automation): the card is still its
+      // assignees' delivery, so credit them. It is not their activity, so lastActive is untouched.
+      if (event.type === "completed" && !event.actorUserId && !event.agentName) {
+        for (const userId of event.card.assigneeIds) addCompletion(userId, event);
+        continue;
+      }
       const actorId = event.type === "checklistItemCompleted" ? event.completedByUserId : event.actorUserId;
       // Agent output is not the person's own effort (see WorkDoneCardEventBase.agentName).
       if (!actorId || ("agentName" in event && event.agentName)) continue;
       if (!lastActive.has(actorId) || lastActive.get(actorId)! < event.at) lastActive.set(actorId, event.at);
       if (event.type === "completed") {
-        const done = completions.get(actorId) ?? new Map<string, { at: string; card: WireCardSummary }>();
-        if (!done.has(event.card.id)) done.set(event.card.id, { at: event.at, card: event.card });
-        completions.set(actorId, done);
+        addCompletion(actorId, event);
         continue;
       }
       const byCard = touches.get(actorId) ?? new Map<string, Touch & { card: WireCardSummary }>();
@@ -435,7 +444,8 @@ export class TeamOverviewComponent {
           || String(b.card.updatedAt).localeCompare(String(a.card.updatedAt))
         );
 
-      // Completions count whoever the card was assigned to: closing it is this person's work.
+      // Whoever closed the card, whoever it was assigned to: closing it is this person's work. An
+      // automation's completion counts for the card's assignees instead (see activity above).
       const doneAll = [...(completions.get(person.userId)?.values() ?? [])]
         .sort((a, b) => b.at.localeCompare(a.at));
 
