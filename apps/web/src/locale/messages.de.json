@@ -1496,6 +1496,8 @@
     "680988522512720463": "hat das Fälligkeitsdatum des Checklistenpunkts entfernt",
     "6347430436135582542": "hat den Checklistenpunkt {$item} erledigt",
     "7699926858270595312": "hat den Checklistenpunkt {$item} als nicht erledigt markiert",
+    "3821233622608825771": "hat {$fileName} angehängt (inzwischen gelöscht)",
+    "8314482808231085764": "hat einen Anhang hinzugefügt (inzwischen gelöscht)",
     "3043118067331815518": "hat einen Anhang hinzugefügt",
     "59975005891304007": "hat den Anhang {$fileName} entfernt",
     "8679661691332520656": "hat ein Titelbild festgelegt",
@@ -2388,6 +2390,7 @@
     "6558950027485145654": "„Als Nächstes“ wird geladen…",
     "5879404803553562638": "Du hast keine Berechtigung, das „Als Nächstes“ dieses Teammitglieds anzusehen",
     "3589470812433263725": "Die Karte konnte nicht zu „Als Nächstes“ hinzugefügt werden. Es wurde nichts geändert.",
+    "9018771488847359675": "Nicht alle Karten konnten zu „Als Nächstes“ hinzugefügt werden. Bereits hinzugefügte Karten wurden behalten.",
     "4272684485147046477": "Die Karte in „Als Nächstes“ konnte nicht umsortiert werden. Ihre vorherige Position wurde wiederhergestellt.",
     "4875676471937718523": "Die Karte konnte nicht aus „Als Nächstes“ entfernt werden. Sie wurde wieder eingefügt.",
     "4185654365805957519": "Die Karte konnte nicht aktualisiert werden. Es wurde nichts geändert.",
@@ -4152,8 +4155,6 @@
     "3652007016355058890": "Deine Boards",
     "2054599520790063739": "Gemeinsame Boards",
     "6368227149612917458": "E-Mail-Adresse kopiert",
-    "8228936172465447983": "Die E-Mail-Adresse konnte nicht kopiert werden.",
-    "3821233622608825771": "hat {$fileName} angehängt (inzwischen gelöscht)",
-    "8314482808231085764": "hat einen Anhang hinzugefügt (inzwischen gelöscht)"
+    "8228936172465447983": "Die E-Mail-Adresse konnte nicht kopiert werden."
   }
 }

@@ -1496,6 +1496,8 @@
     "680988522512720463": "slettet forfallsdatoen på sjekklisteelementet",
     "6347430436135582542": "fullført sjekklisteelement {$item}",
     "7699926858270595312": "merket sjekklisteelementet er ufullstendig {$item}",
+    "3821233622608825771": "la ved {$fileName} (har siden blitt slettet)",
+    "8314482808231085764": "la til et vedlegg (har siden blitt slettet)",
     "3043118067331815518": "lagt til et vedlegg",
     "59975005891304007": "fjernet vedlegg {$fileName}",
     "8679661691332520656": "angi et forsidebilde",
@@ -2388,6 +2390,7 @@
     "6558950027485145654": "Laster opp neste …",
     "5879404803553562638": "Du har ikke tillatelse til å se denne lagkameratens Up next",
     "3589470812433263725": "Vi kunne ikke legge til det kortet i Up next. Ingenting har endret seg.",
+    "9018771488847359675": "Vi kunne ikke legge til alle kortene i Up next. Kort som allerede ble lagt til, er beholdt.",
     "4272684485147046477": "Vi kunne ikke ombestille det Up next-kortet. Dens tidligere posisjon er gjenopprettet.",
     "4875676471937718523": "Vi kunne ikke fjerne det kortet fra Up next. Den er satt tilbake.",
     "4185654365805957519": "Vi kunne ikke oppdatere det kortet. Ingenting har endret seg.",
@@ -4152,8 +4155,6 @@
     "3652007016355058890": "Tavlene dine",
     "2054599520790063739": "Tavler du deler",
     "6368227149612917458": "E-postadresse kopiert",
-    "8228936172465447983": "Kunne ikke kopiere e-postadressen.",
-    "3821233622608825771": "la ved {$fileName} (har siden blitt slettet)",
-    "8314482808231085764": "la til et vedlegg (har siden blitt slettet)"
+    "8228936172465447983": "Kunne ikke kopiere e-postadressen."
   }
 }

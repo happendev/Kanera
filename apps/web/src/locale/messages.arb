@@ -16940,6 +16940,12 @@
       "src/app/features/priorities/my-priorities-panel.component.ts"
     ]
   },
+  "9018771488847359675": "We couldn’t add every card to Up next. Cards already added were kept.",
+  "@9018771488847359675": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
   "4272684485147046477": "We couldn’t reorder that Up next card. Its previous position has been restored.",
   "@4272684485147046477": {
     "x-files": [

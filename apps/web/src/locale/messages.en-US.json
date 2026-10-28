@@ -1496,6 +1496,8 @@
     "680988522512720463": "cleared the due date on checklist item",
     "6347430436135582542": "completed checklist item {$item}",
     "7699926858270595312": "marked checklist item incomplete {$item}",
+    "3821233622608825771": "attached {$fileName} (has since been deleted)",
+    "8314482808231085764": "added an attachment (has since been deleted)",
     "3043118067331815518": "added an attachment",
     "59975005891304007": "removed attachment {$fileName}",
     "8679661691332520656": "set a cover image",
@@ -2388,6 +2390,7 @@
     "6558950027485145654": "Loading Up next…",
     "5879404803553562638": "You don’t have permission to view this teammate’s Up next",
     "3589470812433263725": "We couldn’t add that card to Up next. Nothing has changed.",
+    "9018771488847359675": "We couldn’t add every card to Up next. Cards already added were kept.",
     "4272684485147046477": "We couldn’t reorder that Up next card. Its previous position has been restored.",
     "4875676471937718523": "We couldn’t remove that card from Up next. It has been put back.",
     "4185654365805957519": "We couldn’t update that card. Nothing has changed.",
@@ -4152,8 +4155,6 @@
     "3652007016355058890": "Your boards",
     "2054599520790063739": "Boards you share",
     "6368227149612917458": "Email copied",
-    "8228936172465447983": "Couldn't copy the email address.",
-    "3821233622608825771": "attached {$fileName} (has since been deleted)",
-    "8314482808231085764": "added an attachment (has since been deleted)"
+    "8228936172465447983": "Couldn't copy the email address."
   }
 }

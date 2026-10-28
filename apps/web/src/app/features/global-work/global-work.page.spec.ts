@@ -1238,6 +1238,52 @@ describe("GlobalWorkPage toolbar state", () => {
     });
   });
 
+  it("queues every selected card when one of them is dropped onto Up next", () => {
+    return mount().then(async ({ fixture, priorityTargetId, priorityCandidateCard, addTeamPriority, state }) => {
+      const secondCandidate = {
+        ...priorityCandidateCard,
+        id: "40000000-0000-4000-8000-000000000004",
+        number: 4,
+        key: "WORK-4",
+        title: "Then this",
+        position: "4000.0000000000",
+      };
+      // Candidates carry assignees; the fixture's board cards are typed with none.
+      state.cards.set([...state.cards(), priorityCandidateCard, secondCandidate] as never);
+      state.teamPriorityCandidateCards.set([priorityCandidateCard, secondCandidate]);
+      fixture.componentRef.setInput("lens", "team");
+      state.definition.update((current) => ({ ...current, display: "overview" }));
+      TestBed.tick();
+      const page = fixture.componentInstance;
+      page.setOverviewFocus(priorityTargetId);
+      TestBed.tick();
+      // The first card is already queued, so it stays put rather than failing the whole drop.
+      page.bulkSelectedCardIds.set(new Set([state.cards()[0]!.id, priorityCandidateCard.id, secondCandidate.id]));
+      const flush = () => new Promise((resolve) => setTimeout(resolve));
+
+      // Dropped before an entry: the view's order, each just before it.
+      page.onUpNextAddFromPanel({ cardId: secondCandidate.id, dropped: true, beforeId: "70000000-0000-4000-8000-000000000002" });
+      await flush();
+      expect(addTeamPriority.mock.calls).toEqual([
+        [priorityTargetId, priorityCandidateCard.id, { beforeId: "70000000-0000-4000-8000-000000000002" }],
+        [priorityTargetId, secondCandidate.id, { beforeId: "70000000-0000-4000-8000-000000000002" }],
+      ]);
+
+      // Dropped after an entry: each add lands directly after it, so the last card goes in first.
+      addTeamPriority.mockClear();
+      page.onUpNextAddFromPanel({ cardId: priorityCandidateCard.id, dropped: true, afterId: null });
+      await flush();
+      expect(addTeamPriority.mock.calls.map((call) => (call as unknown[])[1])).toEqual([secondCandidate.id, priorityCandidateCard.id]);
+
+      // A pick from the Add card menu is one card, whatever the board has selected.
+      addTeamPriority.mockClear();
+      page.onUpNextAddFromPanel({ cardId: priorityCandidateCard.id, beforeId: null });
+      expect(addTeamPriority.mock.calls).toEqual([[priorityTargetId, priorityCandidateCard.id, { beforeId: null }]]);
+
+      fixture.destroy();
+    });
+  });
+
   it("keeps a priority-queue card actionable before the main card query catches up", () => {
     return mount().then(({ fixture, prioritySecondCard, state }) => {
       // Queue and card-query refreshes are independent. This is the short-lived state after a card

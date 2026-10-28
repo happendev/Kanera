@@ -25,6 +25,7 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
+- Dragging several selected cards onto **Up next** on My Cards or Team Cards now queues them all where you drop them, in the order the view sorts them, instead of only the card you grabbed.
 - The notification read dot now sits in the same spot on every notification, grouped or not, so you can clear the unread list by clicking down it without moving the pointer and accidentally opening a card. The timestamp moves onto the same line, beside the dot.
 
 - **Mark all read** on the notifications Agent tab now clears only agent notifications, leaving the rest of your unread inbox alone.

@@ -355,7 +355,7 @@ describe("PriorityQueueComponent", () => {
       currentIndex: 1,
       item: { data: tile },
     } as never);
-    expect(added).toEqual([{ cardId: tile.card.id, afterId: "p1" }]);
+    expect(added).toEqual([{ cardId: tile.card.id, dropped: true, afterId: "p1" }]);
 
     // A tile the server would reject (not in the addable set) may not even enter.
     const ineligible = { data: { kind: "card", card: card("70000000-0000-4000-8000-000000000002", "Not yours") } };

@@ -1496,6 +1496,8 @@
     "680988522512720463": "removeu a data de entrega do item da checklist",
     "6347430436135582542": "concluiu o item da checklist {$item}",
     "7699926858270595312": "marcou o item da checklist {$item} como não concluído",
+    "3821233622608825771": "anexou {$fileName} (excluído posteriormente)",
+    "8314482808231085764": "adicionou um anexo (excluído posteriormente)",
     "3043118067331815518": "adicionou um anexo",
     "59975005891304007": "removeu o anexo {$fileName}",
     "8679661691332520656": "definiu uma imagem de capa",
@@ -2388,6 +2390,7 @@
     "6558950027485145654": "Carregando A seguir…",
     "5879404803553562638": "Você não tem permissão para ver o A seguir deste colega",
     "3589470812433263725": "Não foi possível adicionar esse cartão a A seguir. Nada foi alterado.",
+    "9018771488847359675": "Não foi possível adicionar todos os cartões a A seguir. Os cartões já adicionados foram mantidos.",
     "4272684485147046477": "Não foi possível reordenar esse cartão de A seguir. A posição anterior foi restaurada.",
     "4875676471937718523": "Não foi possível remover esse cartão de A seguir. Ele foi colocado de volta.",
     "4185654365805957519": "Não foi possível atualizar esse cartão. Nada foi alterado.",
@@ -4152,8 +4155,6 @@
     "3652007016355058890": "Seus quadros",
     "2054599520790063739": "Quadros em comum",
     "6368227149612917458": "Endereço de e-mail copiado",
-    "8228936172465447983": "Não foi possível copiar o endereço de e-mail.",
-    "3821233622608825771": "anexou {$fileName} (excluído posteriormente)",
-    "8314482808231085764": "adicionou um anexo (excluído posteriormente)"
+    "8228936172465447983": "Não foi possível copiar o endereço de e-mail."
   }
 }

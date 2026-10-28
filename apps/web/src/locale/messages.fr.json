@@ -1496,6 +1496,8 @@
     "680988522512720463": "a effacé l'échéance de l'élément de checklist",
     "6347430436135582542": "a terminé l'élément de checklist {$item}",
     "7699926858270595312": "a marqué l'élément de checklist {$item} comme non terminé",
+    "3821233622608825771": "a joint {$fileName} (supprimé depuis)",
+    "8314482808231085764": "a ajouté une pièce jointe (supprimée depuis)",
     "3043118067331815518": "a ajouté une pièce jointe",
     "59975005891304007": "a retiré la pièce jointe {$fileName}",
     "8679661691332520656": "a défini une image de couverture",
@@ -2388,6 +2390,7 @@
     "6558950027485145654": "Chargement de À suivre…",
     "5879404803553562638": "Vous n'avez pas l'autorisation de voir le À suivre de ce coéquipier",
     "3589470812433263725": "Impossible d'ajouter cette carte à À suivre. Aucune modification n'a été apportée.",
+    "9018771488847359675": "Impossible d'ajouter toutes les cartes à À suivre. Les cartes déjà ajoutées ont été conservées.",
     "4272684485147046477": "Impossible de réordonner cette carte de À suivre. Sa position précédente a été rétablie.",
     "4875676471937718523": "Impossible de retirer cette carte de À suivre. Elle a été remise en place.",
     "4185654365805957519": "Impossible de mettre à jour cette carte. Aucune modification n'a été apportée.",
@@ -4152,8 +4155,6 @@
     "3652007016355058890": "Vos tableaux",
     "2054599520790063739": "Tableaux en commun",
     "6368227149612917458": "Adresse e-mail copiée",
-    "8228936172465447983": "Impossible de copier l'adresse e-mail.",
-    "3821233622608825771": "a joint {$fileName} (supprimé depuis)",
-    "8314482808231085764": "a ajouté une pièce jointe (supprimée depuis)"
+    "8228936172465447983": "Impossible de copier l'adresse e-mail."
   }
 }

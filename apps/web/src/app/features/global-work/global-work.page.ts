@@ -1786,17 +1786,44 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * From the panel itself — its "Add card" picker (appends) or a board tile dropped onto it (joins
    * where the pointer released it). Failures render inside the panel, where the gesture ended.
    */
-  onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null }): void {
+  onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null; dropped?: boolean }): void {
     if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
-    const { cardId, ...anchor } = event;
+    const { cardId, dropped, ...anchor } = event;
     const target = this.overviewDockQueue()?.target.userId;
-    const added = this.overviewDock() && target
-      ? this.state.addTeamPriority(target, cardId, anchor)
-      : this.state.addPriority(cardId, anchor);
-    void added.catch(() => {
-      this.priorityError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
+    const add = (id: string) => this.overviewDock() && target
+      ? this.state.addTeamPriority(target, id, anchor)
+      : this.state.addPriority(id, anchor);
+    const cardIds = dropped ? this.upNextDropCardIds(cardId) : [cardId];
+    if (cardIds.length === 1) {
+      void add(cardId).catch(() => {
+        this.priorityError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
+      });
+      return;
+    }
+    // Every add reuses the drop's anchor. Inserting right after an entry (or at the top) puts the
+    // newest add first, so walk the selection backwards there to keep the view's order in the queue.
+    const ordered = anchor.afterId !== undefined ? [...cardIds].reverse() : cardIds;
+    void (async () => {
+      for (const id of ordered) await add(id);
+    })().catch(() => {
+      this.priorityError.set($localize`We couldn’t add every card to Up next. Cards already added were kept.`);
     });
+  }
+
+  /**
+   * Dragging a selected tile carries the whole selection, as it does between lanes. Only cards the
+   * queue would accept come along, in the view's sort order, and no more than it has room for.
+   */
+  private upNextDropCardIds(cardId: string): string[] {
+    const selected = this.bulkSelectedCardIds();
+    if (!selected.has(cardId) || selected.size < 2) return [cardId];
+    const addable = new Set(this.dockAddableCards().map((card) => card.id));
+    const room = Math.max(1, MAX_UP_NEXT_ENTRIES - (this.dockPriorities()?.totalCount ?? 0));
+    return this.state.cards()
+      .filter((card) => selected.has(card.id) && addable.has(card.id))
+      .map((card) => card.id)
+      .slice(0, room);
   }
 
   /**

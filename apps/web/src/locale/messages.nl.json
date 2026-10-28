@@ -1496,6 +1496,8 @@
     "680988522512720463": "de vervaldatum op het checklistitem gewist",
     "6347430436135582542": "ingevuld checklistitem {$item}",
     "7699926858270595312": "gemarkeerd checklistitem onvolledig {$item}",
+    "3821233622608825771": "heeft {$fileName} bijgevoegd (inmiddels verwijderd)",
+    "8314482808231085764": "heeft een bijlage toegevoegd (inmiddels verwijderd)",
     "3043118067331815518": "een bijlage toegevoegd",
     "59975005891304007": "verwijderd bijlage {$fileName}",
     "8679661691332520656": "stel een omslagafbeelding in",
@@ -2388,6 +2390,7 @@
     "6558950027485145654": "Volgende laden...",
     "5879404803553562638": "Je hebt geen toestemming om de Up Next van deze teamgenoot te bekijken",
     "3589470812433263725": "We konden die kaart niet toevoegen aan Up next. Er is niets veranderd.",
+    "9018771488847359675": "We konden niet alle kaarten toevoegen aan Up next. Kaarten die al zijn toegevoegd, zijn behouden.",
     "4272684485147046477": "We konden die Up next-kaart niet opnieuw ordenen. De vorige positie is hersteld.",
     "4875676471937718523": "We konden die kaart niet verwijderen uit Up next. Het is teruggeplaatst.",
     "4185654365805957519": "We kunnen die kaart niet updaten. Er is niets veranderd.",
@@ -4152,8 +4155,6 @@
     "3652007016355058890": "Jouw borden",
     "2054599520790063739": "Borden die je deelt",
     "6368227149612917458": "E-mail gekopieerd",
-    "8228936172465447983": "Kan het e-mailadres niet kopiëren.",
-    "3821233622608825771": "heeft {$fileName} bijgevoegd (inmiddels verwijderd)",
-    "8314482808231085764": "heeft een bijlage toegevoegd (inmiddels verwijderd)"
+    "8228936172465447983": "Kan het e-mailadres niet kopiëren."
   }
 }

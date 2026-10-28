@@ -69,7 +69,7 @@ export class UpNextPanelComponent {
 
   readonly reordered = output<PriorityReorder>();
   readonly removed = output<{ priorityId: string }>();
-  readonly added = output<PriorityAnchor & { cardId: string }>();
+  readonly added = output<PriorityAnchor & { cardId: string; dropped?: boolean }>();
   readonly cardOpened = output<string>();
   readonly completed = output<{ cardId: string; completed: boolean }>();
   readonly closed = output<void>();

@@ -157,8 +157,11 @@ export class PriorityQueueComponent {
 
   readonly reordered = output<PriorityReorder>();
   readonly removed = output<{ priorityId: string }>();
-  /** A new card for the queue, with the anchor for where it was dropped (append when picked). */
-  readonly added = output<PriorityAnchor & { cardId: string }>();
+  /**
+   * A new card for the queue, with the anchor for where it was dropped (append when picked).
+   * `dropped` marks a drag from outside, which a host may widen to the board's whole selection.
+   */
+  readonly added = output<PriorityAnchor & { cardId: string; dropped?: boolean }>();
   readonly cardOpened = output<{ cardId: string; boardId: string; event: MouseEvent }>();
   readonly completed = output<{ cardId: string; completed: boolean }>();
 
@@ -419,6 +422,7 @@ export class PriorityQueueComponent {
       if (data?.kind !== "card" || !this.canEnterFromBoard(event.item)) return;
       this.added.emit({
         cardId: data.card.id,
+        dropped: true,
         ...priorityAnchorAt(this.items(), this.queueIndexAt(this.rows(), this.items(), event.currentIndex)),
       });
       return;
