@@ -73,7 +73,7 @@ test("a public API write reaches an open board live and a signed webhook", async
       expect(board.ok(), await board.text()).toBe(true);
       const { lists } = (await board.json()) as { lists: { id: string; name: string }[] };
       const backlog = lists.find((list) => list.name === "Backlog");
-      expect(backlog, "Platform Delivery has a Backlog list").toBeDefined();
+      expect(backlog, "owned workspace has a Backlog list").toBeDefined();
 
       const created = await publicApi.post(`${v1}/boards/${boardId}/lists/${backlog!.id}/cards`, { data: { title } });
       expect(created.ok(), await created.text()).toBe(true);

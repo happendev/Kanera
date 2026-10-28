@@ -1,13 +1,13 @@
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardHref, openBoard, workspaceSettingsHref } from "./support/ui";
 
 test("board overview shows card counts without health verdicts or settings", async ({ page, signIn }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem("kanera-theme", "dark"));
   await signIn(page, "amelia");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await openBoard(page, "Platform Delivery");
-  const href = await boardHref(page, "Platform Delivery");
-  const settingsHref = await workspaceSettingsHref(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
+  const href = await boardHref(page, "E2E primary board");
+  const settingsHref = await workspaceSettingsHref(page, "E2E primary board");
   const trigger = page.getByRole("button", { name: "Board overview", exact: true });
   await expect(trigger).toBeVisible();
   await expect(trigger).not.toHaveAttribute("data-risk");
@@ -31,7 +31,7 @@ test("board overview shows card counts without health verdicts or settings", asy
   await expect(page.getByText("Show board health by default", { exact: true })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(href);
-  await expect(page.getByRole("heading", { level: 1, name: "Platform Delivery" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "E2E primary board" })).toBeVisible();
   await page.getByRole("button", { name: "Board menu", exact: true }).click();
   await page.getByRole("menuitem", { name: /Board overview$/ }).click();
   await expect(overview).toBeVisible();

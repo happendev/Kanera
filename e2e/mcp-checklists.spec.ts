@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import ports from "./ports.json";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, expectCardTileMounted, openBoard, openCard, workspaceSettingsHref } from "./support/ui";
 
 const mcpUrl = `http://localhost:${ports.mcp}/mcp`;
@@ -47,8 +47,8 @@ test("an agent builds and edits a nested checklist plan through MCP while the ca
   const record = (step: string, detail: unknown) => evidence.push({ step, detail });
 
   await signIn(page, "amelia");
-  const boardId = await boardIdOf(page, "Platform Delivery");
-  await page.goto(`${await workspaceSettingsHref(page, "Platform Delivery")}/api`);
+  const boardId = await boardIdOf(page, "E2E primary board");
+  await page.goto(`${await workspaceSettingsHref(page, "E2E primary board")}/api`);
   await page.locator('input[name="apiKeyName"]').fill(uniqueName("MCP checklist key"));
   await page.locator('select[name="apiKeyScope"]').selectOption("write");
   await page.getByRole("button", { name: "Create API key" }).click();
@@ -89,9 +89,8 @@ test("an agent builds and edits a nested checklist plan through MCP while the ca
     const title = uniqueName("Nested plan card");
     const card = await call<{ id: string }>("cards.create", { boardId, listId, title });
 
-    await openBoard(page, "Platform Delivery");
-    // Earlier specs append to this seeded lane. Scroll its incremental render window so the
-    // persisted card is mounted before opening it, even when it is past the first fifteen tiles.
+    await openBoard(page, "E2E primary board");
+    // Wait for the integration-created tile before opening its detail.
     await expectCardTileMounted(page, title, listId);
     const detail = await openCard(page, title);
 

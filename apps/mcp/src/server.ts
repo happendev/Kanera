@@ -1438,9 +1438,6 @@ function laneAnchorBody(anchor: z.infer<typeof lanePositionAnchor>):
   return anchor.side === "after" ? { afterItem: anchor.item } : { beforeItem: anchor.item };
 }
 
-// The priority routes are addressed by target user so admins can curate a teammate's queue, but the
-// overwhelmingly common case is "my own queue"; resolving the session here spares the model a
-// separate session.get round trip before every priority call.
 async function createStandaloneBoard(
   api: KaneraClient,
   a: BootstrapConfiguration & { name: string; templateId: string; icon?: string; iconColor?: z.infer<typeof colorToken> | null },
@@ -1490,6 +1487,9 @@ async function userDateContext(api: KaneraClient, explicitTimeZone?: string): Pr
   return { timeZone, today: session.today ?? localDateIn(timeZone) };
 }
 
+// The priority routes are addressed by target user so admins can curate a teammate's queue, but the
+// overwhelmingly common case is "my own queue"; resolving the session here spares the model a
+// separate session.get round trip before every priority call.
 async function priorityTargetUserId(api: KaneraClient, targetUserId: string | undefined): Promise<string> {
   if (targetUserId) return targetUserId;
   const session = await api.get<{ userId: string }>("/api/v1/session");

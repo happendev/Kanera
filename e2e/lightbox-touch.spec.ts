@@ -1,14 +1,14 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { CDPSession, Locator } from "@playwright/test";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { createCard, openBoard, openCard } from "./support/ui";
 
 // Phone-sized touch device. The app's viewport meta disables browser zoom, so the lightbox's own
 // gestures are the only way to zoom an attachment on a phone.
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-const image = readFileSync(path.join(__dirname, "..", "dev-db-seed-content", "attachments", "images", "access-review-symbol.png"));
+const image = readFileSync(path.join(__dirname, "fixtures/sample.png"));
 
 type Point = { x: number; y: number };
 
@@ -34,7 +34,7 @@ async function zoomPercent(lightbox: Locator): Promise<number> {
 test("lightbox images pinch-zoom and double-tap-zoom on a phone", async ({ page, signIn, uniqueName }) => {
   const title = uniqueName("E2E touch lightbox card");
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   await createCard(page, title);
   const detail = await openCard(page, title);
 

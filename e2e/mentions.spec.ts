@@ -1,11 +1,11 @@
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { createCard, openBoard, openCard } from "./support/ui";
 
 test("a comment mention creates a durable unread notification with a working card link and read action", async ({ page, signIn, pageAs, uniqueName }) => {
   const title = uniqueName("E2E mention card");
   await signIn(page, "amelia");
   const recipient = await pageAs("marcus");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   await createCard(page, title);
   const detail = await openCard(page, title);
   await detail.getByRole("button", { name: /Comments/ }).click();

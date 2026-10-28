@@ -4,10 +4,10 @@ import type { Locator } from "@playwright/test";
 import { expect, test } from "./support/fixtures";
 import { expectBoardLoaded, openCard } from "./support/ui";
 
-const imageFiles = ["access-review-symbol.png", "access-review-evidence.jpg"].map((name) => ({
+const imageFiles = ["sample.png", "sample.jpg"].map((name) => ({
   name,
   mimeType: name.endsWith("png") ? "image/png" : "image/jpeg",
-  buffer: readFileSync(path.join(__dirname, "..", "dev-db-seed-content/attachments/images", name)),
+  buffer: readFileSync(path.join(__dirname, "fixtures", name)),
 }));
 
 async function imageSources(container: Locator): Promise<string[]> {

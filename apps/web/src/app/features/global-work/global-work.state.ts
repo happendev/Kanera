@@ -477,6 +477,11 @@ export class GlobalWorkState {
 
   async queryFirstPage(): Promise<void> {
     if (!this.interactionReady()) return;
+    // A reconcile in flight was started by a realtime event and will now be discarded, taking its
+    // Work Done invalidation with it. The filter change that queued this query already made Work
+    // Done re-read, but possibly before that event (search waits out its debounce), so this query
+    // owes the invalidation instead. Otherwise Recently done/History stay stale until the next event.
+    const supersedesReconcile = this.backgroundRefreshInFlight;
     const version = ++this.requestVersion;
     // This foreground query supersedes any in-flight background reconcile. Clear its status now;
     // the loading flag below owns readiness until the requested projection has settled.
@@ -506,6 +511,9 @@ export class GlobalWorkState {
       this.lastSyncedAt.set(new Date().toISOString());
       this.updateRooms();
       await this.persistCache();
+      if (supersedesReconcile && version === this.requestVersion) {
+        this.reconciliationVersion.update((current) => current + 1);
+      }
     } catch {
       if (version === this.requestVersion) this.error.set($localize`We couldn’t apply those filters.`);
     } finally {

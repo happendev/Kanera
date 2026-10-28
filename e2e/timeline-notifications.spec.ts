@@ -1,5 +1,7 @@
+import { execFileSync } from "node:child_process";
+import path from "node:path";
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardIdOf, expectCardTileMounted, openBoard, openCard } from "./support/ui";
 
 // In-progress limits on the "Card in progress too long" automation, and the scheduling-conflict
@@ -123,10 +125,10 @@ async function conflictNotices(api: APIRequestContext, cardId: string): Promise<
 
 test("a new scheduling conflict reaches the blocked card's assignee once, and never its author", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
-  await openBoard(page, "Platform Delivery");
+  await openBoard(page, "E2E primary board");
   const api = await apiAs("amelia");
   const marcusApi = await apiAs("marcus");
-  const boardId = await boardIdOf(page, "Platform Delivery");
+  const boardId = await boardIdOf(page, "E2E primary board");
   const { lists } = await json<{ lists: { id: string; name: string }[] }>(await api.get(`/api/boards/${boardId}?includeCards=false`));
   const listId = (lists.find((list) => list.name === "Backlog") ?? lists[0]!).id;
   const me = await json<{ id?: string; user?: { id: string } }>(await marcusApi.get("/api/me"));
@@ -144,11 +146,24 @@ test("a new scheduling conflict reaches the blocked card's assignee once, and ne
 
     // Marcus has his inbox open.
     const assignee = await pageAs("marcus");
-    await openBoard(assignee, "Platform Delivery");
+    await openBoard(assignee, "E2E primary board");
     await assignee.getByRole("button", { name: /^Notifications/ }).click();
     const notice = (card: CreatedCard) => assignee.locator(".notif-item")
       .filter({ hasText: "flagged that this card is planned to start before its blocker finishes" })
       .filter({ hasText: card.title });
+
+    // A new board's first worker evaluation establishes a silent baseline. Wait for our
+    // conflict-free setup to be latched before editing it; otherwise that edit can be folded
+    // into the first evaluation and correctly produce no notification. Observe the real worker,
+    // without invoking it or writing its state, in the runner's isolated database only.
+    await expect.poll(() => execFileSync("docker", [
+      "compose", "-p", "kanera-e2e", "-f", path.join(__dirname, "../docker-compose.e2e.yml"),
+      "exec", "-T", "postgres", "psql", "-U", "kanera_test", "-d", "kanera_test_e2e", "-v", "ON_ERROR_STOP=1", "-At", "-c",
+      `SELECT count(*) FROM card_schedule_state s JOIN card c ON c.id = s.card_id
+       WHERE c.board_id = '${boardId}' AND cardinality(s.conflict_blocker_ids) = 0
+       AND EXISTS (SELECT 1 FROM board_schedule_state WHERE board_id = '${boardId}')
+       AND NOT EXISTS (SELECT 1 FROM schedule_recheck_queue WHERE board_id = '${boardId}')`,
+    ], { encoding: "utf8", timeout: 10_000 }).trim(), { timeout: 30_000 }).toBe("3");
 
     // Amelia slips the blocker to Friday, past the waiting card's Thursday start.
     expect((await api.patch(`/api/cards/${blocker.id}`, { data: { dueDateLocalDate: day(monday, 4) } })).ok()).toBe(true);

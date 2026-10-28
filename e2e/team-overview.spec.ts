@@ -1,14 +1,13 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { users } from "./support/env";
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardHref } from "./support/ui";
 
 // Team Cards → Team overview: a manager (Amelia, owner) reads what a teammate (Marcus) is working
 // on and what is next for him, from in-progress lists, his own activity, his queue and his other
 // assigned cards, and drills into one set of his cards from the panel's stats.
 
-// This file runs sequentially against the seed board. Remove every card even after a failure:
-// its 2020/2099 agenda examples otherwise stretch later Timeline tests across decades.
+// Each test owns its accounts and workspace; archive cards before workspace teardown as well.
 const createdCardIds: string[] = [];
 test.afterEach(async ({ apiAs }) => {
   if (!createdCardIds.length) return;
@@ -21,8 +20,8 @@ test.afterEach(async ({ apiAs }) => {
 
 type BoardLists = { boardId: string; lists: Map<string, string> };
 
-async function platformDelivery(page: Page, api: APIRequestContext): Promise<BoardLists> {
-  const boardId = (await boardHref(page, "Platform Delivery")).split("/")[2]!;
+async function scenarioBoard(page: Page, api: APIRequestContext): Promise<BoardLists> {
+  const boardId = (await boardHref(page, "E2E primary board")).split("/")[2]!;
   const response = await api.get(`/api/boards/${boardId}?includeCards=false`);
   const { lists } = (await response.json()) as { lists: { id: string; name: string }[] };
   return { boardId, lists: new Map(lists.map((list) => [list.name, list.id])) };
@@ -69,9 +68,9 @@ test("Team overview shows each teammate's in-progress work, own activity, queue 
   const amelia = await apiAs("amelia");
   const marcus = await apiAs("marcus");
   await signIn(page, "amelia");
-  const board = await platformDelivery(page, amelia);
+  const board = await scenarioBoard(page, amelia);
   const marcusId = await userId(marcus);
-  // "In Progress" is an in-progress list in the seeded Development Team workflow; "Ready for QA" is not.
+  // The scenario marks only "In Progress" as active work; "Ready for QA" is not.
   const inProgress = board.lists.get("In Progress")!;
   const readyForQa = board.lists.get("Ready for QA")!;
 
@@ -85,7 +84,7 @@ test("Team overview shows each teammate's in-progress work, own activity, queue 
   const live = uniqueName("E2E overview live move");
   const unowned = uniqueName("E2E overview nobody owns");
   // Every title above shares uniqueName's per-test suffix. Searching for it narrows the overview's
-  // card-derived sections to this test's cards, clear of Marcus's seeded long-running work.
+  // card-derived sections to the selected scenario cards.
   const suffix = workedOn.split(" ").at(-1)!;
 
   const workedOnId = await createCard(amelia, board, workedOn, [marcusId]);
@@ -214,7 +213,7 @@ test("Team overview focuses one teammate with their Up next docked, curated from
   const amelia = await apiAs("amelia");
   const marcus = await apiAs("marcus");
   await signIn(page, "amelia");
-  const board = await platformDelivery(page, amelia);
+  const board = await scenarioBoard(page, amelia);
   const marcusId = await userId(marcus);
 
   const head = uniqueName("E2E dock head");
@@ -222,6 +221,14 @@ test("Team overview focuses one teammate with their Up next docked, curated from
   const later = uniqueName("E2E dock due later");
   const suffix = head.split(" ").at(-1)!;
   const headId = await createCard(amelia, board, head, [marcusId]);
+  // The focus/fold assertions below need another non-viewer with matching work.
+  await createCard(amelia, board, uniqueName("E2E dock other teammate"), [await userId(await apiAs("priya"))]);
+  // Exercise appending after an existing queue, without inheriting demo priorities.
+  for (let index = 0; index < 2; index++) {
+    const cardId = await createCard(amelia, board, uniqueName(`E2E queued background ${index}`), [marcusId]);
+    const added = await marcus.post(`/api/work/priorities/${marcusId}/cards`, { data: { cardId, afterId: null } });
+    expect(added.ok(), await added.text()).toBe(true);
+  }
   const soonerId = await createCard(amelia, board, sooner, [marcusId]);
   const laterId = await createCard(amelia, board, later, [marcusId]);
   for (const [id, due] of [[soonerId, "2099-01-05"], [laterId, "2099-03-05"]] as const) {
@@ -230,8 +237,9 @@ test("Team overview focuses one teammate with their Up next docked, curated from
   }
   const queued = await marcus.post(`/api/work/priorities/${marcusId}/cards`, { data: { cardId: headId, afterId: null } });
   expect(queued.ok(), await queued.text()).toBe(true);
-  // Marcus's seeded queue sits below the head, so appended cards rank after all of it.
-  const queueSize = ((await queued.json()) as { totalCount: number }).totalCount;
+  // The two background cards plus the new head form the complete initial queue.
+  expect(((await queued.json()) as { totalCount: number }).totalCount).toBe(3);
+  const queueSize = 3;
 
   // Marcus keeps his own Up next open in the shell drawer: Amelia's edits must reach it live.
   const marcusPage = await pageAs("marcus");
@@ -353,8 +361,12 @@ test("Team overview focuses one teammate with their Up next docked, curated from
   for (const toggle of await sectionToggles.all()) await expect(toggle).toHaveAttribute("aria-expanded", "true");
 });
 
-test("Team overview hides guests from other organisations by default, and remembers the toggle", async ({ page, signIn }) => {
-  // Maya is a cross-organisation guest on Mobile Experience; Marcus is a member of Amelia's organisation.
+test("Team overview hides guests from other organisations by default, and remembers the toggle", async ({ page, signIn, apiAs, testWorkspace }) => {
+  const owner = await apiAs("amelia");
+  const granted = await owner.post(`/api/workspaces/${testWorkspace.id}/guests/invitations`, {
+    data: { boardId: testWorkspace.boardId, email: users.maya.email, role: "editor" },
+  });
+  expect(granted.ok(), await granted.text()).toBe(true);
   await signIn(page, "amelia");
   await page.goto("/team-cards");
   await page.getByRole("button", { name: "Team overview" }).click();
@@ -426,4 +438,120 @@ test("Team overview hides hosts of boards the viewer visits as a guest", async (
   await page.reload();
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await expect(strip.locator(".strip-chip", { hasText: "Marcus" })).toBeVisible();
+});
+
+test("My overview shows only the viewer's panel, live, and docks their own Up next", async ({ page, signIn, apiAs, uniqueName }) => {
+  const amelia = await apiAs("amelia");
+  const marcus = await apiAs("marcus");
+  await signIn(page, "marcus");
+  const board = await scenarioBoard(page, marcus);
+  const marcusId = await userId(marcus);
+  const ameliaId = await userId(amelia);
+  const inProgress = board.lists.get("In Progress")!;
+
+  const started = uniqueName("E2E my overview started");
+  const queued = uniqueName("E2E my overview queued");
+  const live = uniqueName("E2E my overview live move");
+  const theirs = uniqueName("E2E my overview someone else's");
+  const unowned = uniqueName("E2E my overview nobody owns");
+  const suffix = started.split(" ").at(-1)!;
+
+  const startedId = await createCard(amelia, board, started, [marcusId]);
+  const queuedId = await createCard(amelia, board, queued, [marcusId]);
+  const liveId = await createCard(amelia, board, live, [marcusId]);
+  const theirsId = await createCard(amelia, board, theirs, [ameliaId]);
+  const unownedId = await createCard(amelia, board, unowned, []);
+  await moveToList(marcus, startedId, inProgress);
+  await moveToList(amelia, theirsId, inProgress);
+  await moveToList(amelia, unownedId, inProgress);
+  const queuedResponse = await marcus.post(`/api/work/priorities/${marcusId}/cards`, { data: { cardId: queuedId, afterId: null } });
+  expect(queuedResponse.ok(), await queuedResponse.text()).toBe(true);
+
+  await page.goto("/my-cards");
+  await page.getByRole("button", { name: "My overview", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Search cards" }).fill(suffix);
+  const panel = personPanel(page, "Marcus Cole");
+  await expect(panel).toBeVisible();
+
+  // One panel, the viewer's: no person strip, no unowned panel, nobody else's work.
+  await expect(page.locator("k-team-overview section.person")).toHaveCount(1);
+  await expect(page.locator("k-team-overview .person-strip")).toHaveCount(0);
+  await expect(page.locator("k-team-overview section.unowned")).toHaveCount(0);
+  await expect(page.getByText(theirs)).toHaveCount(0);
+  await expect(page.getByText(unowned)).toHaveCount(0);
+
+  const inProgressSection = section(panel, "In progress");
+  await expect(row(inProgressSection, started).locator(".row-time.is-running")).toBeVisible();
+  await expect(row(section(panel, "Up next"), queued).locator(".row-rank")).toHaveText("1");
+
+  // Realtime: someone else moves one of the viewer's cards in, and it arrives without a reload.
+  await moveToList(amelia, liveId, inProgress);
+  await expect(row(inProgressSection, live).locator(".row-time.is-running")).toBeVisible();
+  await expect(stat(panel, "In progress").locator(".stat-value")).toHaveText("2");
+
+  // Edit docks the viewer's own queue beside the panel, and Close puts it away again. The dock is
+  // the lens's own, so it may already be open from the board display's remembered preference.
+  const upNextAction = section(panel, "Up next").locator("button.section-action");
+  if (await upNextAction.getAttribute("aria-pressed") === "true") {
+    await section(panel, "Up next").getByRole("button", { name: "Close your Up next" }).click();
+  }
+  await expect(page.locator("k-up-next-panel")).toHaveCount(0);
+  await section(panel, "Up next").getByRole("button", { name: "Edit your Up next" }).click();
+  const dock = page.locator("k-up-next-panel");
+  await expect(dock.getByText(queued).first()).toBeVisible();
+  // The only panel needs no ring tying it to the dock.
+  await expect(panel).not.toHaveClass(/\bis-docked\b/);
+  await page.screenshot({ path: test.info().outputPath("my-overview.png"), fullPage: true });
+  await section(panel, "Up next").getByRole("button", { name: "Close your Up next" }).click();
+  await expect(dock).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(panel).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath("my-overview-phone.png") });
+});
+
+test("Overview credits an automation's completion to the card's assignees, live", async ({ page, signIn, apiAs, pageAs, testWorkspace, uniqueName }) => {
+  const amelia = await apiAs("amelia");
+  const marcus = await apiAs("marcus");
+  await signIn(page, "amelia");
+  const board = await scenarioBoard(page, amelia);
+  const marcusId = await userId(marcus);
+  const done = board.lists.get("Done")!;
+  // The common setup: entering Done completes the card. The automation, not a person, records the
+  // completion, so the activity row has no actor.
+  const rule = await amelia.post(`/api/workspaces/${testWorkspace.id}/automations`, { data: {
+    enabled: true, triggerType: "card_enters_list", triggerListId: done, applyOnCreate: false,
+    actions: [{ type: "set_completion", config: { completed: true } }],
+  } });
+  expect(rule.ok(), await rule.text()).toBe(true);
+
+  const shipped = uniqueName("E2E overview shipped by automation");
+  const suffix = shipped.split(" ").at(-1)!;
+  const shippedId = await createCard(amelia, board, shipped, [marcusId]);
+
+  await page.goto("/team-cards");
+  await page.getByRole("button", { name: "Team overview", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Search cards" }).fill(suffix);
+  const marcusPanel = personPanel(page, "Marcus Cole");
+  // The searched view has settled once the card is listed as his open work.
+  await expect(row(section(marcusPanel, "Assigned"), shipped)).toBeVisible();
+  await expect(section(marcusPanel, "Recently done")).toHaveCount(0);
+
+  // Amelia drags Marcus's card into Done: the completion is Marcus's delivery, not Amelia's.
+  await moveToList(amelia, shippedId, done);
+  const detail = await amelia.get(`/api/cards/${shippedId}/detail`);
+  expect((await detail.json() as { card: { completedAt: string | null } }).card.completedAt).not.toBeNull();
+  await expect(row(section(marcusPanel, "Recently done"), shipped)).toBeVisible();
+  await expect(stat(marcusPanel, "Done 7d").locator(".stat-value")).toHaveText("1");
+  const ameliaPanel = personPanel(page, "Amelia");
+  await expect(row(section(ameliaPanel, "Recently done"), shipped)).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath("team-overview-automated-done.png"), fullPage: true });
+
+  // The My lens reads the same feed through the viewer's own filter.
+  const marcusPage = await pageAs("marcus");
+  await marcusPage.goto("/my-cards");
+  await marcusPage.getByRole("button", { name: "My overview", exact: true }).click();
+  await marcusPage.getByRole("searchbox", { name: "Search cards" }).fill(suffix);
+  await expect(row(section(personPanel(marcusPage, "Marcus Cole"), "Recently done"), shipped)).toBeVisible();
 });

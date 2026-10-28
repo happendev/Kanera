@@ -13,6 +13,7 @@ import type {
   WorkDisplayMode,
   WorkDoneEventType,
   WorkGroupBy,
+  WorkPriorityQueue,
   WorkSort,
 } from "@kanera/shared/dto";
 import { DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
@@ -291,13 +292,13 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const option = (id: WorkDisplayMode, icon: string, label: string, shortLabel?: string): SegmentedOption<WorkDisplayMode> =>
       ({ id, icon, label, shortLabel, disabled: busy && current !== id && !canBrowseSaved });
     return [
+      // The overview leads, ahead of the board view that reads the same work card by card. On Team
+      // Cards it is one panel per teammate and where their Up next queues are curated, through its
+      // dock (see `overviewDock`); on My Cards it is the viewer's own panel alone.
+      this.lens() === "team"
+        ? option("overview", "users-group", $localize`:Display option:Team overview`, $localize`:Short display option:Overview`)
+        : option("overview", "user-circle", $localize`:Display option:My overview`, $localize`:Short display option:Overview`),
       option("board", "layout-kanban", $localize`:Display option:Board view`, $localize`:Short display option:Board`),
-      // Team only: the per-teammate overview sits beside the board view, since both read the same
-      // work person by person. It is also where teammates' Up next queues are curated, through the
-      // dock (see `dockTargetUserId`). An overview of one person is just My Cards.
-      ...(this.lens() === "team"
-        ? [option("overview", "users-group", $localize`:Display option:Team overview`, $localize`:Short display option:Overview`)]
-        : []),
       option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),
       option("calendar", "calendar", $localize`:Display option:Calendar view`, $localize`:Short display option:Calendar`),
       // Only while some board in reach has start dates and the Timeline on; the preference
@@ -970,6 +971,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly saveViewLabel = $localize`:Button, save the current filters as a view:Save view`;
   readonly openUpNextLabel = $localize`:Tooltip, open the Up next panel:Open Up next`;
   readonly closeUpNextLabel = $localize`:Tooltip, close the Up next panel:Close Up next`;
+  /**
+   * Whether the page's offline banner is up. The displays embedded below it have their own
+   * "Offline copy" notes for hosts without one; here they would say the same thing twice.
+   */
+  readonly offlineBannerShown = computed(() => !!this.state.cachedAt() || !this.state.sockets.displayedOnline());
   offlineStamp(value: string | number | Date): string {
     return formatDateTime(value, "medium");
   }
@@ -1491,12 +1497,19 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly upNextAvailable = computed(() =>
     this.currentPriorities() !== null
     && this.effectiveDisplay() !== "history"
-    // The overview has no person in focus; its dock follows `overviewDockQueue` instead.
-    && this.effectiveDisplay() !== "overview"
+    // Team overview has no person in focus; its dock follows `overviewDockQueue` instead.
+    && !(this.lens() === "team" && this.effectiveDisplay() === "overview")
   );
   /** The dock is a board curation tool; every other display keeps its own full-width reading mode. */
   readonly showUpNextControl = computed(() =>
     this.effectiveDisplay() === "board"
+  );
+  /**
+   * Where the lens's own dock can open. My overview opens it from its Up next section's Edit
+   * button rather than the toolbar, the same way Team overview docks a teammate's queue.
+   */
+  private readonly upNextDockable = computed(() =>
+    this.showUpNextControl() || (this.lens() === "my" && this.effectiveDisplay() === "overview")
   );
   readonly upNextUnavailableTooltip = computed(() => {
     if (this.effectiveDisplay() === "history") {
@@ -1523,7 +1536,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.overviewDock()
       ? this.overviewDockQueue() !== null && this.overviewDockOpen()
       : this.upNextAvailable()
-        && this.showUpNextControl()
+        && this.upNextDockable()
         && (this.sheetMode() ? this.sheetOpen() : this.state.upNextPanelOpen())
   );
   /** Names the queue's owner in the panel header when curating somebody else. */
@@ -1589,6 +1602,24 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly overviewQueues = computed(() =>
     this.overviewDock() ? this.state.teamPriorities()?.queues ?? [] : []
   );
+  /**
+   * My overview is the same panel for the viewer alone, with their own queue: the shell-wide
+   * `MyPrioritiesService` copy behind `currentPriorities`, so the panel's Up next head and the
+   * ordinary dock it opens can never disagree.
+   */
+  readonly myOverviewPeople = computed(() => {
+    const viewer = this.peopleById().get(this.state.auth.user()?.id ?? "");
+    return viewer ? [viewer] : [];
+  });
+  readonly myOverviewQueues = computed<WorkPriorityQueue[]>(() => {
+    const viewer = this.state.auth.user();
+    const queue = this.currentPriorities();
+    if (!viewer || !queue) return [];
+    return [{
+      target: { userId: viewer.id, displayName: viewer.displayName, email: viewer.email, self: true, workspaceIds: [], queueSize: queue.totalCount },
+      queue,
+    }];
+  });
   /**
    * Whether the focused person's dock is showing. Separate from the focus so closing the dock (on a
    * phone, a sheet over their panel) leaves their panel in view; Edit brings it back.
@@ -1763,7 +1794,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   toggleUpNextPanel(): void {
-    if (!this.showUpNextControl() || !this.upNextAvailable()) return;
+    if (!this.upNextDockable() || !this.upNextAvailable()) return;
     this.priorityError.set(null);
     if (this.sheetMode()) {
       this.sheetOpen.update((open) => !open);
@@ -1786,17 +1817,44 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * From the panel itself — its "Add card" picker (appends) or a board tile dropped onto it (joins
    * where the pointer released it). Failures render inside the panel, where the gesture ended.
    */
-  onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null }): void {
+  onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null; dropped?: boolean }): void {
     if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
-    const { cardId, ...anchor } = event;
+    const { cardId, dropped, ...anchor } = event;
     const target = this.overviewDockQueue()?.target.userId;
-    const added = this.overviewDock() && target
-      ? this.state.addTeamPriority(target, cardId, anchor)
-      : this.state.addPriority(cardId, anchor);
-    void added.catch(() => {
-      this.priorityError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
+    const add = (id: string) => this.overviewDock() && target
+      ? this.state.addTeamPriority(target, id, anchor)
+      : this.state.addPriority(id, anchor);
+    const cardIds = dropped ? this.upNextDropCardIds(cardId) : [cardId];
+    if (cardIds.length === 1) {
+      void add(cardId).catch(() => {
+        this.priorityError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
+      });
+      return;
+    }
+    // Every add reuses the drop's anchor. Inserting right after an entry (or at the top) puts the
+    // newest add first, so walk the selection backwards there to keep the view's order in the queue.
+    const ordered = anchor.afterId !== undefined ? [...cardIds].reverse() : cardIds;
+    void (async () => {
+      for (const id of ordered) await add(id);
+    })().catch(() => {
+      this.priorityError.set($localize`We couldn’t add every card to Up next. Cards already added were kept.`);
     });
+  }
+
+  /**
+   * Dragging a selected tile carries the whole selection, as it does between lanes. Only cards the
+   * queue would accept come along, in the view's sort order, and no more than it has room for.
+   */
+  private upNextDropCardIds(cardId: string): string[] {
+    const selected = this.bulkSelectedCardIds();
+    if (!selected.has(cardId) || selected.size < 2) return [cardId];
+    const addable = new Set(this.dockAddableCards().map((card) => card.id));
+    const room = Math.max(1, MAX_UP_NEXT_ENTRIES - (this.dockPriorities()?.totalCount ?? 0));
+    return this.state.cards()
+      .filter((card) => selected.has(card.id) && addable.has(card.id))
+      .map((card) => card.id)
+      .slice(0, room);
   }
 
   /**

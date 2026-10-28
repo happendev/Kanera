@@ -38,6 +38,17 @@ for (const scope of ["board", "my-cards", "team-cards"] as const) {
       if (scope !== "board") await page.getByRole("searchbox", { name: "Search cards", exact: true }).fill(title);
       const timeline = page.locator("k-board-timeline-view");
       const map = page.locator("k-dependency-map");
+      // My/Team Cards say "saved copy" once, in the page's banner; the board has no banner, so each
+      // view carries its own note there.
+      const expectOfflineNote = async (view: typeof map) => {
+        if (scope === "board") {
+          await expect(view).toContainText("Offline copy from");
+          return;
+        }
+        await expect(page.locator(".offline-banner")).toHaveCount(1);
+        await expect(page.locator(".offline-banner")).toContainText("Showing a saved copy");
+        await expect(view).not.toContainText("Offline copy from");
+      };
       const history = page.locator("k-work-done-view");
       const bar = timeline.locator(`.tl-row-card[data-card-id="${dependent.id}"] .tl-bar`);
       const wire = timeline.locator(`.tl-wire-hit[aria-label="${dependent.key} waits on ${blocker.key}"]`);
@@ -101,7 +112,7 @@ for (const scope of ["board", "my-cards", "team-cards"] as const) {
       await expect(timeline.locator(".tl-handle, .tl-link-handle")).toHaveCount(0);
       await page.addInitScript(() => Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false }));
       await page.reload();
-      await expect(timeline).toContainText("Offline copy from");
+      await expectOfflineNote(timeline);
       await expect(bar).toBeVisible();
       await expect(wire).toHaveCount(1);
       await expect(bar).toHaveClass(/has-conflict/);
@@ -119,7 +130,7 @@ for (const scope of ["board", "my-cards", "team-cards"] as const) {
       }
       await page.setViewportSize({ width: 1280, height: 900 });
       await select("Dependencies view");
-      await expect(map).toContainText("Offline copy from");
+      await expectOfflineNote(map);
       await expect(map).toContainText(dependent.title);
       await expect(map.locator(".dm-link-handle")).toHaveCount(0);
       await page.keyboard.press("Control+z");
@@ -129,7 +140,7 @@ for (const scope of ["board", "my-cards", "team-cards"] as const) {
       }
       await page.setViewportSize({ width: 1280, height: 900 });
       await select("Work done");
-      await expect(history).toContainText("Offline copy from");
+      await expectOfflineNote(history);
       await expect(history.locator(".wd-card-title").filter({ hasText: dependent.title })).toBeVisible();
       for (const width of [1280, 390]) {
         await page.setViewportSize({ width, height: 900 });

@@ -1,4 +1,4 @@
-import { expect, test } from "./support/fixtures";
+import { expect, test } from "./support/scenario";
 import { boardHref, createCard, expectBoardLoaded, moveCardToBoard, openCard, workspaceSettingsHref } from "./support/ui";
 
 test("unchanged custom field blurs do not count as edits", async ({ page, signIn, apiAs, testWorkspace, uniqueName }, testInfo) => {
@@ -101,9 +101,9 @@ test("workspace field edits and card values survive a board transfer and work in
   const value = uniqueName("E2E shared value");
   const title = uniqueName("E2E field card");
   await signIn(page, "amelia");
-  const sourceHref = await boardHref(page, "Platform Delivery");
-  const targetHref = await boardHref(page, "Mobile Experience");
-  const settingsHref = await workspaceSettingsHref(page, "Platform Delivery");
+  const sourceHref = await boardHref(page, "E2E primary board");
+  const targetHref = await boardHref(page, "E2E secondary board");
+  const settingsHref = await workspaceSettingsHref(page, "E2E primary board");
 
   await page.goto(`${settingsHref}/fields`);
   await page.getByPlaceholder("Field name").fill(initialField);
@@ -116,7 +116,7 @@ test("workspace field edits and card values survive a board transfer and work in
   await expect(page.locator(".cf-field-tile").filter({ hasText: field })).toBeVisible();
 
   await page.goto(sourceHref);
-  await expectBoardLoaded(page, "Platform Delivery");
+  await expectBoardLoaded(page, "E2E primary board");
   await createCard(page, title);
   const detail = await openCard(page, title);
   const fieldRow = detail.locator(".cf-row").filter({ hasText: field });
@@ -124,10 +124,10 @@ test("workspace field edits and card values survive a board transfer and work in
   await fieldRow.locator("input.cf-input").fill(value);
   await fieldRow.locator("input.cf-input").press("Enter");
   await expect(fieldRow.locator("input.cf-input")).toHaveValue(value);
-  await moveCardToBoard(detail, "Mobile Experience");
+  await moveCardToBoard(detail, "E2E secondary board");
 
   await page.goto(targetHref);
-  await expectBoardLoaded(page, "Mobile Experience");
+  await expectBoardLoaded(page, "E2E secondary board");
   await page.getByRole("button", { name: "Table view" }).click();
   const row = page.locator("k-board-table-view .tv-row").filter({ hasText: title });
   await expect(row).toHaveCount(1);

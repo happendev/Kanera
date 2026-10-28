@@ -22,6 +22,11 @@ test("Team overview and a teammate's queue survive offline reloads, stay read-on
     const make = async (suffix: string, assigneeIds: string[]) => result<{ id: string; title: string }>(await teammate.post(`/api/boards/${workspace.initialBoard.id}/lists/${board.lists[0]!.id}/cards`, { data: { title: `${title} ${suffix}`, assigneeIds } }));
     const queued = await make("queued", [person.id]);
     const active = await make("recently active", [person.id]);
+    // Focusing a teammate requires multiple people in the cached overview. Supply the other
+    // person explicitly instead of relying on unrelated demo assignments to show the strip.
+    const other = await result<{ id: string }>(await (await apiAs("marcus")).get("/api/me"));
+    await result(await api.post(`/api/workspaces/${workspace.id}/members`, { data: { userId: other.id, role: "admin" } }));
+    await make("other teammate work", [other.id]);
     await result(await api.patch(`/api/lists/${board.lists[1]!.id}`, { data: { inProgress: true } }));
     const unowned = await make("unowned", []);
     await result(await teammate.post(`/api/cards/${unowned.id}/move`, { data: { listId: board.lists[1]!.id, afterCardId: null } }));
@@ -59,6 +64,9 @@ test("Team overview and a teammate's queue survive offline reloads, stay read-on
     await page.addInitScript(() => Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false }));
     await page.reload();
     await expect(overview).toBeVisible();
+    // One "saved copy" message: the page's banner, not a second note inside the overview.
+    await expect(page.locator(".offline-banner")).toHaveCount(1);
+    await expect(overview.locator(".overview-offline")).toHaveCount(0);
     await expect(personPanel.locator(".tone-recent")).toContainText(active.title);
     await expect(overview.locator("section.unowned")).toContainText(unowned.title);
     await expect(personPanel.locator(".tone-next")).toContainText(queued.title);
