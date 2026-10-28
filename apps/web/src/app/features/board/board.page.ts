@@ -811,6 +811,8 @@ export class BoardPage implements OnDestroy {
   readonly isWatchingBoard = computed(() => this.notifications.isWatchingBoard(this.boardId()));
   readonly offlineBoardCachedAt = signal<string | null>(null);
   private filterLoadSeq = 0;
+  /** The current route's serialized board refresh; a no-op once its board context is torn down. */
+  private refreshBoard: (() => void) | null = null;
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   private hasAny(values: Set<string> | undefined, filters: Set<string>): boolean {
@@ -1421,6 +1423,7 @@ export class BoardPage implements OnDestroy {
             }
           });
       };
+      this.refreshBoard = refreshBoard;
 
       this.clearBulkSelection();
       void this.offlineCache.loadBoard(boardId)
@@ -2121,9 +2124,10 @@ export class BoardPage implements OnDestroy {
       this.showReminderSetOnly.set(false);
       this.showBlockedOnly.set(false);
     }
+    const mutationSeq = this.state.cardMutationSeq();
     const data = await this.loadBoard(boardId, false, next);
     if (this.boardId() !== boardId || seq !== this.filterLoadSeq || this.showArchived() !== next) return;
-    this.state.hydrate(data);
+    this.hydrateFilterReload(data, mutationSeq);
     const snapshot = this.state.snapshot();
     if (snapshot) void this.offlineCache.saveBoard(this.boardId(), snapshot).catch(() => undefined);
   }
@@ -2135,9 +2139,10 @@ export class BoardPage implements OnDestroy {
     this.completedFrom.set(range.from);
     this.completedTo.set(range.to);
     writeCompletedFilter(`board:${this.boardId()}`, range);
+    const mutationSeq = this.state.cardMutationSeq();
     const data = await this.loadBoard(boardId, false, this.showArchived());
     if (this.boardId() !== boardId || seq !== this.filterLoadSeq) return;
-    this.state.hydrate(data);
+    this.hydrateFilterReload(data, mutationSeq);
     this.persistOfflineSnapshot();
   }
 
@@ -2147,10 +2152,21 @@ export class BoardPage implements OnDestroy {
     this.completedFrom.set("");
     this.completedTo.set("");
     writeCompletedFilter(`board:${this.boardId()}`, null);
+    const mutationSeq = this.state.cardMutationSeq();
     const data = await this.loadBoard(boardId, false, this.showArchived());
     if (this.boardId() !== boardId || seq !== this.filterLoadSeq) return;
-    this.state.hydrate(data);
+    this.hydrateFilterReload(data, mutationSeq);
     this.persistOfflineSnapshot();
+  }
+
+  /**
+   * Filter reloads replace the board with a snapshot read when the request left. A live card event
+   * applied while it was in flight would be reverted on screen, with no later event to correct it,
+   * so when one landed, converge through the serialized board refresh, as reconnects do.
+   */
+  private hydrateFilterReload(data: Awaited<ReturnType<typeof this.loadBoard>>, mutationSeqBeforeFetch: number) {
+    this.state.hydrate(data);
+    if (this.state.cardMutationSeq() !== mutationSeqBeforeFetch) this.refreshBoard?.();
   }
 
   // The completed range is sticky per board, so the next load re-applies it; keep the offline copy
@@ -2221,9 +2237,10 @@ export class BoardPage implements OnDestroy {
     this.completedTo.set("");
     writeCompletedFilter(`board:${this.boardId()}`, null);
     if (!needsActiveCardsReload) return;
+    const mutationSeq = this.state.cardMutationSeq();
     const data = await this.loadBoard(boardId, false, false);
     if (this.boardId() !== boardId || seq !== this.filterLoadSeq || this.showArchived()) return;
-    this.state.hydrate(data);
+    this.hydrateFilterReload(data, mutationSeq);
     const snapshot = this.state.snapshot();
     if (snapshot) void this.offlineCache.saveBoard(this.boardId(), snapshot).catch(() => undefined);
   }
