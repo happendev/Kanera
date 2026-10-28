@@ -16764,6 +16764,13 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
+  "3599621720429128251": "My overview",
+  "@3599621720429128251": {
+    "description": "Display option",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
   "8815325188094721834": "{$startDate} – {$endDate}",
   "@8815325188094721834": {
     "description": "Completed date filter range",
@@ -17198,14 +17205,15 @@
       "src/app/features/global-work/team-overview.component.html"
     ]
   },
-  "7889021945991084119": "+{$COUNT} more — open their cards",
-  "@7889021945991084119": {
+  "3990934405028319170": "+{$COUNT} more — open Board view",
+  "@3990934405028319170": {
+    "description": "My overview drill-down link to the board display",
     "x-files": [
       "src/app/features/global-work/team-overview.component.html"
     ]
   },
-  "2561564569166996904": "Their open cards in In progress lists, longest time in progress first",
-  "@2561564569166996904": {
+  "7889021945991084119": "+{$COUNT} more — open their cards",
+  "@7889021945991084119": {
     "x-files": [
       "src/app/features/global-work/team-overview.component.html"
     ]
@@ -17260,14 +17268,14 @@
       "src/app/features/global-work/team-overview.component.html"
     ]
   },
-  "2761580161538136318": "+{$COUNT} more in their queue",
-  "@2761580161538136318": {
+  "6459914027805714270": "+{$COUNT} more in your queue",
+  "@6459914027805714270": {
     "x-files": [
       "src/app/features/global-work/team-overview.component.html"
     ]
   },
-  "3604403583923319665": "Their other open cards, soonest due first",
-  "@3604403583923319665": {
+  "2761580161538136318": "+{$COUNT} more in their queue",
+  "@2761580161538136318": {
     "x-files": [
       "src/app/features/global-work/team-overview.component.html"
     ]
@@ -17311,8 +17319,43 @@
       "src/app/features/global-work/team-overview.component.html"
     ]
   },
+  "3926385910953650659": "Other open cards you moved, created or ticked items on in the last {$days} days",
+  "@3926385910953650659": {
+    "description": "My overview section tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
   "2450973332099804953": "Other open cards they moved, created or ticked items on in the last {$days} days",
   "@2450973332099804953": {
+    "description": "Team overview section tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8312896359393704551": "Your open cards in In progress lists, longest time in progress first",
+  "@8312896359393704551": {
+    "description": "My overview section tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "2561564569166996904": "Their open cards in In progress lists, longest time in progress first",
+  "@2561564569166996904": {
+    "description": "Team overview section tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "2396751796755411848": "Your other open cards, soonest due first",
+  "@2396751796755411848": {
+    "description": "My overview section tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "3604403583923319665": "Their other open cards, soonest due first",
+  "@3604403583923319665": {
     "description": "Team overview section tooltip",
     "x-files": [
       "src/app/features/global-work/team-overview.component.ts"
@@ -17339,6 +17382,13 @@
       "src/app/features/global-work/team-overview.component.ts"
     ]
   },
+  "8105955402072164295": "All your open cards",
+  "@8105955402072164295": {
+    "description": "My overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
   "5249629887488927270": "All their open cards",
   "@5249629887488927270": {
     "description": "Team overview stat tooltip",
@@ -17353,9 +17403,23 @@
       "src/app/features/global-work/team-overview.component.ts"
     ]
   },
+  "6967312471163817586": "Your open cards in In progress lists",
+  "@6967312471163817586": {
+    "description": "My overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
   "3979400396303016544": "Their open cards in In progress lists",
   "@3979400396303016544": {
     "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8663011144506633289": "Your open cards past due",
+  "@8663011144506633289": {
+    "description": "My overview stat tooltip",
     "x-files": [
       "src/app/features/global-work/team-overview.component.ts"
     ]
@@ -17370,6 +17434,13 @@
   "5642349890500799643": "Done {$days}d",
   "@5642349890500799643": {
     "description": "Team overview stat, cards completed in the last N days",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "7428142213134792187": "Cards you completed in the last {$days} days",
+  "@7428142213134792187": {
+    "description": "My overview stat tooltip",
     "x-files": [
       "src/app/features/global-work/team-overview.component.ts"
     ]
@@ -17433,6 +17504,20 @@
   "4875921088778203989": "Open {$person}’s cards",
   "@4875921088778203989": {
     "description": "Button opening one teammate's cards",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "6019146000102320580": "Close your Up next",
+  "@6019146000102320580": {
+    "description": "Button on My overview closing the Up next panel",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "1720336700259890530": "Edit your Up next",
+  "@1720336700259890530": {
+    "description": "Button on My overview opening the Up next panel to change it",
     "x-files": [
       "src/app/features/global-work/team-overview.component.ts"
     ]

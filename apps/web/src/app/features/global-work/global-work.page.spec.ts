@@ -1164,13 +1164,13 @@ describe("GlobalWorkPage toolbar state", () => {
     });
   });
 
-  it("places the team overview immediately after Board, with no Up next display", () => {
+  it("places the team overview first, ahead of Board, with no Up next display", () => {
     return mount().then(({ fixture }) => {
       fixture.componentRef.setInput("lens", "team");
       TestBed.tick();
 
       expect(fixture.componentInstance.displayOptions().map((option) => option.id))
-        .toEqual(["board", "overview", "table", "calendar", "timeline", "dependencies", "history"]);
+        .toEqual(["overview", "board", "table", "calendar", "timeline", "dependencies", "history"]);
       expect(fixture.componentInstance.showTeammateFilter()).toBe(true);
       expect(fixture.componentInstance.showUpNextControl()).toBe(true);
 

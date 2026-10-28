@@ -427,3 +427,74 @@ test("Team overview hides hosts of boards the viewer visits as a guest", async (
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await expect(strip.locator(".strip-chip", { hasText: "Marcus" })).toBeVisible();
 });
+
+test("My overview shows only the viewer's panel, live, and docks their own Up next", async ({ page, signIn, apiAs, uniqueName }) => {
+  const amelia = await apiAs("amelia");
+  const marcus = await apiAs("marcus");
+  await signIn(page, "marcus");
+  const board = await platformDelivery(page, marcus);
+  const marcusId = await userId(marcus);
+  const ameliaId = await userId(amelia);
+  const inProgress = board.lists.get("In Progress")!;
+
+  const started = uniqueName("E2E my overview started");
+  const queued = uniqueName("E2E my overview queued");
+  const live = uniqueName("E2E my overview live move");
+  const theirs = uniqueName("E2E my overview someone else's");
+  const unowned = uniqueName("E2E my overview nobody owns");
+  const suffix = started.split(" ").at(-1)!;
+
+  const startedId = await createCard(amelia, board, started, [marcusId]);
+  const queuedId = await createCard(amelia, board, queued, [marcusId]);
+  const liveId = await createCard(amelia, board, live, [marcusId]);
+  const theirsId = await createCard(amelia, board, theirs, [ameliaId]);
+  const unownedId = await createCard(amelia, board, unowned, []);
+  await moveToList(marcus, startedId, inProgress);
+  await moveToList(amelia, theirsId, inProgress);
+  await moveToList(amelia, unownedId, inProgress);
+  const queuedResponse = await marcus.post(`/api/work/priorities/${marcusId}/cards`, { data: { cardId: queuedId, afterId: null } });
+  expect(queuedResponse.ok(), await queuedResponse.text()).toBe(true);
+
+  await page.goto("/my-cards");
+  await page.getByRole("button", { name: "My overview", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Search cards" }).fill(suffix);
+  const panel = personPanel(page, "Marcus Cole");
+  await expect(panel).toBeVisible();
+
+  // One panel, the viewer's: no person strip, no unowned panel, nobody else's work.
+  await expect(page.locator("k-team-overview section.person")).toHaveCount(1);
+  await expect(page.locator("k-team-overview .person-strip")).toHaveCount(0);
+  await expect(page.locator("k-team-overview section.unowned")).toHaveCount(0);
+  await expect(page.getByText(theirs)).toHaveCount(0);
+  await expect(page.getByText(unowned)).toHaveCount(0);
+
+  const inProgressSection = section(panel, "In progress");
+  await expect(row(inProgressSection, started).locator(".row-time.is-running")).toBeVisible();
+  await expect(row(section(panel, "Up next"), queued).locator(".row-rank")).toHaveText("1");
+
+  // Realtime: someone else moves one of the viewer's cards in, and it arrives without a reload.
+  await moveToList(amelia, liveId, inProgress);
+  await expect(row(inProgressSection, live).locator(".row-time.is-running")).toBeVisible();
+  await expect(stat(panel, "In progress").locator(".stat-value")).toHaveText("2");
+
+  // Edit docks the viewer's own queue beside the panel, and Close puts it away again. The dock is
+  // the lens's own, so it may already be open from the board display's remembered preference.
+  const upNextAction = section(panel, "Up next").locator("button.section-action");
+  if (await upNextAction.getAttribute("aria-pressed") === "true") {
+    await section(panel, "Up next").getByRole("button", { name: "Close your Up next" }).click();
+  }
+  await expect(page.locator("k-up-next-panel")).toHaveCount(0);
+  await section(panel, "Up next").getByRole("button", { name: "Edit your Up next" }).click();
+  const dock = page.locator("k-up-next-panel");
+  await expect(dock.getByText(queued).first()).toBeVisible();
+  // The only panel needs no ring tying it to the dock.
+  await expect(panel).not.toHaveClass(/\bis-docked\b/);
+  await page.screenshot({ path: test.info().outputPath("my-overview.png"), fullPage: true });
+  await section(panel, "Up next").getByRole("button", { name: "Close your Up next" }).click();
+  await expect(dock).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(panel).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath("my-overview-phone.png") });
+});

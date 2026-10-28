@@ -59,6 +59,9 @@ test("Team overview and a teammate's queue survive offline reloads, stay read-on
     await page.addInitScript(() => Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false }));
     await page.reload();
     await expect(overview).toBeVisible();
+    // One "saved copy" message: the page's banner, not a second note inside the overview.
+    await expect(page.locator(".offline-banner")).toHaveCount(1);
+    await expect(overview.locator(".overview-offline")).toHaveCount(0);
     await expect(personPanel.locator(".tone-recent")).toContainText(active.title);
     await expect(overview.locator("section.unowned")).toContainText(unowned.title);
     await expect(personPanel.locator(".tone-next")).toContainText(queued.title);

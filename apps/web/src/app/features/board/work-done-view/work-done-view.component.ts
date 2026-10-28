@@ -150,8 +150,10 @@ function toDateInputValue(date: Date): string {
 export class WorkDoneViewComponent {
   private readonly queries = inject(CachedViewService);
   readonly cachedAt = signal<string | null>(null);
+  /** The host page's own offline banner already says the view is a saved copy; don't repeat it. */
+  readonly hostShowsOffline = input(false);
   readonly offlineCopyLabel = computed(() => {
-    const time = this.cachedAt();
+    const time = this.hostShowsOffline() ? null : this.cachedAt();
     return time ? $localize`:Dependencies view note; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(time)}:time:` : "";
   });
   private readonly toasts = inject(ToastService);
