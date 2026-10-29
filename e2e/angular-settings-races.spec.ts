@@ -188,13 +188,16 @@ test("a foreground scratchpad refresh keeps the caret of a clean editor whose se
   const editor = await selectScratchpad(page, title);
   try {
     await expect(editor).toContainText("Keep the caret");
-    await editor.click();
-    // Use editor input so ProseMirror's selection and the DOM selection agree before refreshing.
-    await page.keyboard.press("Home");
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
+    await editor.focus();
+    await editor.evaluate(async (element) => {
+      // Let focus restoration finish. Rapid cursor keys can race ProseMirror's native selection
+      // observer, so establish the caret and notify it before exercising the foreground refresh.
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const text = element.querySelector("p")?.firstChild;
+      if (text?.nodeType !== Node.TEXT_NODE) throw new Error("Scratchpad paragraph text not found");
+      window.getSelection()!.collapse(text, 4);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
     expect(await editor.evaluate(() => window.getSelection()?.anchorOffset)).toBe(4);
     const refreshed = page.waitForResponse((result) => result.request().method() === "GET" && result.url().endsWith("/api/scratchpad/notes"));
     await setVisibility(page, "hidden");

@@ -1513,7 +1513,6 @@
     "3992937414900539657": "{status, select, succeeded {marcó la ejecución de {agent} como finalizada} failed {marcó la ejecución de {agent} como fallida} cancelled {marcó la ejecución de {agent} como cancelada} stalled {marcó la ejecución de {agent} como detenida} other {marcó la ejecución de {agent} como terminada}}",
     "6014090634684622457": "{status, select, succeeded {finalizó} failed {falló} cancelled {canceló} stalled {se detuvo en} other {terminó}}",
     "6574872987502148701": "{$outcome}: {$title}",
-    "933472262077597290": "{$outcome} — {$summary}",
     "2350070440008093526": "Haz clic para editar",
     "2598235812257841662": "mediante {$agent}",
     "6554006484550476652": "mediante un agente de IA",

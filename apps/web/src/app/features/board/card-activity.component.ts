@@ -83,6 +83,7 @@ type CardFeedView =
       html: string;
       hasDescriptionChanges: boolean;
       attachmentPreview: ActivityAttachmentPreview | null;
+      runSummary: string | null;
     };
 
 let listFormat: Intl.ListFormat | null = null;
@@ -217,6 +218,7 @@ export class CardActivityComponent {
         html: this.activityText(item.data),
         hasDescriptionChanges: this.hasDescriptionChangesForActivity(item.data),
         attachmentPreview: this.attachmentPreviewForActivity(item.data),
+        runSummary: this.runSummaryForActivity(item.data),
       };
   }
 
@@ -815,6 +817,16 @@ export class CardActivityComponent {
     return diff;
   }
 
+  /**
+   * The run's closing summary is the outcome a reader actually wants; the run row itself is gone
+   * from card detail once it ends, so this is where that note lives. Agents write it like a comment,
+   * so it renders like one (markdown in a comment body) under the headline.
+   */
+  runSummaryForActivity(event: ActivityFeedEvent): string | null {
+    if (event.action !== "agentRun:ended") return null;
+    return this.activityPayloadText(event.payload as Record<string, unknown>, "summary");
+  }
+
   attachmentPreviewForActivity(event: ActivityFeedEvent): ActivityAttachmentPreview | null {
     if (event.entityType !== "card" || event.action !== "attachment_added") return null;
     const payload = event.payload as Record<string, unknown>;
@@ -1229,11 +1241,10 @@ export class CardActivityComponent {
         const subject = agent
           ? icu($localize`:Card activity after a system name; agent is an AI agent's name:{status, select, succeeded {marked {agent}'s run as finished} failed {marked {agent}'s run as failed} cancelled {marked {agent}'s run as cancelled} stalled {marked {agent}'s run as stalled} other {marked {agent}'s run as ended}}`, { status, agent: this.v(agent) })
           : icu($localize`:Card activity after an AI agent's name; a run title may follow after a colon:{status, select, succeeded {finished} failed {failed} cancelled {cancelled} stalled {stalled on} other {ended}}`, { status });
-        // The run's closing summary is the outcome a reader actually wants; the run row itself is
-        // gone from card detail once it ends, so this is where that note lives.
-        const summary = this.activityPayloadText(p, "summary");
-        const headline = title ? $localize`:Agent run outcome followed by the run title:${subject}:outcome:: ${this.v(title)}:title:` : subject;
-        return ` ${summary ? $localize`:Agent run outcome followed by its closing summary:${headline}:outcome: — ${this.v(summary)}:summary:` : headline}`;
+        // The title is the agent's own prose, not a changed value, so it reads as text rather than a
+        // value pill. The closing summary renders under the row (runSummaryForActivity).
+        const runTitle = title ? `<span class="activity-run-title">${this.esc(title)}</span>` : null;
+        return ` ${runTitle ? $localize`:Agent run outcome followed by the run title:${subject}:outcome:: ${runTitle}:title:` : subject}`;
       }
       default:
         // Unknown actions from a newer server: show the raw action and entity type rather than nothing.

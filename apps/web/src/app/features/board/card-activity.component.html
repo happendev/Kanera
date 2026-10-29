@@ -198,6 +198,11 @@
           </span>
           <span class="activity-date">{{ item.timeText }}</span>
         </div>
+        @if (item.runSummary; as summary) {
+        <div class="comment-body activity-run-summary">
+          <k-description-viewer [value]="summary" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" />
+        </div>
+        }
         @if (item.attachmentPreview; as preview) {
         @if (preview.kind === 'image') {
         <div class="activity-attachment-preview">

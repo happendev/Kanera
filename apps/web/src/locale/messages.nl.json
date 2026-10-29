@@ -1513,7 +1513,6 @@
     "3992937414900539657": "{status, select, succeeded {markeerde de run van {agent} als voltooid} failed {markeerde de uitvoering van {agent} als mislukt} cancelled {markeerde de run van {agent} als geannuleerd} stalled {markeerde de run van {agent} als vastgelopen} other {markeerde de run van {agent} als beëindigd}}",
     "6014090634684622457": "{status, select, succeeded {afgerond} failed {mislukt} cancelled {geannuleerd} stalled {bleef steken} other {eindigde}}",
     "6574872987502148701": "{$outcome}: {$title}",
-    "933472262077597290": "{$outcome} — {$summary}",
     "2350070440008093526": "Klik om te bewerken",
     "2598235812257841662": "via {$agent}",
     "6554006484550476652": "via AI-agent",
