@@ -97,6 +97,24 @@ export function workingMs(startMs: number, stopMs: number, timeZone: string | nu
   return total;
 }
 
+/**
+ * When working time next starts counting, or null while `ms` is inside working hours. A running
+ * clock adds nothing until then, so surfaces can say it is paused rather than look stuck at "0m".
+ */
+export function nextWorkingStart(ms: number, timeZone: string | null | undefined): number | null {
+  const zone = trackingTimeZone(timeZone);
+  const local = localParts(ms, zone);
+  // At most one weekend plus today stands between any instant and the next working day.
+  for (let offset = 0, dateKey = Date.UTC(local.year, local.month - 1, local.day); offset < 4; offset++, dateKey += DAY_MS) {
+    const weekday = new Date(dateKey).getUTCDay();
+    if (weekday === 0 || weekday === 6) continue;
+    const [open, close] = workdayFor(dateKey, zone);
+    if (ms < open) return open;
+    if (ms < close) return null;
+  }
+  return null;
+}
+
 /** Whether `timeZone` is an IANA zone this runtime knows, for validating the workspace setting. */
 export function isKnownTimeZone(timeZone: string): boolean {
   try {

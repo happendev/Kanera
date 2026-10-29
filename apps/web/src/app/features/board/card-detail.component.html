@@ -33,11 +33,16 @@
       <div class="detail-status-row">
       @if (timeInProgress(); as timer) {
       <div class="detail-time-row">
-        <div class="detail-time-in-progress" [class.is-done]="!timer.running" [class.is-alert]="timer.alert" [kTooltip]="timer.label" [attr.aria-label]="timer.label" role="status">
+        <div class="detail-time-in-progress" [class.is-done]="!timer.running" [class.is-paused]="timer.paused" [class.is-alert]="timer.alert" [kTooltip]="timer.label" [attr.aria-label]="timer.label" role="status">
           <!-- Running and stopped must read differently at a glance: a stopped clock says so in words
-               and wears a pause icon and a dashed outline, rather than only a muted colour. -->
-          <i aria-hidden="true" class="ti" [class.ti-progress]="timer.running" [class.ti-player-pause]="!timer.running"></i>
-          @if (timer.running) {
+               and wears a pause icon and a dashed outline, rather than only a muted colour. A running
+               clock outside working hours adds nothing, so it says when it resumes instead. -->
+          <i aria-hidden="true" class="ti" [class.ti-progress]="timer.running && !timer.paused" [class.ti-clock-pause]="timer.paused" [class.ti-player-pause]="!timer.running"></i>
+          @if (timer.paused) {
+          <span class="detail-time-caption" i18n="Card detail caption - the card is in progress but outside working hours, so its clock adds nothing until the given time">Paused until {{ timer.resumesAt }}</span>
+          <span class="detail-time-sep" aria-hidden="true">·</span>
+          <span i18n="Card detail: the stopped total of tracked time in progress, e.g. 24h tracked"><strong>{{ timer.detail }}</strong> tracked</span>
+          } @else if (timer.running) {
           <span class="detail-time-caption" i18n="Card detail caption before the running tracked time in progress">In progress</span>
           <strong>{{ timer.detail }}</strong>
           } @else {
@@ -53,6 +58,26 @@
         </button>
         }
       </div>
+      <!-- On its own line straight under the chip it corrects, ahead of the dependency chips. -->
+      @if (editingTimeInProgress()) {
+      <form class="detail-time-editor" (submit)="$event.preventDefault(); saveTimeInProgress()">
+        <label>
+          <input class="detail-time-input" type="number" min="0" max="100000" step="1" inputmode="numeric" [value]="timeDraftHours()" (input)="timeDraftHours.set(+$any($event.target).value)" aria-label="Hours" i18n-aria-label="Accessible name of the hours input when correcting time in progress" />
+          <span i18n="Unit after the hours input when correcting time in progress">h</span>
+        </label>
+        <label>
+          <input class="detail-time-input" type="number" min="0" max="59" step="1" inputmode="numeric" [value]="timeDraftMinutes()" (input)="timeDraftMinutes.set(+$any($event.target).value)" aria-label="Minutes" i18n-aria-label="Accessible name of the minutes input when correcting time in progress" />
+          <span i18n="Unit after the minutes input when correcting time in progress">m</span>
+        </label>
+        <span class="detail-time-actions">
+        <button type="submit" class="detail-time-save" [disabled]="savingTimeInProgress()" i18n="Button - save a corrected time in progress">Save</button>
+        <button type="button" class="ghost detail-time-cancel" (click)="editingTimeInProgress.set(false)" [disabled]="savingTimeInProgress()" i18n="Button - discard a time in progress correction">Cancel</button>
+        </span>
+        @if (timeInProgressError()) {
+        <p class="detail-time-error" role="alert" i18n="Error when saving a corrected time in progress fails">The time in progress could not be saved. Try again.</p>
+        }
+      </form>
+      }
       }
       <!-- Dependencies sit beside the clock: "can I start this?" is answered before the description.
            Each chip jumps to the Dependencies section, which lists the cards. -->
@@ -63,23 +88,6 @@
       </button>
       }
       </div>
-      }
-      @if (timeInProgress() && editingTimeInProgress()) {
-      <form class="detail-time-editor" (submit)="$event.preventDefault(); saveTimeInProgress()">
-        <label>
-          <input class="detail-time-input" type="number" min="0" max="100000" step="1" inputmode="numeric" [value]="timeDraftHours()" (input)="timeDraftHours.set(+$any($event.target).value)" aria-label="Hours" i18n-aria-label="Accessible name of the hours input when correcting time in progress" />
-          <span i18n="Unit after the hours input when correcting time in progress">h</span>
-        </label>
-        <label>
-          <input class="detail-time-input" type="number" min="0" max="59" step="1" inputmode="numeric" [value]="timeDraftMinutes()" (input)="timeDraftMinutes.set(+$any($event.target).value)" aria-label="Minutes" i18n-aria-label="Accessible name of the minutes input when correcting time in progress" />
-          <span i18n="Unit after the minutes input when correcting time in progress">m</span>
-        </label>
-        <button type="submit" class="detail-time-save" [disabled]="savingTimeInProgress()" i18n="Button - save a corrected time in progress">Save</button>
-        <button type="button" class="ghost detail-time-cancel" (click)="editingTimeInProgress.set(false)" [disabled]="savingTimeInProgress()" i18n="Button - discard a time in progress correction">Cancel</button>
-        @if (timeInProgressError()) {
-        <p class="detail-time-error" role="alert" i18n="Error when saving a corrected time in progress fails">The time in progress could not be saved. Try again.</p>
-        }
-      </form>
       }
 
       <!--

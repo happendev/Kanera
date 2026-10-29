@@ -656,8 +656,8 @@
                   }
                   @case ('inProgress') {
                     @if (timeInProgress(card); as timer) {
-                      <span class="tv-static-value tv-time-in-progress" [class.is-done]="!timer.running" [class.is-alert]="timer.alert" [kTooltip]="timer.label">
-                        <i aria-hidden="true" class="ti" [class.ti-progress]="timer.running" [class.ti-clock]="!timer.running"></i>{{ timer.text }}
+                      <span class="tv-static-value tv-time-in-progress" [class.is-done]="!timer.running" [class.is-paused]="timer.paused" [class.is-alert]="timer.alert" [kTooltip]="timer.label">
+                        <i aria-hidden="true" class="ti" [class.ti-progress]="timer.running && !timer.paused" [class.ti-clock-pause]="timer.paused" [class.ti-clock]="!timer.running"></i>{{ timer.text }}
                       </span>
                     } @else { <span class="tv-muted">—</span> }
                   }

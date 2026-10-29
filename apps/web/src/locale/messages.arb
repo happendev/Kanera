@@ -11632,9 +11632,9 @@
       "src/app/features/board/card-detail.component.html"
     ]
   },
-  "1310445301409424297": "Not in progress",
-  "@1310445301409424297": {
-    "description": "Card detail caption: the card is not in an In progress list, so its clock is stopped",
+  "5644204650192763251": "Paused until {$INTERPOLATION}",
+  "@5644204650192763251": {
+    "description": "Card detail caption - the card is in progress but outside working hours, so its clock adds nothing until the given time",
     "x-files": [
       "src/app/features/board/card-detail.component.html"
     ]
@@ -11642,6 +11642,13 @@
   "3972877797169399055": "{$START_TAG_STRONG}{$INTERPOLATION}{$CLOSE_TAG_STRONG} tracked",
   "@3972877797169399055": {
     "description": "Card detail: the stopped total of tracked time in progress, e.g. 24h tracked",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "1310445301409424297": "Not in progress",
+  "@1310445301409424297": {
+    "description": "Card detail caption: the card is not in an In progress list, so its clock is stopped",
     "x-files": [
       "src/app/features/board/card-detail.component.html"
     ]
@@ -14682,6 +14689,13 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
+  "1850064052886031152": "0m",
+  "@1850064052886031152": {
+    "description": "Tracked duration of zero minutes",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
   "2397252975094332874": "<1m",
   "@2397252975094332874": {
     "description": "Time-in-progress chip - under one minute tracked",
@@ -14699,13 +14713,6 @@
   "2435990898832003719": "{$hours}h",
   "@2435990898832003719": {
     "description": "Time-in-progress chip - whole hours tracked, e.g. 96h",
-    "x-files": [
-      "src/app/features/board/time-in-progress.util.ts"
-    ]
-  },
-  "1850064052886031152": "0m",
-  "@1850064052886031152": {
-    "description": "Tracked duration of zero minutes",
     "x-files": [
       "src/app/features/board/time-in-progress.util.ts"
     ]
@@ -14769,6 +14776,13 @@
       "src/app/features/board/time-in-progress.util.ts"
     ]
   },
+  "6111327500092975842": "{days, plural, one {In progress since {since} ({span}) · {tracked} tracked, past the #-day alert} other {In progress since {since} ({span}) · {tracked} tracked, past the #-day alert}}",
+  "@6111327500092975842": {
+    "description": "Tooltip on a running time-in-progress chip past the workspace alert",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
   "2482726385673320452": "In progress since {$date} ({$span}) · {$tracked} tracked",
   "@2482726385673320452": {
     "description": "Tooltip on a running time-in-progress chip",
@@ -14776,9 +14790,9 @@
       "src/app/features/board/time-in-progress.util.ts"
     ]
   },
-  "6111327500092975842": "{days, plural, one {In progress since {since} ({span}) · {tracked} tracked, past the #-day alert} other {In progress since {since} ({span}) · {tracked} tracked, past the #-day alert}}",
-  "@6111327500092975842": {
-    "description": "Tooltip on a running time-in-progress chip past the workspace alert",
+  "2788158133730087763": "{$running} · paused outside working hours (weekdays 09:00-17:00 {$zone}), resumes {$resume}",
+  "@2788158133730087763": {
+    "description": "Tooltip on a running time-in-progress chip outside working hours, appended to the running tooltip - zone is an IANA time zone such as Europe/London",
     "x-files": [
       "src/app/features/board/time-in-progress.util.ts"
     ]
