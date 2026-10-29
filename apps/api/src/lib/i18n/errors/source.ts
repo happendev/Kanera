@@ -6,6 +6,7 @@
 // template literal: each placeholder captures the dynamic part, which is carried into the
 // translation unchanged. catalog.test.ts fails when a literal message in src/ is missing here.
 export const ERROR_MESSAGES = [
+  "external reference already exists",
   "AI agent access is turned off for this organisation",
   "Additional notification destinations are not available on your plan. Upgrade to configure ntfy, Gotify, or a personal webhook.",
   "All purchased seats are in use. Buy more seats to add this person.",

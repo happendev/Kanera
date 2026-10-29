@@ -1,6 +1,26 @@
+import type { AuthClaims } from "../auth/plugin.js";
+import { assertWorkspaceAccess } from "./access.js";
+import { forbidden } from "./errors.js";
 import { externalLinks, type ExternalLink, type NewExternalLink } from "@kanera/shared/schema";
 import { and, desc, eq, inArray, or, type SQL } from "drizzle-orm";
 import { db, type Db } from "../db.js";
+
+export async function assertExternalLinkWriteAccess(
+  auth: AuthClaims,
+  workspaceId: string,
+) {
+  if (auth.authKind === "apiKey" && auth.apiKeyKind !== "personal") {
+    // External links are integration-maintained sync metadata: write-scoped workspace API keys may
+    // mutate them, while human users still need workspace-admin power because this is workspace-scoped.
+    await assertWorkspaceAccess(auth, workspaceId);
+    if ((auth.apiKeyScope ?? "read") === "read") throw forbidden();
+    return;
+  }
+
+  // Personal credentials follow their owner's permissions, like a human request. Only a workspace
+  // admin may mutate this workspace-scoped integration metadata.
+  await assertWorkspaceAccess(auth, workspaceId, "admin");
+}
 
 export type ExternalLinkDb = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 

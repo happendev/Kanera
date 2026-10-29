@@ -2,6 +2,7 @@ import type { ErrorCatalog } from "./source.js";
 
 // pt-BR translations of the API error catalog. Terms and voice follow apps/web/src/locale/GLOSSARY.md.
 export const ptBR: ErrorCatalog = {
+  "external reference already exists": "a referência externa já existe",
   "AI agent access is turned off for this organisation":
     "O acesso de agentes de IA está desativado para esta organização.",
   "Additional notification destinations are not available on your plan. Upgrade to configure ntfy, Gotify, or a personal webhook.":

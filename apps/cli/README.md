@@ -202,3 +202,21 @@ credential in a second place to use Kanera from an MCP client.
 When connected Kanera MCP tools are already available, prefer them over the CLI. The CLI is the
 fallback for shell-only agents; both transports should be used instead of browser automation for
 supported card and project operations.
+
+### Create a fully described alert
+
+`cards.create` and `cards.bulk_create` accept `customFields` keyed by field UUID, using the
+same typed value columns as the public API, and `externalRef: {provider, type, id}`.
+Each card and its values/reference are saved atomically; bulk creation validates all entries
+first, then commits each card separately. A reference already in the workspace returns 409.
+External references require a write-scoped workspace key or workspace admin access.
+
+```bash
+kanera card create --boardId "$BOARD_ID" --listId "$LIST_ID" --title "Service alert" \
+  --customFields."$SEVERITY_FIELD_ID".valueOptionIds[] "$CRITICAL_OPTION_ID" \
+  --externalRef.provider sentry --externalRef.type issue --externalRef.id 12345
+
+kanera call cards.bulk_create --boardId "$BOARD_ID" --cards '[
+  {"listId":"<list UUID>","title":"Service alert","customFields":{"<field UUID>":{"valueText":"production"}},"externalRef":{"provider":"sentry","type":"issue","id":"12346"}}
+]'
+```

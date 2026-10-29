@@ -1,6 +1,7 @@
 import type { ErrorCatalog } from "./source.js";
 
 export const nl: ErrorCatalog = {
+  "external reference already exists": "de externe verwijzing bestaat al",
   "AI agent access is turned off for this organisation": "Toegang tot AI-agenten is uitgeschakeld voor deze organisatie",
   "Additional notification destinations are not available on your plan. Upgrade to configure ntfy, Gotify, or a personal webhook.": "Er zijn geen aanvullende meldingsbestemmingen beschikbaar in je abonnement. Upgrade om ntfy, Gotify of een persoonlijke webhook te configureren.",
   "All purchased seats are in use. Buy more seats to add this person.": "Alle gekochte stoelen zijn in gebruik. Koop meer stoelen om deze persoon toe te voegen.",

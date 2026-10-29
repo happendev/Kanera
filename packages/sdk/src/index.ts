@@ -87,7 +87,7 @@ export type { CallOptions, ResourceContext } from "./resources/base.js";
 export { Boards, Lists, type BoardDetail, type OpenBoardOptions } from "./resources/boards.js";
 export {
   BulkCards, CardAttachments, Cards, Checklists,
-  type BulkCreateCardInput, type ChecklistItemUpdate, type CreateCardInput, type CreateChecklistInput, type CreateChecklistItemInput,
+  type CardExternalRefInput, type BulkCreateCardInput, type ChecklistItemUpdate, type CreateCardInput, type CreateChecklistInput, type CreateChecklistItemInput,
   type CustomFieldValueInput, type DependencyGraphScope, type MoveCardInput, type NewChecklistItemInput, type NewSubChecklistInput,
   type NewSubChecklistItemInput, type UpdateAllChecklistItemsInput, type UpdateCardInput, type UpdateChecklistItemInput,
 } from "./resources/cards.js";
