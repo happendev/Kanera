@@ -25,6 +25,7 @@ import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/
 import { avatarFallbackColorStyle, blobatarFallbackUri, documentThemeIsDark } from "../../shared/avatar.component";
 import { stripEmptyTaskItems } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { githubStateLabel } from "./github-state-label";
 
 marked.setOptions({ gfm: true, breaks: true });
 
@@ -182,19 +183,6 @@ function normalizePlainText(value: string): string {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-}
-
-/** GitHub's own state words, shown on link cards. Unknown future states fall through untranslated. */
-function githubStateLabel(state: string): string {
-  switch (state) {
-    case "open": return $localize`:GitHub pull request or issue state:open`;
-    case "closed": return $localize`:GitHub pull request or issue state:closed`;
-    case "merged": return $localize`:GitHub pull request state:merged`;
-    case "draft": return $localize`:GitHub pull request or release state:draft`;
-    case "released": return $localize`:GitHub release state:released`;
-    case "prerelease": return $localize`:GitHub release state:prerelease`;
-    default: return state;
-  }
 }
 
 @Component({

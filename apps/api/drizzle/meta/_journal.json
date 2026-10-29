@@ -673,6 +673,13 @@
       "when": 1793005688293,
       "tag": "0095_lonely_bushwacker",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1793108401746,
+      "tag": "0096_groovy_kitty_pryde",
+      "breakpoints": true
     }
   ]
 }

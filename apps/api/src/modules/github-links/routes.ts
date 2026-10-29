@@ -1,11 +1,11 @@
 import { dto } from "@kanera/shared";
-import { githubApp, githubAppInstallations } from "@kanera/shared/schema";
-import { eq } from "drizzle-orm";
+import { cardGitHubPulls, githubApp, githubAppInstallations } from "@kanera/shared/schema";
+import { desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { db } from "../../db.js";
-import { env } from "../../env.js";
-import { assertOrgRole, assertWorkspaceAccess } from "../../lib/access.js";
+import { env, isLocalUrl } from "../../env.js";
+import { assertCardAccess, assertOrgRole, assertWorkspaceAccess } from "../../lib/access.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import {
   createInstallationAccessToken,
@@ -309,6 +309,11 @@ export async function githubLinkRoutes(app: FastifyInstance) {
     const body = dto.createGitHubManifestBody.parse(req.body);
     const state = `${req.auth.cid}:${randomUUID()}`;
     const settingsUrl = `${env.WEB_ORIGIN}/settings/org`;
+    // Pull request webhooks link pull requests to the cards their branch, title or body names.
+    // GitHub cannot reach a localhost API, so a local bootstrap registers no webhook.
+    const webhook = isLocalUrl(env.API_PUBLIC_URL)
+      ? { default_events: [] }
+      : { hook_attributes: { url: `${env.API_PUBLIC_URL}/api/integrations/github/webhook`, active: true }, default_events: ["pull_request"] };
     const manifest = {
       name: `Kanera ${body.accountLogin}`,
       url: env.WEB_ORIGIN,
@@ -325,7 +330,7 @@ export async function githubLinkRoutes(app: FastifyInstance) {
         contents: "read",
         pull_requests: "read",
       },
-      default_events: [],
+      ...webhook,
     };
 
     const action = new URL(`https://github.com/organizations/${encodeURIComponent(body.accountLogin)}/settings/apps/new`);
@@ -488,5 +493,27 @@ export async function githubLinkRoutes(app: FastifyInstance) {
     }));
 
     return { links };
+  });
+
+  app.get("/cards/:id/github-pulls", async (req): Promise<dto.CardGitHubPullsResponse> => {
+    const { id } = req.params as { id: string };
+    await assertCardAccess(req.auth, id);
+    const pulls = await db
+      .select({
+        id: cardGitHubPulls.id,
+        repoFullName: cardGitHubPulls.repoFullName,
+        number: cardGitHubPulls.number,
+        title: cardGitHubPulls.title,
+        url: cardGitHubPulls.url,
+        headRef: cardGitHubPulls.headRef,
+        state: cardGitHubPulls.state,
+        additions: cardGitHubPulls.additions,
+        deletions: cardGitHubPulls.deletions,
+        githubUpdatedAt: cardGitHubPulls.githubUpdatedAt,
+      })
+      .from(cardGitHubPulls)
+      .where(eq(cardGitHubPulls.cardId, id))
+      .orderBy(desc(cardGitHubPulls.githubUpdatedAt));
+    return { pulls };
   });
 }

@@ -86,6 +86,10 @@
           <i aria-hidden="true" class="ti ti-hash"></i>
           <span i18n="Menu item: copy the card's short key, e.g. ENG-42">Copy key</span>
         </button>
+        <button class="card-actions-item" (click)="copyBranchName()">
+          <i aria-hidden="true" class="ti ti-git-branch"></i>
+          <span i18n="Menu item - copy a git branch name that starts with the card's key, so GitHub pull requests from it link back to the card">Copy branch name</span>
+        </button>
         <button class="card-actions-item" (click)="duplicateCard()" [disabled]="duplicating()">
           <i aria-hidden="true" class="ti ti-copy"></i>
           <span i18n="Menu item">Duplicate card</span>
@@ -904,6 +908,8 @@
       <k-card-relations [cardId]="card().id" [workspaceId]="card().workspaceId" [relations]="relations()" [hiddenBlockerCount]="hiddenBlockerCount()" [statusShownAbove]="true"
         [cardClosed]="!!(card().completedAt || card().archivedAt)"
         [canEdit]="canEdit()" [canEditRole]="canEditRole()" (changed)="refreshRelations()" (openCard)="openRelatedCard($event)" />
+
+      <k-card-github-pulls [cardId]="card().id" />
 
       @if (linkedNotes().length) {
       <section class="detail-section">

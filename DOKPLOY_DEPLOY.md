@@ -335,6 +335,7 @@ Leave them unset to instead bootstrap an App from Settings > Organisation.
 | `GITHUB_APP_SLUG` | No | GitHub App slug from its install URL. |
 | `GITHUB_APP_CLIENT_ID` | Hosted | App OAuth client id. Enable "Request user authorization (OAuth) during installation" on the App and set its Callback URL to `${WEB_ORIGIN}/settings/org`; Kanera uses the resulting authorization to confirm the connecting user can see the installation. |
 | `GITHUB_APP_CLIENT_SECRET` | Hosted | An OAuth client secret for the App. Required alongside `GITHUB_APP_CLIENT_ID`. |
+| `GITHUB_APP_WEBHOOK_SECRET` | No | The App's webhook secret. Set the App's Webhook URL to `${API_PUBLIC_URL}/api/integrations/github/webhook` and subscribe it to "Pull request" events so pull requests naming a card key link to that card. |
 | `GITHUB_APP_PRIVATE_KEY` | No | App private key PEM with newlines escaped as `\n`. Paste as a single line — Dokploy's env editor reads one value per line, so a raw multi-line PEM will be silently truncated. Run `awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' your-key.pem` to get the correctly escaped form. |
 | `TRELLO_API_KEY` | No | Trello app API key for authenticated Trello attachment imports. See `trello_import.md`. |
 

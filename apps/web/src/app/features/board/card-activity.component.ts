@@ -961,6 +961,15 @@ export class CardActivityComponent {
         const other = this.v(this.activityPayloadText(p, "otherCardKey") ?? "?");
         return $localize`:Card activity shown without a person - the card's planned start is before the planned finish of the named card that blocks it:Scheduling conflict: this card is planned to start before ${other}:card: finishes`;
       }
+      case "githubPull:linked": {
+        const pull = this.v(`${this.activityPayloadText(p, "repoFullName") ?? "?"}#${typeof p["number"] === "number" ? p["number"] : "?"}`);
+        const title = this.v(this.activityPayloadText(p, "title") ?? "");
+        return $localize`:Card activity shown without a person - a GitHub pull request named this card's key in its branch, title or description; pullRequest is like acme/api#12:Linked to GitHub pull request ${pull}:pullRequest:, ${title}:title:`;
+      }
+      case "githubPull:stateChanged": {
+        const pull = this.v(`${this.activityPayloadText(p, "repoFullName") ?? "?"}#${typeof p["number"] === "number" ? p["number"] : "?"}`);
+        return icu($localize`:Card activity shown without a person - a linked GitHub pull request changed state; pullRequest is like acme/api#12:{state, select, open {GitHub pull request {pullRequest} is open for review} draft {GitHub pull request {pullRequest} went back to draft} merged {GitHub pull request {pullRequest} was merged} closed {GitHub pull request {pullRequest} was closed without merging} other {GitHub pull request {pullRequest} changed}}`, { state: this.activityPayloadText(p, "state"), pullRequest: pull });
+      }
       case "deleted":
         return ` ${$localize`:Card activity after a person's name:deleted this card`}`;
       case "labels:set": {
@@ -1273,7 +1282,7 @@ export class CardActivityComponent {
   }
 
   activityActorText(event: ActivityFeedEvent): string | null {
-    if ((event.action === "overdue" || event.action === "inProgress:tooLong" || event.action === "schedule:conflict") && event.actorKind === "system") return null;
+    if ((event.action === "overdue" || event.action === "inProgress:tooLong" || event.action === "schedule:conflict" || event.action.startsWith("githubPull:")) && event.actorKind === "system") return null;
     const copiedName = this.activityPayloadText(event.payload as Record<string, unknown>, "copiedActorName");
     return copiedName && event.actorKind === "system" ? `${event.actorName} (${copiedName})` : event.actorName;
   }

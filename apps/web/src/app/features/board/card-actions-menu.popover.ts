@@ -12,7 +12,7 @@ import {
 } from "@angular/core";
 import { Router } from "@angular/router";
 import type { WireCard, WireList } from "@kanera/shared/events";
-import { cardPath } from "@kanera/shared/card-links";
+import { cardBranchName, cardPath } from "@kanera/shared/card-links";
 import { ApiClient } from "../../core/api/api.client";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
@@ -182,6 +182,10 @@ import type { DueDateSlotSelection } from "./due-date.util";
       <button type="button" class="k-menu-item cam-item" (click)="copyCardKey($event)">
         <i aria-hidden="true" class="ti ti-hash"></i>
         <span i18n="Card menu item: copy the card's short key, such as DEV-12">Copy key</span>
+      </button>
+      <button type="button" class="k-menu-item cam-item" (click)="copyBranchName($event)">
+        <i aria-hidden="true" class="ti ti-git-branch"></i>
+        <span i18n="Menu item - copy a git branch name that starts with the card's key, so GitHub pull requests from it link back to the card">Copy branch name</span>
       </button>
       }
       <div class="cam-sep" role="separator"></div>
@@ -435,6 +439,14 @@ export class CardActionsMenuPopover {
     event.stopPropagation();
     const key = this.cardKey();
     if (key) await navigator.clipboard?.writeText(key).catch(() => undefined);
+    this.close.emit();
+  }
+
+  async copyBranchName(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const key = this.cardKey();
+    if (key) await navigator.clipboard?.writeText(cardBranchName(key, this.title())).catch(() => undefined);
     this.close.emit();
   }
 

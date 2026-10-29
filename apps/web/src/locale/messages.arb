@@ -9894,6 +9894,14 @@
       "src/app/features/board/card-detail.component.ts"
     ]
   },
+  "3016606420638616347": "Copy branch name",
+  "@3016606420638616347": {
+    "description": "Menu item - copy a git branch name that starts with the card's key, so GitHub pull requests from it link back to the card",
+    "x-files": [
+      "src/app/features/board/card-actions-menu.popover.ts",
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
   "1936837046207394927": "Unarchive card",
   "@1936837046207394927": {
     "description": "Card menu item",
@@ -10268,6 +10276,20 @@
   "5374494272971328150": "Scheduling conflict: this card is planned to start before {$card} finishes",
   "@5374494272971328150": {
     "description": "Card activity shown without a person - the card's planned start is before the planned finish of the named card that blocks it",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "8534193330040122602": "Linked to GitHub pull request {$pullRequest}, {$title}",
+  "@8534193330040122602": {
+    "description": "Card activity shown without a person - a GitHub pull request named this card's key in its branch, title or description; pullRequest is like acme/api#12",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "2997275584727558676": "{state, select, open {GitHub pull request {pullRequest} is open for review} draft {GitHub pull request {pullRequest} went back to draft} merged {GitHub pull request {pullRequest} was merged} closed {GitHub pull request {pullRequest} was closed without merging} other {GitHub pull request {pullRequest} changed}}",
+  "@2997275584727558676": {
+    "description": "Card activity shown without a person - a linked GitHub pull request changed state; pullRequest is like acme/api#12",
     "x-files": [
       "src/app/features/board/card-activity.component.ts"
     ]
@@ -12154,6 +12176,13 @@
       "src/app/features/notes/note-editor.component.ts"
     ]
   },
+  "1019897759924590321": "Pull requests",
+  "@1019897759924590321": {
+    "description": "Card detail section heading: GitHub pull requests that mention this card",
+    "x-files": [
+      "src/app/features/board/card-github-pulls.component.ts"
+    ]
+  },
   "3249696299920128231": "Card not found",
   "@3249696299920128231": {
     "x-files": [
@@ -12786,48 +12815,6 @@
       "src/app/features/board/description-editor.component.ts"
     ]
   },
-  "9010413891924313175": "open",
-  "@9010413891924313175": {
-    "description": "GitHub pull request or issue state",
-    "x-files": [
-      "src/app/features/board/description-viewer.component.ts"
-    ]
-  },
-  "6767507527148794848": "closed",
-  "@6767507527148794848": {
-    "description": "GitHub pull request or issue state",
-    "x-files": [
-      "src/app/features/board/description-viewer.component.ts"
-    ]
-  },
-  "6614347438773873128": "merged",
-  "@6614347438773873128": {
-    "description": "GitHub pull request state",
-    "x-files": [
-      "src/app/features/board/description-viewer.component.ts"
-    ]
-  },
-  "8466608973232252767": "draft",
-  "@8466608973232252767": {
-    "description": "GitHub pull request or release state",
-    "x-files": [
-      "src/app/features/board/description-viewer.component.ts"
-    ]
-  },
-  "5045954964545843238": "released",
-  "@5045954964545843238": {
-    "description": "GitHub release state",
-    "x-files": [
-      "src/app/features/board/description-viewer.component.ts"
-    ]
-  },
-  "2076300641365400661": "prerelease",
-  "@2076300641365400661": {
-    "description": "GitHub release state",
-    "x-files": [
-      "src/app/features/board/description-viewer.component.ts"
-    ]
-  },
   "6086194260175067803": "Copy text",
   "@6086194260175067803": {
     "description": "Button - copy the description as plain text",
@@ -12919,6 +12906,48 @@
     "description": "Very short abbreviation of \"End of work day\" for compact chips",
     "x-files": [
       "src/app/features/board/due-date.util.ts"
+    ]
+  },
+  "9010413891924313175": "open",
+  "@9010413891924313175": {
+    "description": "GitHub pull request or issue state",
+    "x-files": [
+      "src/app/features/board/github-state-label.ts"
+    ]
+  },
+  "6767507527148794848": "closed",
+  "@6767507527148794848": {
+    "description": "GitHub pull request or issue state",
+    "x-files": [
+      "src/app/features/board/github-state-label.ts"
+    ]
+  },
+  "6614347438773873128": "merged",
+  "@6614347438773873128": {
+    "description": "GitHub pull request state",
+    "x-files": [
+      "src/app/features/board/github-state-label.ts"
+    ]
+  },
+  "8466608973232252767": "draft",
+  "@8466608973232252767": {
+    "description": "GitHub pull request or release state",
+    "x-files": [
+      "src/app/features/board/github-state-label.ts"
+    ]
+  },
+  "5045954964545843238": "released",
+  "@5045954964545843238": {
+    "description": "GitHub release state",
+    "x-files": [
+      "src/app/features/board/github-state-label.ts"
+    ]
+  },
+  "2076300641365400661": "prerelease",
+  "@2076300641365400661": {
+    "description": "GitHub release state",
+    "x-files": [
+      "src/app/features/board/github-state-label.ts"
     ]
   },
   "540532048084437099": "Previous attachment",

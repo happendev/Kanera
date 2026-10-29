@@ -402,6 +402,8 @@ describe("CardDetailComponent realtime regressions", () => {
           ? Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [], relations: [], hiddenBlockerCount: 0 })
           : path.endsWith("/mirrors")
             ? Promise.resolve({ asSource: [], asTarget: [] })
+          : path.endsWith("/github-pulls")
+            ? Promise.resolve({ pulls: [] })
           : path === "/workspaces/workspace-1"
             ? Promise.resolve({ checklistTemplates: [] })
             : Promise.resolve({ items: [], nextCursor: null }),

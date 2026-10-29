@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CardGitHubPull } from "../schema/card-github-pull.js";
 import type { GitHubAppInstallation } from "../schema/github-app-installation.js";
 
 export const resolveGitHubLinksBody = z.object({
@@ -109,3 +110,56 @@ export interface GitHubAppConfigResponse {
   /** True when credentials exist but this organisation has not installed the app yet. */
   pendingInstallation?: boolean;
 }
+
+/** A pull request linked to a card, as card detail shows it. */
+export type CardGitHubPullRow = Pick<
+  CardGitHubPull,
+  "id" | "repoFullName" | "number" | "title" | "url" | "headRef" | "state" | "additions" | "deletions" | "githubUpdatedAt"
+>;
+
+export interface CardGitHubPullsResponse {
+  pulls: CardGitHubPullRow[];
+}
+
+const githubWebhookRepository = z.object({ full_name: z.string().min(1).max(200) });
+
+/**
+ * The parts of GitHub's `pull_request` webhook payload Kanera reads. Other fields pass through
+ * unvalidated so GitHub can add to the payload without breaking delivery.
+ */
+export const githubPullRequestWebhook = z.object({
+  action: z.string(),
+  installation: z.object({ id: z.number().int() }),
+  repository: githubWebhookRepository,
+  pull_request: z.object({
+    number: z.number().int().positive(),
+    title: z.string(),
+    body: z.string().nullable().optional(),
+    html_url: z.url(),
+    state: z.enum(["open", "closed"]),
+    draft: z.boolean().optional(),
+    merged_at: z.string().nullable().optional(),
+    updated_at: z.iso.datetime({ offset: true }),
+    additions: z.number().int().nullable().optional(),
+    deletions: z.number().int().nullable().optional(),
+    // `head.repo` is null when the fork a pull request came from has been deleted.
+    head: z.object({ ref: z.string(), repo: githubWebhookRepository.nullable() }),
+    base: z.object({ repo: githubWebhookRepository }),
+  }),
+});
+export type GitHubPullRequestWebhook = z.infer<typeof githubPullRequestWebhook>;
+
+const githubWebhookInstalledRepository = z.object({
+  full_name: z.string().min(1).max(200),
+  name: z.string().min(1).max(100),
+  private: z.boolean(),
+});
+
+/** GitHub's `installation` and `installation_repositories` webhooks, which keep a binding current. */
+export const githubInstallationWebhook = z.object({
+  action: z.string(),
+  installation: z.object({ id: z.number().int(), repository_selection: z.string().optional() }),
+  repositories_added: z.array(githubWebhookInstalledRepository).optional(),
+  repositories_removed: z.array(githubWebhookInstalledRepository).optional(),
+});
+export type GitHubInstallationWebhook = z.infer<typeof githubInstallationWebhook>;

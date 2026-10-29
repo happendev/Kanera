@@ -30,7 +30,7 @@ import {
 } from "@angular/core";
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
-import { cardPath } from "@kanera/shared/card-links";
+import { cardBranchName, cardPath } from "@kanera/shared/card-links";
 import { barDurationDays, plannedBar } from "@kanera/shared/schedule";
 import type { CardLinkedItemsResponse, CardMirrorStatus, CardRelationCard, CardRelationsResponse, LinkedInternalSummary } from "@kanera/shared/dto";
 import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type WireAgentRun, type ServerToClientEvents, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
@@ -66,6 +66,7 @@ import { DatePickerPopover } from "./date-picker.popover";
 import { DescriptionEditorComponent } from "./description-editor.component";
 import { DescriptionViewerComponent } from "./description-viewer.component";
 import { isPlainPrimaryClick } from "./card-navigation.util";
+import { CardGitHubPullsComponent } from "./card-github-pulls.component";
 import { CardRelationsComponent } from "./card-relations.component";
 import { blockerStatus, hiddenBlockersLabel } from "./card-relations.util";
 import {
@@ -116,7 +117,7 @@ const SIZE_FORMAT = new Intl.NumberFormat(appLocale(), { minimumFractionDigits: 
 @Component({
   selector: "k-card-detail",
   standalone: true,
-  imports: [CdkTrapFocus, CardRelationsComponent, 
+  imports: [CdkTrapFocus, CardGitHubPullsComponent, CardRelationsComponent, 
     NgOptimizedImage,
     NgTemplateOutlet,
     CdkDropList,
@@ -314,6 +315,11 @@ export class CardDetailComponent {
 
   async copyCardKey() {
     await navigator.clipboard?.writeText(this.card().key).catch(() => undefined);
+  }
+
+  async copyBranchName() {
+    const card = this.card();
+    await navigator.clipboard?.writeText(cardBranchName(card.key, card.title)).catch(() => undefined);
   }
 
   async toggleCardWatch() {
