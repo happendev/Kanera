@@ -276,6 +276,107 @@ describe("NotificationsService", () => {
     expect(api.get).toHaveBeenCalledWith("/notifications/org-unread-counts");
   });
 
+  // These races need deliberately held HTTP responses and explicit signal scheduling. A browser
+  // reconnect test cannot reliably position the online effect inside an in-flight recovery batch.
+  it("shares initial recovery with the first socket connection", async () => {
+    vi.useFakeTimers();
+    try {
+      service.initialise();
+      socket.trigger("connect");
+      TestBed.tick();
+      await vi.advanceTimersByTimeAsync(200);
+      for (const path of ["/notifications/unread-count", "/notifications/board-unread-counts", "/notifications/card-unread-counts", "/notifications/agent-counts", "/notifications/org-unread-counts", "/card-watches", "/board-watches", "/reminders?status=all"]) {
+        expect(api.get.mock.calls.filter(([requested]) => requested === path), path).toHaveLength(1);
+      }
+    } finally {
+      service.teardown();
+      vi.useRealTimers();
+    }
+  });
+
+  it("coalesces socket and online recovery while their HTTP requests are pending", async () => {
+    vi.useFakeTimers();
+    try {
+      service.initialise();
+      TestBed.tick();
+      await vi.advanceTimersByTimeAsync(200);
+      online.set(false);
+      TestBed.tick();
+      socket.trigger("disconnect");
+      const pending = deferred<{ count: number }>();
+      const get = api.get.getMockImplementation() as (path: string) => Promise<unknown>;
+      api.get.mockImplementation((path: string) => path === "/notifications/unread-count" ? pending.promise : get(path));
+      api.get.mockClear();
+      socket.trigger("connect");
+      online.set(true);
+      TestBed.tick();
+      await vi.advanceTimersByTimeAsync(200);
+      pending.resolve({ count: 0 });
+      await vi.advanceTimersByTimeAsync(200);
+      expect(api.get.mock.calls.filter(([path]) => path === "/notifications/unread-count")).toHaveLength(1);
+      expect(api.get.mock.calls.filter(([path]) => path === "/card-watches")).toHaveLength(1);
+      expect(service.unreadCount()).toBe(0);
+    } finally {
+      service.teardown();
+      vi.useRealTimers();
+    }
+  });
+
+  it("refreshes after the first connection if the initial snapshot predates its user-room subscription", async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = deferred<{ count: number }>();
+      const get = api.get.getMockImplementation() as (path: string) => Promise<unknown>;
+      let countReads = 0;
+      api.get.mockImplementation((path: string) => path === "/notifications/unread-count"
+        ? ++countReads === 1 ? pending.promise : Promise.resolve({ count: 1 })
+        : get(path));
+      service.initialise();
+      TestBed.tick();
+      await vi.advanceTimersByTimeAsync(200);
+      socket.trigger("connect");
+      await vi.advanceTimersByTimeAsync(200);
+      expect(countReads).toBe(1);
+      pending.resolve({ count: 0 });
+      await vi.advanceTimersByTimeAsync(200);
+      expect(countReads).toBe(2);
+      expect(service.unreadCount()).toBe(1);
+    } finally {
+      service.teardown();
+      vi.useRealTimers();
+    }
+  });
+
+  it("queues fresh recovery when another short outage interrupts an in-flight snapshot", async () => {
+    vi.useFakeTimers();
+    try {
+      service.initialise();
+      TestBed.tick();
+      await vi.advanceTimersByTimeAsync(200);
+      const pending = deferred<{ count: number }>();
+      const get = api.get.getMockImplementation() as (path: string) => Promise<unknown>;
+      let countReads = 0;
+      api.get.mockImplementation((path: string) => path === "/notifications/unread-count"
+        ? ++countReads === 1 ? pending.promise : Promise.resolve({ count: 1 })
+        : get(path));
+      socket.trigger("disconnect");
+      socket.trigger("connect");
+      await vi.advanceTimersByTimeAsync(200);
+      // displayedOnline stays true throughout both short outages.
+      socket.trigger("disconnect");
+      socket.trigger("connect");
+      await vi.advanceTimersByTimeAsync(200);
+      expect(countReads).toBe(1);
+      pending.resolve({ count: 99 });
+      await vi.advanceTimersByTimeAsync(200);
+      expect(countReads).toBe(2);
+      expect(service.unreadCount()).toBe(1);
+    } finally {
+      service.teardown();
+      vi.useRealTimers();
+    }
+  });
+
   it("deduplicates realtime notifications even when filters exclude them from cached pages", async () => {
     service.initialise();
     await Promise.resolve();
@@ -385,8 +486,7 @@ describe("NotificationsService", () => {
   it("tolerates failed optional requests during offline shell startup", async () => {
     api.get.mockRejectedValue(new Error("offline"));
     service.initialise();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(api.get).toHaveBeenCalledWith("/notifications/unread-count");
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/notifications/unread-count"));
     expect(service.unreadCount()).toBe(0);
   });
 
@@ -414,12 +514,10 @@ describe("NotificationsService", () => {
     api.get.mockClear();
 
     online.set(false);
-    TestBed.flushEffects();
+    TestBed.tick();
     online.set(true);
-    TestBed.flushEffects();
-    await Promise.resolve();
-
-    expect(api.get).toHaveBeenCalledWith("/notifications/unread-count");
+    TestBed.tick();
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/notifications/unread-count"));
     expect(api.get).toHaveBeenCalledWith("/notifications/board-unread-counts");
     expect(api.get).toHaveBeenCalledWith("/notifications/card-unread-counts");
   });
@@ -592,7 +690,7 @@ describe("NotificationsService", () => {
     await service.markAllRead();
 
     expect(api.post).toHaveBeenCalledWith("/notifications/read-all", { agentOnly: true });
-    expect(api.get).toHaveBeenCalledWith("/notifications/agent-counts");
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/notifications/agent-counts"));
     expect(service.items().find((n) => n.id === "agent-1")?.readAt).toBeTruthy();
     service.feedMode.set("unread");
     expect(service.items().map((n) => n.id)).toEqual(["human-1"]);
@@ -609,7 +707,7 @@ describe("NotificationsService", () => {
     await service.markBoardNotificationsRead("board-1");
 
     expect(api.post).toHaveBeenCalledWith("/notifications/boards/board-1/read", {});
-    expect(api.get).toHaveBeenCalledWith("/notifications/unread-count");
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/notifications/unread-count"));
     expect(api.get).toHaveBeenCalledWith("/notifications/board-unread-counts");
     expect(api.get).toHaveBeenCalledWith("/notifications/card-unread-counts");
   });
@@ -708,13 +806,14 @@ describe("NotificationsService", () => {
   });
 
   it("removes deleted notifications from both feeds and refreshes every badge aggregate", async () => {
+    let deleted = false;
     api.get.mockImplementation((path: string) => {
       if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path.startsWith("/notifications?")) {
         return Promise.resolve(page([
-          notification({ id: "notification-delete" }),
+          ...(!deleted ? [notification({ id: "notification-delete" })] : []),
           notification({ id: "notification-keep", cardId: "card-2" }),
-        ], null, 2));
+        ], null, deleted ? 1 : 2));
       }
       if (path === "/notifications/unread-count") return Promise.resolve({ count: 1 });
       if (path === "/notifications/board-unread-counts") return Promise.resolve([{ boardId: "board-1", count: 1 }]);
@@ -724,6 +823,7 @@ describe("NotificationsService", () => {
     service.initialise();
     await service.setIncludeRead(true);
 
+    deleted = true;
     socket.trigger("notification:deleted", { notificationIds: ["notification-delete"] });
     await vi.waitFor(() => expect(service.unreadCount()).toBe(1));
 

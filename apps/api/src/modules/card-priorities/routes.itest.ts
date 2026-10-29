@@ -818,6 +818,12 @@ void test("the target — and only the target — receives their queue in full o
   assert.ok(latest.items.every((item) => item.card !== null && item.context !== null));
   assert.deepEqual(latest.items.map((item) => item.card?.title), ["DEV-726", "DEV-755"]);
   assert.ok(Number.isFinite(Date.parse(latest.snapshotAt)));
+  const pings = await db.select({ userId: directRealtimeOutbox.userId, payload: directRealtimeOutbox.payload })
+    .from(directRealtimeOutbox).where(eq(directRealtimeOutbox.eventType, "cardPriority:invalidated"));
+  assert.ok(pings.some((row) => row.userId === f.target.id
+    && (row.payload as { snapshotAt?: string }).snapshotAt === latest.snapshotAt));
+  assert.ok(pings.filter((row) => row.userId !== f.target.id)
+    .every((row) => !("snapshotAt" in (row.payload as object))));
 
   // The event body and the REST body are one projection, so a client can apply either.
   const rest = await readQueue(f, f.targetToken);

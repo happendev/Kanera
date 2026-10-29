@@ -15,7 +15,7 @@ const OFFLINE_LOAD_ERROR = $localize`:Notifications load error while offline:You
 const GENERIC_LOAD_ERROR = $localize`:Notifications load error:Couldn't refresh notifications. Try again in a moment.`;
 const ACTIVE_CARD_VIEW_TTL_MS = 15_000;
 const ACTIVE_CARD_VIEW_HEARTBEAT_MS = 5_000;
-const GROUP_COUNT_REFRESH_DEBOUNCE_MS = 150;
+const RECONCILE_DEBOUNCE_MS = 150;
 
 function storedNotificationGroupBy(clientId: string | null | undefined): NotificationGroupBy {
   const stored = localStorage.getItem(organisationStorageKey(STORAGE_KEYS.NOTIFICATION_GROUP_BY, clientId));
@@ -107,11 +107,14 @@ export class NotificationsService {
   private sessionVersion = 0;
   private readonly countRequests = new Map<string, number>();
   private reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconcileReadActiveCards = false;
+  private reconcileQueued = false;
+  private reconcileInFlight: { revision: number; readActiveCards: boolean; promise: Promise<void> } | null = null;
   private feedLoaded = false;
+  private userOptionsDirty = false;
   private readonly receivedNotificationIds = new Set<string>();
   private feedRequestVersion = 0;
   private groupRequestVersion = 0;
-  private groupCountRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.teardown());
@@ -128,7 +131,8 @@ export class NotificationsService {
         this.wasOnline = online;
         return;
       }
-      if (online && !this.wasOnline) void this.resync(true);
+      if (!online && this.wasOnline) this.invalidateNotificationRequests();
+      if (online && !this.wasOnline) this.scheduleRecovery();
       this.wasOnline = online;
     });
   }
@@ -138,22 +142,16 @@ export class NotificationsService {
     this.restoreOrganisationPreferences();
     this.refreshActiveCardViews();
     this.initialised.set(true);
-    // Offline startup still attaches realtime so counts recover on reconnect. These optional
-    // reads must not surface unhandled rejections while the shell restores its cached directory.
-    void this.refreshUnreadCount().catch(() => undefined);
-    void this.refreshAgentCounts().catch(() => undefined);
-    void this.refreshOrganisationUnreadCounts().catch(() => undefined);
-    void this.refreshBoardUnreadCounts().catch(() => undefined);
-    void this.refreshCardUnreadCounts().catch(() => undefined);
-    void this.loadWatchedCards().catch(() => undefined);
-    void this.loadWatchedBoards().catch(() => undefined);
-    void this.loadCardReminders().catch(() => undefined);
+    // Initial load and the socket's first connect share a recovery batch. Offline startup still
+    // attaches realtime so returning online can restore counts, follows and reminders together.
+    this.scheduleRecovery();
     this.attachSocket();
   }
 
   teardown(): void {
     this.invalidateNotificationRequests();
     this.feedLoaded = false;
+    this.userOptionsDirty = false;
     this.sessionVersion += 1;
     this.pendingReadChanges = 0;
     this.receivedNotificationIds.clear();
@@ -162,12 +160,11 @@ export class NotificationsService {
     this.activeCardBoards.set({});
     if (this.reconcileTimer !== null) clearTimeout(this.reconcileTimer);
     this.reconcileTimer = null;
+    this.reconcileReadActiveCards = false;
+    this.reconcileQueued = false;
+    this.reconcileInFlight = null;
     this.detach?.();
     this.detach = null;
-    if (this.groupCountRefreshTimer !== null) {
-      clearTimeout(this.groupCountRefreshTimer);
-      this.groupCountRefreshTimer = null;
-    }
     this.initialised.set(false);
     this.feedMode.set("unread");
     this.unreadItems.set([]);
@@ -249,12 +246,49 @@ export class NotificationsService {
     this.loading.set(false);
   }
 
-  private scheduleReconciliation(): void {
+  private scheduleRecovery(): void {
+    // The displayed-online effect and socket connect describe the same recovery. A disconnect
+    // invalidates the revision, so a genuinely new outage cannot reuse an older in-flight batch.
+    if (this.reconcileReadActiveCards) {
+      this.scheduleReconciliation(true);
+      return;
+    }
+    if (this.reconcileInFlight?.readActiveCards && this.reconcileInFlight.revision === this.stateRevision) return;
+    this.invalidateNotificationRequests();
+    this.scheduleReconciliation(true);
+  }
+
+  private scheduleReconciliation(readActiveCards = false): void {
+    this.reconcileReadActiveCards ||= readActiveCards;
+    this.reconcileQueued = true;
     if (this.reconcileTimer !== null) return;
     this.reconcileTimer = setTimeout(() => {
       this.reconcileTimer = null;
-      if (this.online() && this.pendingReadChanges === 0) void this.resync();
-    }, GROUP_COUNT_REFRESH_DEBOUNCE_MS);
+      if (this.online() && this.pendingReadChanges === 0) this.reconcile();
+    }, RECONCILE_DEBOUNCE_MS);
+  }
+
+  private reconcile(): void {
+    if (this.reconcileInFlight) {
+      // Reuse an equivalent snapshot. A mutation during the request changes the revision and
+      // leaves one follow-up queued; starting parallel batches would only discard their results.
+      if (this.reconcileInFlight.revision === this.stateRevision && (!this.reconcileReadActiveCards || this.reconcileInFlight.readActiveCards)) {
+        this.reconcileQueued = false;
+        this.reconcileReadActiveCards = false;
+      }
+      return;
+    }
+    const session = this.sessionVersion;
+    const readActiveCards = this.reconcileReadActiveCards;
+    this.reconcileReadActiveCards = false;
+    this.reconcileQueued = false;
+    const batch = { revision: this.stateRevision, readActiveCards, promise: this.resync(readActiveCards) };
+    this.reconcileInFlight = batch;
+    void batch.promise.finally(() => {
+      if (session !== this.sessionVersion || this.reconcileInFlight !== batch) return;
+      this.reconcileInFlight = null;
+      if (this.reconcileQueued) this.scheduleReconciliation();
+    });
   }
 
   private async postReadChange(path: string, body: object): Promise<void> {
@@ -274,7 +308,7 @@ export class NotificationsService {
     }
   }
 
-  async loadFirstPage(): Promise<void> {
+  async loadFirstPage({ refreshAgentCounts = true, refreshUserOptions = true } = {}): Promise<void> {
     this.feedLoaded = true;
     if (this.pendingReadChanges > 0) return;
     if (!this.online()) {
@@ -291,16 +325,18 @@ export class NotificationsService {
       const [page, groupCounts, userOptions] = await Promise.all([
         this.fetchNotificationsPage(mode),
         this.fetchGroupCounts(mode).catch(() => null),
-        this.fetchNotificationUserOptions().catch(() => null),
+        refreshUserOptions ? this.fetchNotificationUserOptions().catch(() => null) : Promise.resolve(null),
       ]);
-      // The Agent tab's existence rides along with every feed load so it appears without a reload
-      // once the first agent notification lands.
+      // Standalone feed loads need Agent tab metadata; reconciliation already fetched it.
       if (requestVersion !== this.feedRequestVersion) return;
-      void this.refreshAgentCounts().catch(() => undefined);
+      if (refreshAgentCounts) void this.refreshAgentCounts().catch(() => undefined);
       const visibleItems = page.items.filter((n) => this.isVisibleNotification(n));
       this.setFeed(mode, visibleItems, page.nextCursor);
       if (groupCounts && groupRequestVersion === this.groupRequestVersion) this.setGroupCounts(groupCounts);
-      if (userOptions) this.setNotificationUserOptions(userOptions);
+      if (userOptions) {
+        this.setNotificationUserOptions(userOptions);
+        this.userOptionsDirty = false;
+      }
       this.unreadCount.set(page.unreadCount);
       this.loadError.set(null);
     } catch {
@@ -569,8 +605,6 @@ export class NotificationsService {
     const session = this.sessionVersion;
     try {
       await this.postReadChange(`/notifications/read`, { notificationIds: targetIds });
-      if (session !== this.sessionVersion) return;
-      this.scheduleGroupCountRefresh();
     } catch {
       if (session !== this.sessionVersion) return;
       // Roll back if the server rejected the update. Per row, the board aggregate must be restored
@@ -596,8 +630,6 @@ export class NotificationsService {
     const session = this.sessionVersion;
     try {
       await this.postReadChange(`/notifications/unread`, { notificationIds: [id] });
-      if (session !== this.sessionVersion) return;
-      this.scheduleGroupCountRefresh();
     } catch {
       if (session !== this.sessionVersion) return;
       this.upsertNotificationInFeeds({ ...target, readAt: previousReadAt });
@@ -624,8 +656,6 @@ export class NotificationsService {
     const session = this.sessionVersion;
     try {
       await this.postReadChange(`/notifications/read-all`, {});
-      if (session !== this.sessionVersion) return;
-      this.scheduleGroupCountRefresh();
     } catch {
       if (session !== this.sessionVersion) return;
       await Promise.all([
@@ -645,21 +675,10 @@ export class NotificationsService {
     const session = this.sessionVersion;
     try {
       await this.postReadChange(`/notifications/read-all`, { agentOnly: true });
-      if (session !== this.sessionVersion) return;
-      this.scheduleGroupCountRefresh();
     } catch {
       if (session !== this.sessionVersion) return;
       await this.loadFirstPage().catch(() => undefined);
     }
-    // Agent notifications can sit on unloaded pages, so the bell and per-board/card counts are
-    // re-read rather than derived from the rows in the drawer.
-    await Promise.all([
-      this.refreshUnreadCount().catch(() => undefined),
-      this.refreshAgentCounts().catch(() => undefined),
-      this.refreshBoardUnreadCounts().catch(() => undefined),
-      this.refreshCardUnreadCounts().catch(() => undefined),
-      this.refreshOrganisationUnreadCounts().catch(() => undefined),
-    ]);
   }
 
   async markBoardNotificationsRead(boardId: string): Promise<void> {
@@ -678,19 +697,10 @@ export class NotificationsService {
     const session = this.sessionVersion;
     try {
       await this.postReadChange(`/notifications/boards/${boardId}/read`, {});
-      if (session !== this.sessionVersion) return;
-      this.scheduleGroupCountRefresh();
     } catch {
       if (session !== this.sessionVersion) return;
       if (this.items().length > 0) await this.loadFirstPage().catch(() => undefined);
     }
-    // The drawer may only have one page loaded, so aggregate counts cannot be
-    // derived safely from its rows. Re-read them after success or failure.
-    await Promise.all([
-      this.refreshUnreadCount().catch(() => undefined),
-      this.refreshBoardUnreadCounts().catch(() => undefined),
-      this.refreshCardUnreadCounts().catch(() => undefined),
-    ]);
   }
 
   async markCardNotificationsRead(cardId: string, boardId: string): Promise<void> {
@@ -716,8 +726,6 @@ export class NotificationsService {
     const session = this.sessionVersion;
     try {
       await this.postReadChange(`/notifications/cards/${cardId}/read`, {});
-      if (session !== this.sessionVersion) return;
-      this.scheduleGroupCountRefresh();
     } catch {
       if (session !== this.sessionVersion) return;
       await Promise.all([
@@ -1175,7 +1183,9 @@ export class NotificationsService {
       for (const [cardId, boardId] of Object.entries(this.activeCardBoards())) this.requestActiveCardRead(cardId, boardId);
     }
     if (revision === this.stateRevision && this.feedLoaded) {
-      await this.loadFirstPage().catch(() => undefined);
+      // Read changes cannot change the available actors. Reconnects refresh those options;
+      // every reconciliation still refills the feed and its group counts from server truth.
+      await this.loadFirstPage({ refreshAgentCounts: false, refreshUserOptions: readActiveCards || this.userOptionsDirty }).catch(() => undefined);
     }
   }
 
@@ -1187,7 +1197,6 @@ export class NotificationsService {
         if (this.receivedNotificationIds.has(notification.id) || this.knownNotifications([notification.id])[0]?.readAt) return;
         this.upsertNotificationUserOption(notification);
         if (!notification.readAt && this.handleOpenCardNotification(notification)) {
-          this.scheduleGroupCountRefresh();
           return;
         }
         const visible = this.isVisibleNotification(notification);
@@ -1213,94 +1222,36 @@ export class NotificationsService {
         if (visible && !alreadyKnown && !notification.readAt && this.shouldPlayAttentionSound(notification)) {
           this.mentionSound.playMention();
         }
-        this.scheduleGroupCountRefresh();
-        void this.refreshOrganisationUnreadCounts().catch(() => undefined);
       },
       [SERVER_EVENTS.NOTIFICATION_UPDATED]: ({ notification }) => {
         this.upsertNotificationUserOption(notification);
         if (!notification.readAt && this.handleOpenCardNotification(notification)) {
-          this.scheduleGroupCountRefresh();
           return;
         }
         if (!this.isVisibleNotification(notification)) {
           this.agentItems.update((current) => current.filter((n) => n.id !== notification.id));
           this.allItems.update((current) => current.filter((n) => n.id !== notification.id));
           this.unreadItems.update((current) => current.filter((n) => n.id !== notification.id));
-          if (!notification.readAt) void this.refreshUnreadCount().catch(() => undefined);
-          void this.refreshBoardUnreadCounts().catch(() => undefined);
-          void this.refreshCardUnreadCounts().catch(() => undefined);
-          void this.refreshOrganisationUnreadCounts().catch(() => undefined);
-          this.scheduleGroupCountRefresh();
           return;
         }
-        let previousReadAt: NotificationRow["readAt"] | undefined;
-        let previousBoardId: NotificationRow["boardId"] | undefined;
-        let previousCardId: NotificationRow["cardId"] | undefined;
-        let inserted = false;
         const previous = this.knownNotifications([notification.id])[0];
-        if (previous) {
-          previousReadAt = previous.readAt;
-          previousBoardId = previous.boardId;
-          previousCardId = previous.cardId;
-        } else {
-          inserted = true;
-        }
         this.upsertNotificationInFeeds(previous ? { ...previous, ...notification } : notification);
-        if (!notification.readAt) {
-          void this.refreshUnreadCount().catch(() => undefined);
-        }
-        if (
-          (inserted && !notification.readAt)
-          || previousReadAt !== notification.readAt
-          || previousBoardId !== notification.boardId
-          || previousCardId !== notification.cardId
-        ) {
-          // An update for an unknown row can be a card relocation. The client has the aggregate
-          // source-board badge but not the row's previous board, so only a server refresh can
-          // remove the old count without double-counting the destination.
-          void this.refreshBoardUnreadCounts().catch(() => undefined);
-          void this.refreshCardUnreadCounts().catch(() => undefined);
-        }
-        this.scheduleGroupCountRefresh();
-        void this.refreshOrganisationUnreadCounts().catch(() => undefined);
       },
       [SERVER_EVENTS.NOTIFICATION_DELETED]: ({ notificationIds }) => {
         const deletedIds = new Set(notificationIds);
         this.agentItems.update((current) => current.filter((notification) => !deletedIds.has(notification.id)));
         this.allItems.update((current) => current.filter((notification) => !deletedIds.has(notification.id)));
         this.unreadItems.update((current) => current.filter((notification) => !deletedIds.has(notification.id)));
-        // A sibling tab may not have loaded the deleted rows, so the IDs alone
-        // cannot safely produce count deltas. Re-read every badge aggregate.
-        void this.refreshUnreadCount().catch(() => undefined);
-        void this.refreshBoardUnreadCounts().catch(() => undefined);
-        void this.refreshCardUnreadCounts().catch(() => undefined);
-        void this.refreshOrganisationUnreadCounts().catch(() => undefined);
-        this.scheduleGroupCountRefresh();
       },
       [SERVER_EVENTS.NOTIFICATION_READ]: ({ notificationIds, readAt }) => {
         this.applyReadLocal(notificationIds, readAt);
-        // applyReadLocal only adjusts unreadCount for items currently in the
-        // signal — a sibling tab that never opened the panel won't know about
-        // the affected ids, so re-sync from the server to keep the bell badge
-        // honest across tabs.
-        void this.refreshUnreadCount().catch(() => undefined);
-        void this.refreshBoardUnreadCounts().catch(() => undefined);
-        void this.refreshCardUnreadCounts().catch(() => undefined);
-        void this.refreshOrganisationUnreadCounts().catch(() => undefined);
-        this.scheduleGroupCountRefresh();
       },
       [SERVER_EVENTS.NOTIFICATION_UNREAD]: ({ notificationIds }) => {
         this.applyUnreadLocal(notificationIds);
-        void this.refreshUnreadCount().catch(() => undefined);
-        void this.refreshBoardUnreadCounts().catch(() => undefined);
-        void this.refreshCardUnreadCounts().catch(() => undefined);
-        void this.refreshOrganisationUnreadCounts().catch(() => undefined);
-        this.scheduleGroupCountRefresh();
       },
       [SERVER_EVENTS.NOTIFICATION_ALL_READ]: ({ readAt, notificationIds }) => {
         if (notificationIds) {
           this.applyReadLocal(notificationIds, readAt);
-          this.scheduleGroupCountRefresh();
           return;
         }
         // Compatibility with older servers; current events carry the exact changed ids.
@@ -1310,13 +1261,18 @@ export class NotificationsService {
         this.boardUnreadCounts.set({});
         this.cardUnreadCounts.set({});
         this.organisationUnreadCounts.set({});
-        this.scheduleGroupCountRefresh();
       },
     };
     // Socket events invalidate in-flight HTTP snapshots before changing local state. Reconcile
-    // after the burst so unloaded rows, duplicate deliveries and every badge converge together.
+    // after the burst so unloaded rows, relocated cards and every badge converge together.
+    // Individual handlers must not fetch counts: the HTTP completion and socket echo share this
+    // reconciliation, including sibling tabs that have never loaded the affected rows.
     const guardedHandlers = Object.fromEntries(Object.entries(handlers).map(([event, handler]) => [event, (payload: never) => {
       this.invalidateNotificationRequests();
+      // Read-state events leave actor options unchanged. Content changes can add or remove actors.
+      if (event === SERVER_EVENTS.NOTIFICATION_CREATED || event === SERVER_EVENTS.NOTIFICATION_UPDATED || event === SERVER_EVENTS.NOTIFICATION_DELETED) {
+        this.userOptionsDirty = true;
+      }
       handler(payload);
       this.scheduleReconciliation();
     }])) as Partial<ServerToClientEvents>;
@@ -1333,9 +1289,21 @@ export class NotificationsService {
     });
     // A short socket outage can finish before displayedOnline changes; listen to the actual
     // connection too, otherwise changes missed in that gap never reach an already-open inbox.
-    const onConnect = () => { this.invalidateNotificationRequests(); void this.resync(true); };
+    const onConnect = () => {
+      // A connection established after a recovery request started may have missed events before
+      // joining the user room. Only a snapshot requested after that boundary can close the gap.
+      this.invalidateNotificationRequests();
+      this.scheduleRecovery();
+    };
+    const onDisconnect = () => this.invalidateNotificationRequests();
     socket.on("connect", onConnect);
-    this.detach = () => { detachHandlers(); detachFollowHandlers(); socket.off("connect", onConnect); };
+    socket.on("disconnect", onDisconnect);
+    this.detach = () => {
+      detachHandlers();
+      detachFollowHandlers();
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+    };
   }
 
   private shouldPlayAttentionSound(notification: NotificationRow): boolean {
@@ -1362,15 +1330,6 @@ export class NotificationsService {
     }
     if (!notification.readAt) return true;
     return Date.now() - new Date(notification.createdAt as unknown as string).getTime() <= READ_NOTIFICATION_WINDOW_MS;
-  }
-
-  private scheduleGroupCountRefresh(): void {
-    if (this.items().length === 0 && Object.keys(this.groupCounts()).length === 0) return;
-    if (this.groupCountRefreshTimer !== null) return;
-    this.groupCountRefreshTimer = setTimeout(() => {
-      this.groupCountRefreshTimer = null;
-      void this.refreshGroupCounts();
-    }, GROUP_COUNT_REFRESH_DEBOUNCE_MS);
   }
 
   private incrementBoardUnreadCardCount(boardId: string | null, cardId: string | null): void {

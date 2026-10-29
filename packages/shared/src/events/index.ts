@@ -595,7 +595,9 @@ export interface ServerToClientEvents {
    * behind the same invalidation. That removes a class of ordering bug rather than obeying a rule
    * about it.
    */
-  "cardPriority:invalidated": (payload: { targetUserId: string }) => void;
+  // Only the target receives snapshotAt, correlating this ping with their full snapshot. Its
+  // absence preserves the refetch fallback for older servers or failed snapshot construction.
+  "cardPriority:invalidated": (payload: { targetUserId: string; snapshotAt?: string }) => void;
   /**
    * Your own priority queue, in full, after it changed. Sent only to `targetUserId`.
    *
