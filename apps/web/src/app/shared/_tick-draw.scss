@@ -1,0 +1,52 @@
+// A Tabler tick drawn as if by pen, for a completion the user just made. Include it on the icon
+// (`.ti-circle-check`, `.ti-square-check`) only while it should draw.
+//
+// Tabler's *-check glyphs are their outline glyph plus the tick `M9 12l2 2l4 -4`, and the tick's x
+// only ever increases along the stroke. So the bare outline sits in ::after and the full glyph in
+// ::before is revealed from the left: the circle or box never blinks, and the wipe's edge traces the
+// pen. A font glyph rather than an inline SVG keeps every icon Tabler's.
+//
+// $outline-glyph: the Tabler codepoint of the bare outline, "\ea6b" (ti-circle) or "\eb2c"
+// (ti-square). Tabler 3.x.
+@mixin tick-draw($outline-glyph) {
+  position: relative;
+  display: inline-block;
+
+  &::before {
+    display: inline-block;
+    animation: tick-draw-stroke 300ms;
+  }
+
+  &::after {
+    content: $outline-glyph;
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    animation: tick-draw-outline 300ms;
+  }
+
+  // The pen covers x 8-16 of the 24-unit glyph (the path plus its 2-unit stroke). It eases into the
+  // short down-stroke, turns at the vertex (x 11), then flicks through the long up-stroke.
+  @keyframes tick-draw-stroke {
+    0% {
+      clip-path: inset(0 66.7% 0 0);
+      animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+    }
+
+    38% {
+      clip-path: inset(0 52% 0 0);
+      animation-timing-function: cubic-bezier(0.3, 0.4, 0.45, 1);
+    }
+
+    100% {
+      clip-path: inset(0 33.3% 0 0);
+    }
+  }
+
+  @keyframes tick-draw-outline {
+    from,
+    to {
+      opacity: 1;
+    }
+  }
+}

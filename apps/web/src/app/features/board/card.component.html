@@ -88,7 +88,7 @@
   <k-card-labels [labels]="labels()" />
   <div class="card-body">
     @if (card().completedAt) {
-    <i aria-hidden="true" class="ti ti-circle-check card-complete-icon" kTooltip="Completed" i18n-kTooltip="Tooltip: the card is completed"></i>
+    <i aria-hidden="true" class="ti ti-circle-check card-complete-icon" [class.is-drawing]="completionDrawn()" kTooltip="Completed" i18n-kTooltip="Tooltip: the card is completed"></i>
     }
     @if (hasUnreadNotifications()) {
     <span class="card-unread-dot" [kTooltip]="unreadMarkLabel()" [attr.aria-label]="unreadMarkLabel()"></span>
@@ -241,9 +241,9 @@
     <div class="card-checklist-items">
       @for (item of checklist.items; track item.id) {
       <div class="card-checklist-item">
-        <button type="button" class="card-checklist-check" [class.checked]="item.completedAt" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklist.id, item, $event)"
+        <button type="button" class="card-checklist-check" [class.checked]="item.completedAt" [class.is-ticking]="tickedChecklistItemId() === item.id" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklist.id, item, $event)"
           [attr.aria-label]="item.completedAt ? markIncompleteLabel : markCompleteLabel">
-          <i aria-hidden="true" class="ti" [class.ti-checkbox]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
+          <i aria-hidden="true" class="ti" [class.ti-square-check]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
         </button>
         <button type="button" class="card-checklist-item-text" [class.is-done]="item.completedAt" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklist.id, item, $event)"
           [attr.aria-label]="item.completedAt ? markIncompleteLabel : markCompleteLabel">

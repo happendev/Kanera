@@ -738,11 +738,16 @@ export class CardDetailComponent {
     }
   }
 
+  // The card this user just completed from the header, so its tick draws in. Keyed by card so a
+  // reused detail panel opening another, already complete card stays still.
+  protected readonly completionTickedCardId = signal<string | null>(null);
+
   async toggleCompletion() {
     if (!this.canEdit() || this.savingCompletion()) return;
     this.savingCompletion.set(true);
     try {
       if (!await this.completionWarning.allow(!this.card().completedAt, { cardIds: [this.card().id] })) return;
+      if (!this.card().completedAt) this.completionTickedCardId.set(this.card().id);
       const card = await this.api.patch<WireCard>(`/cards/${this.card().id}/completion`, {
         completed: !this.card().completedAt,
       });
@@ -1966,8 +1971,13 @@ export class CardDetailComponent {
     }
   }
 
+  // The item this user last ticked, so only that box pops (on the realtime echo) rather than every
+  // checked item when the checklist renders.
+  protected readonly tickedChecklistItemId = signal<string | null>(null);
+
   async toggleChecklistItem(checklistId: string, item: WireCardChecklistItem) {
     if (!this.canEdit()) return;
+    if (!item.completedAt) this.tickedChecklistItemId.set(item.id);
     await this.api.patch(`/cards/${this.card().id}/checklists/${checklistId}/items/${item.id}`, {
       completed: !item.completedAt,
     });

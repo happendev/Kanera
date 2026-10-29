@@ -1,4 +1,5 @@
 @use "../../shared/card-key" as key;
+@use "../../shared/tick-draw" as tick;
 
 // ── Watch button ──────────────────────────────────────────────────────────────
 
@@ -362,6 +363,10 @@
 
   i {
     font-size: 19px;
+  }
+
+  i.is-drawing {
+    @include tick.tick-draw("\ea6b"); // ti-circle
   }
 
   &.is-active {
@@ -1627,8 +1632,9 @@
     font-size: 17px;
   }
 
-  &.checked i {
-    font-size: 19px;
+  // Only the box this user just ticked; unticking drops the animation, so re-ticking replays it.
+  &.is-ticking.checked i {
+    @include tick.tick-draw("\eb2c"); // ti-square
   }
 }
 
