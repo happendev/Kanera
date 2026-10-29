@@ -563,6 +563,11 @@ button.xs {
     vertical-align: baseline;
   }
 
+  .activity-run-title {
+    font-weight: 500;
+    color: var(--text);
+  }
+
   .activity-value-overdue {
     color: var(--danger);
     background: var(--danger-soft);
@@ -587,6 +592,10 @@ button.xs {
   // The feed stacks timestamps in a column, so proportional digits make consecutive entries look
   // ragged as the clock ticks past a narrow glyph like 1.
   font-variant-numeric: tabular-nums;
+}
+
+.activity-run-summary {
+  margin-top: 6px;
 }
 
 .activity-attachment-preview {

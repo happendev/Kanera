@@ -1513,7 +1513,6 @@
     "3992937414900539657": "{status, select, succeeded {將 {agent} 的運行標記為已完成} failed {將 {agent} 的運行標記為失敗} cancelled {將 {agent} 的運行標記為已取消} stalled {將 {agent} 的運行標記為已停止} other {將 {agent} 的運行標記為結束}}",
     "6014090634684622457": "{status, select, succeeded {完成} failed {失敗了} cancelled {取消} stalled {停滯在} other {結束了}}",
     "6574872987502148701": "{$outcome}: {$title}",
-    "933472262077597290": "{$outcome} — {$summary}",
     "2350070440008093526": "點擊編輯",
     "2598235812257841662": "通過 {$agent}",
     "6554006484550476652": "通過人工智能代理",

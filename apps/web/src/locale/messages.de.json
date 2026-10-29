@@ -1513,7 +1513,6 @@
     "3992937414900539657": "{status, select, succeeded {hat die Ausführung von {agent} als abgeschlossen markiert} failed {hat die Ausführung von {agent} als fehlgeschlagen markiert} cancelled {hat die Ausführung von {agent} als abgebrochen markiert} stalled {hat die Ausführung von {agent} als hängengeblieben markiert} other {hat die Ausführung von {agent} als beendet markiert}}",
     "6014090634684622457": "{status, select, succeeded {hat abgeschlossen} failed {ist fehlgeschlagen} cancelled {wurde abgebrochen} stalled {hängt fest bei} other {hat beendet}}",
     "6574872987502148701": "{$outcome}: {$title}",
-    "933472262077597290": "{$outcome} – {$summary}",
     "2350070440008093526": "Zum Bearbeiten klicken",
     "2598235812257841662": "über {$agent}",
     "6554006484550476652": "über KI-Agent",
