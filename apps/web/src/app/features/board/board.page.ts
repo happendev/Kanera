@@ -91,6 +91,7 @@ type AnyCard = Card | WireCard | WireCardSummary;
 type BoardCardFilter = "overdue" | "blocked" | "atRisk" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong";
 const OFFLINE_COPY_PROMPT_DELAY_MS = 3000; // 3 seconds
 const SEARCH_DEBOUNCE_MS = 200;
+const BACKGROUND_RESYNC_AFTER_MS = 60_000;
 
 // Wide boards initially render a leading run of columns and grow it on idle scrolling.
 // Mounted columns stay available as CDK targets. Growth pauses during a drag because CDK takes
@@ -1344,15 +1345,16 @@ export class BoardPage implements OnDestroy {
       };
       refreshViewerQueue();
 
-      const applyBoard = (data: Awaited<ReturnType<typeof this.loadBoard>>) => {
-        if (cancelled) return;
-        this.state.hydrate(data);
-        // Live agent runs ride a separate request so the board-open hot path stays unchanged for
-        // the many boards no agent ever touches. Best-effort: a failure just means no chips until
-        // the next agentRun:* event arrives.
+      const refreshAgentRuns = () => {
+        // Socket events maintain badges while connected; snapshots seed them and recover missed
+        // starts/ends after an outage. Keep this request off routine board refreshes.
         void this.api.get<{ runs: WireAgentRun[] }>(`/boards/${boardId}/agent-runs`)
           .then((payload) => { if (!cancelled) this.state.setBoardLiveAgentRuns(payload.runs); })
           .catch(() => undefined);
+      };
+      const applyBoard = (data: Awaited<ReturnType<typeof this.loadBoard>>) => {
+        if (cancelled) return;
+        this.state.hydrate(data);
         if (!pageViewCaptured && data.workspaceClientId) {
           // The authorised payload carries the board owner's org, not a cross-org guest's home org.
           this.analytics.pageCurrentRoute(data.workspaceClientId);
@@ -1423,6 +1425,10 @@ export class BoardPage implements OnDestroy {
             }
           });
       };
+      const recoverBoard = () => {
+        refreshAgentRuns();
+        refreshBoard();
+      };
       this.refreshBoard = refreshBoard;
 
       this.clearBulkSelection();
@@ -1432,6 +1438,7 @@ export class BoardPage implements OnDestroy {
         })
         .catch(() => undefined);
 
+      refreshAgentRuns();
       void this.loadBoard(boardId, false, includeArchived, true, completedFrom, completedTo).then(applyBoard).catch(async (error: unknown) => {
         if (handleRevokedAccess(error)) return;
         if (hydrated) return;
@@ -1452,9 +1459,9 @@ export class BoardPage implements OnDestroy {
             // refresh the restored snapshot too.
             if (!initialLoadFinished || !this.offlineBoardCachedAt()) return;
           }
-          refreshBoard();
+          recoverBoard();
         },
-        onDesync: refreshBoard,
+        onDesync: recoverBoard,
         onWorkDoneChanged: () => this.workDoneRefreshVersion.update((version) => version + 1),
         onBoardMirrorsChanged: () => {
           // The event contains the full mirror for consumers that need it; this page intentionally
@@ -1513,11 +1520,18 @@ export class BoardPage implements OnDestroy {
       socket.on("client:user:role-changed", onClientUserRoleChanged);
       socket.on("user:profile:updated", onUserProfileUpdated);
       socket.on("board:member:removed", onBoardMemberRemoved);
-      // Resuming from sleep or backgrounding can leave the socket's automatic reconnect/rejoin
-      // cycle stalled or racing the network coming back up, which would otherwise strand the
-      // offline-cache fallback on screen indefinitely. Re-checking on visibility makes it self-heal.
+      let hiddenAt = document.visibilityState === "hidden" ? Date.now() : null;
+      // Brief tab switches retain the live socket state. A long absence can hide a stalled
+      // connection before Socket.IO notices, so retain a snapshot recovery after a minute away.
       const onVisibilityChange = () => {
-        if (document.visibilityState === "visible") refreshBoard();
+        if (document.visibilityState === "hidden") {
+          hiddenAt = Date.now();
+          return;
+        }
+        if (document.visibilityState !== "visible") return;
+        const longAbsence = hiddenAt !== null && Date.now() - hiddenAt >= BACKGROUND_RESYNC_AFTER_MS;
+        hiddenAt = null;
+        if (!socket.connected || this.offlineBoardCachedAt() !== null || longAbsence) recoverBoard();
       };
       document.addEventListener("visibilitychange", onVisibilityChange);
       onCleanup(() => {
