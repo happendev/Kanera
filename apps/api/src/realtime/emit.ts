@@ -329,7 +329,12 @@ export async function emitCardPriorityInvalidated(targetUserId: string): Promise
   });
   await Promise.all([
     ...[...audienceUserIds].map((userId) =>
-      emitToUserDurable(userId, SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId })),
+      emitToUserDurable(userId, SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, {
+        targetUserId,
+        // Managers still receive only the content-free invalidation. The target can suppress its
+        // redundant GET only when the corresponding full snapshot has actually arrived.
+        ...(userId === targetUserId && snapshot ? { snapshotAt: snapshot.snapshotAt } : {}),
+      })),
     // A failed enqueue must not fail the caller's already-committed write, like any emit here.
     enqueuePriorityQueueMcpEvents(targetUserId, currentOutboxActor()).catch((err) => {
       logRealtimePublishFailure(err, { scope: "user", scopeId: targetUserId, event: SERVER_EVENTS.CARD_PRIORITY_INVALIDATED });

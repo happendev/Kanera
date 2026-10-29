@@ -1071,8 +1071,7 @@ export class CardDetailComponent {
         // linked from elsewhere without being reopened.
         [SERVER_EVENTS.CARD_LINKS_CHANGED]: ({ cardId: changedCardId }) => {
           if (changedCardId !== cardId) return;
-          this.refreshLinkedItems(cardId);
-          this.refreshRelations(cardId);
+          this.scheduleLinkedItemsRefresh(cardId, true);
           this.linkRevision.update((revision) => revision + 1);
         },
         // The Dependencies section names each related card's list, board and labels, and a rename of
@@ -1108,7 +1107,10 @@ export class CardDetailComponent {
       if (this.sockets.displayedOnline()) {
         // The loader synchronously inspects detail state before its first await. Keep that read out
         // of this card/connectivity-scoped effect or hydration itself retriggers a duplicate request.
-        untracked(() => void this.refreshDetailFromNetwork(cardId, boardId));
+        untracked(() => {
+          this.refreshAgentRuns(cardId);
+          void this.refreshDetailFromNetwork(cardId, boardId);
+        });
       } else {
         untracked(() => void this.loadCachedDetail(cardId));
       }
@@ -1297,6 +1299,25 @@ export class CardDetailComponent {
       .catch(() => undefined);
   }
 
+  private linkedRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private linkedRefreshCardId: string | null = null;
+  private linkedRefreshRelations = false;
+
+  private scheduleLinkedItemsRefresh(cardId: string, relations = false) {
+    if (this.linkedRefreshCardId !== cardId) this.linkedRefreshRelations = false;
+    this.linkedRefreshCardId = cardId;
+    this.linkedRefreshRelations ||= relations;
+    if (this.linkedRefreshTimer !== null) clearTimeout(this.linkedRefreshTimer);
+    this.linkedRefreshTimer = setTimeout(() => {
+      this.linkedRefreshTimer = null;
+      const refreshRelations = this.linkedRefreshRelations;
+      this.linkedRefreshRelations = false;
+      if (this.destroyRef.destroyed || cardId !== this.cardId()) return;
+      this.refreshLinkedItems(cardId);
+      if (refreshRelations) this.refreshRelations(cardId);
+    }, 150);
+  }
+
   /**
    * Re-reads only the linked items. A full /detail refresh is the wrong tool here: the description
    * save (or another user's edit) that changed the links also emits card:updated, which bumps the
@@ -1322,7 +1343,6 @@ export class CardDetailComponent {
   }
 
   private async refreshDetailFromNetwork(cardId: string, boardId: string) {
-    this.refreshAgentRuns(cardId);
     const seq = ++this.detailLoadSeq;
     // Only show the loading gate when we have no detail yet, so a background/reconnect refresh of an
     // already-hydrated card doesn't blank the body. Snapshot the realtime version to detect a
@@ -1488,9 +1508,9 @@ export class CardDetailComponent {
       this.editorDrafts.clear(this.currentUserId(), "card-description", card.id);
       this.recoveredDescriptionDraft.set(false);
       this.exitDescriptionEdit();
-      void this.refreshDetailFromNetwork(card.id, card.boardId);
-      // Don't wait for the card:links:changed echo: the author should see a new link immediately.
-      this.refreshLinkedItems(card.id);
+      // PATCH supplies the saved card; uploads have their own attachment events. Only links
+      // need a follow-up snapshot, shared with the author's card:links:changed echo.
+      this.scheduleLinkedItemsRefresh(card.id);
     } catch {
       this.toasts.error($localize`Couldn't save the description. Your draft is still available; try again.`);
     } finally {

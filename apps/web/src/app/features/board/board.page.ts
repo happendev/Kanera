@@ -8,7 +8,7 @@ import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireAgentRun, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, inProgressClockOf, SERVER_EVENTS } from "@kanera/shared/events";
 import type { ReportedInProgressClock } from "./time-in-progress.util";
-import type { BoardExportArchive, DependencyGraphCard, DependencyGraphEdge, DependencyGraphResponse, WorkDoneEventType, WorkPrioritiesResponse } from "@kanera/shared/dto";
+import type { BoardExportArchive, DependencyGraphCard, DependencyGraphEdge, DependencyGraphResponse, WorkDoneEventType } from "@kanera/shared/dto";
 import type { Board, BoardRole, BoardSeparator, Card, CardCustomFieldValue, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
@@ -19,6 +19,7 @@ import { downloadTextFile } from "../../core/browser/download";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { OfflineCacheService, type OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AppTitleService } from "../../core/title/app-title.service";
@@ -339,10 +340,10 @@ export class BoardPage implements OnDestroy {
   /**
    * The viewer's own "Up next" queue positions, worn as rank pills on this board's tiles. The queue
    * is user-scoped and spans boards; this page only ever looks up its own card ids in the map, so
-   * entries for other boards are simply never read. Cleared on fetch failure rather than left
-   * stale — a stale sequence reads as an instruction.
+   * entries for other boards are simply never read. The shell-owned service supplies the same
+   * live/offline queue used by the drawer and Home, without a second board-specific request.
    */
-  readonly viewerPriorityRanks = signal<Map<string, number>>(new Map());
+  readonly viewerPriorityRanks = inject(MyPrioritiesService).ranksByCardId;
   readonly workDoneRefreshVersion = signal(0);
   /** The header's single secondary-actions menu: display, background, export and mirrors. */
   readonly boardMenuOpen = signal(false);
@@ -1327,24 +1328,6 @@ export class BoardPage implements OnDestroy {
       this.state.clear();
       const socket = this.sockets.connect();
 
-      // The viewer's own queue, refetched under their own credentials — the invalidation event is a
-      // bare ping (see `cardPriority:invalidated` in the shared events). Failure clears the pills
-      // instead of leaving last session's order on screen.
-      const refreshViewerQueue = () => {
-        if (!viewerUserId) return;
-        void this.api.get<WorkPrioritiesResponse>(`/work/priorities/${viewerUserId}`)
-          .then((queue) => {
-            if (cancelled) return;
-            this.viewerPriorityRanks.set(new Map(
-              queue.items.flatMap((item) => item.card ? [[item.card.id, item.rank] as const] : []),
-            ));
-          })
-          .catch(() => {
-            if (!cancelled) this.viewerPriorityRanks.set(new Map());
-          });
-      };
-      refreshViewerQueue();
-
       const refreshAgentRuns = () => {
         // Socket events maintain badges while connected; snapshots seed them and recover missed
         // starts/ends after an outage. Keep this request off routine board refreshes.
@@ -1388,9 +1371,6 @@ export class BoardPage implements OnDestroy {
       };
       const refreshBoard = () => {
         if (cancelled) return;
-        // Reconnect and foregrounding are convergence boundaries for the queue too: its
-        // invalidation ping is not replayed for events missed while disconnected.
-        refreshViewerQueue();
         if (!hydrated) return;
         if (refreshInFlight) {
           refreshQueued = true;
@@ -1507,12 +1487,6 @@ export class BoardPage implements OnDestroy {
         this.openCardHeld.set(null);
         this.closeCardDetail();
       };
-      const onPriorityInvalidated: ServerToClientEvents[typeof SERVER_EVENTS.CARD_PRIORITY_INVALIDATED] = ({ targetUserId }) => {
-        // Only the viewer's own queue draws pills here; a teammate's queue changing is not this
-        // page's business (managers curate from Team Cards, where the focused person is explicit).
-        if (targetUserId === this.auth.user()?.id) refreshViewerQueue();
-      };
-      socket.on(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, onPriorityInvalidated);
       socket.on(SERVER_EVENTS.CARD_DELETED, onCardDeleted);
       socket.on("board:deleted", onDeleted);
       socket.on("workspace:deleted", onWorkspaceDeleted);
@@ -1536,7 +1510,6 @@ export class BoardPage implements OnDestroy {
       document.addEventListener("visibilitychange", onVisibilityChange);
       onCleanup(() => {
         cancelled = true;
-        socket.off(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, onPriorityInvalidated);
         socket.off(SERVER_EVENTS.CARD_DELETED, onCardDeleted);
         socket.off("board:deleted", onDeleted);
         socket.off("workspace:deleted", onWorkspaceDeleted);
