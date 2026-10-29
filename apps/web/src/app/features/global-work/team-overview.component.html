@@ -407,7 +407,7 @@
           }
           @if (row.time; as time) {
             <span class="row-chip row-time" [class.is-running]="time.running" [class.is-aging]="time.alert" [kTooltip]="time.label" [attr.aria-label]="time.label">
-              <i aria-hidden="true" class="ti" [class.ti-progress]="time.running" [class.ti-clock]="!time.running"></i>{{ time.text }}
+              <i aria-hidden="true" class="ti" [class.ti-progress]="time.running && !time.paused" [class.ti-clock-pause]="time.paused" [class.ti-clock]="!time.running"></i>{{ time.text }}
             </span>
           }
           @if (row.due; as due) {

@@ -124,8 +124,8 @@
       </span>
       }
       @if (timeInProgress(); as timer) {
-      <span class="card-time-in-progress" [class.is-done]="!timer.running" [class.is-alert]="timer.alert" [kTooltip]="timer.label" [attr.aria-label]="timer.label">
-        <i aria-hidden="true" class="ti" [class.ti-progress]="timer.running" [class.ti-clock]="!timer.running"></i>
+      <span class="card-time-in-progress" [class.is-done]="!timer.running" [class.is-paused]="timer.paused" [class.is-alert]="timer.alert" [kTooltip]="timer.label" [attr.aria-label]="timer.label">
+        <i aria-hidden="true" class="ti" [class.ti-progress]="timer.running && !timer.paused" [class.ti-clock-pause]="timer.paused" [class.ti-clock]="!timer.running"></i>
         {{ timer.text }}
       </span>
       }

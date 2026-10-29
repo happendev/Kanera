@@ -1,0 +1,293 @@
+@let vm = model();
+      <!-- Checklists -->
+      <section class="detail-section card-detail-section" [class.large-checklist-collection]="vm.checklistItemPresentationById().size > 100">
+        <div class="section-label card-detail-section-label">
+          <i aria-hidden="true" class="ti ti-checklist"></i>
+          &ngsp;<ng-container i18n="Card detail section heading">Checklists</ng-container>
+          @if (vm.topLevelChecklists().length) {
+          <span class="count card-detail-count">{{ vm.topLevelChecklists().length }}</span>
+          }
+          @if (vm.topLevelChecklists().length) {
+          <span class="section-label-actions card-detail-section-label-actions">
+            <button type="button" class="outline sm checklist-hide-toggle" [class.is-active]="vm.hideCompletedChecklistItems()" (click)="vm.toggleCompletedChecklistItems()"
+              [kTooltip]="vm.hideCompletedChecklistItems() ? vm.labels.showCompletedItems : vm.labels.hideCompletedItems">
+              <i aria-hidden="true" [class]="vm.hideCompletedChecklistItems() ? 'ti ti-eye' : 'ti ti-eye-off'"></i>
+              @if (vm.hideCompletedChecklistItems()) {<ng-container i18n="Button: show completed checklist items">Show completed</ng-container>} @else {<ng-container i18n="Button: hide completed checklist items">Hide completed</ng-container>}
+            </button>
+          </span>
+          }
+        </div>
+
+        <ng-template #checklistList let-renderChecklists="checklists" let-showItemMeta="showItemMeta">
+        @if (renderChecklists.length) {
+        <!-- Native auto-scroll is disabled because the registered scroller (above) would otherwise be
+             scrolled by both CDK and our manual edge-nudge, doubling the speed. -->
+        <div class="checklists" cdkDropList cdkDropListAutoScrollDisabled [cdkDropListData]="renderChecklists" [cdkDropListDisabled]="!vm.canEdit()" (cdkDropListDropped)="vm.dropChecklist($event)">
+          @for (checklist of renderChecklists; track checklist.id) {
+          @let progress = vm.checklistProgressById().get(checklist.id);
+          <div class="checklist-block" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-id]="checklist.id" [cdkDragDisabled]="!vm.canEdit()" [cdkDragData]="checklist"
+            (cdkDragStarted)="vm.onChecklistDragStarted()" (cdkDragMoved)="vm.onChecklistDragMoved($event)" (cdkDragEnded)="vm.onChecklistDragEnded()">
+            <ng-template cdkDragPreview>
+              <div class="checklist-drag-preview"><i aria-hidden="true" class="ti ti-grip-vertical"></i>{{ checklist.title }}</div>
+            </ng-template>
+            <div class="checklist-head">
+              <button type="button" class="ghost icon checklist-collapse" (click)="vm.toggleChecklistCollapsed(checklist.id)" [kTooltip]="vm.isChecklistCollapsed(checklist.id) ? vm.labels.expandChecklist : vm.labels.collapseChecklist"
+                [attr.aria-label]="vm.isChecklistCollapsed(checklist.id) ? vm.labels.expandChecklist : vm.labels.collapseChecklist">
+                <i aria-hidden="true" [class]="vm.isChecklistCollapsed(checklist.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+              </button>
+              @if (vm.canEditRole()) {
+              <i aria-hidden="true" class="ti ti-grip-vertical checklist-grip" cdkDragHandle kTooltip="Drag checklist" i18n-kTooltip="Tooltip on the handle that reorders checklists"></i>
+              } @else {
+              <span class="checklist-grip-spacer"></span>
+              }
+              @if (vm.editingChecklistId() === checklist.id && vm.canEditRole()) {
+              <input #checklistTitleInput class="checklist-title-input" [value]="vm.draftChecklistTitle()" (input)="vm.draftChecklistTitle.set($any($event.target).value)" (keydown.enter)="vm.saveChecklistTitle(checklist)"
+                (keydown.escape)="vm.cancelChecklistTitle()" autofocus />
+              } @else {
+              <button type="button" class="checklist-title" [disabled]="!vm.canEdit()" (click)="vm.startEditChecklist(checklist)" [kTooltip]="vm.canEdit() ? vm.labels.editChecklistTitle : checklist.title">{{ checklist.title }}</button>
+              }
+              <span class="checklist-count" [class.is-complete]="progress?.complete">{{ progress?.text }}</span>
+              @if (vm.canEditRole()) {
+              @if (showItemMeta && checklist.items.length) {
+              <div class="checklist-bulk-wrap">
+                <button type="button" class="ghost xs checklist-bulk-btn" [class.is-active]="vm.bulkChecklistAssigneePickerId() === checklist.id" [disabled]="!vm.canEdit()" (click)="vm.toggleBulkChecklistAssigneePicker(checklist.id, $event)" kTooltip="Assign all items" i18n-kTooltip
+                  aria-label="Assign all checklist items" i18n-aria-label>
+                  <i aria-hidden="true" class="ti ti-user-plus"></i>
+                </button>
+                @if (vm.bulkChecklistAssigneePickerId() === checklist.id) {
+                <k-member-picker [members]="vm.members()" [selectedIds]="[]" [pinnedIds]="vm.assigneeIds()" [currentUserId]="vm.currentUserId()" [workspaceId]="vm.workspaceId()" [allowClear]="true" clearLabel="Unassign all" i18n-clearLabel="Button: remove the assignee from every checklist item"
+                  (toggle)="vm.bulkSetChecklistItemAssignee(checklist, $event)" (clear)="vm.bulkSetChecklistItemAssignee(checklist, null)" (close)="vm.bulkChecklistAssigneePickerId.set(null)" />
+                }
+              </div>
+              <div class="checklist-bulk-wrap">
+                <button type="button" class="ghost xs checklist-bulk-btn" [class.is-active]="vm.bulkChecklistDueDatePickerId() === checklist.id" [disabled]="!vm.canEdit()" (click)="vm.toggleBulkChecklistDueDatePicker(checklist.id, $event)" kTooltip="Set due date on all items" i18n-kTooltip
+                  aria-label="Set due date on all checklist items" i18n-aria-label>
+                  <i aria-hidden="true" class="ti ti-calendar-plus"></i>
+                </button>
+                @if (vm.bulkChecklistDueDatePickerId() === checklist.id) {
+                <k-date-picker value="" slot="anyTime" (applyDate)="vm.bulkSetChecklistItemDueDate(checklist, $event.value, $event.slot)" (clear)="vm.bulkSetChecklistItemDueDate(checklist, '')" (close)="vm.bulkChecklistDueDatePickerId.set(null)" />
+                }
+              </div>
+              }
+              <button type="button" class="ghost xs checklist-delete" [disabled]="!vm.canEdit()" (click)="vm.deleteChecklist(checklist)" kTooltip="Delete checklist" i18n-kTooltip>
+                <i aria-hidden="true" class="ti ti-trash"></i>
+              </button>
+              }
+            </div>
+
+            @if (checklist.items.length) {
+            <div class="checklist-progress-bar" [class.is-complete]="progress?.complete">
+              <div class="checklist-progress-fill" [style.width.%]="progress?.fillPct"></div>
+            </div>
+            }
+
+            @if (!vm.isChecklistCollapsed(checklist.id)) {
+            <!-- See sibling checklists list: native auto-scroll disabled so it doesn't compound the manual edge-nudge. -->
+            <div class="checklist-items" cdkDropList cdkDropListAutoScrollDisabled [id]="vm.checklistDropListId(checklist.id)" [cdkDropListData]="vm.visibleChecklistItems(checklist)" [cdkDropListConnectedTo]="vm.checklistDropListIdsFor(renderChecklists)" [cdkDropListDisabled]="!vm.canEdit()"
+              (cdkDropListDropped)="vm.dropChecklistItem($event, checklist.id)">
+              @for (item of vm.visibleChecklistItems(checklist); track item.id) {
+              @let itemPresentation = vm.checklistItemPresentationById().get(item.id);
+              <div class="checklist-item" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-item-id]="item.id" [cdkDragDisabled]="!vm.canEdit()" [cdkDragData]="item"
+                (cdkDragStarted)="vm.onChecklistDragStarted()" (cdkDragMoved)="vm.onChecklistDragMoved($event)" (cdkDragEnded)="vm.onChecklistDragEnded()">
+                @if (vm.canEditRole()) {
+                <i aria-hidden="true" class="ti ti-grip-vertical checklist-item-grip" cdkDragHandle kTooltip="Drag item" i18n-kTooltip="Tooltip on the handle that reorders checklist items"></i>
+                } @else {
+                <span class="checklist-grip-spacer"></span>
+                }
+                <button type="button" class="checklist-check" [class.checked]="item.completedAt" [class.is-ticking]="vm.tickedChecklistItemId() === item.id" [disabled]="!vm.canEdit()" (click)="vm.toggleChecklistItem(checklist.id, item)" [kTooltip]="item.completedAt ? vm.labels.markIncomplete : vm.labels.markComplete">
+                  <i aria-hidden="true" class="ti" [class.ti-square-check]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
+                </button>
+                @if (vm.editingItemId() === item.id && vm.canEditRole()) {
+                <input #checklistItemInput class="checklist-item-input" [value]="vm.draftItemText()" (input)="vm.draftItemText.set($any($event.target).value)" (keydown.enter)="vm.saveChecklistItem(checklist.id, item)"
+                  (keydown.escape)="vm.cancelChecklistItem()" autofocus />
+                } @else if (showItemMeta) {
+                <!-- Mini-card model: clicking the item opens its detail drawer (description + sub-checklists). Renaming lives in the item actions menu — a double-click can't coexist here because the first click already opens the drawer. Observers can open (read-only) too, so this is not gated on vm.canEdit. -->
+                <!-- Rows keep a single-line ellipsis, so the tooltip carries the full text for titles too long to fit; the drawer is the only other place it can be read. -->
+                <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" (click)="vm.openChecklistItemDetail(item)" [kTooltip]="item.text">{{ item.text }}</button>
+                } @else {
+                <!-- Sub-checklist items are terminal rows: they support text and completion only. -->
+                <span class="checklist-item-text is-static" [class.is-done]="item.completedAt" [kTooltip]="item.text">{{ item.text }}</span>
+                }
+                @if (showItemMeta || vm.canEditRole()) {
+                <div class="checklist-item-actions">
+                @if (showItemMeta && (itemPresentation?.hasDueDate || vm.canEditRole())) {
+                <div class="checklist-duedate-wrap" [class.is-empty]="!itemPresentation?.hasDueDate" [class.is-open]="vm.checklistItemDueDatePickerId() === item.id">
+                  @if (itemPresentation?.hasDueDate) {
+                  <button type="button" class="checklist-item-due due-badge due-badge-btn" [class.overdue]="itemPresentation?.overdue" [class.is-active]="vm.checklistItemDueDatePickerId() === item.id" [disabled]="!vm.canEdit()"
+                    (click)="vm.toggleChecklistItemDueDatePicker(item.id, $event)" [kTooltip]="vm.canEdit() ? vm.labels.changeDueDate : itemPresentation.dueDateText" aria-label="Change checklist item due date" i18n-aria-label>
+                    <i aria-hidden="true" class="ti ti-calendar-event"></i>
+                    {{ itemPresentation?.dueDateText }}
+                    @if (vm.canEditRole()) {
+                    <span class="due-clear" (click)="vm.setChecklistItemDueDate(checklist.id, item, ''); $event.stopPropagation()" kTooltip="Clear due date" i18n-kTooltip><i aria-hidden="true" class="ti ti-x"></i></span>
+                    }
+                  </button>
+                  } @else if (vm.canEditRole()) {
+                  <button type="button" class="ghost xs checklist-item-due-add" [class.is-active]="vm.checklistItemDueDatePickerId() === item.id" [disabled]="!vm.canEdit()" (click)="vm.toggleChecklistItemDueDatePicker(item.id, $event)" kTooltip="Add due date" i18n-kTooltip
+                    aria-label="Add checklist item due date" i18n-aria-label>
+                    <i aria-hidden="true" class="ti ti-calendar-plus"></i>
+                  </button>
+                  }
+                  @if (vm.checklistItemDueDatePickerId() === item.id && vm.openChecklistItemId() !== item.id && vm.canEditRole()) {
+                  <k-date-picker [value]="itemPresentation?.dueDateInputValue ?? ''" [slot]="itemPresentation?.dueDateSlot ?? 'anyTime'" (applyDate)="vm.setChecklistItemDueDate(checklist.id, item, $event.value, $event.slot)"
+                    (clear)="vm.setChecklistItemDueDate(checklist.id, item, '')" (close)="vm.checklistItemDueDatePickerId.set(null)" />
+                  }
+                </div>
+                }
+                @if (showItemMeta && (vm.canEditRole() || itemPresentation?.assignee)) {
+                <div class="checklist-assignee-wrap" [class.is-empty]="!itemPresentation?.assignee" [class.is-open]="vm.checklistItemAssigneePickerId() === item.id">
+                  @if (itemPresentation?.assignee; as assignee) {
+                  <button type="button" class="checklist-item-assignee" [disabled]="!vm.canEdit()" (click)="vm.toggleChecklistItemAssigneePicker(item.id, $event)" [attr.aria-label]="vm.labels.changeItemAssignee(assignee.displayName)"
+                    [kTooltip]="vm.canEdit() ? vm.labels.unassign(assignee.displayName) : vm.labels.assignedTo(assignee.displayName)">
+                    <k-avatar [url]="assignee.avatarUrl" [name]="assignee.displayName" [size]="24" [userId]="assignee.userId" [workspaceId]="vm.workspaceId()" [showPresence]="true" [showTooltip]="false" [lastOnlineAt]="assignee.lastOnlineAt" />
+                  </button>
+                  } @else {
+                  <button type="button" class="ghost xs checklist-item-assign" [class.is-active]="vm.checklistItemAssigneePickerId() === item.id" [disabled]="!vm.canEdit()" (click)="vm.toggleChecklistItemAssigneePicker(item.id, $event)"
+                    kTooltip="Assign item" i18n-kTooltip aria-label="Assign checklist item" i18n-aria-label>
+                    <i aria-hidden="true" class="ti ti-user-plus"></i>
+                  </button>
+                  }
+                  @if (vm.checklistItemAssigneePickerId() === item.id && vm.openChecklistItemId() !== item.id && vm.canEditRole()) {
+                  <k-member-picker [members]="vm.members()" [selectedIds]="item.assigneeId ? [item.assigneeId] : []" [alphabetical]="true" [currentUserId]="vm.currentUserId()" [workspaceId]="vm.workspaceId()" [allowClear]="true" clearLabel="Unassign item" i18n-clearLabel="Button: remove the checklist item's assignee"
+                    (toggle)="vm.setChecklistItemAssignee(checklist.id, item, $event)" (clear)="vm.setChecklistItemAssignee(checklist.id, item, null)" (close)="vm.checklistItemAssigneePickerId.set(null)" />
+                  }
+                </div>
+                }
+                @if (showItemMeta) {
+                @let subChecklistProgress = vm.subChecklistProgressByItemId().get(item.id);
+                @let hasDetail = !!item.description || !!subChecklistProgress;
+                @if (hasDetail) {
+                <!-- Notes and sub-items are persistent metadata, so they remain visible while empty
+                actions stay contextual. The indicator sizes to its content instead of reserving a
+                wide empty column on every row. -->
+                <button type="button" class="ghost xs checklist-item-detail" [class.has-detail]="hasDetail" (click)="vm.openChecklistItemDetail(item)"
+                  [kTooltip]="item.description && subChecklistProgress ? vm.labels.notesAndSubItems : item.description ? vm.labels.notes : subChecklistProgress ? vm.labels.subItems : vm.labels.addNotesAndSubItems" aria-label="Open checklist item detail" i18n-aria-label>
+                  @if (item.description) {
+                  <i aria-hidden="true" class="ti ti-align-left"></i>
+                  }
+                  @if (subChecklistProgress) {
+                  @if (!item.description) {
+                  <i aria-hidden="true" class="ti ti-checklist"></i>
+                  }
+                  <span i18n="Sub-checklist progress, e.g. 2/5 items done">{{ subChecklistProgress.done // i18n(ph="done") }}/{{ subChecklistProgress.total // i18n(ph="total") }}</span>
+                  }
+                </button>
+                }
+                }
+                @if (vm.canEditRole()) {
+                <div class="checklist-item-more-wrap" [class.is-open]="vm.checklistItemActionsMenuId() === item.id">
+                  <button #itemActionsTrigger type="button" class="ghost xs checklist-item-more" [class.is-active]="vm.checklistItemActionsMenuId() === item.id" [disabled]="!vm.canEdit()"
+                    (click)="vm.checklistItemActionsMenuId.set(vm.checklistItemActionsMenuId() === item.id ? null : item.id)" aria-label="Checklist item actions" i18n-aria-label aria-haspopup="menu" [attr.aria-expanded]="vm.checklistItemActionsMenuId() === item.id" kTooltip="Item actions" i18n-kTooltip="Button: open the checklist item actions menu">
+                    <i aria-hidden="true" class="ti ti-dots"></i>
+                  </button>
+                  @if (vm.checklistItemActionsMenuId() === item.id) {
+                  <div class="card-actions-menu checklist-item-actions-menu" kAnchoredPanel [apAnchor]="itemActionsTrigger" [apPlacement]="vm.checklistItemActionsMenuPlacement"
+                    (apDismissed)="vm.checklistItemActionsMenuId.set(null)" role="menu">
+                    @if (showItemMeta) {
+                    <button type="button" class="card-actions-item" (click)="vm.openChecklistItemDetailsFromMenu(item)" role="menuitem">
+                      <i aria-hidden="true" class="ti ti-layout-sidebar-right-expand"></i><span i18n="Menu item: open the checklist item detail drawer">Open details</span>
+                    </button>
+                    }
+                    <button type="button" class="card-actions-item checklist-item-rename" (click)="vm.startEditChecklistItemFromMenu(item)" role="menuitem">
+                      <i aria-hidden="true" class="ti ti-pencil"></i><span i18n="Menu item: rename the checklist item">Rename</span>
+                    </button>
+                    <button type="button" class="card-actions-item is-danger" (click)="vm.deleteChecklistItemFromMenu(checklist.id, item)" role="menuitem">
+                      <i aria-hidden="true" class="ti ti-trash"></i><span i18n="Menu item: delete the checklist item">Delete</span>
+                    </button>
+                  </div>
+                  }
+                </div>
+                }
+                </div>
+                }
+              </div>
+              }
+            </div>
+            @if (vm.hiddenChecklistItemCount(checklist)) {
+            <div class="checklist-hidden-note" i18n="Note under a checklist">{ vm.hiddenChecklistItemCount(checklist), plural, other {{{ vm.hiddenChecklistItemCount(checklist) }} completed hidden} }</div>
+            }
+
+            @if (vm.canEditRole()) {
+            @if (vm.addingItemChecklistId() === checklist.id) {
+            <form class="checklist-add-item" (submit)="vm.createChecklistItem(checklist.id, $event)">
+              <input #addItemInput type="text" [value]="vm.newItemText()" (input)="vm.newItemText.set($any($event.target).value)" placeholder="Add an item…" i18n-placeholder [disabled]="!vm.canEdit()" (keydown.escape)="vm.cancelAddItem()" autofocus />
+              <button type="submit" class="sm" [disabled]="!vm.canEdit()"><i aria-hidden="true" class="ti ti-plus"></i><ng-container i18n="Button: add the checklist item">Add</ng-container></button>
+              <button type="button" class="ghost icon" (click)="vm.cancelAddItem()" kTooltip="Cancel" i18n-kTooltip><i aria-hidden="true" class="ti ti-x"></i></button>
+            </form>
+            } @else {
+            <button type="button" class="checklist-add-btn" [disabled]="!vm.canEdit()" (click)="vm.startAddItem(checklist.id)">
+              <i aria-hidden="true" class="ti ti-plus"></i>
+              &ngsp;<ng-container i18n="Button: add an item to the checklist">Add an item</ng-container>
+            </button>
+            }
+            }
+            }
+          </div>
+          }
+        </div>
+        } @else if (!vm.canEditRole()) {
+        <span class="readonly-empty" i18n>No checklists</span>
+        }
+        </ng-template>
+
+        <ng-container *ngTemplateOutlet="checklistList; context: { checklists: vm.topLevelChecklists(), showItemMeta: true }" />
+
+        @if (vm.canEditRole()) {
+        <div class="checklist-actions">
+        @if (vm.addingChecklist() && vm.newChecklistParentItemId() === null) {
+        <form class="checklist-add" (submit)="vm.createChecklist($event)">
+          <input #addChecklistInput type="text" [value]="vm.newChecklistTitle()" (input)="vm.newChecklistTitle.set($any($event.target).value)" placeholder="Checklist title…" i18n-placeholder [disabled]="!vm.canEdit()" (keydown.escape)="vm.cancelAddChecklist()" autofocus />
+          <button type="submit" class="sm" [disabled]="!vm.canEdit()"><i aria-hidden="true" class="ti ti-plus"></i><ng-container i18n="Button: create the checklist">Add checklist</ng-container></button>
+          <button type="button" class="ghost icon" (click)="vm.cancelAddChecklist()" aria-label="Cancel new checklist" i18n-aria-label kTooltip="Cancel" i18n-kTooltip><i aria-hidden="true" class="ti ti-x"></i></button>
+        </form>
+        } @else {
+        <button type="button" class="checklist-add-btn" [disabled]="!vm.canEdit()" (click)="vm.startAddChecklist()">
+          <i aria-hidden="true" class="ti ti-plus"></i>
+          &ngsp;<ng-container i18n="Button: start a new checklist">Add checklist</ng-container>
+        </button>
+        }
+        @if (vm.checklistTemplates().length) {
+        <div class="checklist-template-wrap">
+          <button #checklistTemplateTrigger type="button" class="checklist-add-btn" [class.is-active]="vm.checklistTemplatePickerOpen()" [disabled]="vm.availableChecklistTemplates().length === 0 || !vm.canEdit()" (click)="vm.toggleChecklistTemplatePicker($event)"
+            [kTooltip]="vm.availableChecklistTemplates().length === 0 ? vm.labels.allTemplatesAdded : vm.labels.addFromTemplateTooltip">
+            <i aria-hidden="true" class="ti ti-template"></i>
+            &ngsp;<ng-container i18n="Button: add a checklist from a template">Add from template</ng-container>
+          </button>
+          @if (vm.checklistTemplatePickerOpen()) {
+          <div
+            class="checklist-template-panel"
+            kAnchoredPanel
+            [apAnchor]="checklistTemplateTrigger"
+            [apPlacement]="{ width: 320, maxHeight: 360, minHeight: 180 }"
+            (apDismissed)="vm.checklistTemplatePickerOpen.set(false)"
+          >
+            <input class="checklist-template-search" type="text" placeholder="Search templates…" i18n-placeholder [value]="vm.checklistTemplateQuery()" (input)="vm.checklistTemplateQuery.set($any($event.target).value)" />
+            <div class="checklist-template-list">
+              @if (vm.filteredChecklistTemplates().length === 0) {
+              <span class="checklist-template-empty" i18n>No matching templates</span>
+              }
+              @for (template of vm.filteredChecklistTemplates(); track template.id) {
+              <button type="button" class="checklist-template-row" [disabled]="vm.isChecklistTemplateApplied(template.id) || vm.applyingChecklistTemplates()" (click)="vm.applyChecklistTemplate(template)">
+                <i aria-hidden="true" class="ti ti-list-check"></i>
+                <span class="checklist-template-copy">
+                  <span class="checklist-template-title">{{ template.title }}</span>
+                  <span class="checklist-template-meta">
+                    &ngsp;<ng-container i18n="Number of items in a checklist template">{ template.items.length, plural, =1 {1 item} other {{{ template.items.length }} items} }</ng-container>
+                    @if (vm.isChecklistTemplateApplied(template.id)) {
+                    · <ng-container i18n="Checklist template already on this card">Already added</ng-container>
+                    }
+                  </span>
+                </span>
+                @if (vm.isChecklistTemplateApplied(template.id)) {
+                <i aria-hidden="true" class="ti ti-check checklist-template-status"></i>
+                }
+              </button>
+              }
+            </div>
+          </div>
+          }
+        </div>
+        }
+        </div>
+        }
+      </section>
+

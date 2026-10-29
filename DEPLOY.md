@@ -720,6 +720,7 @@ staff, demo, seed, test, and load-test organisations.
 | `GITHUB_APP_PRIVATE_KEY` | no | GitHub App private key PEM, with newlines escaped as `\n`. Required alongside `GITHUB_APP_ID`. |
 | `GITHUB_APP_CLIENT_ID` | hosted | The App's OAuth client id. Enable "Request user authorization (OAuth) during installation" and set the Callback URL to `${WEB_ORIGIN}/settings/org`. Lets Kanera verify that the user connecting an installation can see it on GitHub; hosted deployments refuse to connect installations without it. |
 | `GITHUB_APP_CLIENT_SECRET` | hosted | An OAuth client secret generated for the App. Required alongside `GITHUB_APP_CLIENT_ID`. |
+| `GITHUB_APP_WEBHOOK_SECRET` | no | The App's webhook secret. Set the App's Webhook URL to `${API_PUBLIC_URL}/api/integrations/github/webhook` and subscribe it to "Pull request" events; pull requests whose branch, title or body name a card key are then linked to that card. Without it, webhooks are refused. |
 | `TRELLO_API_KEY` | no | Trello app API key for authenticated Trello attachment imports. See `trello_import.md`. |
 
 ## Notes

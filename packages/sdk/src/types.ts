@@ -403,6 +403,11 @@ export interface CardFollowState {
 }
 
 export interface CardDetail {
+  /**
+   * Card-local revision as a decimal integer string. Every write to the card or one of its detail
+   * rows advances it; reads never do. Compare numerically, never lexically.
+   */
+  revision?: string;
   card: Card;
   customFieldValues: CustomFieldValue[];
   labelIds: Uuid[];

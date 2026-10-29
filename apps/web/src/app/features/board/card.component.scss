@@ -723,6 +723,13 @@
     top: -0.5px;
   }
 
+  // Running outside working hours: still in progress (the accent outline stays) but not counting,
+  // so the text quiets. An alert below still wins, since the card is still stuck.
+  &.is-paused {
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
+  }
+
   // Open work past its workspace's in-progress alert: the amber of a due-soon date, not the red of
   // overdue. It is a prompt to ask about the card, not a missed commitment.
   &.is-alert {

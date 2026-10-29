@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { tsvector } from "./_tsvector.js";
 import { valueIn } from "./_value-check.js";
 import { boards } from "./board.js";
@@ -18,6 +18,10 @@ export const cards = pgTable(
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     clientToken: uuid("client_token"),
+    // Owned by card/detail-child triggers: advances in the transaction of every write to the card or
+    // its detail rows (a read's background link repair included), never on a read itself. A per-card
+    // counter stays far below 2^53, so a plain number is safe; the wire carries it as a string.
+    detailRevision: bigint("detail_revision", { mode: "number" }).notNull().default(1),
     // Direct insert tooling may omit these fields; a BEFORE INSERT trigger derives and allocates
     // them atomically. Product paths use the range allocator and provide all three explicitly.
     workspaceId: uuid("workspace_id").notNull().default(sql`null`).references(() => workspaces.id, { onDelete: "cascade" }),

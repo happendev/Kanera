@@ -60,7 +60,7 @@
   </div>
   }
 
-  <div class="feed">
+  <div class="feed" [class.large-feed]="feedViewItems().length > 100">
     @if (feedLoading() && !feedItems().length) {
     <div class="feed-skeleton" aria-hidden="true">
       @for (row of [0, 1, 2]; track row) {

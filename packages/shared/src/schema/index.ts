@@ -28,6 +28,7 @@ export * from "./card-label.js";
 export * from "./card-key-prefix-reservation.js";
 export * from "./card-mention.js";
 export * from "./card-priority.js";
+export * from "./card-github-pull.js";
 export * from "./card-relation.js";
 export * from "./schedule-state.js";
 export * from "./card-reminder.js";

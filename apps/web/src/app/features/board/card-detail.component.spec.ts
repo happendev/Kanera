@@ -18,6 +18,7 @@ import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { BoardState } from "./board-state";
+import { CardDetailPersistence } from "./card-detail-persistence.service";
 import { DatePickerPopover } from "./date-picker.popover";
 import { CardActivityComponent } from "./card-activity.component";
 import { UserProfileCardService } from "../../shared/user-profile/user-profile-card.service";
@@ -402,6 +403,8 @@ describe("CardDetailComponent realtime regressions", () => {
           ? Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [], relations: [], hiddenBlockerCount: 0 })
           : path.endsWith("/mirrors")
             ? Promise.resolve({ asSource: [], asTarget: [] })
+          : path.endsWith("/github-pulls")
+            ? Promise.resolve({ pulls: [] })
           : path === "/workspaces/workspace-1"
             ? Promise.resolve({ checklistTemplates: [] })
             : Promise.resolve({ items: [], nextCursor: null }),
@@ -485,6 +488,8 @@ describe("CardDetailComponent realtime regressions", () => {
           },
         },
         { provide: OfflineCacheService, useValue: offlineCache },
+        // The drawer provides this itself; the activity panel is also mounted on its own here.
+        CardDetailPersistence,
         { provide: ImageLightboxService, useValue: imageLightbox },
         { provide: NotificationsService, useValue: notifications },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1", boardSummaryFor: () => null } },
@@ -495,9 +500,18 @@ describe("CardDetailComponent realtime regressions", () => {
             timelineEnabled: signal(true),
             dependenciesEnabled: signal(true),
             detailForCard: vi.fn((_cardId: string) => boardStateDetail()),
+            detailSnapshotForCard: vi.fn((cardId: string) => TestBed.inject(BoardState).detailForCard(cardId)),
             liveAgentRunsForCard: vi.fn(() => []),
             mergeAgentRuns: vi.fn(),
             setCardDetail: vi.fn((detail: WireCardDetail) => boardStateDetail.set(detail)),
+            beginCardDetailRead: vi.fn(() => ({
+              cancel: vi.fn(),
+              apply: (detail: WireCardDetail) => {
+                const state = TestBed.inject(BoardState);
+                state.setCardDetail(detail);
+                return detail;
+              },
+            })),
             cardDetailRealtimeRevision: vi.fn(() => cardDetailRevision),
             noteCardDetailRealtimeMutation: vi.fn(() => { cardDetailRevision += 1; }),
             setCardAssignees: vi.fn(),
@@ -1012,7 +1026,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.detectChanges();
 
     await vi.waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50");
+      expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50", { signal: expect.any(AbortSignal) as unknown, conditional: expect.any(Object) as unknown });
       expect(socketService.connect).toHaveBeenCalledTimes(1);
     });
 
@@ -1072,6 +1086,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("does not merge a stale loadMore page into the feed after the card switches", async () => {
     const loadMore = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path === "/cards/card-1/feed?limit=50") {
         return Promise.resolve({ items: [{ type: "activity", data: createActivity({ id: "activity-card-1" }) }], nextCursor: "cursor-1" });
       }
@@ -1107,6 +1122,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("union-merges the feed page with a realtime item that arrives mid-request", async () => {
     const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path === "/cards/card-1/feed?limit=50") return feed.promise;
       if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
       return Promise.resolve({ items: [], nextCursor: null });
@@ -1139,6 +1155,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("applies a realtime reaction that arrives before its comment loads", async () => {
     const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path === "/cards/card-1/feed?limit=50") return feed.promise;
       if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
       return Promise.resolve({ items: [], nextCursor: null });
@@ -1177,6 +1194,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("applies a realtime reaction removal that arrives before its comment loads", async () => {
     const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path === "/cards/card-1/feed?limit=50") return feed.promise;
       if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
       return Promise.resolve({ items: [], nextCursor: null });
@@ -1221,6 +1239,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("does not let a stale feed page overwrite a realtime comment edit", async () => {
     const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path === "/cards/card-1/feed?limit=50") return feed.promise;
       if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
       return Promise.resolve({ items: [], nextCursor: null });
@@ -1253,6 +1272,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("does not let a stale feed page resurrect a realtime-deleted item", async () => {
     const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path === "/cards/card-1/feed?limit=50") return feed.promise;
       if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
       return Promise.resolve({ items: [], nextCursor: null });
@@ -1289,6 +1309,7 @@ describe("CardDetailComponent realtime regressions", () => {
     const loadMoreA = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
     const loadMoreB = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path === "/cards/card-1/feed?limit=50") return Promise.resolve({ items: [{ type: "activity", data: createActivity({ id: "a1" }) }], nextCursor: "cursor-a" });
       if (path === "/cards/card-1/feed?limit=50&cursor=cursor-a") return loadMoreA.promise;
       if (path === "/cards/card-2/feed?limit=50") return Promise.resolve({ items: [{ type: "activity", data: createActivity({ id: "b1" }) }], nextCursor: "cursor-b" });
@@ -1325,6 +1346,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("shows the empty activity state, not an error, when an empty feed is recovered from cache", async () => {
     const onlineFeed: CardFeedItem[] = [{ type: "activity", data: createActivity({ id: "activity-online" }) }];
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path === "/cards/card-1/feed?limit=50") return Promise.resolve({ items: onlineFeed, nextCursor: null });
       return Promise.resolve({ items: [], nextCursor: null });
     });
@@ -1357,6 +1379,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("keeps the visible feed when the authenticated user snapshot refreshes", async () => {
     const onlineFeed: CardFeedItem[] = [{ type: "activity", data: createActivity({ id: "activity-online" }) }];
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path === "/cards/card-1/feed?limit=50") return Promise.resolve({ items: onlineFeed, nextCursor: null });
       return Promise.resolve({ items: [], nextCursor: null });
     });
@@ -1415,17 +1438,17 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
 
-    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50"));
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50", { signal: expect.any(AbortSignal) as unknown, conditional: expect.any(Object) as unknown }));
     offlineCache.saveCardDetail.mockClear();
 
     await fixture.componentInstance.submitComment({ markdown: "Saved before disconnect", attachmentIds: [] });
 
     expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["comment-created"]);
-    expect(offlineCache.saveCardDetail).toHaveBeenCalledWith(
+    await vi.waitFor(() => expect(offlineCache.saveCardDetail).toHaveBeenCalledWith(
       "card-1",
       detail,
       [{ type: "comment", data: expect.objectContaining({ id: "comment-created", body: "Saved before disconnect" }) }],
-    );
+    ));
   });
 
   it("saves a new comment as a local draft when send is pressed offline", async () => {
@@ -1534,7 +1557,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
-    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50"));
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50", { signal: expect.any(AbortSignal) as unknown, conditional: expect.any(Object) as unknown }));
     fixture.componentInstance.feedItems.set([{ type: "comment", data: comment }]);
 
     fixture.componentInstance.startEditComment(comment);
@@ -1567,7 +1590,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
-    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50"));
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50", { signal: expect.any(AbortSignal) as unknown, conditional: expect.any(Object) as unknown }));
     fixture.componentInstance.feedItems.set([{ type: "comment", data: comment }]);
 
     fixture.componentInstance.startEditComment(comment);
@@ -1595,7 +1618,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
-    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50"));
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50", { signal: expect.any(AbortSignal) as unknown, conditional: expect.any(Object) as unknown }));
     fixture.componentInstance.feedItems.set([{ type: "comment", data: comment }]);
 
     fixture.componentInstance.startEditComment(comment);
@@ -1610,6 +1633,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("keeps the visible feed when going offline with an empty cached feed", async () => {
     const onlineFeed: CardFeedItem[] = [{ type: "activity", data: createActivity({ id: "activity-online" }) }];
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path === "/cards/card-1/feed?limit=50") return Promise.resolve({ items: onlineFeed, nextCursor: null });
       return Promise.resolve({ items: [], nextCursor: null });
     });
@@ -2600,7 +2624,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("hydrates a clean open description editor when detail arrives late", async () => {
     const detail = deferred<WireCardDetail>();
     api.get.mockImplementation((path: string) =>
-      path.endsWith("/detail")
+      path.endsWith("/github-pulls") ? Promise.resolve({ pulls: [] }) : path.endsWith("/detail")
         ? detail.promise
         : path.endsWith("/mirrors")
           ? Promise.resolve({ asSource: [], asTarget: [] })
@@ -2637,7 +2661,7 @@ describe("CardDetailComponent realtime regressions", () => {
     // detail-dependent body (here a custom field) stays behind the skeleton until /detail lands.
     const detail = deferred<WireCardDetail>();
     api.get.mockImplementation((path: string) =>
-      path.endsWith("/detail")
+      path.endsWith("/github-pulls") ? Promise.resolve({ pulls: [] }) : path.endsWith("/detail")
         ? detail.promise
         : path === "/workspaces/workspace-1"
           ? Promise.resolve({ checklistTemplates: [] })
@@ -2670,7 +2694,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("shows an inline error with retry when /detail fails and no detail is cached", async () => {
     api.get.mockImplementation((path: string) =>
-      path.endsWith("/detail")
+      path.endsWith("/github-pulls") ? Promise.resolve({ pulls: [] }) : path.endsWith("/detail")
         ? Promise.reject(new ApiError(500, {}))
         : path === "/workspaces/workspace-1"
           ? Promise.resolve({ checklistTemplates: [] })
@@ -2698,7 +2722,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
     // Retrying after the network recovers hydrates the body.
     api.get.mockImplementation((path: string) =>
-      path.endsWith("/detail")
+      path.endsWith("/github-pulls") ? Promise.resolve({ pulls: [] }) : path.endsWith("/detail")
         ? Promise.resolve(createCardDetail())
         : path === "/workspaces/workspace-1"
           ? Promise.resolve({ checklistTemplates: [] })
@@ -2714,10 +2738,10 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("does not let a stale /detail response revert a realtime mutation that landed mid-fetch", async () => {
     const refreshDetail = deferred<WireCardDetail>();
-    // The initial open may fetch /detail more than once; let all those resolve immediately, and only
-    // hand back the controllable deferred once we've armed the background-refresh phase.
+    // Hold the reconnect response after the initial open has settled.
     let deferRefresh = false;
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path.endsWith("/detail")) return deferRefresh ? refreshDetail.promise : Promise.resolve(createCardDetail());
       if (path === "/workspaces/workspace-1") return Promise.resolve({ checklistTemplates: [] });
       return Promise.resolve({ items: [], nextCursor: null });
@@ -2737,6 +2761,8 @@ describe("CardDetailComponent realtime regressions", () => {
 
     // Trigger a background refresh (as a reconnect would), which re-fetches /detail.
     deferRefresh = true;
+    const coordinator = TestBed.inject(BoardState).beginCardDetailRead as ReturnType<typeof vi.fn>;
+    coordinator.mockReturnValueOnce({ cancel: vi.fn(), apply: () => boardStateDetail()! });
     fixture.componentInstance.retryDetail();
 
     // A realtime label/assignee/etc. event lands while that refresh is in flight: BoardState records
@@ -2754,11 +2780,12 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(boardStateDetail()?.card.description).toBe("Newer realtime body");
   });
 
-  it("retries an initial /detail load when realtime mutates the card mid-fetch", async () => {
+  it("shows and persists the reconciled detail, not the stale response, after a realtime race", async () => {
     const initialDetail = deferred<WireCardDetail>();
     const freshDetail = createCardDetail({ card: createCard({ description: "Fresh after realtime" }) });
     let detailRequests = 0;
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path.endsWith("/detail")) {
         detailRequests += 1;
         return detailRequests === 1 ? initialDetail.promise : Promise.resolve(freshDetail);
@@ -2776,15 +2803,55 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("cardLabelIds", []);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
+    offlineCache.saveCardDetail.mockClear();
 
-    // No detail is hydrated yet. A socket mutation makes the first response stale before it lands.
-    (TestBed.inject(BoardState) as unknown as { noteCardDetailRealtimeMutation: (id: string) => void })
-      .noteCardDetailRealtimeMutation("card-1");
+    // The journal itself is exercised in board-state and E2E. Here it hands back a reconciled detail
+    // that differs from the raw response: the editor, the cache and the request count must all
+    // follow that result rather than the response or a retry.
+    const coordinator = TestBed.inject(BoardState).beginCardDetailRead as ReturnType<typeof vi.fn>;
+    const read = coordinator.mock.results.at(-1)!.value as { apply: (detail: WireCardDetail) => WireCardDetail };
+    read.apply = () => { boardStateDetail.set(freshDetail); return freshDetail; };
     initialDetail.resolve(createCardDetail({ card: createCard({ description: "Stale initial body" }) }));
 
-    await vi.waitFor(() => expect(detailRequests).toBe(2));
     await vi.waitFor(() => expect(boardStateDetail()).toBe(freshDetail));
-    expect(boardStateDetail()?.card.description).toBe("Fresh after realtime");
+    expect(fixture.componentInstance.editorInitialValue()).toBe("Fresh after realtime");
+    await vi.waitFor(() => expect(offlineCache.saveCardDetail).toHaveBeenCalledWith("card-1", freshDetail, expect.anything()));
+    expect(offlineCache.saveCardDetail).not.toHaveBeenCalledWith(
+      "card-1", expect.objectContaining({ card: expect.objectContaining({ description: "Stale initial body" }) }), expect.anything(),
+    );
+    expect(detailRequests).toBe(1);
+  });
+
+  it("re-reads linked items and relations once a detail exists when a link change raced the first read", async () => {
+    const initialDetail = deferred<WireCardDetail>();
+    const linkedReads: string[] = [];
+    api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
+      if (path.endsWith("/detail")) return initialDetail.promise;
+      if (path.endsWith("/linked-items")) { linkedReads.push(path); return Promise.resolve({ linkedItems: [] }); }
+      if (path.endsWith("/relations")) { linkedReads.push(path); return Promise.resolve({ relations: [], hiddenBlockerCount: 0 }); }
+      if (path === "/workspaces/workspace-1") return Promise.resolve({ checklistTemplates: [] });
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = createComponentFixture(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    // The invalidation's own re-read runs while the card still has no detail, so it has nothing
+    // to update; the response that then lands was built before the link changed.
+    socket.trigger("card:links:changed", { boardId: "board-1", cardId: "card-1" });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const beforeDetail = linkedReads.length;
+    initialDetail.resolve(createCardDetail());
+
+    await vi.waitFor(() => expect(linkedReads.slice(beforeDetail)).toEqual(["/cards/card-1/linked-items", "/cards/card-1/relations"]));
   });
 
   it("saves text custom fields when the input blurs", async () => {
@@ -3946,6 +4013,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("loads additional feed pages when the bottom sentinel is reached", async () => {
     const nextPage = deferred<{ items: { type: "comment"; data: WireComment }[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/github-pulls")) return Promise.resolve({ pulls: [] });
       if (path.endsWith("/detail")) {
         return Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [], relations: [], hiddenBlockerCount: 0 });
       }
@@ -3980,7 +4048,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(fixture.componentInstance.feedLoadingMore()).toBe(true);
     expect(sentinel!.textContent).toContain("");
     expect(sentinel!.querySelector(".ti-loader-2")).not.toBeNull();
-    expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50&cursor=2026-05-21T00%3A00%3A00.000Z");
+    expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50&cursor=2026-05-21T00%3A00%3A00.000Z", { signal: expect.any(AbortSignal) as unknown, conditional: expect.any(Object) as unknown });
 
     nextPage.resolve({
       items: [{ type: "comment", data: createComment({ id: "comment-old", createdAt: new Date("2026-05-20T00:00:00.000Z") }) }],

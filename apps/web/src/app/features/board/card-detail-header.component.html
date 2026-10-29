@@ -1,0 +1,169 @@
+@let vm = model();
+  @if (vm.coverUrl(); as url) {
+  <div class="panel-cover" (click)="vm.openCoverLightbox($event)">
+    <img [ngSrc]="url" fill alt="" priority />
+    @if (vm.canEditRole()) {
+    <button type="button" class="cover-remove-btn" [disabled]="!vm.canEdit()" (click)="vm.setCover(vm.card().coverAttachmentId!); $event.stopPropagation()" kTooltip="Remove cover" i18n-kTooltip="Button: remove the card's cover image">
+      <i aria-hidden="true" class="ti ti-photo-off"></i>&ngsp;<ng-container i18n="Button: remove the card's cover image">Remove cover</ng-container>
+    </button>
+    }
+  </div>
+  }
+  <div class="panel-header" [class.has-cover]="vm.coverUrl()">
+    @if (vm.canEditRole()) {
+    <button class="ghost icon completion-btn" [class.is-active]="vm.card().completedAt" (click)="vm.toggleCompletion()" [disabled]="vm.savingCompletion() || !vm.canEdit()" [attr.aria-label]="vm.card().completedAt ? vm.labels.markIncomplete : vm.labels.markComplete"
+      [kTooltip]="vm.card().completedAt ? vm.labels.markIncomplete : vm.labels.markComplete">
+      <i aria-hidden="true" [class]="vm.card().completedAt ? (vm.completionTickedCardId() === vm.card().id ? 'ti ti-circle-check is-drawing' : 'ti ti-circle-check') : 'ti ti-circle'"></i>
+    </button>
+    }
+    @if (vm.editingTitle()) {
+    <input #titleInput type="text" class="title-input" [value]="vm.draftTitle()" (input)="vm.draftTitle.set($any($event.target).value)" (blur)="vm.saveTitle()" (keydown.enter)="vm.saveTitle()" (keydown.escape)="vm.cancelTitle(); $event.stopPropagation()" />
+    } @else {
+    <h2 class="card-title" [class.is-readonly]="!vm.canEdit()" (click)="vm.editTitle()">{{ vm.card().title }}</h2>
+    }
+    @if (vm.showCardKeys()) {
+    <button type="button" class="card-key" (click)="vm.copyCardKey()" [kTooltip]="vm.labels.copyKey(vm.card().key)">{{ vm.card().key }}</button>
+    }
+    @if (vm.canToggle()) {
+    <button class="ghost icon layout-mode-btn" (click)="vm.toggleLayoutMode()" [attr.aria-label]="vm.mode() === 'modal' ? vm.labels.collapseToPanel : vm.labels.expandToModal" [kTooltip]="vm.mode() === 'modal' ? vm.labels.collapseToPanel : vm.labels.expandToModal">
+      <i aria-hidden="true" class="ti" [class.ti-arrows-diagonal-minimize-2]="vm.mode() === 'modal'" [class.ti-arrows-diagonal]="vm.mode() !== 'modal'"></i>
+    </button>
+    }
+    <button class="ghost icon share-btn" (click)="vm.copyCardLink()" aria-label="Copy card link" i18n-aria-label kTooltip="Copy card link" i18n-kTooltip>
+      <i aria-hidden="true" class="ti ti-link"></i>
+    </button>
+    @if (!vm.card().archivedAt && vm.showCardWatchButton()) {
+    <span class="watcher-popover-wrap">
+      <button class="ghost icon watch-btn" [class.is-watching]="vm.isWatchingCard()" [class.is-active]="vm.watcherPopoverOpen()" (click)="vm.toggleCardWatcherPopover($event)" [attr.aria-label]="vm.isWatchingCard() ? vm.labels.cardWatchers : vm.labels.watchCard"
+        [attr.aria-expanded]="vm.watcherPopoverOpen()" kTooltip="Card watchers" i18n-kTooltip="Button: show who watches this card">
+        <i aria-hidden="true" [class]="vm.isWatchingCard() ? 'ti ti-eye-check' : 'ti ti-eye'"></i>
+      </button>
+      @if (vm.watcherPopoverOpen()) {
+      <k-watcher-popover kind="card" [entityId]="vm.card().id" [workspaceId]="vm.workspaceId()" (dismissed)="vm.watcherPopoverOpen.set(false)" />
+      }
+    </span>
+    }
+    @if (!vm.card().archivedAt) {
+    <span class="watcher-popover-wrap">
+      <button class="ghost icon reminder-btn" [class.has-reminder]="vm.pendingReminder()" [class.is-active]="vm.reminderPopoverOpen()" (click)="vm.toggleReminderPopover($event)"
+        [attr.aria-label]="vm.reminderLabel()" [attr.aria-expanded]="vm.reminderPopoverOpen()" [kTooltip]="vm.reminderLabel()">
+        <i aria-hidden="true" class="ti ti-alarm"></i>
+      </button>
+      @if (vm.reminderPopoverOpen()) {
+      <k-reminder-popover [cardId]="vm.card().id" (dismissed)="vm.reminderPopoverOpen.set(false)" />
+      }
+    </span>
+    }
+    @if (vm.canArchiveRole()) {
+    @if (vm.card().archivedAt) {
+    <button class="ghost sm unarchive-btn" (click)="vm.setArchived(false)" [disabled]="vm.archiving() || !vm.canArchive()" aria-label="Unarchive card" i18n-aria-label kTooltip="Unarchive card" i18n-kTooltip>
+      <i aria-hidden="true" class="ti ti-archive-off"></i>
+      <span i18n="Button: restore an archived card">Unarchive</span>
+    </button>
+    } @else {
+    <div class="card-actions-wrap">
+      <button #actionsTrigger class="ghost icon" [class.is-active]="vm.actionsMenuOpen()" [disabled]="!vm.canEdit()" (click)="vm.toggleActionsMenu()" aria-label="Card actions" i18n-aria-label="Button: open the card actions menu" kTooltip="Card actions" i18n-kTooltip="Button: open the card actions menu">
+        <i aria-hidden="true" class="ti ti-dots"></i>
+      </button>
+      @if (vm.actionsMenuOpen()) {
+      <div
+        class="card-actions-menu"
+        kAnchoredPanel
+        [apAnchor]="actionsTrigger"
+        [apPlacement]="vm.actionsMenuPlacement"
+        (apDismissed)="vm.actionsMenuOpen.set(false); vm.copyToBoardOpen.set(false); vm.moveToBoardOpen.set(false)"
+      >
+        <button class="card-actions-item" (click)="vm.copyCardKey()">
+          <i aria-hidden="true" class="ti ti-hash"></i>
+          <span i18n="Menu item: copy the card's short key, e.g. ENG-42">Copy key</span>
+        </button>
+        <button class="card-actions-item" (click)="vm.copyBranchName()">
+          <i aria-hidden="true" class="ti ti-git-branch"></i>
+          <span i18n="Menu item - copy a git branch name that starts with the card's key, so GitHub pull requests from it link back to the card">Copy branch name</span>
+        </button>
+        <button class="card-actions-item" (click)="vm.duplicateCard()" [disabled]="vm.duplicating()">
+          <i aria-hidden="true" class="ti ti-copy"></i>
+          <span i18n="Menu item">Duplicate card</span>
+        </button>
+        @if (vm.workspaceId(); as wsId) {
+        <div class="copy-board-wrap">
+          <button class="card-actions-item" [class.is-active]="vm.copyToBoardOpen()" (click)="vm.toggleCopyToBoard($event)">
+            <i aria-hidden="true" class="ti ti-copy-plus"></i>
+            <span i18n="Menu item">Copy to board…</span>
+            <i aria-hidden="true" class="ti ti-chevron-right card-actions-chev"></i>
+          </button>
+          @if (vm.copyToBoardOpen()) {
+          <k-board-picker [sourceBoardId]="vm.boardId()" [excludeBoardId]="vm.boardId()" [allowCrossWorkspace]="true" [sourceWorkspaceId]="wsId" [sourceListId]="vm.card().listId" [sourceLists]="vm.sourceLists()" title="Copy to board" i18n-title="Picker heading" (pick)="vm.copyToBoard($event)" (close)="vm.copyToBoardOpen.set(false)" />
+          }
+        </div>
+        @if (vm.canMoveToBoard()) {
+        <div class="move-board-wrap">
+          <button class="card-actions-item" [class.is-active]="vm.moveToBoardOpen()" (click)="vm.toggleMoveToBoard($event)">
+            <i aria-hidden="true" class="ti ti-arrow-right"></i>
+            <span i18n="Menu item">Move to board…</span>
+            <i aria-hidden="true" class="ti ti-chevron-right card-actions-chev"></i>
+          </button>
+          @if (vm.moveToBoardOpen()) {
+          <k-board-picker [sourceBoardId]="vm.boardId()" [excludeBoardId]="vm.boardId()" title="Move to board" i18n-title="Picker heading" (pick)="vm.moveToBoard($event)" (close)="vm.moveToBoardOpen.set(false)" />
+          }
+        </div>
+        }
+        }
+      </div>
+      }
+    </div>
+    <!-- No inline confirm: archiving fires at once and the toast offers Undo. -->
+    <button class="ghost icon danger" (click)="vm.setArchived(true)" [disabled]="vm.archiving() || !vm.canEdit()" aria-label="Archive card" i18n-aria-label kTooltip="Archive card" i18n-kTooltip>
+      <i aria-hidden="true" class="ti ti-archive"></i>
+    </button>
+    }
+    }
+    <button class="ghost icon close-btn" (click)="vm.requestClose()" aria-label="Close" i18n-aria-label="Button: close the card detail">
+      <i aria-hidden="true" class="ti ti-x"></i>
+    </button>
+  </div>
+
+  <!-- Compact list + board row, shown only below md (mobile/full-screen). These
+       controls also live as labelled sections in .row-top; the body copies are
+       hidden below md (.detail-section--relocate) and surfaced here without
+       labels to reclaim vertical space. Both triggers target the single anchored
+       panel below, avoiding duplicate hidden popovers across breakpoints. -->
+  @if (vm.canEditRole() || vm.boardSummary()) {
+  <div class="panel-subheader">
+    @if (vm.canEditRole()) {
+    <div class="move-list-wrap">
+      <button type="button" class="move-list-btn" [class.is-active]="vm.moveToListOpen()" [disabled]="!vm.canEdit()" (click)="vm.toggleMoveToList($event)" kTooltip="Move to a different list" i18n-kTooltip>
+        <i aria-hidden="true" [class]="'ti ti-' + (vm.currentList()?.icon || 'list')" [style.color]="vm.currentList()?.color ? 'var(--color-' + vm.currentList()?.color + ')' : null"></i>
+        <span class="move-list-name">{{ vm.currentList()?.name ?? '…' }}</span>
+      </button>
+    </div>
+    }
+    @if (vm.boardSummary(); as board) {
+    <button type="button" class="card-board-badge is-clickable" (click)="vm.goToBoard()" [attr.aria-label]="vm.labels.goToBoard(board.name)">
+      <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+      <span class="card-board-name">{{ board.name }}</span>
+    </button>
+    }
+  </div>
+  }
+
+  @if (vm.moveToListOpen() && vm.moveToListAnchor(); as moveListAnchor) {
+  <div
+    class="move-list-popover"
+    kAnchoredPanel
+    [apAnchor]="moveListAnchor"
+    [apPlacement]="vm.moveToListPlacement"
+    (apDismissed)="vm.moveToListOpen.set(false)"
+  >
+    @for (list of vm.otherLists(); track list.id) {
+    <button type="button" class="move-list-option" (click)="vm.moveToList(list.id)">
+      <i aria-hidden="true" [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+      {{ list.name }}
+    </button>
+    }
+    @if (!vm.otherLists().length) {
+    <span class="move-list-empty" i18n>No other lists</span>
+    }
+  </div>
+  }
+

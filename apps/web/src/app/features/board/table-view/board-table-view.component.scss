@@ -1311,6 +1311,8 @@
   i { font-size: var(--text-md); }
 
   &.is-done { color: var(--text-muted); font-weight: 500; }
+  // Running outside working hours, so not counting (see the card tile's matching chip).
+  &.is-paused { color: var(--text-muted); }
   // Past the workspace's in-progress alert (see the card tile's matching chip).
   &.is-alert { color: var(--color-amber); }
 }

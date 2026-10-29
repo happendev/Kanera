@@ -1,0 +1,94 @@
+@let vm = model();
+      <!-- Custom fields -->
+      @if (vm.customFields().length) {
+      <section class="detail-section card-detail-section">
+        <div class="section-label card-detail-section-label">
+          <i aria-hidden="true" class="ti ti-forms"></i>
+          &ngsp;<ng-container i18n="Card detail section heading">Custom fields</ng-container>
+        </div>
+        <div class="cf-grid">
+          @for (field of vm.customFields(); track field.id) {
+          @let fieldValue = vm.customFieldValuesByFieldId().get(field.id);
+          <div class="cf-row">
+            <span class="cf-name"><i aria-hidden="true" [class]="'ti ti-' + field.icon"></i>{{ field.name }}</span>
+            @switch (field.type) {
+              @case ('checkbox') {
+              <button type="button" class="cf-checkbox-btn" [class.checked]="fieldValue?.valueCheckbox === true" [disabled]="!vm.canEdit()" (click)="vm.setCheckboxField(field, fieldValue?.valueCheckbox !== true)">
+                <i aria-hidden="true" class="ti" [class.ti-square-check]="fieldValue?.valueCheckbox === true" [class.ti-square]="fieldValue?.valueCheckbox !== true"></i>
+                &ngsp;<ng-container i18n="Checkbox custom field label">Yes</ng-container>
+              </button>
+              }
+              @case ('url') {
+              <div class="cf-url">
+                <input class="cf-input" type="url" inputmode="url" placeholder="https://…" [value]="fieldValue?.valueUrl ?? ''" [readonly]="!vm.canEdit()" [disabled]="!vm.canEdit()"
+                  (blur)="vm.setUrlField(field, $any($event.target).value)" (keydown.enter)="vm.setUrlField(field, $any($event.target).value); $event.preventDefault()" />
+                @if (fieldValue?.valueUrl; as fieldUrl) {
+                <a class="cf-url-open" [href]="fieldUrl" target="_blank" rel="noopener noreferrer" kTooltip="Open link" i18n-kTooltip><i aria-hidden="true" class="ti ti-external-link"></i></a>
+                }
+              </div>
+              }
+              @case ('date') {
+              <div class="cf-picker-wrap">
+                <button type="button" class="cf-trigger" [disabled]="!vm.canEdit()" (click)="vm.toggleCfPicker(field.id, $event)">
+                  @if (fieldValue?.valueDate; as fieldDate) {
+                  <span>{{ vm.formatFieldDate(fieldDate) }}</span>
+                  } @else {
+                  <span class="cf-placeholder"><i aria-hidden="true" class="ti ti-calendar"></i>&ngsp;<ng-container i18n="Placeholder on an empty date field">Set date</ng-container></span>
+                  }
+                </button>
+                @if (vm.cfPickerFieldId() === field.id && vm.canEditRole()) {
+                <k-date-picker [value]="fieldValue?.valueDate ?? ''" slot="anyTime" [showSlots]="false" (applyDate)="vm.setDateField(field, $event.value)" (clear)="vm.setDateField(field, '')" (close)="vm.cfPickerFieldId.set(null)" />
+                }
+              </div>
+              }
+              @case ('select') {
+              @let selectedFieldOptions = vm.selectedOptionsByFieldId().get(field.id) ?? [];
+              <div class="cf-picker-wrap">
+                <button type="button" class="cf-trigger" [disabled]="!vm.canEdit()" (click)="vm.toggleCfPicker(field.id, $event)">
+                  @if (selectedFieldOptions.length) {
+                  <span class="cf-chips">
+                    @for (option of selectedFieldOptions; track option.id) {
+                    <span class="cf-chip" [style.background]="option.color ? 'var(--color-' + option.color + ')' : 'var(--surface-2)'" [style.color]="option.color ? 'var(--color-' + option.color + '-cf, #fff)' : 'var(--text)'">{{ option.label }}</span>
+                    }
+                  </span>
+                  } @else {
+                  <span class="cf-placeholder"><i aria-hidden="true" class="ti ti-plus"></i>&ngsp;<ng-container i18n="Placeholder on an empty select field">Set value</ng-container></span>
+                  }
+                </button>
+                @if (vm.cfPickerFieldId() === field.id && vm.canEditRole()) {
+                <k-select-picker [options]="vm.optionsForField(field)" [selectedIds]="vm.optionIdsFor(field.id)" [allowMultiple]="$any(field).allowMultiple" [title]="field.name"
+                  (toggle)="vm.toggleSelectOption(field, $event)" (clear)="vm.clearCfField(field)" (close)="vm.cfPickerFieldId.set(null)" />
+                }
+              </div>
+              }
+              @case ('user') {
+              @let selectedFieldUsers = vm.selectedUsersByFieldId().get(field.id) ?? [];
+              <div class="cf-picker-wrap">
+                <button type="button" class="cf-trigger" [disabled]="!vm.canEdit()" (click)="vm.toggleCfPicker(field.id, $event)">
+                  @if (selectedFieldUsers.length) {
+                  <span class="cf-users">
+                    @for (member of selectedFieldUsers; track member.userId) {
+                    <k-avatar [name]="member.displayName" [url]="member.avatarUrl" [size]="22" [userId]="member.userId" [workspaceId]="vm.workspaceId()" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
+                    }
+                  </span>
+                  } @else {
+                  <span class="cf-placeholder"><i aria-hidden="true" class="ti ti-user-plus"></i>&ngsp;<ng-container i18n="Placeholder on an empty person field">Set user</ng-container></span>
+                  }
+                </button>
+                @if (vm.cfPickerFieldId() === field.id && vm.canEditRole()) {
+                <k-member-picker [members]="vm.members()" [selectedIds]="vm.userIdsFor(field.id)" [currentUserId]="vm.currentUserId()" [workspaceId]="vm.workspaceId()" [allowClear]="true" clearLabel="Clear" i18n-clearLabel="Button: clear the person field"
+                  (toggle)="vm.toggleUserValue(field, $event)" (clear)="vm.clearCfField(field)" (close)="vm.cfPickerFieldId.set(null)" />
+                }
+              </div>
+              }
+              @default {
+              <input class="cf-input" [type]="field.type === 'number' ? 'number' : 'text'" [attr.step]="field.type === 'number' ? 'any' : null" [value]="fieldValue?.valueText ?? fieldValue?.valueNumber ?? ''" [readonly]="!vm.canEdit()" [disabled]="!vm.canEdit()"
+                (blur)="vm.setField(field, $any($event.target).value)" (keydown.enter)="vm.setField(field, $any($event.target).value); $event.preventDefault()" />
+              }
+            }
+          </div>
+          }
+        </div>
+      </section>
+      }
+

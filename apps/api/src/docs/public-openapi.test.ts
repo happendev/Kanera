@@ -38,8 +38,9 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
     synthetic: ["url", "blockedByCount"],
     // `clientToken` is idempotency bookkeeping, `searchVector` is a tsvector index column and
     // `listEnteredAt` is trigger bookkeeping behind `inProgressSince`; none is meaningful to an API
-    // consumer.
-    omitted: ["clientToken", "dueDateTimezone", "createdById", "coverAttachmentId", "searchVector", "listEnteredAt"],
+    // consumer. `detailRevision` is the card-local write counter, published on `CardDetail` as
+    // `revision` next to the ETag rather than on every card listing.
+    omitted: ["clientToken", "dueDateTimezone", "createdById", "coverAttachmentId", "searchVector", "listEnteredAt", "detailRevision"],
   },
   {
     name: "CardAttachment",

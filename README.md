@@ -10,7 +10,7 @@
 
 See what is assigned, what changed, what is blocked, and what has been completed across every project, client, and team.
 
-[Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [Explore dependencies](#dependencies-show-what-can-move-next) · [Work with AI agents](#work-with-ai-agents-with-progress-you-can-see) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
+[Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [Work with AI agents](#work-with-ai-agents-with-progress-you-can-see) · [Explore dependencies](#dependencies-show-what-can-move-next) · [Connect GitHub](#keep-github-pull-requests-and-commits-with-the-work) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
 
 </div>
 
@@ -25,6 +25,7 @@ Use the hosted service and get started in minutes, or self-host Kanera on your o
 - **Plan in the view that fits.** Move between Kanban, Table, Calendar, Dependencies, My Cards, Team Cards, and Work Done without duplicating work.
 - **See what unblocks the team.** Connect prerequisites across boards, trace the chain in Map, Timeline, or Steps, spot risks and bottlenecks, and edit blocking links directly on the map.
 - **Keep the details with the task.** Add descriptions, comments, attachments, labels, custom fields, watchers, and assignable checklist items to cards.
+- **Connect the code to the task.** Link GitHub pull requests automatically through card keys, follow their review and merge states, and render commit links with readable change summaries.
 - **Set clear priorities.** Use Home and a ranked Up next queue to keep urgent work visible across every board.
 - **Make progress visible.** Review what was created, moved, completed, or checked off without chasing another status update.
 - **Keep knowledge nearby.** Use personal, workspace, and board notes for decisions, processes, references, and project context, with Scratchpad ready for quick capture.
@@ -34,22 +35,6 @@ Use the hosted service and get started in minutes, or self-host Kanera on your o
 - **Get told what matters, where you want it.** Choose per notification type whether an update reaches email, browser push, ntfy, Gotify, or your own webhook, then add per-workspace exceptions so one busy board does not drown out the rest.
 - **Work together in real time.** Stay current with live updates, mentions, activity history, and controlled guest access.
 - **Work from any screen.** The full Kanera experience adapts to phones, tablets, and desktops, and installs as a PWA on iOS, Android, and desktop.
-
-## Dependencies show what can move next
-
-Connect cards with **Blocks**, **Blocked by**, or **Relates to** relationships, including across boards. Kanera makes blocked work visible and shows when the last active prerequisite clears, helping the next person pick up the handoff.
-
-Open **Dependencies** on a board, in **My Cards**, or in **Team Cards**. Follow the chain in **Map**, compare due weeks in **Timeline**, or read a numbered **Steps** list that adapts to your phone. On a workspace board, switch between the board's chains and the wider workspace while keeping each card's source and permissions intact.
-
-![Kanera Dependencies Map showing connected prerequisites, blocked cards, owners, and filters for Blocked, At risk, Start here, and Ready](docs/readme-assets/dependency-map.jpg?v=20261025noportfolio)
-
-Find **Blocked**, **At risk**, **Start here**, and **Ready** work without losing the chain around it. The biggest bottleneck points to the card holding up the most open work; **Critical path** highlights the longest routes by number of open cards. Timeline aligns every chain to shared due-week columns and marks prerequisites due after their dependents in amber.
-
-![Kanera Dependencies Timeline aligning connected cards by due week and marking scheduling risks in amber](docs/readme-assets/dependency-timeline.jpg?v=20261025noportfolio)
-
-In Map or Timeline, drag from a card's **+** handle to add a blocking link, or select a connector to remove it. Tap-to-link and keyboard controls work too, with **Undo** and **Redo** for your map edits. Changes update live, and agents can inspect the same chains through MCP, the CLI, SDK, or REST API.
-
-Read the [Dependencies view, timeline, and editing guide](https://www.kanera.app/docs/dependencies-view) or learn about [card relationships and blocking](https://www.kanera.app/docs/card-dependencies).
 
 ## Workspaces and standalone boards
 
@@ -71,14 +56,6 @@ For work that does not need to share that setup, create a standalone board. It k
 ## Work with AI agents, with progress you can see
 
 Use Claude, ChatGPT, Codex, Cursor, or another agent you already work with to pick up cards, read their context, carry out tasks, and report back in Kanera. Agent work stays on the same boards as your team's work, with live progress, visible blockers, and a record of who did what for whom.
-
-### A board for delegating work and reviewing results
-
-Start with the **Agent Workflow** template: **Backlog → Agent Working → Waiting on Me → Review → Done**. Describe the task on a card, then ask your agent to pick it up. Following Kanera's agent instructions, it moves the card as work starts, needs your input, or finishes. You review the result and decide when it belongs in Done.
-
-![Kanera Agent Workflow board with Backlog, Agent Working, Waiting on Me, Review, and Done lists, including live agent run chips](docs/readme-assets/agent-workflow.jpg?v=20261025noportfolio)
-
-The workflow combines ordinary cards with **agent runs**. Runs track a working session; card moves remain explicit actions by the agent or a person, so starting or finishing a run does not silently move the card.
 
 ### Know what is running and what needs you
 
@@ -116,6 +93,14 @@ npx -y @kanera/cli commands
 
 Read-only credentials are enforced by the server, and self-hosted Kanera exposes its own MCP address and API for the same CLI and SDK. See [Work with coding agents from the terminal](https://www.kanera.app/docs/ai-coding-agents) for picking up cards and reporting progress from Claude Code or Codex.
 
+### A board for delegating work and reviewing results
+
+Start with the **Agent Workflow** template: **Backlog → Agent Working → Waiting on Me → Review → Done**. Describe the task on a card, then ask your agent to pick it up. Following Kanera's agent instructions, it moves the card as work starts, needs your input, or finishes. You review the result and decide when it belongs in Done.
+
+![Kanera Agent Workflow board with Backlog, Agent Working, Waiting on Me, Review, and Done lists, including live agent run chips](docs/readme-assets/agent-workflow.jpg?v=20261025noportfolio)
+
+The workflow combines ordinary cards with **agent runs**. Runs track a working session; card moves remain explicit actions by the agent or a person, so starting or finishing a run does not silently move the card.
+
 ## See Kanera in action
 
 ### Home keeps today and the week in focus
@@ -152,6 +137,32 @@ Export the filtered result to Excel as a multi-sheet workbook containing card ro
 
 ![Kanera Platform Delivery Table view showing grouped card rows, configurable columns, and export controls](docs/readme-assets/table-view.jpg?v=20261025noportfolio)
 
+### Team Cards Overview shows what everyone is busy with
+
+Open **Overview** in **Team Cards** to see everyone’s work across boards. One panel per teammate answers "what is each person working on, and what is next?" without opening each board in turn: their In progress cards longest-running first with time in progress, what they recently moved or created themselves, the head of their Up next queue, their other assigned cards by due date, and what they finished this week. Open, In progress, Overdue, and Done counts expand into the full list, in-progress work with no assignee gets its own panel, and folding a section folds it for everyone.
+
+![Kanera Team overview with panels for Ben Ortega, Grace Liu, and Henry Walsh showing their In progress cards with time in progress, recent activity, Up next, and assigned work](docs/readme-assets/team-overview.jpg?v=20261025weekends)
+
+Pick one teammate to see just their panel with their Up next queue docked beside it. Reorder their queue, and queue what they should do next from the open cards they have not queued yet, listed soonest due first.
+
+![Kanera Team overview focused on Ben Ortega with his ranked Up next queue and the open cards not yet queued docked beside his panel](docs/readme-assets/team-overview-up-next.jpg?v=20261025weekends)
+
+### Dependencies show what can move next
+
+Connect cards with **Blocks**, **Blocked by**, or **Relates to** relationships, including across boards. Kanera makes blocked work visible and shows when the last active prerequisite clears, helping the next person pick up the handoff.
+
+Open **Dependencies** on a board, in **My Cards**, or in **Team Cards**. Follow the chain in **Map**, compare due weeks in **Timeline**, or read a numbered **Steps** list that adapts to your phone. On a workspace board, switch between the board's chains and the wider workspace while keeping each card's source and permissions intact.
+
+![Kanera Dependencies Map showing connected prerequisites, blocked cards, owners, and filters for Blocked, At risk, Start here, and Ready](docs/readme-assets/dependency-map.jpg?v=20261025noportfolio)
+
+Find **Blocked**, **At risk**, **Start here**, and **Ready** work without losing the chain around it. The biggest bottleneck points to the card holding up the most open work; **Critical path** highlights the longest routes by number of open cards. Timeline aligns every chain to shared due-week columns and marks prerequisites due after their dependents in amber.
+
+![Kanera Dependencies Timeline aligning connected cards by due week and marking scheduling risks in amber](docs/readme-assets/dependency-timeline.jpg?v=20261025noportfolio)
+
+In Map or Timeline, drag from a card's **+** handle to add a blocking link, or select a connector to remove it. Tap-to-link and keyboard controls work too, with **Undo** and **Redo** for your map edits. Changes update live, and agents can inspect the same chains through MCP, the CLI, SDK, or REST API.
+
+Read the [Dependencies view, timeline, and editing guide](https://www.kanera.app/docs/dependencies-view) or learn about [card relationships and blocking](https://www.kanera.app/docs/card-dependencies).
+
 ### Timeline view plans the work ahead
 
 Give a card a start date next to its due date and the board's **Timeline** view draws it as a bar on a Gantt-style chart, grouped by list, assignee or label. Drag a bar to reschedule it (its working-day length is kept), pull an end to change its length, click an empty lane to place an unscheduled card, and drag from one bar's end to another to make the second wait on the first. **Critical path** runs a working-day schedule over the board's blocking links, highlights the chain with no slack, fades the rest and shows how far each other card could slip. Cards whose prerequisite is planned to finish after they start are flagged as scheduling conflicts.
@@ -159,6 +170,28 @@ Give a card a start date next to its due date and the board's **Timeline** view 
 ![Kanera campaign Timeline with start-to-finish bars grouped by list and connected by dependency wires](docs/readme-assets/timeline.jpg?v=20261025noportfolio)
 
 Read the [Timeline and Start Dates guide](https://www.kanera.app/docs/timeline) for working-day scheduling, desktop and phone controls, [MCP planning examples](https://www.kanera.app/docs/ai-mcp-examples#review-a-timeline-and-propose-a-reschedule), and [schedule events](https://www.kanera.app/docs/ai-mcp-events#schedule-transitions).
+
+### Keep GitHub pull requests and commits with the work
+
+Keep implementation and review beside the task's requirements, discussion, and delivery history.
+
+#### Pull requests link themselves and stay in sync
+
+Connect your organisation's GitHub App, then include a card key such as `KAN-123` in a pull request's branch name, title, or description. **Copy branch name** in card detail or the card menu gives you a branch name containing the key.
+
+The card's **Pull requests** section shows the repository, PR number, title, and added and deleted lines when available. GitHub webhooks keep **draft**, **open**, **merged**, and **closed** states current, and linking and state changes appear in the card's activity. Open any entry to jump straight to the review on GitHub.
+
+![Kanera card showing merged and open GitHub pull requests with repository names and line changes, beside commit and PR previews in a comment](docs/readme-assets/github-pull-requests.jpg?v=20261029github)
+
+Pull requests from forks are ignored. Self-hosted deployments can bootstrap the GitHub App in-app or supply its credentials, and must configure webhook delivery for PR sync; see [GitHub App setup and webhook configuration](DEPLOY.md#environment-reference).
+
+#### Commit links become readable change summaries
+
+Paste a GitHub commit URL into a card comment and save it to see the commit title, short SHA, repository, changed-file count, and added and deleted lines when available. Pull request links also render rich previews, so implementation and review updates stay readable in the conversation. The same rendering works in descriptions and notes, with support for repository, issue, and release links too.
+
+![Kanera card comment rendering a GitHub commit and pull request as rich previews with titles, repository names, changed-file counts, and added and deleted lines](docs/readme-assets/github-commit-previews.jpg?v=20261029github)
+
+Public repository previews work without a GitHub App connection. Connect the App to preview private repositories it can access in workspace and board content.
 
 ### Notifications keep important changes together
 
@@ -179,16 +212,6 @@ Descriptions, custom fields, checklists, due dates, comments, attachments, and a
 See the whole visible team or focus on one teammate without losing each card's board, list, fields, or permissions. Switch between Board, Team overview, Table, Calendar, Dependencies, and Work Done views to review ownership, workload, and execution order across projects.
 
 ![Kanera Team Cards focused on Ben Ortega with his ranked Up next queue beside assigned work across accessible boards](docs/readme-assets/team-cards.jpg?v=20261025weekends)
-
-### Team overview shows what everyone is busy with
-
-One panel per teammate answers "what is each person working on, and what is next?" without opening each board in turn: their In progress cards longest-running first with time in progress, what they recently moved or created themselves, the head of their Up next queue, their other assigned cards by due date, and what they finished this week. Open, In progress, Overdue, and Done counts expand into the full list, in-progress work with no assignee gets its own panel, and folding a section folds it for everyone.
-
-![Kanera Team overview with panels for Ben Ortega, Grace Liu, and Henry Walsh showing their In progress cards with time in progress, recent activity, Up next, and assigned work](docs/readme-assets/team-overview.jpg?v=20261025weekends)
-
-Pick one teammate to see just their panel with their Up next queue docked beside it. Reorder their queue, and queue what they should do next from the open cards they have not queued yet, listed soonest due first.
-
-![Kanera Team overview focused on Ben Ortega with his ranked Up next queue and the open cards not yet queued docked beside his panel](docs/readme-assets/team-overview-up-next.jpg?v=20261025weekends)
 
 ### Automations keep routine work moving
 

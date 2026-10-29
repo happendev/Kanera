@@ -1790,11 +1790,12 @@ void test("card creation emits the base assignee set before assignment automatio
   const cardAssigneeSets = assigneeEvents
     .map((row) => row.payload as { cardId: string; assigneeIds: string[] })
     .filter((payload) => payload.cardId === card.id);
+  const [committed] = await db.select({ revision: cards.detailRevision }).from(cards).where(eq(cards.id, card.id));
 
   // Assignee events are full snapshots, so clients must receive the automation-expanded set last.
   assert.deepEqual(cardAssigneeSets, [
-    { boardId: f.board.id, cardId: card.id, assigneeIds: [initial.user.id] },
-    { boardId: f.board.id, cardId: card.id, assigneeIds: [initial.user.id, automated.user.id] },
+    { boardId: f.board.id, cardId: card.id, assigneeIds: [initial.user.id], detailRevision: String(committed!.revision) },
+    { boardId: f.board.id, cardId: card.id, assigneeIds: [initial.user.id, automated.user.id], detailRevision: String(committed!.revision) },
   ]);
 });
 
@@ -3583,9 +3584,12 @@ void test("scheduling triggers fire once per boundary from the recheck sweep", a
   assert.equal((await commentsFor(waiting.id)).length, 1);
   assert.equal((await commentsFor(blocker.id)).length, 1);
 
-  // The same date again is a write without a schedule change.
+  // The route's existing no-op guard avoids writes, revisions and rechecks for an unchanged date.
+  const [beforeNoop] = await db.select({ revision: cards.detailRevision }).from(cards).where(eq(cards.id, blocker.id));
   await patchDue(blocker.id, "2030-06-05");
-  assert.equal(await runScheduleRecheckSweep(), 1);
+  assert.equal(await runScheduleRecheckSweep(), 0);
+  const [afterNoop] = await db.select({ revision: cards.detailRevision }).from(cards).where(eq(cards.id, blocker.id));
+  assert.equal(afterNoop!.revision, beforeNoop!.revision);
   assert.equal((await boundaries()).length, 3);
   assert.equal((await db.select().from(automationRunStats)).reduce((sum, row) => sum + row.effectfulRunCount, 0), 2);
 });

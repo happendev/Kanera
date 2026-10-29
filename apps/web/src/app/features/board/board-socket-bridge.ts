@@ -548,6 +548,20 @@ export class BoardSocketBridge {
       },
     };
 
+    // Capture the same reducers that normally reconcile realtime, avoiding a second implementation
+    // of checklist/attachment tombstones. Only mutations of a card with a pending read are retained.
+    for (const event of Object.keys(handlers) as Array<keyof ServerToClientEvents>) {
+      const handler = handlers[event] as (payload: Parameters<ServerToClientEvents[typeof event]>[0]) => void;
+      handlers[event] = ((payload: Parameters<ServerToClientEvents[typeof event]>[0]) => {
+        state.reconcileDetailEvent(() => handler(payload), (cardId) => {
+          // A board rebalance also touches other cards. Replaying it must not revert their later
+          // moves just because this one drawer was loading.
+          handler(event === SERVER_EVENTS.CARD_REBALANCED && "positions" in payload
+            ? { ...payload, positions: payload.positions.filter((position) => position.id === cardId) }
+            : payload);
+        }, (cardId) => "detailRevisions" in payload ? payload.detailRevisions?.[cardId] : "detailRevision" in payload ? payload.detailRevision : undefined);
+      }) as never;
+    }
     const unregisterHandlers = registerSocketHandlers(socket, handlers);
 
     const manageRoom = options.manageRoom !== false;

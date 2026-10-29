@@ -1,3 +1,4 @@
+import { conditionalCardResponse } from "../../lib/conditional-card-response.js";
 import { dto } from "@kanera/shared";
 import {
   activityEvents,
@@ -17,6 +18,7 @@ import { recordActivity } from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { enqueueCommentAddedEmails, enqueueCommentMentionedNotifications } from "../../lib/assignee-email-notifications.js";
 import { touchCardActivity } from "../../lib/card-activity.js";
+import { lockCardsForWrite } from "../../lib/card-write-lock.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { notifyReactionAdded, withdrawReactionNotification } from "../../lib/reaction-notifications.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
@@ -39,18 +41,23 @@ async function linkAttachmentsToComment(params: {
 }) {
   const { clientId, attachmentIds, cardId, boardId, commentId, userId } = params;
   if (attachmentIds.length === 0) return;
-  const updated = await db
-    .update(cardAttachments)
-    .set({ commentId, source: "comment" })
-    .where(
-      and(
-        inArray(cardAttachments.id, attachmentIds),
-        eq(cardAttachments.cardId, cardId),
-        eq(cardAttachments.uploadedById, userId),
-        isNull(cardAttachments.commentId),
-      ),
-    )
-    .returning({ id: cardAttachments.id });
+  const updated = await db.transaction(async (tx) => {
+    await lockCardsForWrite(tx, [cardId]);
+    const [comment] = await tx.select({ id: comments.id }).from(comments).where(eq(comments.id, commentId));
+    if (!comment) throw notFound();
+    return tx
+      .update(cardAttachments)
+      .set({ commentId, source: "comment" })
+      .where(
+        and(
+          inArray(cardAttachments.id, attachmentIds),
+          eq(cardAttachments.cardId, cardId),
+          eq(cardAttachments.uploadedById, userId),
+          isNull(cardAttachments.commentId),
+        ),
+      )
+      .returning({ id: cardAttachments.id });
+  });
   if (updated.length === 0) return;
   const rows = await db
     .select(attachmentRowBaseColumns)
@@ -248,7 +255,7 @@ function signedCommentRow(
 export async function commentRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
-  app.get("/cards/:id/feed", async (req) => {
+  app.get("/cards/:id/feed", async (req, reply) => {
     const { id: cardId } = req.params as { id: string };
     const query = dto.listCardFeedQuery.parse(req.query ?? {});
     const limit = query.limit;
@@ -334,7 +341,8 @@ export async function commentRoutes(app: FastifyInstance) {
     const hasMore = sortedFeed.length > limit;
     const page = sortedFeed.slice(0, limit);
 
-    return {
+    const result = {
+      revision: String(card.detailRevision),
       items: page,
       nextCursor: hasMore
         ? encodeCursor({
@@ -345,6 +353,7 @@ export async function commentRoutes(app: FastifyInstance) {
           })
         : null,
     } satisfies dto.CardFeedPage;
+    return conditionalCardResponse(req, reply, result);
   });
 
   app.get("/cards/:id/comments", async (req): Promise<dto.CardCommentsPage> => {
@@ -412,6 +421,7 @@ export async function commentRoutes(app: FastifyInstance) {
     const commentBody = stripSignedEmbeddedMediaUrls(body.body, req.auth.cid) ?? body.body;
 
     const { comment, mentionedUserIds } = await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, [cardId]);
       const attribution = commentAttribution(req.auth);
       const [comment] = await tx
         .insert(comments)
@@ -514,6 +524,9 @@ export async function commentRoutes(app: FastifyInstance) {
     });
 
     const created = await db.transaction(async (tx) => {
+      // Comments are written in request order; two batches crossing the same cards in opposite
+      // orders would otherwise deadlock on the per-card revision bump (see lockCardsForWrite).
+      await lockCardsForWrite(tx, cardIds);
       const attribution = commentAttribution(req.auth);
       const results: Array<{
         id: string;
@@ -598,19 +611,25 @@ export async function commentRoutes(app: FastifyInstance) {
     assertIntegrationEmbeddedMediaStoredLocally(body.body, req.auth.cid, req.auth.authKind);
     const commentBody = stripSignedEmbeddedMediaUrls(body.body, req.auth.cid) ?? body.body;
 
-    const [comment] = await db
-      .update(comments)
-      .set({ body: commentBody, editedAt: new Date() })
-      .where(eq(comments.id, id))
-      .returning();
-
-    await replaceCardMentions({
-      tx: db,
-      boardId: card.boardId,
-      cardId: card.id,
-      commentId: comment!.id,
-      source: "comment",
-      markdown: commentBody,
+    const comment = await db.transaction(async (tx) => {
+      // Match bulk deletion's card-before-comment order. The revision trigger also writes the
+      // card, so locking just the comment first can deadlock with a batch holding its card.
+      await lockCardsForWrite(tx, [card.id]);
+      const [updated] = await tx
+        .update(comments)
+        .set({ body: commentBody, editedAt: new Date() })
+        .where(eq(comments.id, id))
+        .returning();
+      if (!updated) throw notFound();
+      await replaceCardMentions({
+        tx,
+        boardId: card.boardId,
+        cardId: card.id,
+        commentId: updated.id,
+        source: "comment",
+        markdown: commentBody,
+      });
+      return updated;
     });
 
     if (body.attachmentIds && body.attachmentIds.length > 0) {
@@ -654,14 +673,11 @@ export async function commentRoutes(app: FastifyInstance) {
     // a guest cannot borrow admin status from their home organisation.
     if (!canMutateComment(current, req.auth) && !ctx.isWorkspaceAdmin) throw forbidden();
 
-    // Detach any attachments that were linked to this comment so the row's
-    // commentId doesn't dangle. The attachments themselves stay on the card.
-    await db
-      .update(cardAttachments)
-      .set({ commentId: null })
-      .where(eq(cardAttachments.commentId, id));
-
     await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, [card.id]);
+      // Detach and delete under the same card lock as bulk deletion; both child tables advance
+      // the card revision, and attachments themselves stay on the card.
+      await tx.update(cardAttachments).set({ commentId: null }).where(eq(cardAttachments.commentId, id));
       await tx.delete(comments).where(eq(comments.id, id));
       await clearNotificationsForComments(tx, [id]);
     });
@@ -723,6 +739,7 @@ export async function commentRoutes(app: FastifyInstance) {
     await assertBatchCardVisibility(req.auth, boardAccess, rows.map((row) => row.card.id));
 
     const deletedIds = await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, rows.map((row) => row.card.id));
       await tx
         .update(cardAttachments)
         .set({ commentId: null })
@@ -780,13 +797,18 @@ export async function commentRoutes(app: FastifyInstance) {
     await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
-    const inserted = await db
-      .insert(commentReactions)
-      .values({ commentId, userId: req.auth.sub, reactionType: body.type })
-      .onConflictDoNothing({
-        target: [commentReactions.commentId, commentReactions.userId, commentReactions.reactionType],
-      })
-      .returning({ id: commentReactions.id });
+    const inserted = await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, [card.id]);
+      const [comment] = await tx.select({ id: comments.id }).from(comments).where(eq(comments.id, commentId));
+      if (!comment) throw notFound();
+      return tx
+        .insert(commentReactions)
+        .values({ commentId, userId: req.auth.sub, reactionType: body.type })
+        .onConflictDoNothing({
+          target: [commentReactions.commentId, commentReactions.userId, commentReactions.reactionType],
+        })
+        .returning({ id: commentReactions.id });
+    });
 
     if (inserted.length > 0) {
       const [user] = await db
@@ -834,16 +856,19 @@ export async function commentRoutes(app: FastifyInstance) {
     await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
-    const removed = await db
-      .delete(commentReactions)
-      .where(
-        and(
-          eq(commentReactions.commentId, commentId),
-          eq(commentReactions.userId, req.auth.sub),
-          eq(commentReactions.reactionType, type),
-        ),
-      )
-      .returning({ id: commentReactions.id });
+    const removed = await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, [card.id]);
+      return tx
+        .delete(commentReactions)
+        .where(
+          and(
+            eq(commentReactions.commentId, commentId),
+            eq(commentReactions.userId, req.auth.sub),
+            eq(commentReactions.reactionType, type),
+          ),
+        )
+        .returning({ id: commentReactions.id });
+    });
 
     if (removed.length > 0) {
       await emitToBoard(card.boardId, "comment:reaction:removed", {

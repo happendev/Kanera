@@ -1,3 +1,4 @@
+import { cardDetailRevisionForEvent } from "../lib/card-detail-revision.js";
 import { compactWireCard, SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
 import { boardMembers, boards, clientMembers, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -31,12 +32,18 @@ function compactBoardRealtimePayload<E extends keyof ServerToClientEvents>(
 
 // Mutation callers await board/workspace publication so the outbox write finishes before the
 // response or a dependent event. Awaiting preserves fail-open behavior: publish failures are logged.
-export function emitToBoard<E extends keyof ServerToClientEvents>(
+export async function emitToBoard<E extends keyof ServerToClientEvents>(
   boardId: string,
   event: E,
   ...args: Parameters<ServerToClientEvents[E]>
 ) {
-  const payload = compactBoardRealtimePayload(event, args[0]);
+  const revisions = await cardDetailRevisionForEvent(boardId, event, args[0]).catch((err: unknown) => {
+    // Revision metadata must not change the existing fail-open publication contract. Older or
+    // unstamped events still reconcile conservatively through the client's pending-read journal.
+    logRealtimePublishFailure(err, { scope: "board", scopeId: boardId, event });
+    return {};
+  });
+  const payload = { ...compactBoardRealtimePayload(event, args[0]), ...revisions };
   const realtimeDispatched = broadcastToBoard(boardId, event, payload);
   return publishRealtimeEvent("board", boardId, event, payload, { realtimeDispatched })
     .catch((err) => {
