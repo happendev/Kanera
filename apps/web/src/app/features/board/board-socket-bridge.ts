@@ -1,8 +1,10 @@
 import { Injectable, inject } from "@angular/core";
 import { CLIENT_EVENTS, expandWireCard, SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
+import { AuthService } from "../../core/auth/auth.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { BoardState } from "./board-state";
+import { CardMotionService } from "./card-motion.service";
 
 export type AttachOptions = {
   onJoined?: () => void;
@@ -23,6 +25,8 @@ export type AttachOptions = {
 @Injectable()
 export class BoardSocketBridge {
   private readonly state = inject(BoardState);
+  private readonly cardMotion = inject(CardMotionService);
+  private readonly auth = inject(AuthService);
 
   attach(socket: AppSocket, boardId: string, options: AttachOptions = {}) {
     const state = this.state;
@@ -122,7 +126,11 @@ export class BoardSocketBridge {
 
       [SERVER_EVENTS.CARD_CREATED]: ({ boardId: eventBoardId, card, blockedByCount }) => {
         if (eventBoardId !== boardId || !acceptsCard(card.id)) return;
+        // Someone else's new card washes in rather than appearing. Our own may echo back before the
+        // POST response, and needs no announcing.
+        const arrived = !state.hasCard(card.id) && card.createdById !== this.auth.user()?.id;
         state.addCard(expandWireCard(card), blockedByCount);
+        if (arrived) this.cardMotion.land([card.id]);
         // Work done lists creations, list moves and completions. Completions arrive as card:updated;
         // creations and moves only as these events, so each of the three must refresh the view.
         options.onWorkDoneChanged?.();
@@ -139,7 +147,11 @@ export class BoardSocketBridge {
           requestResync();
           return;
         }
+        // Our own drops already moved the card optimistically, so only a move into a different list
+        // is someone else's. Same-list reorders from others stay quiet: the tile barely moves.
+        const arrived = state.cardsById().get(cardId)?.listId !== toListId;
         state.moveCard(cardId, toListId, position, clock);
+        if (arrived) this.cardMotion.land([cardId]);
         state.touchCardActivity(cardId, false);
         // A concurrent detail fetch contains the card's list/position too. Mark the move so that
         // stale detail cannot put the card back after this realtime event has been applied.

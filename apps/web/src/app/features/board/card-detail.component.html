@@ -22,7 +22,7 @@
     @if (canEditRole()) {
     <button class="ghost icon completion-btn" [class.is-active]="card().completedAt" (click)="toggleCompletion()" [disabled]="savingCompletion() || !canEdit()" [attr.aria-label]="card().completedAt ? labels.markIncomplete : labels.markComplete"
       [kTooltip]="card().completedAt ? labels.markIncomplete : labels.markComplete">
-      <i aria-hidden="true" [class]="card().completedAt ? 'ti ti-circle-check' : 'ti ti-circle'"></i>
+      <i aria-hidden="true" [class]="card().completedAt ? (completionTickedCardId() === card().id ? 'ti ti-circle-check is-drawing' : 'ti ti-circle-check') : 'ti ti-circle'"></i>
     </button>
     }
     @if (editingTitle()) {
@@ -704,8 +704,8 @@
                 } @else {
                 <span class="checklist-grip-spacer"></span>
                 }
-                <button type="button" class="checklist-check" [class.checked]="item.completedAt" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklist.id, item)" [kTooltip]="item.completedAt ? labels.markIncomplete : labels.markComplete">
-                  <i aria-hidden="true" class="ti" [class.ti-checkbox]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
+                <button type="button" class="checklist-check" [class.checked]="item.completedAt" [class.is-ticking]="tickedChecklistItemId() === item.id" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklist.id, item)" [kTooltip]="item.completedAt ? labels.markIncomplete : labels.markComplete">
+                  <i aria-hidden="true" class="ti" [class.ti-square-check]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
                 </button>
                 @if (editingItemId() === item.id && canEditRole()) {
                 <input #checklistItemInput class="checklist-item-input" [value]="draftItemText()" (input)="draftItemText.set($any($event.target).value)" (keydown.enter)="saveChecklistItem(checklist.id, item)"
@@ -1061,9 +1061,9 @@
         <i aria-hidden="true" class="ti ti-arrow-left"></i>
       </button>
       @if (canEditRole()) {
-      <button type="button" class="checklist-check checklist-item-panel-check" [class.checked]="item.completedAt" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklistId, item)"
+      <button type="button" class="checklist-check checklist-item-panel-check" [class.checked]="item.completedAt" [class.is-ticking]="tickedChecklistItemId() === item.id" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklistId, item)"
         [attr.aria-label]="item.completedAt ? labels.markItemIncomplete : labels.markItemComplete" [kTooltip]="item.completedAt ? labels.markIncomplete : labels.markComplete">
-        <i aria-hidden="true" class="ti" [class.ti-checkbox]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
+        <i aria-hidden="true" class="ti" [class.ti-square-check]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
       </button>
       }
       @if (editingItemId() === item.id && canEditRole()) {

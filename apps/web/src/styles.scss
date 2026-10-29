@@ -146,7 +146,9 @@
 // paints while dragging. Non-dragged board cards remain fully rendered.
 .cdk-drag-preview,
 .lists.is-card-dragging .cdk-drag-dragging {
-  box-shadow: none !important;
+  &:not(.is-multi) {
+    box-shadow: none !important;
+  }
 
   .card-board-badge,
   .card-footer,
@@ -1346,9 +1348,79 @@ k-card.cdk-drag-placeholder {
   border: 1px dashed color-mix(in srgb, var(--accent) 50%, var(--border)) !important;
   box-shadow: none !important;
   opacity: 1;
+  // CDK re-inserts the placeholder whenever it crosses into another list (or the Up next panel),
+  // which restarts this, so the slot fades in wherever the card will land rather than popping.
+  animation: drag-slot-in var(--motion-fast) var(--ease-out);
 
   * {
     visibility: hidden;
+  }
+}
+
+// Tiles a drag passes over are not hover targets: without this each one flashes its hover border
+// and background as the pointer crosses it. CDK marks every connected drop list with these classes
+// for the duration of a drag. pointer-events is an independently inherited property, so this is a
+// flag flip per tile rather than a restyle of its subtree. CDK's drop hit test only needs the point
+// to land inside the list, which it still does.
+.cdk-drop-list-dragging > k-card,
+.cdk-drop-list-receiving > k-card {
+  pointer-events: none;
+}
+
+@keyframes drag-slot-in {
+  from {
+    opacity: 0;
+  }
+}
+
+// Pickup: the tile lifts off the board, a slight scale and tilt that eases in once. `scale` and
+// `rotate` are separate from `transform`, which CDK owns for pointer tracking, so they compose
+// without fighting it, and they stay on the compositor.
+.card-drag-preview {
+  scale: 1.02;
+  rotate: 1deg;
+  animation: card-drag-lift var(--dur) var(--ease-out);
+}
+
+@keyframes card-drag-lift {
+  from {
+    scale: 1;
+    rotate: 0deg;
+  }
+}
+
+// Several selected cards: a deck of offset tiles behind the preview says "these all move" before
+// the count badge is read. Box shadows without blur, so the stack is two flat fills and borders.
+// The global preview rule that strips shadows skips .is-multi so the deck can animate out.
+.card-drag-preview.is-multi.cdk-drag-preview {
+  box-shadow:
+    4px 4px 0 -1px var(--card-bg),
+    4px 4px 0 0 var(--border-strong),
+    8px 8px 0 -2px var(--card-bg),
+    8px 8px 0 -1px var(--border-strong);
+  animation: card-drag-lift var(--dur) var(--ease-out), card-drag-deck var(--dur) var(--ease-out);
+}
+
+@keyframes card-drag-deck {
+  from {
+    box-shadow:
+      0 0 0 -1px var(--card-bg),
+      0 0 0 0 var(--border-strong),
+      0 0 0 -2px var(--card-bg),
+      0 0 0 -1px var(--border-strong);
+  }
+}
+
+// The large-board path keeps the first drag frames as cheap as possible.
+body.is-large-board {
+  .card-drag-preview,
+  k-card.cdk-drag-placeholder {
+    animation: none;
+  }
+
+  .card-drag-preview {
+    scale: none;
+    rotate: none;
   }
 }
 
@@ -1370,6 +1442,11 @@ k-up-next-panel .panel-rows k-card.cdk-drag-placeholder {
 // The lightweight card preview is a div, so the large-board k-card transition rule does not
 // reach it. Keep release feedback short without changing list-reorder or sibling animations.
 .card-drag-preview.cdk-drag-animating {
+  // The tile sets back down as it settles. CDK waits on the transform transition alone, so the
+  // lift's scale and rotate must not outlast it.
+  scale: 1;
+  rotate: 0deg;
+  transition-property: transform, scale, rotate;
   transition-duration: 80ms;
 }
 

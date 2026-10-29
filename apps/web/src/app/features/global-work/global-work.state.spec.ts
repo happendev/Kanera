@@ -590,7 +590,7 @@ describe("GlobalWorkState", () => {
       const { state, socket, joinBoard, joinWorkspace, boardLeaves, workspaceLeaves } = setup();
       await state.initialize("my");
 
-      socket.trigger(SERVER_EVENTS.CARD_CREATED, {});
+      socket.trigger(SERVER_EVENTS.CARD_CREATED, { card: { id: "card-new", createdById: "someone-else" } });
       await vi.advanceTimersByTimeAsync(180);
       expect(joinBoard).toHaveBeenCalledTimes(2);
       expect(joinWorkspace).toHaveBeenCalledTimes(1);
@@ -841,7 +841,7 @@ describe("GlobalWorkState", () => {
     await vi.waitFor(() => expect(state.cards()).toHaveLength(2));
 
     holdSecondPage = true;
-    socket.trigger("card:created", {});
+    socket.trigger("card:created", { card: { id: "card-new", createdById: "someone-else" } });
     await vi.waitFor(() => expect(gate.release).not.toBeNull());
 
     // Mid-reconcile the complete board is still on screen. Publishing the first page here is what
@@ -1037,11 +1037,11 @@ describe("GlobalWorkState", () => {
     const cardQueryCount = () => f.post.mock.calls.filter(([path]) => path === "/work/cards/query").length;
     try {
       holdRefresh = true;
-      f.socket.trigger("card:created", {});
+      f.socket.trigger("card:created", { card: { id: "card-new", createdById: "someone-else" } });
       await vi.waitFor(() => expect(gate.release).not.toBeNull());
       expect(f.state.reconciling()).toBe(true);
       // A second event while the walk is in flight cancels it and queues one replacement.
-      f.socket.trigger("card:created", {});
+      f.socket.trigger("card:created", { card: { id: "card-new", createdById: "someone-else" } });
       Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
       document.dispatchEvent(new Event("visibilitychange"));
       holdRefresh = false;
@@ -1077,7 +1077,7 @@ describe("GlobalWorkState", () => {
     const initialVersion = f.state.reconciliationVersion();
 
     holdNextQuery = true;
-    f.socket.trigger("card:created", {});
+    f.socket.trigger("card:created", { card: { id: "card-new", createdById: "someone-else" } });
     await vi.waitFor(() => expect(gate.release).not.toBeNull());
     await f.state.queryFirstPage();
     expect(f.state.reconciliationVersion()).toBe(initialVersion + 1);
