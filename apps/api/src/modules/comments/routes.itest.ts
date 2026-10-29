@@ -784,6 +784,39 @@ void test("bulk comment creation validates atomically and preserves request orde
   await app.close();
 });
 
+// The detail-child triggers lock the owning card per written row. Two batches that traverse the
+// same cards in opposite orders must not deadlock (HTTP 500) once each holds its first card.
+void test("opposite-order bulk comment batches on the same cards never deadlock", async () => {
+  const app = await buildIntegrationServer();
+  const { user: owner, auth } = await signupOwner(app, { orgName: "Acme Bulk Comment Order", email: "owner-bulk-comment-order@example.com", displayName: "Owner" });
+  const workspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(list);
+  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" }).returning();
+  assert.ok(board);
+  const cardRows = await db.insert(cards).values([
+    { listId: list.id, boardId: board.id, title: "A", position: "1000.0000000000", createdById: owner.id },
+    { listId: list.id, boardId: board.id, title: "B", position: "2000.0000000000", createdById: owner.id },
+    { listId: list.id, boardId: board.id, title: "C", position: "3000.0000000000", createdById: owner.id },
+  ]).returning();
+  const forward = cardRows.map((card) => card.id);
+  const reverse = [...forward].reverse();
+  const batch = (order: string[]) => app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/comments/bulk/create`,
+    headers: auth,
+    payload: { comments: order.flatMap((cardId) => [1, 2, 3].map((n) => ({ cardId, body: `Note ${n}` }))) },
+  });
+  for (let round = 0; round < 8; round += 1) {
+    const [left, right] = await Promise.all([batch(forward), batch(reverse)]);
+    assert.deepEqual([left.statusCode, right.statusCode], [201, 201], `round ${round}: ${left.body} ${right.body}`);
+  }
+  assert.equal(await db.$count(comments, inArray(comments.cardId, forward)), 8 * 2 * 9);
+  await app.close();
+});
+
 void test("card feeds sign cross-organisation guest avatars with the guest client", async () => {
   const app = await buildIntegrationServer();
   const hostSignup = await app.inject({

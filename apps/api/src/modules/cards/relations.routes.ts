@@ -4,6 +4,7 @@ import { ACTIVITY_ACTION, boards, cardRelations, cards, lists } from "@kanera/sh
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
+import { lockCardsForWrite } from "../../lib/card-write-lock.js";
 import { assertWorkspaceFeature } from "../../lib/workspace-features.js";
 import { assertBoardAccess, assertCardAccess, assignedCardVisibility } from "../../lib/access.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
@@ -106,6 +107,8 @@ export function cardRelationRoutes(app: FastifyInstance) {
       if (existing) return { relation: existing, created: false as const, activities: null, card: pathCard, other: otherCard };
       // Lifecycle is validated on rows read under the graph lock: completing or archiving either
       // card takes this lock first, so what is checked here is what the relation is written against.
+      // The relation row and its two activity rows bump both cards; hold both in one order first.
+      await lockCardsForWrite(tx, [pathCard.id, otherCard.id]);
       const fresh = await tx.select().from(cards).where(inArray(cards.id, [pathCard.id, otherCard.id]));
       const card = fresh.find((row) => row.id === pathCard.id);
       const other = fresh.find((row) => row.id === otherCard.id);
@@ -212,6 +215,7 @@ export function cardRelationRoutes(app: FastifyInstance) {
         or(eq(cardRelations.sourceCardId, id), eq(cardRelations.targetCardId, id)),
       )).limit(1);
       if (!relation) throw notFound("relation not found");
+      await lockCardsForWrite(tx, [relation.sourceCardId, relation.targetCardId]);
       // Hidden `blocks` rows stay exactly as they were while dependencies are switched off.
       if (relation.kind === "blocks") await assertWorkspaceFeature(card.workspaceId, "dependencies", tx);
       const before = relation.kind === "blocks"

@@ -1,0 +1,116 @@
+@let vm = model();
+      <!-- Attachments -->
+      <section class="detail-section card-detail-section" [class.large-attachment-collection]="vm.visibleAttachments().length > 50">
+        <div class="section-label card-detail-section-label">
+          <i aria-hidden="true" class="ti ti-paperclip"></i>
+          &ngsp;<ng-container i18n="Card detail section heading">Attachments</ng-container>
+          @if (vm.visibleAttachments().length) {
+          <span class="count card-detail-count">{{ vm.visibleAttachments().length }}</span>
+          }
+        </div>
+
+        @if (vm.canEditRole()) {
+        <div class="attach-dropzone" [class.is-drag-active]="vm.attachmentDragActive()" [class.is-disabled]="!vm.canEdit()">
+          <label class="attach-upload sm" [class.disabled]="!vm.canEdit()">
+            <i aria-hidden="true" class="ti ti-upload"></i>
+            &ngsp;<ng-container i18n="Button">Add attachment</ng-container>
+            <input type="file" hidden multiple [accept]="vm.acceptAttr" [disabled]="!vm.canEdit()" (change)="vm.onAttachmentSelected($event)" />
+          </label>
+          <div class="attach-drop-hint" aria-hidden="true">
+            <i aria-hidden="true" class="ti ti-drag-drop"></i>
+            &ngsp;<ng-container i18n>Drop files here</ng-container>
+          </div>
+        </div>
+
+        @if (vm.uploads.validationError(); as err) {
+        <p class="attach-error"><i aria-hidden="true" class="ti ti-alert-circle"></i> {{ err }}</p>
+        }
+        <k-attachment-upload-list [items]="vm.uploads.items()" (retry)="vm.uploads.retry($event)" (dismiss)="vm.uploads.dismiss($event)" />
+        }
+
+        @if (vm.visibleAttachments().length) {
+        <ul class="attach-list">
+          @for (a of vm.visibleAttachments(); track a.id) {
+          @let attachmentDisplay = vm.attachmentDisplayById().get(a.id);
+          <li class="attach-row">
+            @if (attachmentDisplay?.isImage) {
+            <button type="button" class="attach-thumb is-image" (click)="vm.openAttachmentImage(a.id, $event)" [kTooltip]="a.fileName">
+              @if (attachmentDisplay?.thumbnailUrl; as thumb) {
+              <img [ngSrc]="thumb" fill [alt]="a.fileName" />
+              } @else {
+              <i aria-hidden="true" class="ti ti-photo"></i>
+              }
+            </button>
+            } @else if (attachmentDisplay?.isVideo) {
+            <button type="button" class="attach-thumb is-doc is-video" (click)="vm.openAttachmentVideo(a.id, $event)" [kTooltip]="vm.labels.play(a.fileName)" [attr.aria-label]="vm.labels.playVideo(a.fileName)">
+              <i aria-hidden="true" class="ti ti-video"></i>
+            </button>
+            } @else if (attachmentDisplay?.isAudio) {
+            <button type="button" class="attach-thumb is-doc is-audio" (click)="vm.openAttachmentAudio(a.id, $event)" [kTooltip]="vm.labels.play(a.fileName)" [attr.aria-label]="vm.labels.playAudio(a.fileName)">
+              <i aria-hidden="true" class="ti ti-file-music"></i>
+            </button>
+            } @else if (attachmentDisplay?.isPdf) {
+            <button type="button" class="attach-thumb is-doc is-pdf" (click)="vm.openAttachmentPdf(a.id, $event)" [kTooltip]="vm.labels.preview(a.fileName)" [attr.aria-label]="vm.labels.previewPdf(a.fileName)">
+              <i aria-hidden="true" class="ti ti-file-type-pdf"></i>
+            </button>
+            } @else if (attachmentDisplay?.isMarkdown) {
+            <button type="button" class="attach-thumb is-doc is-markdown" (click)="vm.openAttachmentMarkdown(a.id, $event)" [kTooltip]="vm.labels.preview(a.fileName)" [attr.aria-label]="vm.labels.previewMarkdown(a.fileName)">
+              <i aria-hidden="true" class="ti ti-markdown"></i>
+            </button>
+            } @else if (attachmentDisplay?.isText) {
+            <button type="button" class="attach-thumb is-doc is-text" (click)="vm.openAttachmentText(a.id, $event)" [kTooltip]="vm.labels.preview(a.fileName)" [attr.aria-label]="vm.labels.previewText(a.fileName)">
+              <i aria-hidden="true" class="ti ti-file-text"></i>
+            </button>
+            } @else {
+            <a class="attach-thumb is-doc" [href]="a.url" (click)="vm.downloadAttachment(a.url, a.fileName); $event.preventDefault()" [kTooltip]="a.fileName">
+              <i aria-hidden="true" class="ti {{ attachmentDisplay?.iconClass }}"></i>
+            </a>
+            }
+            <div class="attach-meta">
+              <div class="attach-name-row">
+                @if (attachmentDisplay?.isImage) {
+                <a class="attach-name" [href]="a.url" (click)="vm.openAttachmentImage(a.id, $event)">{{ a.fileName }}</a>
+                } @else if (attachmentDisplay?.isVideo) {
+                <a class="attach-name" [href]="a.url" (click)="vm.openAttachmentVideo(a.id, $event)">{{ a.fileName }}</a>
+                } @else if (attachmentDisplay?.isAudio) {
+                <a class="attach-name" [href]="a.url" (click)="vm.openAttachmentAudio(a.id, $event)">{{ a.fileName }}</a>
+                } @else if (attachmentDisplay?.isPdf) {
+                <a class="attach-name" [href]="a.url" (click)="vm.openAttachmentPdf(a.id, $event)">{{ a.fileName }}</a>
+                } @else if (attachmentDisplay?.isMarkdown) {
+                <a class="attach-name" [href]="a.url" (click)="vm.openAttachmentMarkdown(a.id, $event)">{{ a.fileName }}</a>
+                } @else if (attachmentDisplay?.isText) {
+                <a class="attach-name" [href]="a.url" (click)="vm.openAttachmentText(a.id, $event)">{{ a.fileName }}</a>
+                } @else {
+                <a class="attach-name" [href]="a.url" (click)="vm.downloadAttachment(a.url, a.fileName); $event.preventDefault()">{{ a.fileName }}</a>
+                }
+                @if (vm.coverAttachmentId() === a.id) {
+                <span class="cover-pill" i18n="Badge: this image is the card's cover">Cover</span>
+                }
+                @if (a.source === 'description') {
+                <span class="source-pill" kTooltip="Added in description" i18n-kTooltip><i aria-hidden="true" class="ti ti-align-left"></i>&ngsp;<ng-container i18n="Badge: the attachment was added in the card description">description</ng-container></span>
+                } @else if (a.source === 'comment') {
+                <span class="source-pill" kTooltip="Added via comment" i18n-kTooltip><i aria-hidden="true" class="ti ti-message-circle"></i>&ngsp;<ng-container i18n="Badge: the attachment was added in a comment">comment</ng-container></span>
+                }
+              </div>
+              <span class="attach-sub">{{ attachmentDisplay?.subtitle }}</span>
+            </div>
+            <div class="attach-actions">
+              @if (vm.canEditRole() && attachmentDisplay?.isImage) {
+              <button type="button" class="ghost xs" [disabled]="!vm.canEdit()" (click)="vm.setCover(a.id)" [kTooltip]="vm.coverAttachmentId() === a.id ? vm.labels.removeCover : vm.labels.setAsCover">
+                <i aria-hidden="true" class="ti" [class.ti-photo]="vm.coverAttachmentId() !== a.id" [class.ti-photo-off]="vm.coverAttachmentId() === a.id"></i>
+              </button>
+              }
+              <button type="button" class="ghost xs" (click)="vm.downloadAttachment(a.url, a.fileName)" kTooltip="Download" i18n-kTooltip="Button: download the attachment">
+                <i aria-hidden="true" class="ti ti-download"></i>
+              </button>
+              @if (vm.canEditRole()) {
+              <button type="button" class="ghost xs" [disabled]="!vm.canEdit()" (click)="vm.confirmDeleteAttachment(a.id, a.fileName)" kTooltip="Delete" i18n-kTooltip="Button: delete the attachment">
+                <i aria-hidden="true" class="ti ti-trash"></i>
+              </button>
+              }
+            </div>
+          </li>
+          }
+        </ul>
+        }
+      </section>

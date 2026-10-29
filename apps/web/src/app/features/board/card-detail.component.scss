@@ -1,6 +1,10 @@
 @use "../../shared/card-key" as key;
 @use "../../shared/tick-draw" as tick;
 
+// Shared section styles are scoped to this drawer, including the extracted OnPush views.
+// Generic section/heading/count classes also occur inside the activity component. Style only the
+// explicitly marked drawer elements so this shared stylesheet cannot override that child view.
+.card-detail-root {
 // ── Watch button ──────────────────────────────────────────────────────────────
 
 .watch-btn.is-watching,
@@ -13,7 +17,7 @@
   }
 }
 
-:host {
+& {
   position: fixed;
   inset: 0;
   // The shared modal layer, not a bare literal one above it. This was 1001, which outranked
@@ -135,8 +139,8 @@
   }
 }
 
-:host-context([data-theme="light"]),
-:host-context([data-theme="paper"]) {
+[data-theme="light"] &,
+[data-theme="paper"] & {
   .panel {
     box-shadow: -4px 0 16px rgba(15, 23, 42, 0.08), -1px 0 4px rgba(15, 23, 42, 0.04);
 
@@ -147,7 +151,7 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme])) {
+  :not([data-theme]) & {
     .panel {
       box-shadow: -4px 0 16px rgba(15, 23, 42, 0.08), -1px 0 4px rgba(15, 23, 42, 0.04);
 
@@ -488,14 +492,14 @@
   --card-comments-bg: color-mix(in srgb, var(--bg) 55%, var(--surface));
 }
 
-:host-context([data-theme="light"]) .panel-body,
-:host-context([data-theme="paper"]) .panel-body {
+[data-theme="light"] & .panel-body,
+[data-theme="paper"] & .panel-body {
   background: var(--app-tint);
   --card-comments-bg: color-mix(in srgb, var(--bg) 45%, var(--app-tint));
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme])) .panel-body {
+  :not([data-theme]) & .panel-body {
     background: var(--app-tint);
     --card-comments-bg: color-mix(in srgb, var(--bg) 45%, var(--app-tint));
   }
@@ -596,7 +600,7 @@
   gap: 16px;
   align-items: flex-start;
 
-  >.detail-section {
+  >.card-detail-section {
     --section-content-indent: 0;
     flex: 0 1 auto;
     min-width: 0;
@@ -612,7 +616,10 @@
   min-width: 0;
 }
 
-.col-main>.detail-section {
+.col-main>.card-detail-section,
+.col-main>:is(k-card-detail-description, k-card-detail-fields, k-card-detail-checklists, k-card-detail-attachments)>.card-detail-section {
+  // display: contents removes the component's layout box, not its DOM ancestry. Keep section
+  // sizing explicit through these hosts so empty descriptions cannot grow to a 180px flex basis.
   flex: none;
 }
 
@@ -740,7 +747,7 @@
     padding: 20px 20px 16px;
     border-bottom: 1px solid var(--border);
 
-    >.detail-section {
+    >.card-detail-section {
       flex: 0 1 auto;
       min-width: 0;
     }
@@ -785,7 +792,7 @@
 
   // Surface the compact list/board row and hide their labelled body copies so
   // the relocation actually saves space rather than duplicating it. The child
-  // combinator outweighs the later base `.detail-section { display: flex }`.
+  // combinator outweighs the later base `.card-detail-section { display: flex }`.
   .panel-subheader {
     display: flex;
   }
@@ -837,7 +844,7 @@
     flex-basis: 100%;
   }
 
-  :host:has(.panel.mode-modal) {
+  &:has(.panel.mode-modal) {
     justify-content: flex-end;
     align-items: stretch;
     padding: 0;
@@ -947,7 +954,7 @@
 
 // ─── Sections ─────────────────────────────────────────────────────────────────
 
-.detail-section {
+.card-detail-section {
   --section-content-indent: 21px;
 
   display: flex;
@@ -956,7 +963,7 @@
   flex: 1 1 180px;
   min-width: 0;
 
-  > :not(.section-label) {
+  > :not(.card-detail-section-label) {
     margin-left: var(--section-content-indent);
   }
 }
@@ -1001,12 +1008,12 @@
 @media (max-width: 767.98px) {
 
   .panel-body,
-  .detail-section {
+  .card-detail-section {
     --section-content-indent: 0;
   }
 }
 
-.section-label {
+.card-detail-section-label {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1020,7 +1027,7 @@
   }
 }
 
-.section-label-actions {
+.card-detail-section-label-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1974,7 +1981,7 @@
   font-size: 15px;
 }
 
-.count {
+.card-detail-count {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -2248,7 +2255,9 @@ button.checklist-hide-toggle {
   }
 }
 
-.label-chip {
+// Scoped to the metadata row's chips: this sheet is global (see card-detail.component.ts), and
+// k-card-labels, rendered by the relations section, names its chips `.label-chip` as well.
+.label-chips > .label-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2666,8 +2675,8 @@ button.checklist-hide-toggle {
 
 // In light mode, editable custom-field controls use the same white input surface as
 // the description editor so they remain visibly distinct from the tinted detail body.
-:host-context([data-theme="light"]),
-:host-context([data-theme="paper"]) {
+[data-theme="light"] &,
+[data-theme="paper"] & {
   .cf-input,
   .cf-trigger,
   .cf-checkbox-btn,
@@ -2677,7 +2686,7 @@ button.checklist-hide-toggle {
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme])) {
+  :not([data-theme]) & {
     .cf-input,
     .cf-trigger,
     .cf-checkbox-btn,
@@ -3017,8 +3026,8 @@ button.checklist-hide-toggle {
 // on blending into a white surface need to be explicitly lifted to white so
 // they read as distinct, elevated content areas.
 
-:host-context([data-theme="light"]),
-:host-context([data-theme="paper"]) {
+[data-theme="light"] &,
+[data-theme="paper"] & {
 
   // Description: render as a white card against the gray panel body.
   // Non-hover default uses a visible border; hover adds a stronger border +
@@ -3041,7 +3050,7 @@ button.checklist-hide-toggle {
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme])) {
+  :not([data-theme]) & {
     .description-viewer-wrap:not(.is-empty) {
       background: var(--surface);
       border-color: var(--border);
@@ -3066,7 +3075,7 @@ button.checklist-hide-toggle {
   max-width: 100%;
 }
 
-.detail-section > .mirror-badges {
+.card-detail-section > .mirror-badges {
   margin-left: 0;
 }
 
@@ -3119,5 +3128,28 @@ button.checklist-hide-toggle {
     align-items: center;
     padding-top: 0;
     padding-bottom: 0;
+  }
+}
+
+}
+
+// Rendering containment retains every CDK row and its index. Virtualizing the DOM here would
+// remove connected drop targets and change indices while dragging between checklists.
+.card-detail-root {
+  .large-checklist-collection .checklist-item {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 38px; // Estimate until this row has been laid out once.
+  }
+  .large-attachment-collection .attach-row {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 76px; // Thumbnail plus the existing row padding.
+  }
+  // CDK must measure real row geometry throughout a drag. Popovers must keep their viewport
+  // containing block, and focused controls must remain rendered for keyboard navigation.
+  body.is-checklist-dragging & .checklist-item,
+  .large-checklist-collection:has([kAnchoredPanel], k-member-picker, k-date-picker) .checklist-item,
+  .checklist-item:focus-within,
+  .attach-row:focus-within {
+    content-visibility: visible;
   }
 }

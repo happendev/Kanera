@@ -1,12 +1,13 @@
 import "../../test/setup.integration.js";
 import { insertTestNotifications } from "../../test/notification-fixtures.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
-import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, customFields, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, workspaceMembers, workspaces, type ActivityAction } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardAttachmentReactions, cardAttachments, cardRelations, commentReactions, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, customFields, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, workspaceMembers, workspaces, type ActivityAction } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { db, pool } from "../../db.js";
+import { cardDetailRevisionForEvent } from "../../lib/card-detail-revision.js";
 import { queueNotificationFanout, waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
@@ -114,6 +115,127 @@ async function seedDescriptionActivityPayloadFixture(testName: string) {
   assert.ok(card);
   return { app, auth, card };
 }
+
+// Conditional reads must authorize the caller and preserve the card-local revision on a 304.
+void test("detail and feed validate unchanged content and changed checklist content invalidates the tag", async () => {
+  const f = await seedDescriptionActivityPayloadFixture("detail-conditional");
+  try {
+    for (const path of [`/cards/${f.card.id}/detail`, `/cards/${f.card.id}/feed?limit=50`]) {
+      const first = await f.app.inject({ method: "GET", url: path, headers: f.auth });
+      assert.equal(first.statusCode, 200);
+      const etag = String(first.headers.etag);
+      const second = await f.app.inject({ method: "GET", url: path, headers: { ...f.auth, "if-none-match": etag } });
+      assert.equal(second.statusCode, 304);
+      assert.equal(second.body, "");
+      assert.equal(second.headers["x-card-revision"], first.headers["x-card-revision"]);
+      const anonymous = await f.app.inject({ method: "GET", url: path, headers: { "if-none-match": etag } });
+      assert.equal(anonymous.statusCode, 401);
+    }
+    const before = await f.app.inject({ method: "GET", url: `/cards/${f.card.id}/detail`, headers: f.auth });
+    const created = await f.app.inject({ method: "POST", url: `/cards/${f.card.id}/checklists`, headers: f.auth, payload: { title: "Changed", items: [{ text: "New row" }] } });
+    assert.equal(created.statusCode, 201);
+    const after = await f.app.inject({ method: "GET", url: `/cards/${f.card.id}/detail`, headers: { ...f.auth, "if-none-match": String(before.headers.etag) } });
+    assert.equal(after.statusCode, 200);
+    assert.notEqual(after.headers.etag, before.headers.etag);
+  } finally {
+    await f.app.close();
+  }
+});
+
+
+// SQL owns this invariant across transports. Force rollback and concurrent transactions here;
+// browser timing cannot reliably prove atomicity, or exercise imports/FK cascades directly.
+void test("card revisions follow detail/feed mutations without advancing unrelated cards or clients", async () => {
+  const f = await seedDescriptionActivityPayloadFixture("card-revision-owner");
+  const other = await seedDescriptionActivityPayloadFixture("card-revision-other-client");
+  const [peer] = await db.insert(cards).values({ listId: f.card.listId, boardId: f.card.boardId, title: "Unrelated", position: "2000", createdById: f.card.createdById }).returning();
+  const revision = async (id: string) => String((await db.select({ value: cards.detailRevision }).from(cards).where(eq(cards.id, id)))[0]!.value);
+  const advance = async (name: string, write: () => Promise<unknown>) => {
+    const before = await revision(f.card.id);
+    const peerBefore = await revision(peer!.id);
+    const otherBefore = await revision(other.card.id);
+    const result = await write();
+    assert.ok(BigInt(await revision(f.card.id)) > BigInt(before), name);
+    assert.equal(await revision(peer!.id), peerBefore, `${name}: same-board card`);
+    assert.equal(await revision(other.card.id), otherBefore, `${name}: other client`);
+    return result;
+  };
+  try {
+    assert.equal(f.card.detailRevision, 1);
+    const unchanged = await revision(f.card.id);
+    await db.update(cards).set({ title: f.card.title }).where(eq(cards.id, f.card.id));
+    assert.equal(await revision(f.card.id), unchanged, "no-op writes do not advance the card");
+    await advance("card", () => db.update(cards).set({ title: "Changed" }).where(eq(cards.id, f.card.id)));
+    const [checklist] = await db.insert(cardChecklists).values({ cardId: f.card.id, title: "Steps", position: "1000" }).returning();
+    await advance("checklist update", () => db.update(cardChecklists).set({ title: "Revised steps" }).where(eq(cardChecklists.id, checklist!.id)));
+    const itemId = randomUUID();
+    await advance("item insert", () => db.insert(cardChecklistItems).values({ id: itemId, checklistId: checklist!.id, text: "Step", position: "1000" }));
+    await advance("item update", () => db.update(cardChecklistItems).set({ text: "Revised step" }).where(eq(cardChecklistItems.id, itemId)));
+    await advance("item delete", () => db.delete(cardChecklistItems).where(eq(cardChecklistItems.id, itemId)));
+    const [template] = await db.insert(checklistTemplates).values({ workspaceId: f.card.workspaceId, title: "Template", position: "1000" }).returning();
+    await advance("template application", () => db.insert(cardChecklistTemplateApplications).values({ cardId: f.card.id, templateId: template!.id }));
+    await advance("template cascade", () => db.delete(checklistTemplates).where(eq(checklistTemplates.id, template!.id)));
+    const [field] = await db.insert(customFields).values({ workspaceId: f.card.workspaceId, name: "Field", type: "text", position: "1000" }).returning();
+    await advance("custom field value", () => db.insert(cardCustomFieldValues).values({ cardId: f.card.id, fieldId: field!.id, valueText: "value" }));
+    await advance("custom field cascade", () => db.delete(customFields).where(eq(customFields.id, field!.id)));
+    const [label] = await db.insert(cardLabels).values({ workspaceId: f.card.workspaceId, name: "Label", position: "1000" }).returning();
+    await advance("label assignment", () => db.insert(cardLabelAssignments).values({ cardId: f.card.id, labelId: label!.id }));
+    await advance("label cascade", () => db.delete(cardLabels).where(eq(cardLabels.id, label!.id)));
+    await advance("assignee", () => db.insert(cardAssignees).values({ cardId: f.card.id, userId: f.card.createdById }));
+    await advance("assignee removal", () => db.delete(cardAssignees).where(eq(cardAssignees.cardId, f.card.id)));
+    const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, f.card.workspaceId));
+    const attachmentId = randomUUID();
+    await advance("attachment", () => db.insert(cardAttachments).values({ id: attachmentId, cardId: f.card.id, clientId: workspace!.clientId, uploadedById: f.card.createdById, fileName: "file.txt", mimeType: "text/plain", byteSize: 1, fileKey: "revision-test", url: "/revision-test" }));
+    await advance("attachment reaction", () => db.insert(cardAttachmentReactions).values({ attachmentId, userId: f.card.createdById }));
+    await advance("attachment reaction removal", () => db.delete(cardAttachmentReactions).where(eq(cardAttachmentReactions.attachmentId, attachmentId)));
+    await advance("attachment removal", () => db.delete(cardAttachments).where(eq(cardAttachments.id, attachmentId)));
+    const commentId = randomUUID();
+    await advance("comment", () => db.insert(comments).values({ id: commentId, cardId: f.card.id, authorId: f.card.createdById, body: "Comment" }));
+    await advance("comment reaction", () => db.insert(commentReactions).values({ commentId, userId: f.card.createdById }));
+    await advance("comment reaction removal", () => db.delete(commentReactions).where(eq(commentReactions.commentId, commentId)));
+    await advance("comment removal", () => db.delete(comments).where(eq(comments.id, commentId)));
+    const activityId = randomUUID();
+    await advance("activity", () => db.insert(activityEvents).values({ id: activityId, boardId: f.card.boardId, workspaceId: f.card.workspaceId, actorId: f.card.createdById, entityType: "card", entityId: f.card.id, action: "updated", payload: {} }));
+    await advance("activity coalescing", () => db.update(activityEvents).set({ payload: { title: "Updated" } }).where(eq(activityEvents.id, activityId)));
+    await advance("activity deletion", () => db.delete(activityEvents).where(eq(activityEvents.id, activityId)));
+    // Relations and internal links intentionally advance both endpoints, including cross-board ones.
+    const beforePair = [await revision(f.card.id), await revision(peer!.id)];
+    const [relation] = await db.insert(cardRelations).values({ workspaceId: f.card.workspaceId, sourceCardId: f.card.id, targetCardId: peer!.id, kind: "relates_to", createdById: f.card.createdById }).returning();
+    assert.ok(BigInt(await revision(f.card.id)) > BigInt(beforePair[0]!));
+    assert.ok(BigInt(await revision(peer!.id)) > BigInt(beforePair[1]!));
+    await db.delete(cardRelations).where(eq(cardRelations.id, relation!.id));
+    const beforeLink = [await revision(f.card.id), await revision(peer!.id)];
+    await db.insert(internalLinks).values({ workspaceId: f.card.workspaceId, sourceType: "card", sourceId: f.card.id, targetType: "card", targetId: peer!.id });
+    assert.ok(BigInt(await revision(f.card.id)) > BigInt(beforeLink[0]!));
+    assert.ok(BigInt(await revision(peer!.id)) > BigInt(beforeLink[1]!));
+    const current = await revision(f.card.id);
+    assert.deepEqual(await cardDetailRevisionForEvent(f.card.boardId, "card:rebalanced", {
+      boardId: f.card.boardId, listId: f.card.listId, positions: [{ id: f.card.id, position: "1000" }, { id: peer!.id, position: "2000" }],
+    }), { detailRevisions: { [f.card.id]: current, [peer!.id]: await revision(peer!.id) } });
+    assert.deepEqual(await cardDetailRevisionForEvent(f.card.boardId, "card:links:changed", { boardId: f.card.boardId, cardId: f.card.id }), { detailRevision: current });
+    assert.deepEqual(await cardDetailRevisionForEvent(other.card.boardId, "card:links:changed", { boardId: other.card.boardId, cardId: f.card.id }), {});
+    assert.equal(await revision(f.card.id), current, "publication must never advance a revision");
+  } finally { await f.app.close(); await other.app.close(); }
+});
+
+void test("card revision increments roll back with writes and serialize concurrent mutations", async () => {
+  const f = await seedDescriptionActivityPayloadFixture("card-revision-atomic");
+  const [checklist] = await db.insert(cardChecklists).values({ cardId: f.card.id, title: "Steps", position: "1000" }).returning();
+  const revision = async () => (await db.select({ value: cards.detailRevision }).from(cards).where(eq(cards.id, f.card.id)))[0]!.value;
+  try {
+    const before = await revision();
+    await assert.rejects(db.transaction(async (tx) => {
+      await tx.insert(cardChecklistItems).values({ checklistId: checklist!.id, text: "Rolled back", position: "1000" });
+      const [inside] = await tx.select().from(cards).where(eq(cards.id, f.card.id));
+      assert.equal(BigInt(inside!.detailRevision), BigInt(before) + 1n);
+      assert.equal(await revision(), before, "other connections cannot see uncommitted revisions");
+      throw new Error("rollback revision test");
+    }), /rollback revision test/);
+    assert.equal(await revision(), before);
+    await Promise.all([0, 1, 2, 3].map((index) => db.transaction((tx) => tx.insert(cardChecklistItems).values({ checklistId: checklist!.id, text: `Concurrent ${index}`, position: String(1000 + index) }))));
+    assert.equal(BigInt(await revision()), BigInt(before) + 4n);
+  } finally { await f.app.close(); }
+});
 
 async function seedChecklistCompletionFixture(testName: string) {
   const app = await buildIntegrationServer();

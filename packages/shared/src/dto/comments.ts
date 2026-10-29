@@ -64,6 +64,8 @@ export type CardFeedItem =
   | { type: "activity"; data: ActivityFeedEvent };
 
 export interface CardFeedPage {
+  /** Card-local committed revision captured with the card before loading feed rows. */
+  revision?: string;
   items: CardFeedItem[];
   nextCursor: string | null;
 }

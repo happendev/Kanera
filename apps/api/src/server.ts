@@ -224,6 +224,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
     origin: env.WEB_ORIGIN,
     credentials: true,
     methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    exposedHeaders: ["ETag", "X-Card-Revision"],
     maxAge: 600,
   });
   await app.register(cookie);

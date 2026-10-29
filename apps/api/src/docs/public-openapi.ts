@@ -810,6 +810,12 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         type: "object",
         description: "A card plus assignees, labels, custom field values, checklists, attachments, comments, relations, and activity metadata.",
         allOf: [ref("Card")],
+        properties: {
+          revision: {
+            type: "string",
+            description: "Card-local revision as a decimal integer string. Every write to the card or one of its detail rows (checklists, attachments, comments, fields, labels, assignees, relations, links, activity) advances it; reads never do. Compare numerically. The same value is sent as the X-Card-Revision header beside a weak ETag, which If-None-Match can validate for a 304.",
+          },
+        },
         additionalProperties: true,
       },
       CardRelation: {

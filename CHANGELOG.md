@@ -23,6 +23,8 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Faster card details:** sections render independently, large collections defer offscreen rendering, and realtime bursts share one offline-cache write. Detail/feed loads are cancellable and deduplicated, unchanged reconnects use conditional requests, and per-card revisions preserve live edits without retrying the initial detail load.
+
 - **Onboarding templates:** lists now start with colors suited to their workflow stages, carried through to workspace and standalone boards.
 
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.

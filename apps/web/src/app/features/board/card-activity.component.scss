@@ -1087,3 +1087,14 @@ button.xs {
     min-height: 0;
   }
 }
+
+// Pagination bounds initial work; containment defers layout/paint of accumulated offscreen pages.
+.large-feed .comment,
+.large-feed .activity-item {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 88px; // A typical avatar, text and timestamp row.
+}
+.large-feed .comment:focus-within,
+.large-feed .comment:has(k-description-editor, [kAnchoredPanel]) {
+  content-visibility: visible;
+}

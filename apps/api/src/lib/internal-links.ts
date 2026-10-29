@@ -7,6 +7,7 @@ import { db, type TxOnly as Tx } from "../db.js";
 import { env } from "../env.js";
 import { assignedCardVisibility, assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
 import { resolveCardKey } from "./card-keys.js";
+import { lockCardsForWrite } from "./card-write-lock.js";
 import { emitToBoard, emitToUser, emitToWorkspace } from "../realtime/emit.js";
 
 const UUID = "[0-9a-fA-F-]{36}";
@@ -158,7 +159,7 @@ export function mergeLinkFanout(...fanouts: LinkFanout[]): LinkFanout {
  * it. Callers emit the result *after* their transaction commits.
  */
 export async function replaceInternalLinksForSource(params: {
-  tx: DbLike;
+  tx: Tx;
   claims: AuthClaims;
   workspaceId: string;
   sourceType: InternalLinkSourceType;
@@ -193,10 +194,17 @@ export async function replaceInternalLinksForSource(params: {
   const fanout = fanoutFor(changed.map((link) => ({ type: link.targetType, id: link.targetId })));
   if (sourceType === "card") fanout.cardIds.push(sourceId);
 
+  // Both ends of a card link carry it in their detail, so the delete/insert pair bumps every card
+  // involved. The caller's transaction holds them in one order through the entire replacement,
+  // including background repairs, so no reader can observe a committed delete without its insert.
+  await lockCardsForWrite(tx, [
+    ...(sourceType === "card" ? [sourceId] : []),
+    ...[...existing, ...targets.values()].filter((link) => link.targetType === "card").map((link) => link.targetId),
+  ]);
   await tx.delete(internalLinks).where(and(eq(internalLinks.sourceType, sourceType), eq(internalLinks.sourceId, sourceId)));
 
   if (targets.size) {
-    await tx.insert(internalLinks).values([...targets.values()].map((target) => ({
+    await tx.insert(internalLinks).values([...targets.values()].sort((a, b) => a.targetId.localeCompare(b.targetId)).map((target) => ({
       workspaceId,
       sourceType,
       sourceId,
@@ -521,7 +529,7 @@ async function repairAroundCard(claims: AuthClaims, cardId: string, workspaceId:
   if (card) {
     try {
       await assertCardAccess(claims, card, "observer");
-      fanouts.push(await replaceInternalLinksForSource({ tx: db, claims, workspaceId, sourceType: "card", sourceId: card.id, markdown: card.description }));
+      fanouts.push(await db.transaction((tx) => replaceInternalLinksForSource({ tx, claims, workspaceId, sourceType: "card", sourceId: card.id, markdown: card.description })));
     } catch {
       // Detail reads should not leak or fail because a repair candidate is inaccessible.
     }
@@ -537,7 +545,7 @@ async function repairAroundCard(claims: AuthClaims, cardId: string, workspaceId:
   ));
   for (const note of noteCandidates) {
     if (!(await canReadNote(claims, note))) continue;
-    fanouts.push(await replaceInternalLinksForSource({ tx: db, claims, workspaceId, sourceType: "note", sourceId: note.id, markdown: note.content }));
+    fanouts.push(await db.transaction((tx) => replaceInternalLinksForSource({ tx, claims, workspaceId, sourceType: "note", sourceId: note.id, markdown: note.content })));
   }
   await emitInternalLinksChanged(mergeLinkFanout(...fanouts));
 }
@@ -558,7 +566,7 @@ async function repairAroundNote(claims: AuthClaims, note: Note): Promise<void> {
   for (const card of cardCandidates) {
     try {
       await assertCardAccess(claims, card, "observer");
-      fanouts.push(await replaceInternalLinksForSource({ tx: db, claims, workspaceId: note.workspaceId, sourceType: "card", sourceId: card.id, markdown: card.description }));
+      fanouts.push(await db.transaction((tx) => replaceInternalLinksForSource({ tx, claims, workspaceId: note.workspaceId, sourceType: "card", sourceId: card.id, markdown: card.description })));
     } catch {
       // Backlink reads should only repair sources visible to the viewer.
     }
@@ -567,7 +575,7 @@ async function repairAroundNote(claims: AuthClaims, note: Note): Promise<void> {
   const noteCandidates = await db.select().from(notes).where(and(eq(notes.workspaceId, note.workspaceId), like(notes.content, `%${note.id}%`)));
   for (const candidate of noteCandidates) {
     if (!(await canReadNote(claims, candidate))) continue;
-    fanouts.push(await replaceInternalLinksForSource({ tx: db, claims, workspaceId: note.workspaceId, sourceType: "note", sourceId: candidate.id, markdown: candidate.content }));
+    fanouts.push(await db.transaction((tx) => replaceInternalLinksForSource({ tx, claims, workspaceId: note.workspaceId, sourceType: "note", sourceId: candidate.id, markdown: candidate.content })));
   }
   await emitInternalLinksChanged(mergeLinkFanout(...fanouts));
 }

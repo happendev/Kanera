@@ -1,45 +1,25 @@
-import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { CdkTrapFocus } from "@angular/cdk/a11y";
-import { formatTrackedDuration, hasTimeInProgress, timeInProgressChip, type ReportedInProgressClock, type TimeInProgressChip } from "./time-in-progress.util";
-import { MinuteClockService } from "../../shared/minute-clock.service";
-import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
-import { ToastService } from "../../shared/toast.service";
-import { PendingCustomFieldIds } from "../../shared/pending-custom-field-ids";
-import { captureBoardCustomFieldWrite } from "./custom-field-write";
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
-import { CdkDrag, CdkDragHandle, CdkDragPreview, CdkDropList, moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
+import { moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
-import { NgOptimizedImage, NgTemplateOutlet } from "@angular/common";
-import type {
-  ElementRef,
-  TemplateRef,
-} from "@angular/core";
-import {
-  afterRenderEffect,
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  DestroyRef,
-  effect,
-  inject,
-  input,
-  output,
-  signal,
-  untracked,
-  viewChild,
-} from "@angular/core";
+import { NgTemplateOutlet } from "@angular/common";
+import type { ElementRef } from "@angular/core";
+import { afterRenderEffect, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, output, signal, untracked, viewChild, ViewEncapsulation } from "@angular/core";
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
 import { cardBranchName, cardPath } from "@kanera/shared/card-links";
-import { barDurationDays, plannedBar } from "@kanera/shared/schedule";
 import type { CardLinkedItemsResponse, CardMirrorStatus, CardRelationCard, CardRelationsResponse, LinkedInternalSummary } from "@kanera/shared/dto";
-import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type WireAgentRun, type ServerToClientEvents, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
+import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type ServerToClientEvents, type WireAgentRun, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
+import { barDurationDays, plannedBar } from "@kanera/shared/schedule";
 import type { CardCustomFieldValue, CardLabel } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
+import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { MediaDownloadService } from "../../core/media/media-download.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -47,49 +27,50 @@ import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
-import { attachmentIconClass } from "../../shared/attachment-icons";
-import { CardKeyDisplayService } from "../../shared/card-key-display.service";
-import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
-import { AttachmentUploadListComponent } from "../../shared/attachments/attachment-upload-list.component";
-import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { attachmentIconClass } from "../../shared/attachment-icons";
+import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
+import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
+import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
+import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
 import { AvatarComponent } from "../../shared/avatar.component";
-import type { UserProfileAction } from "../../shared/user-profile/user-profile-card.service";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
+import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { ConfirmService } from "../../shared/confirm.service";
+import { formatDate, formatDateTime, formatFeedTime } from "../../shared/date-format";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
+import { MinuteClockService } from "../../shared/minute-clock.service";
+import { PendingCustomFieldIds } from "../../shared/pending-custom-field-ids";
+import { ToastService } from "../../shared/toast.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
-import { BoardState, betweenBoardPositions, type AnyCustomField } from "./board-state";
+import type { UserProfileAction } from "../../shared/user-profile/user-profile-card.service";
+import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
+import type { BoardPickerPick } from "./board-picker.popover";
+import { betweenBoardPositions, BoardState, type AnyCustomField } from "./board-state";
 import { CardActivityComponent } from "./card-activity.component";
+import { CardDetailAttachmentsComponent } from "./card-detail-attachments.component";
+import { CardDetailChecklistsComponent } from "./card-detail-checklists.component";
+import { CardDetailDescriptionComponent } from "./card-detail-description.component";
+import { CardDetailFieldsComponent } from "./card-detail-fields.component";
+import { CardDetailHeaderComponent } from "./card-detail-header.component";
 import { CardDetailLayoutService } from "./card-detail-layout.service";
+import { CardDetailMetadataComponent } from "./card-detail-metadata.component";
+import { CardDetailPersistence } from "./card-detail-persistence.service";
+import { CardDetailRequest } from "./card-detail-request";
+import { createCardDetailViewModel } from "./card-detail-view-model";
+import { CardGitHubPullsComponent } from "./card-github-pulls.component";
+import { isPlainPrimaryClick } from "./card-navigation.util";
+import { CardRelationsComponent } from "./card-relations.component";
+import { blockerStatus, hiddenBlockersLabel } from "./card-relations.util";
+import { captureBoardCustomFieldWrite } from "./custom-field-write";
 import { DatePickerPopover } from "./date-picker.popover";
 import { DescriptionEditorComponent } from "./description-editor.component";
 import { DescriptionViewerComponent } from "./description-viewer.component";
-import { isPlainPrimaryClick } from "./card-navigation.util";
-import { CardGitHubPullsComponent } from "./card-github-pulls.component";
-import { CardRelationsComponent } from "./card-relations.component";
-import { blockerStatus, hiddenBlockersLabel } from "./card-relations.util";
-import {
-  dueDateInputValue,
-  dueDateSlotFor,
-  formatDueDate,
-  isDueSoon,
-  isOverdue,
-  type DueDateSlotSelection,
-} from "./due-date.util";
-import { ImageLightboxService } from "./image-lightbox.service";
+import { dueDateInputValue, dueDateSlotFor, formatDueDate, isDueSoon, isOverdue, type DueDateSlotSelection } from "./due-date.util";
 import type { ImageLightboxItem } from "./image-lightbox.component";
-import { LabelPickerPopover } from "./label-picker.popover";
+import { ImageLightboxService } from "./image-lightbox.service";
 import { MemberPickerPopover } from "./member-picker.popover";
-import { SelectPickerPopover } from "./select-picker.popover";
-import { ReminderPopoverComponent } from "./reminder-popover.component";
-import { WatcherPopoverComponent } from "./watcher-popover.component";
-import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
-import { icu } from "../../core/i18n/icu";
-import { appLocale } from "../../core/i18n/locale";
-import { formatDate, formatDateTime, formatFeedTime } from "../../shared/date-format";
-import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
-import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
+import { formatTrackedDuration, hasTimeInProgress, timeInProgressChip, type ReportedInProgressClock, type TimeInProgressChip } from "./time-in-progress.util";
 
 const CHECKLIST_DRAG_SCROLL_EDGE_PX = 80;
 const CHECKLIST_DRAG_SCROLL_MAX_STEP_PX = 20;
@@ -117,39 +98,34 @@ const SIZE_FORMAT = new Intl.NumberFormat(appLocale(), { minimumFractionDigits: 
 @Component({
   selector: "k-card-detail",
   standalone: true,
-  imports: [CdkTrapFocus, CardGitHubPullsComponent, CardRelationsComponent, 
-    NgOptimizedImage,
+  imports: [CardDetailAttachmentsComponent, CardDetailChecklistsComponent, CardDetailFieldsComponent, CardDetailDescriptionComponent, CardDetailMetadataComponent, CardDetailHeaderComponent, CdkTrapFocus, CardGitHubPullsComponent, CardRelationsComponent,
     NgTemplateOutlet,
-    CdkDropList,
-    CdkDrag,
-    CdkDragHandle,
-    CdkDragPreview,
     CdkScrollable,
     AnchoredPanelDirective,
     AvatarComponent,
     MemberPickerPopover,
-    LabelPickerPopover,
     DatePickerPopover,
-    SelectPickerPopover,
-    BoardPickerPopover,
     CardActivityComponent,
     DraftBannerComponent,
     DescriptionEditorComponent,
     DescriptionViewerComponent,
     TooltipDirective,
-    WatcherPopoverComponent,
-    ReminderPopoverComponent,
-    AttachmentUploadListComponent,
   ],
   // Component-scoped so each open card has its own upload queue.
-  providers: [AttachmentUploadQueue],
+  providers: [AttachmentUploadQueue, CardDetailPersistence],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./card-detail.component.html",
   styleUrl: "./card-detail.component.scss",
+  encapsulation: ViewEncapsulation.None,
+  host: { class: "card-detail-root" },
 })
 export class CardDetailComponent {
+  private readonly checklistsSection = viewChild(CardDetailChecklistsComponent);
+  private readonly descriptionSection = viewChild(CardDetailDescriptionComponent);
+  private readonly headerSection = viewChild(CardDetailHeaderComponent);
   private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
+  private readonly detailRequest = new CardDetailRequest(this.api);
   private readonly completionWarning = inject(CompletionWarningService);
   private readonly auth = inject(AuthService);
   private readonly editorDrafts = inject(EditorDrafts);
@@ -157,6 +133,7 @@ export class CardDetailComponent {
   private readonly mediaDownloads = inject(MediaDownloadService);
   private readonly unsavedDraftSource = Symbol("card-description-draft");
   private readonly checklistItemUnsavedDraftSource = Symbol("checklist-item-description-draft");
+  private readonly persistence = inject(CardDetailPersistence);
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly sockets = inject(SocketService);
   private readonly state = inject(BoardState);
@@ -169,7 +146,7 @@ export class CardDetailComponent {
   private readonly mirrors = inject(BoardMirrorsService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly shortcuts = inject(KeyboardShortcutsService);
-  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
+  readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private readonly customFieldSaveKeys = new Map<string, { saveKey: string }>();
   private readonly pendingFieldIds = new PendingCustomFieldIds();
   readonly imageLightbox = inject(ImageLightboxService);
@@ -247,17 +224,18 @@ export class CardDetailComponent {
     return $localize`:Tooltip on the reminder button; when is e.g. "Wed, 4 Mar, 09.00":Reminder: ${formatDateTime(reminder.remindAt, "weekday")}:when:`;
   });
   readonly panel = viewChild<ElementRef<HTMLElement>>("panel");
-  readonly titleInput = viewChild<ElementRef<HTMLInputElement>>("titleInput");
+  readonly titleInput = computed(() => this.headerSection()?.titleInput());
   readonly detailScroller = viewChild<ElementRef<HTMLElement>>("detailScroller");
-  readonly descriptionEditor = viewChild<DescriptionEditorComponent>("descriptionEditor");
+  readonly descriptionEditor = computed(() => this.descriptionSection()?.descriptionEditor());
   readonly checklistItemDescriptionEditor = viewChild<DescriptionEditorComponent>("checklistItemDescriptionEditor");
-  readonly descViewerInner = viewChild<ElementRef<HTMLElement>>("descViewerInner");
-  readonly addItemInput = viewChild<ElementRef<HTMLInputElement>>("addItemInput");
-  readonly addChecklistInput = viewChild<ElementRef<HTMLInputElement>>("addChecklistInput");
-  readonly checklistTitleInput = viewChild<ElementRef<HTMLInputElement>>("checklistTitleInput");
-  readonly checklistItemInput = viewChild<ElementRef<HTMLInputElement>>("checklistItemInput");
+  readonly descViewerInner = computed(() => this.descriptionSection()?.descViewerInner());
+  readonly addItemInput = computed(() => this.checklistsSection()?.addItemInput());
+  private readonly subChecklistInput = viewChild<ElementRef<HTMLInputElement>>("addChecklistInput");
+  readonly addChecklistInput = computed(() => this.subChecklistInput() ?? this.checklistsSection()?.addChecklistInput());
+  readonly checklistTitleInput = computed(() => this.checklistsSection()?.checklistTitleInput());
+  readonly checklistItemInput = computed(() => this.checklistsSection()?.checklistItemInput());
   readonly checklistItemPanelTitleInput = viewChild<ElementRef<HTMLInputElement>>("checklistItemPanelTitleInput");
-  readonly checklistList = viewChild.required<TemplateRef<{ checklists: WireCardChecklist[]; showItemMeta: boolean }>>("checklistList");
+  readonly checklistList = computed(() => this.checklistsSection()!.checklistList());
   readonly descriptionExpanded = signal(false);
   readonly descriptionOverflows = signal(false);
   private checklistDragPointerY: number | null = null;
@@ -449,6 +427,7 @@ export class CardDetailComponent {
 
   requestClose() {
     if (!this.unsavedWork.confirmNavigation()) return;
+    void this.persistence.flush();
     this.closing.set(true);
     if (this.closeTimer !== null) clearTimeout(this.closeTimer);
     this.closeTimer = setTimeout(() => {
@@ -746,7 +725,7 @@ export class CardDetailComponent {
 
   // The card this user just completed from the header, so its tick draws in. Keyed by card so a
   // reused detail panel opening another, already complete card stays still.
-  protected readonly completionTickedCardId = signal<string | null>(null);
+  readonly completionTickedCardId = signal<string | null>(null);
 
   async toggleCompletion() {
     if (!this.canEdit() || this.savingCompletion()) return;
@@ -938,7 +917,9 @@ export class CardDetailComponent {
     return presentation;
   });
 
-  private readonly cardId = computed(() => this.card().id);
+  readonly cardId = computed(() => this.card().id);
+  readonly coverAttachmentId = computed(() => this.card().coverAttachmentId);
+  readonly dueDateLocalDate = computed(() => this.card().dueDateLocalDate);
   private readonly previouslyFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   private openedInitialLightboxFor: string | null = null;
   private detailLoadSeq = 0;
@@ -948,9 +929,6 @@ export class CardDetailComponent {
   // Passed to the description viewer so its link chips re-resolve on card:links:changed.
   readonly linkRevision = signal(0);
   readonly mirrorStatus = signal<CardMirrorStatus | null>(null);
-  // Bumped when a CARD_UPDATED for the open card lands via socket. refreshDetailFromNetwork
-  // snapshots it before the /detail request so a slower response can't revert a newer realtime body.
-  private detailRealtimeVersion = 0;
 
   // Detail load lifecycle. The detail-dependent body (attachments, checklists, linked items,
   // custom-field values) all come from /cards/:id/detail, so they render together behind one gate
@@ -962,7 +940,20 @@ export class CardDetailComponent {
   // Render the body once we already have detail or the initial fetch has settled (success or error).
   readonly detailReady = computed(() => this.hasDetail() || !this.detailLoading());
 
+  readonly viewModel: ReturnType<typeof createCardDetailViewModel>;
+
   constructor() {
+    this.viewModel = createCardDetailViewModel(this);
+    let lastDetail: WireCardDetail | null = null;
+    effect((onCleanup) => {
+      const cardId = this.cardId();
+      onCleanup(() => { void this.persistence.closeCard(cardId); });
+    });
+    effect(() => {
+      const detail = this.state.detailSnapshotForCard(this.cardId());
+      if (detail && detail !== lastDetail) this.persistence.schedule(detail.card.id, { detail });
+      lastDetail = detail;
+    });
     // Card shortcuts, alive only while a card is open, so they sit above the board's bindings and
     // the sheet shows them only then. Every action here is one the panel already exposes as a
     // button; the shortcut just skips the pointer travel.
@@ -1068,9 +1059,6 @@ export class CardDetailComponent {
         [SERVER_EVENTS.CARD_UPDATED]: ({ card }) => {
           const expanded = expandWireCard(card);
           if (expanded.id !== cardId) return;
-          // Mark that a realtime body update landed so an in-flight /detail response (which may
-          // carry an older description) does not overwrite it with stale text.
-          this.detailRealtimeVersion++;
           this.applyPublishedDescription(expanded.description ?? "");
         },
         // Fired for both ends of a link (and for notes linking this card), so a card shows that it was
@@ -1107,9 +1095,10 @@ export class CardDetailComponent {
       onCleanup(registerSocketHandlers(socket, handlers));
     });
 
-    effect(() => {
+    effect((onCleanup) => {
       const cardId = this.cardId();
       const boardId = this.boardId();
+      onCleanup(() => { this.detailLoadSeq++; this.detailRequest.cancel(); this.cancelDetailRead?.(); this.detailRefresh = undefined; });
       if (this.sockets.displayedOnline()) {
         // The loader synchronously inspects detail state before its first await. Keep that read out
         // of this card/connectivity-scoped effect or hydration itself retriggers a duplicate request.
@@ -1325,9 +1314,8 @@ export class CardDetailComponent {
   }
 
   /**
-   * Re-reads only the linked items. A full /detail refresh is the wrong tool here: the description
-   * save (or another user's edit) that changed the links also emits card:updated, which bumps the
-   * realtime revision mid-fetch and makes refreshDetailFromNetwork discard its response.
+   * Link invalidations carry no replacement entities. Re-read only this small slice instead of
+   * downloading checklists, attachments and fields whenever a description's links change.
    */
   private refreshLinkedItems(cardId: string) {
     const seq = ++this.linkedItemsLoadSeq;
@@ -1348,54 +1336,47 @@ export class CardDetailComponent {
       .catch(() => undefined);
   }
 
-  private async refreshDetailFromNetwork(cardId: string, boardId: string) {
+  private cancelDetailRead: (() => void) | undefined;
+
+  private detailRefresh: { cardId: string; promise: Promise<void> } | undefined;
+
+  private refreshDetailFromNetwork(cardId: string, _boardId: string): Promise<void> {
+    if (this.detailRefresh?.cardId === cardId) return this.detailRefresh.promise;
+    // Share the complete reconciliation session as well as the HTTP request. A second caller must
+    // not discard the events already captured while the first caller's response was in flight.
+    const promise = this.loadDetailFromNetwork(cardId);
+    const refresh = { cardId, promise };
+    this.detailRefresh = refresh;
+    const settled = () => { if (this.detailRefresh === refresh) this.detailRefresh = undefined; };
+    void promise.then(settled, settled);
+    return promise;
+  }
+
+  private async loadDetailFromNetwork(cardId: string) {
     const seq = ++this.detailLoadSeq;
-    // Only show the loading gate when we have no detail yet, so a background/reconnect refresh of an
-    // already-hydrated card doesn't blank the body. Snapshot the realtime version to detect a
-    // CARD_UPDATED that lands mid-request (its body is newer than this response's).
-    const hadDetail = this.hasDetail();
-    const realtimeVersion = this.detailRealtimeVersion;
-    // Snapshot the card's realtime-mutation revision. Labels, assignees, custom fields, attachments,
-    // and checklists arrive via their own board-level socket events (not CARD_UPDATED), so
-    // detailRealtimeVersion alone can't tell whether a slow /detail response is about to revert them.
-    const detailRevision = this.state.cardDetailRealtimeRevision(cardId);
-    this.detailLoading.set(!hadDetail);
+    this.cancelDetailRead?.();
+    const read = this.state.beginCardDetailRead(cardId);
+    this.cancelDetailRead = read.cancel;
+    this.detailLoading.set(!this.hasDetail());
     this.detailError.set(false);
     try {
-      const detail = await this.api.get<WireCardDetail>(`/cards/${cardId}/detail`);
+      const linksBefore = untracked(this.linkRevision);
+      const detail = await this.detailRequest.get<WireCardDetail>(`/cards/${cardId}/detail`);
       if (seq !== this.detailLoadSeq) return;
-      // Mirror the response back into board state only when it can't clobber newer realtime state.
-      // On an initial load there is no complete detail object to retain, so retry from a revision
-      // captured after the socket mutation; that hydrates the missing body without replacing the
-      // newer realtime values with this stale response.
-      const realtimeMutatedDuringFetch = this.state.cardDetailRealtimeRevision(cardId) !== detailRevision;
-      if (!hadDetail && realtimeMutatedDuringFetch) {
-        void this.refreshDetailFromNetwork(cardId, boardId);
-        return;
-      }
-      if (!realtimeMutatedDuringFetch) {
-        this.state.setCardDetail(detail);
-        // Keep the published baseline current without clobbering a dirty editor. If the editor
-        // opened before /detail filled in the real description, the helper hydrates that clean
-        // empty editor once the authoritative body arrives.
-        if (this.detailRealtimeVersion === realtimeVersion) {
-          this.applyPublishedDescription(detail.card.description ?? "");
-        }
-        // BoardPage persists full collections. Global Work also hosts this component with only
-        // one card in BoardState, so saving its snapshot here would truncate a cached board.
-        const cached = await this.offlineCache.loadCardDetail(cardId).catch(() => null);
-        if (seq === this.detailLoadSeq) {
-          void this.offlineCache.saveCardDetail(cardId, detail, cached?.feed ?? []).catch(() => undefined);
-        }
-      }
-      if (seq === this.detailLoadSeq) {
-        this.detailError.set(false);
-        this.detailLoading.set(false);
-      }
+      const reconciled = read.apply(detail);
+      // Link and relation changes arrive as invalidations, not replayable payloads, and their
+      // re-read is dropped while the card has no detail. One that landed during this read has a
+      // detail to update only now, and the response may predate it.
+      if (untracked(this.linkRevision) !== linksBefore) this.scheduleLinkedItemsRefresh(cardId, true);
+      this.applyPublishedDescription(reconciled.card.description ?? "");
+      this.persistence.schedule(cardId, { detail: reconciled });
+      this.detailError.set(false);
+      this.detailLoading.set(false);
     } catch {
-      // loadCachedDetail bumps detailLoadSeq and finalizes loading/error itself, so guard on the
-      // original seq before delegating and don't double-finalize here.
       if (seq === this.detailLoadSeq) await this.loadCachedDetail(cardId);
+    } finally {
+      read.cancel();
+      if (this.cancelDetailRead === read.cancel) this.cancelDetailRead = undefined;
     }
   }
 
@@ -1999,7 +1980,7 @@ export class CardDetailComponent {
 
   // The item this user last ticked, so only that box pops (on the realtime echo) rather than every
   // checked item when the checklist renders.
-  protected readonly tickedChecklistItemId = signal<string | null>(null);
+  readonly tickedChecklistItemId = signal<string | null>(null);
 
   async toggleChecklistItem(checklistId: string, item: WireCardChecklistItem) {
     if (!this.canEdit()) return;

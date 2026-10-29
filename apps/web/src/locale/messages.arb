@@ -196,7 +196,7 @@
       "src/app/app.routes.ts",
       "src/app/features/board/board.page.ts",
       "src/app/features/board/card-composer.dialog.html",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/board/description-viewer.component.ts",
       "src/app/features/board/table-view/board-table-view.component.ts",
       "src/app/features/board/table-view/table-columns.util.ts",
@@ -4890,7 +4890,7 @@
     "x-files": [
       "src/app/features/account-settings/api-keys/api-keys.page.html",
       "src/app/features/board/card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "6613494049648774153": "Hide key",
@@ -5893,7 +5893,8 @@
       "src/app/features/account-settings/storage/storage.page.ts",
       "src/app/features/board-mirrors/board-mirrors.dialog.ts",
       "src/app/features/board/card-activity.component.html",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-attachments.component.html",
+      "src/app/features/board/card-detail-checklists.component.html",
       "src/app/features/notes/note-editor.component.ts",
       "src/app/features/notes/note-tree-node.component.ts",
       "src/app/features/workspace-settings/general/general.page.html",
@@ -6004,6 +6005,7 @@
       "src/app/features/board/bulk-custom-fields.dialog.ts",
       "src/app/features/board/card-actions-menu.popover.ts",
       "src/app/features/board/card-composer.dialog.html",
+      "src/app/features/board/card-detail-checklists.component.html",
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-relations.component.ts",
       "src/app/features/board/description-editor.component.ts",
@@ -6478,7 +6480,7 @@
     "description": "Button: load more files",
     "x-files": [
       "src/app/features/account-settings/storage/storage.page.html",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-description.component.html"
     ]
   },
   "2196868176512418081": "Storage backend",
@@ -7884,7 +7886,7 @@
       "src/app/features/board/bulk-custom-fields.dialog.ts",
       "src/app/features/board/card-activity.component.html",
       "src/app/features/board/card-composer.dialog.html",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-header.component.html",
       "src/app/features/board/image-lightbox.component.ts",
       "src/app/features/completed-cards/completed-cards-panel.component.html",
       "src/app/features/global-work/global-card-detail-host.component.ts",
@@ -8388,7 +8390,7 @@
       "src/app/features/board/board-background.popover.ts",
       "src/app/features/board/card-activity.component.html",
       "src/app/features/board/card-composer.dialog.html",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-fields.component.html",
       "src/app/features/board/date-picker.popover.ts",
       "src/app/features/board/reminder-popover.component.ts",
       "src/app/features/board/select-picker.popover.ts",
@@ -8424,7 +8426,7 @@
       "src/app/features/board/board-export.util.ts",
       "src/app/features/board/board.page.ts",
       "src/app/features/board/card-composer.dialog.html",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/board/table-view/table-columns.util.ts",
       "src/app/features/board/table-view/table-view.types.ts",
       "src/app/features/board/work-done-view/work-done-preferences.ts",
@@ -8463,6 +8465,7 @@
     "description": "Board export spreadsheet column, card description",
     "x-files": [
       "src/app/features/board/board-export.util.ts",
+      "src/app/features/board/card-detail-description.component.html",
       "src/app/features/board/card-detail.component.html",
       "src/app/features/completed-cards/completed-cards-panel.component.ts",
       "src/app/features/import/trello-import.page.html",
@@ -8490,7 +8493,7 @@
       "src/app/features/board/bulk-card-actions-menu.popover.ts",
       "src/app/features/board/card-composer.dialog.html",
       "src/app/features/board/card-composer.dialog.ts",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/board/card-quick-edit.popover.ts",
       "src/app/features/board/label-picker.popover.ts",
       "src/app/features/board/table-view/filter-bar.component.ts",
@@ -8588,7 +8591,7 @@
     "description": "Board export spreadsheet column, number of attachments",
     "x-files": [
       "src/app/features/board/board-export.util.ts",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-attachments.component.html",
       "src/app/features/notes/note-editor.component.ts",
       "src/app/features/search/global-search-overlay.component.ts"
     ]
@@ -9338,7 +9341,7 @@
   "@6591394635511582577": {
     "x-files": [
       "src/app/features/board/bulk-card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/board/card-quick-edit.popover.ts"
     ]
   },
@@ -9347,7 +9350,7 @@
     "x-files": [
       "src/app/features/board/bulk-card-actions-menu.popover.ts",
       "src/app/features/board/bulk-custom-fields.dialog.ts",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/board/card-quick-edit.popover.ts"
     ]
   },
@@ -9385,7 +9388,7 @@
     "x-files": [
       "src/app/features/board/bulk-card-actions-menu.popover.ts",
       "src/app/features/board/card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "6128080766636962737": "Archive selected?",
@@ -9720,7 +9723,7 @@
     "description": "Button - fold a calendar day's cards back",
     "x-files": [
       "src/app/features/board/calendar-view/board-calendar-view.component.html",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-description.component.html"
     ]
   },
   "5463324868498580633": "Nothing due",
@@ -9859,7 +9862,7 @@
     "description": "Card menu item",
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "6548152170340551063": "Copy to board…",
@@ -9867,7 +9870,7 @@
     "description": "Card menu item",
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "3762124311257132249": "Move to board…",
@@ -9875,14 +9878,14 @@
     "description": "Card menu item",
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "1779204704560992370": "Move to board",
   "@1779204704560992370": {
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "8690758064761926823": "Copy card link",
@@ -9890,7 +9893,7 @@
     "description": "Card menu item",
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-header.component.html",
       "src/app/features/board/card-detail.component.ts"
     ]
   },
@@ -9899,7 +9902,7 @@
     "description": "Menu item - copy a git branch name that starts with the card's key, so GitHub pull requests from it link back to the card",
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "1936837046207394927": "Unarchive card",
@@ -9907,7 +9910,7 @@
     "description": "Card menu item",
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "363554547794685097": "Archive this card?",
@@ -9921,7 +9924,7 @@
     "description": "Card menu item",
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "1078727787042510511": "Card duplicated.",
@@ -10126,7 +10129,7 @@
     "description": "Checkbox field value in card activity",
     "x-files": [
       "src/app/features/board/card-activity.component.ts",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-fields.component.html",
       "src/app/features/board/table-view/board-table-view.component.html",
       "src/app/features/board/table-view/export.util.ts",
       "src/app/features/board/table-view/group-by.util.ts"
@@ -10959,6 +10962,7 @@
     "description": "Chip: add checklists from templates",
     "x-files": [
       "src/app/features/board/card-composer.dialog.html",
+      "src/app/features/board/card-detail-checklists.component.html",
       "src/app/features/board/card-detail.component.html",
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
@@ -10975,7 +10979,7 @@
   "@3444357049676807833": {
     "x-files": [
       "src/app/features/board/card-composer.dialog.html",
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-checklists.component.html"
     ]
   },
   "808244655188789032": "No checklist templates",
@@ -11102,19 +11106,373 @@
       "src/app/features/board/card-composer.dialog.ts"
     ]
   },
-  "2616380230148056929": "Drop to attach",
-  "@2616380230148056929": {
-    "description": "Overlay while dragging files over the card",
+  "4482324360266703242": "Add attachment",
+  "@4482324360266703242": {
+    "description": "Button",
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-attachments.component.html",
       "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "1560242024307697439": "Drop files here",
+  "@1560242024307697439": {
+    "x-files": [
+      "src/app/features/board/card-detail-attachments.component.html",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "1832109006397353376": "Cover",
+  "@1832109006397353376": {
+    "description": "Badge: this image is the card's cover",
+    "x-files": [
+      "src/app/features/board/card-detail-attachments.component.html"
+    ]
+  },
+  "5520527893699380272": "Added in description",
+  "@5520527893699380272": {
+    "x-files": [
+      "src/app/features/board/card-detail-attachments.component.html",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "6777974573583289938": "description",
+  "@6777974573583289938": {
+    "description": "Badge: the attachment was added in the card description",
+    "x-files": [
+      "src/app/features/board/card-detail-attachments.component.html",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "7566941126459358927": "Added via comment",
+  "@7566941126459358927": {
+    "x-files": [
+      "src/app/features/board/card-detail-attachments.component.html"
+    ]
+  },
+  "8718048249801659622": "comment",
+  "@8718048249801659622": {
+    "description": "Badge: the attachment was added in a comment",
+    "x-files": [
+      "src/app/features/board/card-detail-attachments.component.html"
+    ]
+  },
+  "3099741642167775297": "Download",
+  "@3099741642167775297": {
+    "description": "Button: download the attachment",
+    "x-files": [
+      "src/app/features/board/card-detail-attachments.component.html",
+      "src/app/features/board/image-lightbox.component.ts",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "3214210601495015665": "Show completed",
+  "@3214210601495015665": {
+    "description": "Button: show completed checklist items",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "3625437191630907403": "Hide completed",
+  "@3625437191630907403": {
+    "description": "Button: hide completed checklist items",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/board/timeline-view/board-timeline-view.component.html"
+    ]
+  },
+  "588620993794060804": "Drag checklist",
+  "@588620993794060804": {
+    "description": "Tooltip on the handle that reorders checklists",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "4203427328166292074": "Assign all items",
+  "@4203427328166292074": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "9069124446135802186": "Assign all checklist items",
+  "@9069124446135802186": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "2977583658164716231": "Unassign all",
+  "@2977583658164716231": {
+    "description": "Button: remove the assignee from every checklist item",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "6726669619551839126": "Set due date on all items",
+  "@6726669619551839126": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "8469675251762906311": "Set due date on all checklist items",
+  "@8469675251762906311": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "75469234841035832": "Delete checklist",
+  "@75469234841035832": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "672041130757911988": "Drag item",
+  "@672041130757911988": {
+    "description": "Tooltip on the handle that reorders checklist items",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "2515602286506166570": "Change checklist item due date",
+  "@2515602286506166570": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "7059894564368583754": "Clear due date",
+  "@7059894564368583754": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
+      "src/app/features/workspace-settings/automations/automation-presentation.util.ts",
+      "src/app/features/workspace-settings/automations/automations.page.ts"
+    ]
+  },
+  "2844203028006360392": "Add due date",
+  "@2844203028006360392": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "441995516011557756": "Add checklist item due date",
+  "@441995516011557756": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "1866033008323018681": "Assign item",
+  "@1866033008323018681": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "2705883200584506072": "Assign checklist item",
+  "@2705883200584506072": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "3162221358912199594": "Unassign item",
+  "@3162221358912199594": {
+    "description": "Button: remove the checklist item's assignee",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "6875742498983298506": "Open checklist item detail",
+  "@6875742498983298506": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "899983344489847167": "{$DONE}/{$TOTAL}",
+  "@899983344489847167": {
+    "description": "Sub-checklist progress, e.g. 2/5 items done",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/shared/board-tile-summary.component.ts"
+    ]
+  },
+  "8309285169711415702": "Checklist item actions",
+  "@8309285169711415702": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "843667496680274292": "Item actions",
+  "@843667496680274292": {
+    "description": "Button: open the checklist item actions menu",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "3513363077148951734": "Open details",
+  "@3513363077148951734": {
+    "description": "Menu item: open the checklist item detail drawer",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "6041115344061899387": "Rename",
+  "@6041115344061899387": {
+    "description": "Menu item: rename the checklist item",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "2674245503578689521": "{VAR_PLURAL, plural, other {{INTERPOLATION} completed hidden}}",
+  "@2674245503578689521": {
+    "description": "Note under a checklist",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "9093666528075508443": "Add an item…",
+  "@9093666528075508443": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "3249513483374643425": "Add",
+  "@3249513483374643425": {
+    "description": "Button: add the checklist item",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-relations.component.ts",
+      "src/app/features/workspace-settings/api/api.page.html",
+      "src/app/features/workspace-settings/members/members.page.html",
+      "src/app/features/workspace-settings/templates/templates.page.html"
+    ]
+  },
+  "4892183629238529845": "Add an item",
+  "@4892183629238529845": {
+    "description": "Button: add an item to the checklist",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/workspace-settings/templates/templates.page.html"
+    ]
+  },
+  "7874172443505327224": "No checklists",
+  "@7874172443505327224": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "7594720067985791034": "Checklist title…",
+  "@7594720067985791034": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "7791426209832144175": "Add checklist",
+  "@7791426209832144175": {
+    "description": "Button: create the checklist",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "4788237682948863446": "Cancel new checklist",
+  "@4788237682948863446": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "2963816355661711542": "Add from template",
+  "@2963816355661711542": {
+    "description": "Button: add a checklist from a template",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "8038150147311553751": "No matching templates",
+  "@8038150147311553751": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "4901790529703340453": "{VAR_PLURAL, plural, =1 {1 item} other {{INTERPOLATION} items}}",
+  "@4901790529703340453": {
+    "description": "Number of items in a checklist template",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/workspace-settings/templates/templates.page.html"
+    ]
+  },
+  "5932939510039092507": "Already added",
+  "@5932939510039092507": {
+    "description": "Checklist template already on this card",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "5158037517542024141": "Card mirror status",
+  "@5158037517542024141": {
+    "x-files": [
+      "src/app/features/board/card-detail-description.component.html"
+    ]
+  },
+  "9132341836190065781": "Mirrored from {$BOARD}",
+  "@9132341836190065781": {
+    "description": "Badge: this card is synced from another board",
+    "x-files": [
+      "src/app/features/board/card-detail-description.component.html"
+    ]
+  },
+  "3830487495946043372": "No description",
+  "@3830487495946043372": {
+    "x-files": [
+      "src/app/features/board/card-detail-description.component.html"
+    ]
+  },
+  "9149498548977462220": "Custom fields",
+  "@9149498548977462220": {
+    "description": "Card detail section heading",
+    "x-files": [
+      "src/app/features/board/card-detail-fields.component.html",
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/onboarding/onboarding.page.html"
+    ]
+  },
+  "1388712764439031120": "Open link",
+  "@1388712764439031120": {
+    "x-files": [
+      "src/app/features/board/card-detail-fields.component.html",
+      "src/app/features/board/card.component.html"
+    ]
+  },
+  "1815539532540276970": "Set date",
+  "@1815539532540276970": {
+    "description": "Placeholder on an empty date field",
+    "x-files": [
+      "src/app/features/board/card-detail-fields.component.html"
+    ]
+  },
+  "8180981845226964764": "Set value",
+  "@8180981845226964764": {
+    "description": "Placeholder on an empty select field",
+    "x-files": [
+      "src/app/features/board/card-detail-fields.component.html"
+    ]
+  },
+  "7197694491889417536": "Set user",
+  "@7197694491889417536": {
+    "description": "Placeholder on an empty person field",
+    "x-files": [
+      "src/app/features/board/card-detail-fields.component.html"
     ]
   },
   "6208277815627839716": "Remove cover",
   "@6208277815627839716": {
     "description": "Button: remove the card's cover image",
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-header.component.html",
       "src/app/features/board/card-detail.component.ts"
     ]
   },
@@ -11122,7 +11480,7 @@
   "@7472508601556679460": {
     "description": "Button: show who watches this card",
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-header.component.html",
       "src/app/features/board/card-detail.component.ts",
       "src/app/features/board/card.component.html",
       "src/app/features/board/watcher-popover.component.ts"
@@ -11132,14 +11490,14 @@
   "@1121513541518618634": {
     "description": "Button: restore an archived card",
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "5462560691198459725": "Card actions",
   "@5462560691198459725": {
     "description": "Button: open the card actions menu",
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-header.component.html",
       "src/app/features/board/card.component.html",
       "src/app/features/board/table-view/board-table-view.component.html"
     ]
@@ -11147,27 +11505,28 @@
   "6340661995484088456": "Move to a different list",
   "@6340661995484088456": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html",
+      "src/app/features/board/card-detail-metadata.component.html"
     ]
   },
   "2123313166218980067": "No other lists",
   "@2123313166218980067": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-header.component.html"
     ]
   },
   "1310142166909985309": "Assigned To",
   "@1310142166909985309": {
     "description": "Card detail section heading",
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-metadata.component.html"
     ]
   },
   "718742434092230008": "Add member",
   "@718742434092230008": {
     "description": "Button: assign a person to the card",
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/shared/board-members-menu.popover.ts",
       "src/app/features/workspace-settings/members/members.page.html"
     ]
@@ -11176,45 +11535,45 @@
   "@739880801667335279": {
     "description": "Card detail section heading - the card's start and due dates",
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-metadata.component.html"
     ]
   },
   "8181699201557545141": "Change start date",
   "@8181699201557545141": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-metadata.component.html"
     ]
   },
   "5162686434580248853": "Start",
   "@5162686434580248853": {
     "description": "Prefix on the card's start date badge, e.g. Start 12 Oct",
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-metadata.component.html"
     ]
   },
   "1227860913873409112": "Clear start date",
   "@1227860913873409112": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-metadata.component.html"
     ]
   },
   "8439896775611643944": "Set start date",
   "@8439896775611643944": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/board/card-detail.component.ts"
     ]
   },
   "6094860985365525109": "Add start date",
   "@6094860985365525109": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-metadata.component.html"
     ]
   },
   "4604802037090944524": "Change due date",
   "@4604802037090944524": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/board/card-detail.component.ts"
     ]
   },
@@ -11222,36 +11581,22 @@
   "@4799153980390902924": {
     "description": "Prefix on the card's due date badge when a start date is also shown, e.g. Due 16 Oct",
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/workspace-settings/automations/automation-action-fields.component.ts"
-    ]
-  },
-  "7059894564368583754": "Clear due date",
-  "@7059894564368583754": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/workspace-settings/automations/automation-presentation.util.ts",
-      "src/app/features/workspace-settings/automations/automations.page.ts"
     ]
   },
   "8772294577762007235": "Set due date",
   "@8772294577762007235": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/board/card-detail.component.ts",
       "src/app/features/workspace-settings/automations/automations.page.ts"
-    ]
-  },
-  "2844203028006360392": "Add due date",
-  "@2844203028006360392": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
     ]
   },
   "8031977097310160007": "No due date",
   "@8031977097310160007": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/board/card-quick-edit.popover.ts",
       "src/app/features/board/table-view/table-view.types.ts",
       "src/app/features/dependencies/dependency-map.component.ts",
@@ -11261,7 +11606,7 @@
   "4897817053917542646": "Add label",
   "@4897817053917542646": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail-metadata.component.html",
       "src/app/features/onboarding/onboarding.page.html",
       "src/app/features/workspace-settings/labels/labels.page.html"
     ]
@@ -11269,7 +11614,15 @@
   "2974974401326864852": "Add or remove labels",
   "@2974974401326864852": {
     "x-files": [
-      "src/app/features/board/card-detail.component.html"
+      "src/app/features/board/card-detail-metadata.component.html"
+    ]
+  },
+  "2616380230148056929": "Drop to attach",
+  "@2616380230148056929": {
+    "description": "Overlay while dragging files over the card",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html",
+      "src/app/features/notes/note-editor.component.ts"
     ]
   },
   "5612709566632732179": "Detail",
@@ -11342,288 +11695,8 @@
       "src/app/features/board/card-detail.component.html"
     ]
   },
-  "5158037517542024141": "Card mirror status",
-  "@5158037517542024141": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "9132341836190065781": "Mirrored from {$BOARD}",
-  "@9132341836190065781": {
-    "description": "Badge: this card is synced from another board",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "3830487495946043372": "No description",
-  "@3830487495946043372": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
   "523158530568802098": "Couldn't load card details.",
   "@523158530568802098": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "9149498548977462220": "Custom fields",
-  "@9149498548977462220": {
-    "description": "Card detail section heading",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/board/table-view/filter-bar.component.ts",
-      "src/app/features/onboarding/onboarding.page.html"
-    ]
-  },
-  "1388712764439031120": "Open link",
-  "@1388712764439031120": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/board/card.component.html"
-    ]
-  },
-  "1815539532540276970": "Set date",
-  "@1815539532540276970": {
-    "description": "Placeholder on an empty date field",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "8180981845226964764": "Set value",
-  "@8180981845226964764": {
-    "description": "Placeholder on an empty select field",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "7197694491889417536": "Set user",
-  "@7197694491889417536": {
-    "description": "Placeholder on an empty person field",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "3214210601495015665": "Show completed",
-  "@3214210601495015665": {
-    "description": "Button: show completed checklist items",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "3625437191630907403": "Hide completed",
-  "@3625437191630907403": {
-    "description": "Button: hide completed checklist items",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/board/table-view/filter-bar.component.ts",
-      "src/app/features/board/timeline-view/board-timeline-view.component.html"
-    ]
-  },
-  "588620993794060804": "Drag checklist",
-  "@588620993794060804": {
-    "description": "Tooltip on the handle that reorders checklists",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "4203427328166292074": "Assign all items",
-  "@4203427328166292074": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "9069124446135802186": "Assign all checklist items",
-  "@9069124446135802186": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "2977583658164716231": "Unassign all",
-  "@2977583658164716231": {
-    "description": "Button: remove the assignee from every checklist item",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "6726669619551839126": "Set due date on all items",
-  "@6726669619551839126": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "8469675251762906311": "Set due date on all checklist items",
-  "@8469675251762906311": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "75469234841035832": "Delete checklist",
-  "@75469234841035832": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "672041130757911988": "Drag item",
-  "@672041130757911988": {
-    "description": "Tooltip on the handle that reorders checklist items",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "2515602286506166570": "Change checklist item due date",
-  "@2515602286506166570": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "441995516011557756": "Add checklist item due date",
-  "@441995516011557756": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "1866033008323018681": "Assign item",
-  "@1866033008323018681": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "2705883200584506072": "Assign checklist item",
-  "@2705883200584506072": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "3162221358912199594": "Unassign item",
-  "@3162221358912199594": {
-    "description": "Button: remove the checklist item's assignee",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "6875742498983298506": "Open checklist item detail",
-  "@6875742498983298506": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "899983344489847167": "{$DONE}/{$TOTAL}",
-  "@899983344489847167": {
-    "description": "Sub-checklist progress, e.g. 2/5 items done",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/shared/board-tile-summary.component.ts"
-    ]
-  },
-  "8309285169711415702": "Checklist item actions",
-  "@8309285169711415702": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "843667496680274292": "Item actions",
-  "@843667496680274292": {
-    "description": "Button: open the checklist item actions menu",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "3513363077148951734": "Open details",
-  "@3513363077148951734": {
-    "description": "Menu item: open the checklist item detail drawer",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "6041115344061899387": "Rename",
-  "@6041115344061899387": {
-    "description": "Menu item: rename the checklist item",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "2674245503578689521": "{VAR_PLURAL, plural, other {{INTERPOLATION} completed hidden}}",
-  "@2674245503578689521": {
-    "description": "Note under a checklist",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "9093666528075508443": "Add an item…",
-  "@9093666528075508443": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "3249513483374643425": "Add",
-  "@3249513483374643425": {
-    "description": "Button: add the checklist item",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/board/card-relations.component.ts",
-      "src/app/features/workspace-settings/api/api.page.html",
-      "src/app/features/workspace-settings/members/members.page.html",
-      "src/app/features/workspace-settings/templates/templates.page.html"
-    ]
-  },
-  "4892183629238529845": "Add an item",
-  "@4892183629238529845": {
-    "description": "Button: add an item to the checklist",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/workspace-settings/templates/templates.page.html"
-    ]
-  },
-  "7874172443505327224": "No checklists",
-  "@7874172443505327224": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "7594720067985791034": "Checklist title…",
-  "@7594720067985791034": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "7791426209832144175": "Add checklist",
-  "@7791426209832144175": {
-    "description": "Button: create the checklist",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "4788237682948863446": "Cancel new checklist",
-  "@4788237682948863446": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "2963816355661711542": "Add from template",
-  "@2963816355661711542": {
-    "description": "Button: add a checklist from a template",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "8038150147311553751": "No matching templates",
-  "@8038150147311553751": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "4901790529703340453": "{VAR_PLURAL, plural, =1 {1 item} other {{INTERPOLATION} items}}",
-  "@4901790529703340453": {
-    "description": "Number of items in a checklist template",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/workspace-settings/templates/templates.page.html"
-    ]
-  },
-  "5932939510039092507": "Already added",
-  "@5932939510039092507": {
-    "description": "Checklist template already on this card",
     "x-files": [
       "src/app/features/board/card-detail.component.html"
     ]
@@ -11633,65 +11706,6 @@
     "description": "Card detail section heading: notes and cards that link to this card",
     "x-files": [
       "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "4482324360266703242": "Add attachment",
-  "@4482324360266703242": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
-  "1560242024307697439": "Drop files here",
-  "@1560242024307697439": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
-  "1832109006397353376": "Cover",
-  "@1832109006397353376": {
-    "description": "Badge: this image is the card's cover",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "5520527893699380272": "Added in description",
-  "@5520527893699380272": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
-  "6777974573583289938": "description",
-  "@6777974573583289938": {
-    "description": "Badge: the attachment was added in the card description",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
-  "7566941126459358927": "Added via comment",
-  "@7566941126459358927": {
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "8718048249801659622": "comment",
-  "@8718048249801659622": {
-    "description": "Badge: the attachment was added in a comment",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "3099741642167775297": "Download",
-  "@3099741642167775297": {
-    "description": "Button: download the attachment",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html",
-      "src/app/features/board/image-lightbox.component.ts",
-      "src/app/features/notes/note-editor.component.ts"
     ]
   },
   "1606162531058543509": "Close checklist item detail",
