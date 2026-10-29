@@ -251,6 +251,79 @@ describe("MyPrioritiesService", () => {
     expect(priorityGets(f.get).length).toBe(before + 1);
   });
 
+  // These transport orderings cannot be forced reliably through an E2E socket: a matching ping
+  // must not refetch, but a newer/unmatched ping or label invalidation must still recover.
+  it.each(["snapshot-first", "ping-first"])("avoids a GET for the matching queue snapshot (%s)", async (order) => {
+    vi.useFakeTimers();
+    const f = setup();
+    f.service.initialise();
+    await vi.advanceTimersByTimeAsync(0);
+    const before = priorityGets(f.get).length;
+    const snapshotAt = "2026-08-09T10:00:00.000Z";
+    const snapshot = () => f.socket.trigger(SERVER_EVENTS.CARD_PRIORITY_QUEUE_CHANGED, {
+      targetUserId: VIEWER_ID, items: [entry("p2", 1), entry("p1", 2)], totalCount: 2, snapshotAt,
+    });
+    const ping = () => f.socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: VIEWER_ID, snapshotAt });
+    if (order === "snapshot-first") { snapshot(); ping(); } else { ping(); snapshot(); }
+    await vi.advanceTimersByTimeAsync(180);
+    expect(priorityGets(f.get).length).toBe(before);
+    expect(f.service.items().map((item) => item.id)).toEqual(["p2", "p1"]);
+  });
+
+  it("keeps snapshot correlation and pending label refreshes across HTTP mutation completion", async () => {
+    vi.useFakeTimers();
+    const f = setup();
+    f.service.initialise();
+    await vi.advanceTimersByTimeAsync(0);
+    const before = priorityGets(f.get).length;
+    const snapshotAt = "2026-08-09T10:00:00.000Z";
+    f.socket.trigger(SERVER_EVENTS.CARD_PRIORITY_QUEUE_CHANGED, {
+      targetUserId: VIEWER_ID, items: [entry("p2", 1), entry("p1", 2)], totalCount: 2, snapshotAt,
+    });
+    await f.service.movePriority("p1", { beforeId: null });
+    f.socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: VIEWER_ID, snapshotAt });
+    await vi.advanceTimersByTimeAsync(180);
+    expect(priorityGets(f.get).length).toBe(before);
+
+    f.socket.trigger(SERVER_EVENTS.CARD_LABELS_SET, { boardId: "board-1", cardId: "card-1", labelIds: ["l1"] });
+    await f.service.movePriority("p1", { beforeId: null });
+    await vi.advanceTimersByTimeAsync(180);
+    expect(priorityGets(f.get).length).toBe(before + 1);
+  });
+
+  it("refetches when the correlated snapshot is missing or older than the pending invalidation", async () => {
+    vi.useFakeTimers();
+    const f = setup();
+    f.service.initialise();
+    await vi.advanceTimersByTimeAsync(0);
+    const before = priorityGets(f.get).length;
+    f.socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: VIEWER_ID, snapshotAt: "2026-08-09T10:00:01.000Z" });
+    f.socket.trigger(SERVER_EVENTS.CARD_PRIORITY_QUEUE_CHANGED, {
+      targetUserId: VIEWER_ID, items: [], totalCount: 0, snapshotAt: "2026-08-09T10:00:00.000Z",
+    });
+    await vi.advanceTimersByTimeAsync(180);
+    expect(priorityGets(f.get).length).toBe(before + 1);
+  });
+
+  it("a matching snapshot does not cancel a label refresh or a bare invalidation", async () => {
+    vi.useFakeTimers();
+    const f = setup();
+    f.service.initialise();
+    await vi.advanceTimersByTimeAsync(0);
+    const before = priorityGets(f.get).length;
+    const snapshotAt = "2026-08-09T10:00:00.000Z";
+    f.socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: VIEWER_ID, snapshotAt });
+    f.socket.trigger(SERVER_EVENTS.CARD_LABELS_SET, { boardId: "board-1", cardId: "card-1", labelIds: ["l1"] });
+    f.socket.trigger(SERVER_EVENTS.CARD_PRIORITY_QUEUE_CHANGED, {
+      targetUserId: VIEWER_ID, items: [entry("p1", 1), entry("p2", 2)], totalCount: 2, snapshotAt,
+    });
+    await vi.advanceTimersByTimeAsync(180);
+    expect(priorityGets(f.get).length).toBe(before + 1);
+    f.socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: VIEWER_ID });
+    await vi.advanceTimersByTimeAsync(180);
+    expect(priorityGets(f.get).length).toBe(before + 2);
+  });
+
   it("defers socket-driven changes while a card drag is in flight, then flushes one refetch", async () => {
     vi.useFakeTimers();
     const f = setup();

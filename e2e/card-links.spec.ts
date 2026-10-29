@@ -84,6 +84,12 @@ test("a card link shows on both cards live, and linked items open the other card
   const sourceDetail = await openCard(page, source.title);
   // Survives in-app navigation, cleared by a full page load: proves the clicks below stay in the SPA.
   await page.evaluate(() => { (window as { __noReload?: boolean }).__noReload = true; });
+  await page.waitForTimeout(500);
+  const saveReads: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === "GET" && path.startsWith(`/api/cards/${source.id}/`)) saveReads.push(path);
+  });
   await writeDescription(sourceDetail, `Depends on ${targetUrl}`);
 
   // The author's own list updates without reopening the card.
@@ -95,6 +101,12 @@ test("a card link shows on both cards live, and linked items open the other card
   await expect(linkedItems(viewerDetail)).toHaveCount(1);
   await expect(linkedItems(viewerDetail).first()).toContainText(source.title);
   await viewer.screenshot({ path: test.info().outputPath("card-links-viewer-backlink.png") });
+
+  // Include the delayed socket echo: one link refresh, without unrelated detail/agent snapshots.
+  await page.waitForTimeout(1_000);
+  expect(saveReads.filter((path) => path.endsWith("/detail"))).toHaveLength(0);
+  expect(saveReads.filter((path) => path.endsWith("/agent-runs"))).toHaveLength(0);
+  expect(saveReads.filter((path) => path.endsWith("/linked-items"))).toHaveLength(1);
 
   // Clicking a linked item swaps the drawer to that card on its canonical key URL.
   await linkedItems(sourceDetail).first().click();

@@ -141,6 +141,7 @@ export interface VisibleCardPatch {
 
 const REALTIME_REFRESH_MS = 180;
 const REALTIME_REFRESH_MAX_MS = 1_500;
+const BACKGROUND_RESYNC_AFTER_MS = 60_000;
 // Someone else's new card renders after the debounced refetch (up to REALTIME_REFRESH_MAX_MS) plus
 // the request itself; a tile that appears later than this just appears.
 const NEW_CARD_LANDING_PICKUP_MS = 4_000;
@@ -315,6 +316,7 @@ export class GlobalWorkState {
   private backgroundRefreshQueued = false;
   private destroyed = false;
   private queuedWhileHidden = false;
+  private hiddenAt: number | null = null;
   private queuedWhileDragging = false;
   private queuedWhileLoading = false;
   private dragIdleWaiters: Array<() => void> = [];
@@ -1785,6 +1787,7 @@ export class GlobalWorkState {
     });
     socket.on("connect", this.onSocketConnect);
     if (typeof document !== "undefined") {
+      this.hiddenAt = document.visibilityState === "hidden" ? Date.now() : null;
       document.addEventListener("visibilitychange", this.onVisibilityChange);
     }
   }
@@ -1798,12 +1801,22 @@ export class GlobalWorkState {
   };
 
   private readonly onVisibilityChange = () => {
+    if (document.visibilityState === "hidden") {
+      this.hiddenAt = Date.now();
+      return;
+    }
     if (document.visibilityState !== "visible") return;
-    // A foreground transition is itself a convergence boundary: browsers can suspend timers and
-    // websocket delivery without producing a timely disconnect event.
+    const longAbsence = this.hiddenAt !== null && Date.now() - this.hiddenAt >= BACKGROUND_RESYNC_AFTER_MS;
+    this.hiddenAt = null;
+    // Brief switches keep the live projection. Still flush events deferred while hidden, and
+    // recover cached/disconnected views or a long absence that may hide a stalled connection.
+    const needsRecovery = !this.socket?.connected || this.cachedAt() !== null || longAbsence;
+    if (!this.queuedWhileHidden && !needsRecovery) return;
     this.queuedWhileHidden = false;
     this.reconciling.set(true);
-    this.scheduleRealtimeRefresh(true);
+    // Ordinary hidden card events need only the card query. A catalog event already marked
+    // realtimeRefreshNeedsCatalog, which scheduleRealtimeRefresh preserves independently.
+    this.scheduleRealtimeRefresh(needsRecovery);
   };
 
   /**

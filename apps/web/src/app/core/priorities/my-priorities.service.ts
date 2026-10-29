@@ -143,6 +143,8 @@ export class MyPrioritiesService {
   private roomLeaves: (() => void)[] = [];
   private joinedBoardIds = new Set<string>();
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private refreshRequired = false;
+  private pendingSnapshotAt: string | null = null;
   private requestVersion = 0;
   private sessionVersion = 0;
   /** Independent from queue reads: a reconnecting queue refresh must not cancel a slower candidate load. */
@@ -219,6 +221,8 @@ export class MyPrioritiesService {
     this.addCandidatesLoading.set(false);
     this.addCandidatesLoadError.set(null);
     this.appliedSnapshotAt = null;
+    this.refreshRequired = false;
+    this.pendingSnapshotAt = null;
     this.pendingResync = false;
   }
 
@@ -226,6 +230,11 @@ export class MyPrioritiesService {
     const userId = this.auth.user()?.id;
     if (!userId) return;
     const version = ++this.requestVersion;
+    // An explicit recovery read also covers any pending invalidations.
+    if (this.refreshTimer !== null) clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
+    this.refreshRequired = false;
+    this.pendingSnapshotAt = null;
     this.loading.set(true);
     try {
       if (!this.online()) {
@@ -525,9 +534,9 @@ export class MyPrioritiesService {
   private applyQueue(response: WorkPrioritiesResponse): void {
     this.queue.set(personalQueue(response));
     this.saveQueue();
-    // A REST read is newer than anything already applied, so it also resets the snapshot watermark;
-    // otherwise a settled mutation would be undone by a snapshot that predates it.
-    this.appliedSnapshotAt = null;
+    // Keep the socket watermark across HTTP completions: the matching invalidation can arrive
+    // after this response, and an already-applied snapshot still satisfies that ping. Pending
+    // label/context invalidations also survive a mutation response, which may predate their change.
     this.updateRooms();
   }
 
@@ -613,11 +622,11 @@ export class MyPrioritiesService {
        * API that emits only this ping still keeps every surface correct, just one round trip slower.
        * Debounced, so a burst of reorders costs one refetch.
        */
-      [SERVER_EVENTS.CARD_PRIORITY_INVALIDATED]: ({ targetUserId }) => {
+      [SERVER_EVENTS.CARD_PRIORITY_INVALIDATED]: ({ targetUserId, snapshotAt }) => {
         // Managers also receive invalidations for teammate queues they may curate; this service
         // holds only the viewer's own.
         if (targetUserId !== this.auth.user()?.id) return;
-        this.scheduleRefresh();
+        this.scheduleRefresh(snapshotAt);
       },
       // Card edits (a retitled or rescheduled queued card) are ordinary board events. They reach us
       // because `updateRooms()` joins a room per queued card's board — which is why the queue itself
@@ -710,7 +719,15 @@ export class MyPrioritiesService {
     void this.refresh();
   };
 
-  private scheduleRefresh(): void {
+  private scheduleRefresh(snapshotAt?: string): void {
+    if (snapshotAt) {
+      if (this.appliedSnapshotAt && snapshotAt <= this.appliedSnapshotAt) return;
+      if (!this.pendingSnapshotAt || snapshotAt > this.pendingSnapshotAt) this.pendingSnapshotAt = snapshotAt;
+    } else {
+      // Bare invalidations and label/context changes cannot be satisfied by an unrelated queue
+      // snapshot. Keep their refresh requirement separate from correlated queue-change pings.
+      this.refreshRequired = true;
+    }
     if (this.cardDrag.active()) {
       this.pendingResync = true;
       return;
@@ -718,7 +735,11 @@ export class MyPrioritiesService {
     if (this.refreshTimer !== null) return;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
-      void this.refresh();
+      const needsRefresh = this.refreshRequired || (this.pendingSnapshotAt !== null
+        && (!this.appliedSnapshotAt || this.pendingSnapshotAt > this.appliedSnapshotAt));
+      this.refreshRequired = false;
+      this.pendingSnapshotAt = null;
+      if (needsRefresh) void this.refresh();
     }, INVALIDATION_DEBOUNCE_MS);
   }
 

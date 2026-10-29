@@ -1088,7 +1088,7 @@ describe("GlobalWorkState", () => {
     expect(f.state.reconciliationVersion()).toBe(initialVersion + 1);
   });
 
-  it("reconciles on foreground resume even without a queued realtime event", async () => {
+  it("reconciles after a long background absence even without a queued realtime event", async () => {
     vi.useFakeTimers();
     try {
       const f = setup();
@@ -1098,6 +1098,7 @@ describe("GlobalWorkState", () => {
 
       Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
       document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(60_000);
       Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
       document.dispatchEvent(new Event("visibilitychange"));
       await vi.advanceTimersByTimeAsync(400);

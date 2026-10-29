@@ -10,6 +10,7 @@ import { AuthService } from "../../core/auth/auth.service";
 import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { SocketService } from "../../core/realtime/socket.service";
@@ -153,6 +154,7 @@ describe("BoardPage", () => {
   let offlineCache: { saveBoard: ReturnType<typeof vi.fn>; loadBoard: ReturnType<typeof vi.fn>; revokeBoardAccess: ReturnType<typeof vi.fn> };
   let recentBoards: { record: ReturnType<typeof vi.fn> };
   let analytics: { pageCurrentRoute: ReturnType<typeof vi.fn> };
+  let priorityRanks: ReturnType<typeof signal<Map<string, number>>>;
   let cardUnreadCounts: ReturnType<typeof signal<Record<string, number>>>;
   let router: { navigate: ReturnType<typeof vi.fn>; navigateByUrl: ReturnType<typeof vi.fn> };
   let socket: SocketStub;
@@ -211,6 +213,7 @@ describe("BoardPage", () => {
     recentBoards = { record: vi.fn() };
     analytics = { pageCurrentRoute: vi.fn() };
     cardUnreadCounts = signal<Record<string, number>>({});
+    priorityRanks = signal(new Map<string, number>());
     router = { navigate: vi.fn(() => Promise.resolve(true)), navigateByUrl: vi.fn(() => Promise.resolve(true)) };
     socket = new SocketStub();
 
@@ -219,6 +222,7 @@ describe("BoardPage", () => {
         provideZonelessChangeDetection(),
         { provide: AnalyticsService, useValue: analytics },
         { provide: ApiClient, useValue: api },
+        { provide: MyPrioritiesService, useValue: { ranksByCardId: priorityRanks.asReadonly() } },
         { provide: AuthService, useValue: { user: signal({ id: "user-1" }) } },
         { provide: Router, useValue: router },
         { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), online: signal(true), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
@@ -679,7 +683,7 @@ describe("BoardPage", () => {
       members: [],
       viewerRole: "editor",
     });
-    component.viewerPriorityRanks.set(new Map([["card-2", 1]]));
+    priorityRanks.set(new Map([["card-2", 1]]));
     component.showPrioritySetOnly.set(true);
 
     expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
