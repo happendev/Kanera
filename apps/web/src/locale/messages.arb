@@ -10797,13 +10797,6 @@
       "src/app/features/board/card-activity.component.ts"
     ]
   },
-  "933472262077597290": "{$outcome} — {$summary}",
-  "@933472262077597290": {
-    "description": "Agent run outcome followed by its closing summary",
-    "x-files": [
-      "src/app/features/board/card-activity.component.ts"
-    ]
-  },
   "2350070440008093526": "Click to edit",
   "@2350070440008093526": {
     "description": "Tooltip on a saved comment draft",

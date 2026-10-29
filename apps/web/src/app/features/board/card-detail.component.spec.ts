@@ -2256,7 +2256,9 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(host.querySelectorAll(".activity-item").length).toBe(1);
     expect(host.querySelector(".count")?.textContent?.trim()).toBe("1");
     expect(host.textContent).not.toContain("started working");
-    expect(host.textContent).toContain("finished: Audit links — Fixed 3 links");
+    expect(host.textContent).toContain("finished: Audit links");
+    expect(host.querySelector(".activity-run-summary")?.textContent?.trim()).toBe("Fixed 3 links");
+    expect(host.querySelector(".activity-value")).toBeNull();
   });
 
   it("renders self-assignment activity without repeating the actor name", () => {

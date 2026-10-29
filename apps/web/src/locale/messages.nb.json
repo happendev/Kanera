@@ -1513,7 +1513,6 @@
     "3992937414900539657": "{status, select, succeeded {merket {agent} sitt løp som fullført} failed {merket {agent} sin kjøring som mislykket} cancelled {merket {agent} sitt løp som kansellert} stalled {merket {agent} sitt løp som stoppet} other {merket {agent} sin kjøring som avsluttet}}",
     "6014090634684622457": "{status, select, succeeded {ferdig} failed {mislyktes} cancelled {kansellert} stalled {stoppet på} other {avsluttet}}",
     "6574872987502148701": "{$outcome}: {$title}",
-    "933472262077597290": "{$outcome} — {$summary}",
     "2350070440008093526": "Klikk for å redigere",
     "2598235812257841662": "via {$agent}",
     "6554006484550476652": "via AI-agent",
