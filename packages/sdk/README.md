@@ -274,3 +274,23 @@ that in a trusted first-party context — for anything user-facing, call Kanera 
 
 [MIT](LICENSE). The SDK is deliberately more permissive than the Kanera server (Elastic License
 2.0), so embedding it in your application raises no license-policy questions.
+
+### Create cards with custom fields and external references
+
+```ts
+await kanera.cards.create(boardId, listId, {
+  title: "Production alert",
+  customFields: {
+    [severityFieldId]: { valueOptionIds: [criticalOptionId] },
+    [environmentFieldId]: { valueText: "production" },
+  },
+  externalRef: { provider: "sentry", type: "issue", id: "12345" },
+});
+```
+
+The same `customFields` and `externalRef` properties are accepted on each item in
+`kanera.cards.bulk.create(boardId, items)`. Fields use workspace field UUIDs and the typed value
+columns accepted by `cards.setCustomField`. Each card, its values and its reference are saved
+atomically; bulk validates the whole request first, then commits cards separately. External
+references require a write-scoped workspace key or workspace admin access. An existing identity
+returns 409; `mirror:` providers are reserved. Use `idempotencyKey` to safely retry a request.

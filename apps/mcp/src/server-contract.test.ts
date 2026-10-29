@@ -176,8 +176,8 @@ const allToolCases: ToolCase[] = [
   { name: "cards.get", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
   { name: "cards.list_history", args: { cardId: C, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/feed?limit=50` },
   { name: "cards.get_content", args: { boardId: B, cardIds: [C] }, method: "POST", path: `/api/v1/boards/${B}/cards/content/query`, body: { cardIds: [C] } },
-  { name: "cards.create", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, labelIds: [O], assigneeIds: [U], startDateLocalDate: "2026-10-12", dueDateLocalDate: "2026-10-16", dueDateSlot: "morning", idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, labelIds: [O], assigneeIds: [U], startDateLocalDate: "2026-10-12", dueDateLocalDate: "2026-10-16", dueDateSlot: "morning" } },
-  { name: "cards.bulk_create", args: { boardId: B, cards: [{ listId: L, title: "One", labelIds: [O], startDateLocalDate: "2026-10-12" }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] }, method: "POST", path: `/api/v1/boards/${B}/cards/bulk/create`, body: { cards: [{ listId: L, title: "One", labelIds: [O], startDateLocalDate: "2026-10-12" }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] } },
+  { name: "cards.create", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, customFields: { [O]: { valueCheckbox: false } }, externalRef: { provider: "sentry", type: "issue", id: "123" }, labelIds: [O], assigneeIds: [U], startDateLocalDate: "2026-10-12", dueDateLocalDate: "2026-10-16", dueDateSlot: "morning", idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, customFields: { [O]: { valueCheckbox: false } }, externalRef: { provider: "sentry", type: "issue", id: "123" }, labelIds: [O], assigneeIds: [U], startDateLocalDate: "2026-10-12", dueDateLocalDate: "2026-10-16", dueDateSlot: "morning" } },
+  { name: "cards.bulk_create", args: { boardId: B, cards: [{ listId: L, title: "One", customFields: { [O]: { valueText: "production" } }, externalRef: { provider: "sentry", type: "issue", id: "456" }, labelIds: [O], startDateLocalDate: "2026-10-12" }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] }, method: "POST", path: `/api/v1/boards/${B}/cards/bulk/create`, body: { cards: [{ listId: L, title: "One", customFields: { [O]: { valueText: "production" } }, externalRef: { provider: "sentry", type: "issue", id: "456" }, labelIds: [O], startDateLocalDate: "2026-10-12" }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] } },
   { name: "cards.update", args: { cardId: C, changes: { title: "New", startDateLocalDate: "2026-06-24", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { title: "New", startDateLocalDate: "2026-06-24", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } },
   // A start date alone is a valid update, and null clears it.
   { name: "cards.update", args: { cardId: C, changes: { startDateLocalDate: null } }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { startDateLocalDate: null } },
@@ -860,14 +860,15 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // triggers described on automations.create/update) adds ~8.9k; both ceilings move by 9k.
     // In-progress limits on automations.create/update (fixed or number-field thresholds and the
     // include-existing switch) plus schedule.lateToStart on work.my_day add ~2.4k; both move by 2.5k.
+    // Typed customFields and externalRef on single/bulk create add ~3.8k; both ceilings move by 4k.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
     // OAuth declarations add a fixed per-tool cost. Preserve the original routing/schema
     // budget independently, and bound the extra auth metadata rather than granting schema growth.
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
     // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
-    assert.ok(schemaCatalogLength <= 200_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 209_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    assert.ok(schemaCatalogLength <= 204_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 213_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8.5k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.

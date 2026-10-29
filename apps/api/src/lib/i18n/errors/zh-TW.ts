@@ -1,6 +1,7 @@
 import type { ErrorCatalog } from "./source.js";
 
 export const zhTW: ErrorCatalog = {
+  "external reference already exists": "外部參照已存在",
   "AI agent access is turned off for this organisation": "該組織的 AI 代理訪問權限已關閉",
   "Additional notification destinations are not available on your plan. Upgrade to configure ntfy, Gotify, or a personal webhook.": "你的計劃中沒有其他通知目的地。升級以配置 ntfy、Gotify 或個人 Webhook。",
   "All purchased seats are in use. Buy more seats to add this person.": "所有購買的席位均已使用。購買更多席位以添加此人。",

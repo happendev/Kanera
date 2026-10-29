@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { inProgressClockOf, SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, boards, clients, workspaces, automationInProgressRuns, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardInProgressAlerts, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, boards, clients, workspaces, automationInProgressRuns, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardInProgressAlerts, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, externalLinks, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { assertWorkspaceFeature, featureDisabledError, loadWorkspaceFeatures } from "../../lib/workspace-features.js";
 import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
@@ -27,7 +27,8 @@ import { loadChecklistsForCard, loadChecklistsForCards } from "../../lib/checkli
 import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
-import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { assertExternalLinkWriteAccess, findExternalLink } from "../../lib/external-links.js";
+import { AppError, badRequest, conflict, notFound } from "../../lib/errors.js";
 import { clampStartToDue, resolveDueDatePatch, resolveStartDatePatch } from "../../lib/due-date.js";
 import { allocateCardKeys, resolveCardKey } from "../../lib/card-keys.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls } from "../../lib/media-keys.js";
@@ -884,6 +885,7 @@ export async function cardRoutes(
     description: string | null;
     assigneeIds: string[];
     labelIds: string[];
+    customFieldValues: Array<{ fieldId: string } & CustomFieldValueColumns>;
     dueDate: { dueDateLocalDate: string; dueDateSlot: dto.DueDateSlot; dueDateTimezone: string } | null;
     startDateLocalDate: string | null;
   }
@@ -954,6 +956,24 @@ export async function cardRoutes(
         .where(and(eq(cardLabels.workspaceId, ctx.workspaceId), inArray(cardLabels.id, labelIds), isNull(cardLabels.archivedAt)));
       if (validLabels.length !== labelIds.length) throw badRequest("one or more label ids are invalid");
     }
+    const customFieldValues: CardCreatePlan["customFieldValues"] = [];
+    for (const [fieldId, input] of Object.entries(body.customFields ?? {})) {
+      // Fields belong to the workspace shared by its boards, never to an individual board.
+      const [field] = await db.select().from(customFields).where(and(
+        eq(customFields.id, fieldId), eq(customFields.workspaceId, ctx.workspaceId), isNull(customFields.archivedAt),
+      )).limit(1);
+      if (!field) throw notFound("custom field not found");
+      customFieldValues.push({ fieldId, ...await buildCustomFieldValueColumns(field, input, { workspaceId: ctx.workspaceId }) });
+    }
+    if (body.externalRef) {
+      // Creation must not bypass the workspace-level policy for integration metadata.
+      await assertExternalLinkWriteAccess(auth, ctx.workspaceId);
+      const { provider, type, id } = body.externalRef;
+      if (provider.startsWith("mirror:")) throw badRequest("the mirror provider namespace is reserved");
+      if (await findExternalLink({ workspaceId: ctx.workspaceId, provider, externalType: type, externalId: id })) {
+        throw conflict("external reference already exists");
+      }
+    }
     // A due date set at creation captures the creator's zone, exactly as a later PATCH would.
     const dueDate = body.dueDateLocalDate
       ? { dueDateLocalDate: body.dueDateLocalDate, dueDateSlot: body.dueDateSlot ?? "anyTime" as const, dueDateTimezone: await actorTimezone(auth.sub) }
@@ -963,11 +983,11 @@ export async function cardRoutes(
     const startDateLocalDate = body.startDateLocalDate ?? null;
     if (startDateLocalDate) await assertWorkspaceFeature(ctx.workspaceId, "timeline");
 
-    return { kind: "ready", plan: { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate, startDateLocalDate } };
+    return { kind: "ready", plan: { boardId, listId, ctx, body, description, assigneeIds, labelIds, customFieldValues, dueDate, startDateLocalDate } };
   }
 
   async function commitCardCreate(auth: AuthClaims, plan: CardCreatePlan): Promise<WireCard> {
-    const { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate, startDateLocalDate } = plan;
+    const { boardId, listId, ctx, body, description, assigneeIds, labelIds, customFieldValues, dueDate, startDateLocalDate } = plan;
     const result = await db.transaction(async (tx) => {
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
@@ -1049,6 +1069,20 @@ export async function cardRoutes(
         await tx.insert(cardLabelAssignments).values(labelIds.map((labelId) => ({ cardId: card.id, labelId })));
       }
 
+      const createdFieldValues = customFieldValues.length > 0
+        ? await tx.insert(cardCustomFieldValues).values(customFieldValues.map((value) => ({ cardId: card.id, ...value }))).returning()
+        : [];
+      if (body.externalRef) {
+        const { provider, type, id } = body.externalRef;
+        // Never repoint an existing external identity. A conflict rolls back the card and values
+        // too, including when another writer claimed the identity after preparation.
+        const [link] = await tx.insert(externalLinks).values({
+          workspaceId: ctx.workspaceId, provider, externalType: type, externalId: id,
+          entityType: "card", entityId: card.id,
+        }).onConflictDoNothing().returning({ id: externalLinks.id });
+        if (!link) throw conflict("external reference already exists");
+      }
+
       await replaceCardMentions({
         tx,
         boardId,
@@ -1085,10 +1119,22 @@ export async function cardRoutes(
           // Labels and due date set at creation belong to the creation event; the card's history
           // records no separate label or due-date change for them.
           ...(labelIds.length > 0 && { labelIds }),
+          ...(customFieldValues.length > 0 && { customFields: body.customFields }),
+          ...(body.externalRef && { externalRef: body.externalRef }),
           ...(dueDate && dueDate),
           ...(startDateLocalDate && { startDateLocalDate }),
         },
       });
+      // Initial values participate in the same field-change rules as create-then-set. Store all
+      // values first so every rule (including list-entry rules) sees the fully described card.
+      const customFieldAutomationEffects: AutomationEffects = { effects: [] };
+      for (const value of createdFieldValues) {
+        const effects = await runCustomFieldValueChangedAutomations(tx, {
+          cardId: card.id, fieldId: value.fieldId, previousValue: undefined, currentValue: value,
+          boardId, workspaceId: ctx.workspaceId, clientId: ctx.clientId, triggerActorId: auth.sub,
+        });
+        customFieldAutomationEffects.effects.push(...effects.effects);
+      }
       // App and public API card creation share this route; keep list-entry
       // automations here so both surfaces behave the same.
       const automationEffects = await runListEntryAutomations(tx, {
@@ -1133,10 +1179,10 @@ export async function cardRoutes(
       // card:created keeps the pre-automation snapshot (automation effects emit their own events)
       // but must carry the rebalanced position, or clients would place it by a stale number.
       const createdCard = rebalanced && finalCard ? { ...card, position: finalCard.position } : card;
-      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects, labelAutomationEffects, rebalanced, laneRebalanced, linkFanout } as const;
+      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, customFieldAutomationEffects, automationEffects, assignmentAutomationEffects, labelAutomationEffects, rebalanced, laneRebalanced, linkFanout } as const;
     });
     if (result.kind === "replayed") return toWireCard(result.card, auth.cid);
-    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects, labelAutomationEffects, rebalanced, laneRebalanced, linkFanout } = result;
+    const { card, finalCard, activity, customFieldAutomationEffects, automationEffects, assignmentAutomationEffects, labelAutomationEffects, rebalanced, laneRebalanced, linkFanout } = result;
     if (rebalanced) await emitLaneRebalanced(boardId, listId, rebalanced);
     if (laneRebalanced) await emitWorkspaceLaneRebalanced(listId, laneRebalanced);
     if (assigneeIds.length > 0) {
@@ -1154,18 +1200,21 @@ export async function cardRoutes(
     await emitCardActivityFeedItem(boardId, card.id, activity);
     // A description that links existing cards or notes adds this card to their linked items/backlinks.
     await emitInternalLinksChanged(linkFanout);
-    await emitAutomationEffects(automationEffects);
+    // All requested values were stored before any automation ran. Publish those snapshots first
+    // so field/list/assignment/label rules can replace them without a stale initial value winning.
+    for (const value of customFieldValues) {
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, { boardId, cardId: card.id, ...value });
+    }
     if (assigneeIds.length > 0) {
-      // Emit the requested assignment first because automation effects contain the final set;
-      // clients use last-write-wins semantics when applying assignee snapshots.
       await emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
-      await emitAutomationEffects(assignmentAutomationEffects);
     }
     if (labelIds.length > 0) {
-      // Same ordering rule as assignees: the requested set first, then any automation snapshots.
       await emitToBoard(boardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId, cardId: card.id, labelIds });
-      await emitAutomationEffects(labelAutomationEffects);
     }
+    await emitAutomationEffects(customFieldAutomationEffects);
+    await emitAutomationEffects(automationEffects);
+    await emitAutomationEffects(assignmentAutomationEffects);
+    await emitAutomationEffects(labelAutomationEffects);
     // Card activity stays in Kanera's audit log. PostHog receives only the durable activation
     // milestone below, never one event per card mutation.
     await evaluateWorkspaceAnalyticsMilestones({
@@ -1190,8 +1239,14 @@ export async function cardRoutes(
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkCreateCardsBody.parse(req.body);
     const plans: CardCreatePlan[] = [];
+    const externalIdentities = new Set<string>();
     for (const [index, { listId, ...item }] of body.cards.entries()) {
       try {
+        if (item.externalRef) {
+          const identity = JSON.stringify([item.externalRef.provider, item.externalRef.type, item.externalRef.id]);
+          if (externalIdentities.has(identity)) throw conflict("external reference already exists");
+          externalIdentities.add(identity);
+        }
         const prepared = await prepareCardCreate(req.auth, boardId, listId, item);
         // Bulk items carry no clientToken, so nothing can replay; the public API's Idempotency-Key
         // covers the whole batch instead.

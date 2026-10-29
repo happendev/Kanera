@@ -321,7 +321,10 @@ export function coerceToSchema(value: unknown, schema: JsonSchema | undefined, r
   if (types.includes("object") && typeof value === "object" && value !== null && !Array.isArray(value)) {
     const shaped: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-      shaped[key] = coerceToSchema(entry, resolved.properties?.[key], root);
+      // UUID-keyed records (card customFields) describe their values in additionalProperties.
+      const property = resolved.properties?.[key]
+        ?? (typeof resolved.additionalProperties === "object" ? resolved.additionalProperties : undefined);
+      shaped[key] = coerceToSchema(entry, property, root);
     }
     return shaped;
   }

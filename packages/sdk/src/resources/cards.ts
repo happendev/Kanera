@@ -6,6 +6,15 @@ import type {
 } from "../types.js";
 import type { CallOptions, ResourceContext } from "./base.js";
 
+/** Workspace-scoped external identity. Existing identities conflict; mirror: providers are reserved.
+ * Requires a write-scoped workspace key or workspace admin access.
+ */
+export interface CardExternalRefInput {
+  provider: string;
+  type: string;
+  id: string;
+}
+
 export interface CreateCardInput {
   title: string;
   description?: string;
@@ -17,6 +26,9 @@ export interface CreateCardInput {
   beforeItem?: LaneItemReference | null;
   assigneeIds?: Uuid[];
   labelIds?: Uuid[];
+  /** Initial values keyed by workspace field UUID, saved atomically with this card. */
+  customFields?: Record<Uuid, CustomFieldValueInput>;
+  externalRef?: CardExternalRefInput;
   /**
    * Planned start, date-only. Must be on or before `dueDateLocalDate`; the API rejects a later
    * start (400) and clamps the start when a due date is moved before it.
@@ -33,6 +45,9 @@ export interface BulkCreateCardInput {
   title: string;
   description?: string;
   labelIds?: Uuid[];
+  /** Initial values keyed by workspace field UUID, saved atomically with this card. */
+  customFields?: Record<Uuid, CustomFieldValueInput>;
+  externalRef?: CardExternalRefInput;
   assigneeIds?: Uuid[];
   /** Planned start, date-only; on or before `dueDateLocalDate`. */
   startDateLocalDate?: LocalDate;

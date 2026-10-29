@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { CARD_TITLE_MAX_LENGTH } from "../card-value-limits.js";
 import { CARD_DUE_DATE_SLOTS } from "../schema/card.js";
-import { customFieldValueColumns } from "./custom-fields.js";
+import { cardExternalRef } from "./external-links.js";
+import { customFieldValueColumns, setCustomFieldValueBody } from "./custom-fields.js";
 import { separatorAnchorItem } from "./separators.js";
 
 export const dueDateSlot = z.enum(CARD_DUE_DATE_SLOTS);
@@ -18,6 +19,9 @@ const startBeforeDue = (v: { startDateLocalDate?: string | null; dueDateLocalDat
   !v.startDateLocalDate || !v.dueDateLocalDate || v.startDateLocalDate <= v.dueDateLocalDate;
 const START_BEFORE_DUE = "startDateLocalDate must be on or before dueDateLocalDate";
 
+// Keys are workspace custom-field UUIDs; values use the same typed columns as a later PUT.
+const cardCreateCustomFields = z.record(z.uuid(), setCustomFieldValueBody);
+
 export const createCardBody = z.object({
   title: z.string().min(1).max(CARD_TITLE_MAX_LENGTH),
   description: z.string().max(50000).optional(),
@@ -33,6 +37,8 @@ export const createCardBody = z.object({
   // Set at creation so an integration gets a fully described card in one atomic write instead of
   // create + set labels + set due date (three activity rows and three chances to fail half way).
   labelIds: z.array(z.uuid()).max(100).optional(),
+  customFields: cardCreateCustomFields.optional(),
+  externalRef: cardExternalRef.optional(),
   dueDateLocalDate: localDate.optional(),
   dueDateSlot: dueDateSlot.optional(),
   startDateLocalDate: localDate.optional(),
@@ -137,6 +143,8 @@ export const bulkCreateCardItem = z.object({
   title: z.string().min(1).max(CARD_TITLE_MAX_LENGTH),
   description: z.string().max(50000).optional(),
   labelIds: z.array(z.uuid()).max(100).optional(),
+  customFields: cardCreateCustomFields.optional(),
+  externalRef: cardExternalRef.optional(),
   assigneeIds: z.array(z.uuid()).max(100).optional(),
   dueDateLocalDate: localDate.optional(),
   dueDateSlot: dueDateSlot.optional(),
