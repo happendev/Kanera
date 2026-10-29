@@ -26,6 +26,7 @@ import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
 import type { SettleCustomFieldWrite } from "../board/custom-field-write";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
+import { CardMotionService } from "../board/card-motion.service";
 import { optimisticPriorityPosition, reorderedQueueItems } from "../../shared/priority-queue/priority-queue-math";
 import {
   DEFAULT_COMPLETION,
@@ -140,6 +141,9 @@ export interface VisibleCardPatch {
 
 const REALTIME_REFRESH_MS = 180;
 const REALTIME_REFRESH_MAX_MS = 1_500;
+// Someone else's new card renders after the debounced refetch (up to REALTIME_REFRESH_MAX_MS) plus
+// the request itself; a tile that appears later than this just appears.
+const NEW_CARD_LANDING_PICKUP_MS = 4_000;
 
 @Injectable()
 export class GlobalWorkState {
@@ -150,6 +154,7 @@ export class GlobalWorkState {
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly queries = inject(CachedViewService);
   private readonly cardDrag = inject(CardDragCoordinator);
+  private readonly cardMotion = inject(CardMotionService);
   /** The viewer's own queue lives app-wide; this page reads and mutates it through the service. */
   private readonly myPriorities = inject(MyPrioritiesService);
   private readonly destroyRef = inject(DestroyRef);
@@ -1645,6 +1650,9 @@ export class GlobalWorkState {
         refreshCards();
       },
       [SERVER_EVENTS.CARD_MOVED]: ({ cardId, toListId, position, ...reported }) => {
+        // Our own drops already moved the row optimistically, so a list change here is someone
+        // else's and washes where it lands, as on the board.
+        const arrived = this.response().cards.some((card) => card.id === cardId && card.listId !== toListId);
         this.response.update((response) => ({
           ...response,
           // The event carries the persisted clock (read back after the trigger); take it as-is.
@@ -1652,6 +1660,7 @@ export class GlobalWorkState {
             ? { ...card, listId: toListId, position, updatedAt: new Date(), ...(compactInProgressClock(resolveInProgressClock(card, reported)) as Partial<WorkRow>) }
             : card),
         }));
+        if (arrived) this.cardMotion.land([cardId]);
         refreshCards();
       },
       [SERVER_EVENTS.CARD_REBALANCED]: ({ positions }) => {
@@ -1686,7 +1695,12 @@ export class GlobalWorkState {
         }));
         refreshCards();
       },
-      [SERVER_EVENTS.CARD_CREATED]: refreshCards,
+      [SERVER_EVENTS.CARD_CREATED]: ({ card }) => {
+        // Someone else's new card only appears once the debounced refetch returns, so its wash
+        // stays claimable for that round trip. Our own creations need no announcing.
+        if (card.createdById !== this.auth.user()?.id) this.cardMotion.land([card.id], NEW_CARD_LANDING_PICKUP_MS);
+        refreshCards();
+      },
       [SERVER_EVENTS.GLOBAL_WORK_SEPARATOR_CREATED]: refreshCards,
       [SERVER_EVENTS.GLOBAL_WORK_SEPARATOR_UPDATED]: refreshCards,
       [SERVER_EVENTS.GLOBAL_WORK_SEPARATOR_MOVED]: refreshCards,

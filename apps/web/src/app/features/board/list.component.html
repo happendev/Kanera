@@ -104,7 +104,7 @@
     <ng-template cdkDragPreview [matchSize]="true">
       @let dragCoverUrl = coverUrlForCard(item.card);
       @let dragBoard = boardSummaryForCard(item.card);
-      <div class="card-drag-preview" [class.has-cover]="dragCoverUrl" [class.is-completed]="item.card.completedAt"
+      <div class="card-drag-preview" [class.has-cover]="dragCoverUrl" [class.is-completed]="item.card.completedAt" [class.is-multi]="isBulkSelectedCard(item.card.id) && bulkSelectedCardIds().size > 1"
         [style.--drag-cover-color]="coverColorForCard(item.card)">
         @if (isBulkSelectedCard(item.card.id) && bulkSelectedCardIds().size > 1) {
         <strong class="bulk-drag-count" i18n="Shown while dragging several selected cards">{ bulkSelectedCardIds().size, plural, one {{{ bulkSelectedCardIds().size }} card} other {{{ bulkSelectedCardIds().size }} cards} }</strong>

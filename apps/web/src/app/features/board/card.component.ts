@@ -1,5 +1,6 @@
 import { NgOptimizedImage } from "@angular/common";
-import { ChangeDetectionStrategy, Component, HostBinding, computed, effect, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, computed, effect, inject, input, output, signal } from "@angular/core";
+import type { OnChanges, OnDestroy, SimpleChanges } from "@angular/core";
 import type { WireBoardMemberUser, WireCard, WireCardDetail, WireCardChecklist, WireCardChecklistItem, WireCardSummary, WireCustomFieldOption } from "@kanera/shared/events";
 import type { Card, CardCustomFieldValue } from "@kanera/shared/schema";
 import type { AnyCustomField, AnyList } from "./board-state";
@@ -17,6 +18,7 @@ import { BoardState } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { isCardInactive } from "@kanera/shared/card-timing";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
+import { CardMotionService } from "./card-motion.service";
 import { CardActionsMenuPopover } from "./card-actions-menu.popover";
 import { priorityRankHeat } from "../../shared/priority-rank";
 import { CardLabelsComponent, type CardLabelPresentation } from "./card-labels.component";
@@ -56,13 +58,14 @@ const COVER_HEIGHT_FALLBACK_PX = "160px";
   templateUrl: "./card.component.html",
   styleUrl: "./card.component.scss",
 })
-export class CardComponent {
+export class CardComponent implements OnChanges, OnDestroy {
   private readonly state = inject(BoardState);
   private readonly api = inject(ApiClient);
   private readonly notifications = inject(NotificationsService);
   private readonly workspaces = inject(WorkspaceService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly dragCoordinator = inject(CardDragCoordinator);
+  private readonly cardMotion = inject(CardMotionService);
   private readonly clock = inject(MinuteClockService);
   private readonly density = inject(DensityService);
   // Avatar size is a component input, not CSS, so the compact density has to reach it here.
@@ -214,11 +217,38 @@ export class CardComponent {
   // one closed an open menu (and any popover in it) whenever the card changed underneath it.
   private readonly cardIdForMenu = computed(() => this.card().id);
 
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private detachMotion: (() => void) | null = null;
+  // The completion tick draws only when completion flips while this tile is on screen. Tiles that
+  // render already complete (board load, a filter, scrolling a long list) stay still.
+  protected readonly completionDrawn = signal(false);
+  // The checklist item this tile last ticked, so only that box draws rather than every checked item
+  // when the checklist expands.
+  protected readonly tickedChecklistItemId = signal<string | null>(null);
+
   constructor() {
     effect((onCleanup) => {
       const unregister = this.menuCoordinator.registerCardMenu(this.cardIdForMenu(), this.actionsMenuOpen);
       onCleanup(unregister);
     });
+  }
+
+  // A lifecycle hook rather than an effect per tile: boards render thousands of tiles, and this only
+  // has to compare the card it had with the card it got.
+  ngOnChanges(changes: SimpleChanges): void {
+    const change = changes["card"];
+    if (!change) return;
+    const previous = change.previousValue as AnyCard | undefined;
+    const current = change.currentValue as AnyCard;
+    if (previous?.id !== current.id) {
+      this.detachMotion?.();
+      this.detachMotion = this.cardMotion.attach(current.id, this.host.nativeElement);
+    }
+    if (!change.firstChange && !previous?.completedAt && current.completedAt) this.completionDrawn.set(true);
+  }
+
+  ngOnDestroy(): void {
+    this.detachMotion?.();
   }
 
   @HostBinding("class.is-selected")
@@ -370,6 +400,7 @@ export class CardComponent {
     const cardId = this.card().id;
     const previous = item;
     const next = { ...item, completedAt: item.completedAt ? null : new Date() };
+    if (next.completedAt) this.tickedChecklistItemId.set(item.id);
     this.state.updateChecklistItem(cardId, checklistId, next);
     try {
       await this.api.patch(`/cards/${cardId}/checklists/${checklistId}/items/${item.id}`, { completed: !item.completedAt });

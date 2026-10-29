@@ -15,6 +15,7 @@ import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CardComponent, type CardAssigneePresentation, type CardBulkMenuIntent, type CardLabelPresentation, type CardSelectionIntent } from "./card.component";
 import { CardLabelsComponent } from "./card-labels.component";
+import { CardMotionService } from "./card-motion.service";
 import type { BulkCardMenuPayload, BulkCardSelectionPayload } from "./list.component";
 import type { CardGroup } from "./table-view/table-view.types";
 
@@ -65,6 +66,7 @@ export interface GroupCardDropPayload {
 })
 export class BoardGroupColumnComponent implements OnDestroy {
   private readonly dragCoordinator = inject(CardDragCoordinator);
+  private readonly cardMotion = inject(CardMotionService);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private readonly cardsEl = viewChild<ElementRef<HTMLElement>>("cardsEl");
   protected readonly dragStartDelay = CARD_DRAG_START_DELAY;
@@ -272,6 +274,7 @@ export class BoardGroupColumnComponent implements OnDestroy {
     document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_DROP_TARGET, { detail: toGroupKey }));
     // Keep the incoming card mounted: it lands past the current slice on a column already at cap.
     this.renderCap.update((cap) => Math.max(cap, this.cardCount() + 1));
+    this.cardMotion.land([card.id]);
     this.cardDropped.emit({
       cardId: card.id,
       toGroupKey,

@@ -1,5 +1,6 @@
 @use "../../shared/rank-pill" as rank;
 @use "../../shared/card-key" as key;
+@use "../../shared/tick-draw" as tick;
 
 :host {
   display: block;
@@ -355,6 +356,36 @@
   background: color-mix(in srgb, var(--accent) 10%, var(--card-bg-hover));
 }
 
+// Landing: a card dropped here, or moved or added by someone else, washes once in accent and fades
+// back, so a tile that arrived where the eye wasn't looking can be found. A separate ::before
+// overlay, animated on opacity only, so it never fights the ::after rings or the box's colours.
+:host.is-landing::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+  opacity: 0;
+  animation: card-land 800ms ease-out; // CardMotionService clears the mark at the same time
+}
+
+@keyframes card-land {
+  0%,
+  30% {
+    opacity: 1;
+  }
+}
+
+// The placeholder is a clone of the dragged tile, state classes included. The dashed slot keeps
+// neither the landing wash nor the selection or unread ring, which would draw a solid accent border
+// over the dashes (every multi-card drag starts from a selected tile).
+:host(.cdk-drag-placeholder)::before,
+:host(.cdk-drag-placeholder)::after {
+  content: none;
+}
+
 // Elevation: the tile's own 1px border is the ring, --shadow-card the whisper beneath it (each
 // theme tunes both in styles.scss). Hover only deepens the shadow. It never touches the border:
 // the accent rings above (unread, selected, Up next) must survive a hover, and a plain :host:hover
@@ -476,6 +507,12 @@
   font-size: 15px;
   margin-right: 4px;
   vertical-align: -2px;
+}
+
+// Completion while the tile is on screen: the tick draws itself in. The tile's success wash
+// already fades in through the host's background transition.
+.card-complete-icon.is-drawing {
+  @include tick.tick-draw("\ea6b"); // ti-circle
 }
 
 // A badge is the field's *value* with its icon; the field name is a tooltip. Showing icon, name,
@@ -923,6 +960,12 @@
   i {
     font-size: var(--text-lg);
     line-height: 1;
+  }
+
+  // Only the box this tile just ticked: the unchecked rule drops the animation, so re-ticking
+  // the same item replays it.
+  &.is-ticking.checked i {
+    @include tick.tick-draw("\eb2c"); // ti-square
   }
 }
 

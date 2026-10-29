@@ -19,6 +19,7 @@ import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
+import { CardMotionService } from "./card-motion.service";
 import { CardComponent, type CardAssigneePresentation, type CardBulkMenuIntent, type CardLabelPresentation, type CardSelectionIntent } from "./card.component";
 import { CardLabelsComponent } from "./card-labels.component";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
@@ -139,6 +140,7 @@ export class ListComponent implements OnDestroy {
   private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly completionWarning = inject(CompletionWarningService);
+  private readonly cardMotion = inject(CardMotionService);
   private readonly notifications = inject(NotificationsService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly dragCoordinator = inject(CardDragCoordinator);
@@ -884,6 +886,7 @@ export class ListComponent implements OnDestroy {
         candidate.kind !== "card" || !this.bulkSelectedCardIds().has(candidate.card.id);
       const following = order.slice(index + 1).find(stationary);
       const preceding = order.slice(0, index).filter(stationary).at(-1);
+      this.cardMotion.land(this.bulkSelectedCardIds());
       this.cardDropped.emit({
         cardId: droppedItem.card.id, toListId: targetListId,
         ...(following ? { beforeItem: laneItemAnchor(following) }
@@ -920,6 +923,7 @@ export class ListComponent implements OnDestroy {
       : { afterItem: afterItem ? laneItemAnchor(afterItem) : null };
 
     if (droppedItem.kind === "card") {
+      this.cardMotion.land([droppedItem.card.id]);
       this.cardDropped.emit({ cardId: droppedItem.card.id, toListId: targetListId, ...anchorPayload });
     } else {
       this.separatorDropped.emit({ separatorId: droppedItem.separator.id, toListId: targetListId, ...anchorPayload });
