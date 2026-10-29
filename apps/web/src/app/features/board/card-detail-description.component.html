@@ -1,0 +1,46 @@
+@let vm = model();
+      <!-- Description -->
+      <section class="detail-section card-detail-section">
+        @if (vm.mirrorStatus(); as status) {
+          @if (status.asTarget.length) {
+          <div class="mirror-badges" aria-label="Card mirror status" i18n-aria-label>
+            @for (mirror of status.asTarget; track mirror.mirrorId) {
+            <span class="mirror-badge" i18n="Badge: this card is synced from another board">Mirrored from {{ mirror.boardName // i18n(ph="board") }}</span>
+            }
+          </div>
+          }
+        }
+        <div class="section-label card-detail-section-label">
+          <i aria-hidden="true" class="ti ti-align-left"></i>
+          &ngsp;<ng-container i18n="Card detail section heading">Description</ng-container>
+        </div>
+        @if (vm.editingDescription() && vm.canEditRole()) {
+        @if (vm.recoveredDescriptionDraft()) {
+        <k-draft-banner mode="recovered" (discard)="vm.discardDescriptionDraft()" />
+        }
+        <k-description-editor #descriptionEditor [value]="vm.editorInitialValue()" [unsavedBaseline]="vm.draftDescription()" [cardId]="vm.cardId()" [mentionMembers]="vm.members()" (contentChange)="vm.onDescriptionDraftChange($event)" (save)="vm.onSaveDescription($event)" (cancel)="vm.cancelEditDescription()" />
+        } @else if (vm.recoveredDescriptionDraft() && vm.canEditRole()) {
+        <k-draft-banner mode="saved" [canEdit]="vm.canEdit()" (edit)="vm.startEditDescription()" (discard)="vm.discardDescriptionDraft()" />
+        <div class="description-viewer-wrap dv-copy-hover-scope" [class.is-readonly]="!vm.canEdit()" [class.is-empty]="!vm.editorInitialValue().trim()" (click)="vm.startEditDescription()" [kTooltip]="vm.canEdit() ? vm.labels.clickToEdit : ''">
+          <div class="description-viewer-inner">
+            <k-description-viewer [value]="vm.editorInitialValue()" [linkRevision]="vm.linkRevision()" [workspaceId]="vm.workspaceId()" [mentionMembers]="vm.members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="vm.imageLightbox.open({ src: $event })" (attachmentClick)="vm.openInlineAttachment($event)" />
+          </div>
+        </div>
+        } @else if (!vm.canEditRole() && !vm.draftDescription().trim()) {
+        <span class="readonly-empty" i18n>No description</span>
+        } @else {
+        <div class="description-viewer-wrap dv-copy-hover-scope" [class.is-readonly]="!vm.canEdit()" [class.is-clamped]="vm.descriptionOverflows() && !vm.descriptionExpanded()" [class.is-empty]="!vm.draftDescription().trim()" (click)="vm.onDescriptionViewerClick()"
+          [kTooltip]="vm.descriptionOverflows() && !vm.descriptionExpanded() ? vm.labels.showFullDescription : (vm.canEdit() ? vm.labels.clickToEdit : '')">
+          <div #descViewerInner class="description-viewer-inner">
+            <k-description-viewer [value]="vm.draftDescription()" [linkRevision]="vm.linkRevision()" [workspaceId]="vm.workspaceId()" [mentionMembers]="vm.members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="vm.imageLightbox.open({ src: $event })" (attachmentClick)="vm.openInlineAttachment($event)" />
+          </div>
+        </div>
+        @if (vm.descriptionOverflows()) {
+        <button type="button" class="show-more-btn" (click)="vm.toggleDescriptionExpanded($event)">
+          @if (vm.descriptionExpanded()) {<ng-container i18n="Button: collapse the long description">Show less</ng-container>} @else {<ng-container i18n="Button: expand the long description">Show more</ng-container>}
+          <i aria-hidden="true" class="ti" [class.ti-chevron-down]="!vm.descriptionExpanded()" [class.ti-chevron-up]="vm.descriptionExpanded()"></i>
+        </button>
+        }
+        }
+      </section>
+

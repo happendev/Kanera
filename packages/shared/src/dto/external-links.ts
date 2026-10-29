@@ -28,6 +28,13 @@ export const listExternalLinksQuery = z.object({
 });
 export type ListExternalLinksQuery = z.infer<typeof listExternalLinksQuery>;
 
+// Compact identity used when linking a newly created card in the same transaction.
+export const cardExternalRef = z.object({
+  provider: externalLinkName.describe("Integration provider, such as sentry. The mirror: namespace is reserved."),
+  type: externalLinkName.describe("Provider entity type, such as issue."),
+  id: z.string().trim().min(1).max(500).describe("Identifier in the provider; unique with provider and type within this workspace."),
+});
+
 export const upsertExternalLinkBody = z.object({
   provider: externalLinkName,
   externalType: externalLinkName,

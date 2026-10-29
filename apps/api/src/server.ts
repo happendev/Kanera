@@ -44,6 +44,7 @@ import { customFieldRoutes } from "./modules/custom-fields/routes.js";
 import { agentRunRoutes } from "./modules/agent-runs/routes.js";
 import { externalLinkRoutes } from "./modules/external-links/routes.js";
 import { githubLinkRoutes } from "./modules/github-links/routes.js";
+import { githubWebhookRoutes } from "./modules/github-links/webhook.routes.js";
 import { importRoutes } from "./modules/imports/routes.js";
 import { inviteRoutes } from "./modules/invites/routes.js";
 import { integrationRoutes } from "./modules/integrations/routes.js";
@@ -223,6 +224,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
     origin: env.WEB_ORIGIN,
     credentials: true,
     methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    exposedHeaders: ["ETag", "X-Card-Revision"],
     maxAge: 600,
   });
   await app.register(cookie);
@@ -282,6 +284,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(externalLinkRoutes);
   await app.register(agentRunRoutes);
   await app.register(githubLinkRoutes);
+  await app.register(githubWebhookRoutes);
   await app.register(cardLabelRoutes);
   await app.register(inviteRoutes);
   await app.register(commentRoutes);

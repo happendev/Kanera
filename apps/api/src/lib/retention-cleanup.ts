@@ -15,7 +15,7 @@ import {
   passwordResetTokens,
   refreshTokens,
 } from "@kanera/shared/schema";
-import { and, eq, inArray, isNotNull, isNull, lt, or, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
@@ -42,6 +42,10 @@ const cutoffFrom = (now: Date, days: number) => new Date(now.getTime() - daysMs(
 export async function runActivityRetentionCleanup({ db, log }: RetentionCleanupDeps, now = new Date()): Promise<number> {
   const cutoff = cutoffFrom(now, env.ACTIVITY_EVENT_RETENTION_DAYS);
   const deleted = await db.transaction(async (tx) => {
+    // Purged history is not a change anyone is shown: nothing is published, and a feed re-read
+    // validates by content (ETag), not by revision. Skipping the per-row card revision bump keeps
+    // this sweep from holding a row lock on every card with old activity until it commits.
+    await tx.execute(sql`SET LOCAL kanera.skip_card_detail_revision = 'on'`);
     // Retention windows are configurable. Capture remaining inbox recipients before the activity
     // cascade, even when activity retention is shorter than notification retention.
     const removed = await tx.delete(notifications)

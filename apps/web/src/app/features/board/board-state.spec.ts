@@ -383,6 +383,65 @@ describe("BoardState realtime regressions", () => {
     });
   });
 
+  // Force exact publication/read ordering; these interleavings cannot be timed reliably with
+  // concurrent HTTP alone. The E2E revision test separately exercises the real outbox processes.
+  it("hydrates an initial stale response and replays newer checklist events without double-counting", () => {
+    state.cards.set([createCardSummary({ checklistTotalCount: 0, checklistDoneCount: 0 })]);
+    const socket = new SocketStub();
+    bridge.attach(socket.asSocket(), "board-1");
+    const read = state.beginCardDetailRead("card-1");
+    const checklist = createChecklist();
+    socket.trigger(SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId: "board-1", cardId: "card-1", checklist, detailRevision: "12" });
+    const result = read.apply(createCardDetail({ revision: "10", checklists: [] }));
+    expect(result.checklists).toEqual([checklist]);
+    expect(result.revision).toBe("12");
+    expect(state.cardById("card-1")).toMatchObject({ checklistTotalCount: checklist.items.length });
+  });
+
+  it("keeps a response that already includes a racing publication instead of replaying its older payload", () => {
+    const socket = new SocketStub();
+    bridge.attach(socket.asSocket(), "board-1");
+    const read = state.beginCardDetailRead("card-1");
+    socket.trigger(SERVER_EVENTS.CARD_UPDATED, { boardId: "board-1", card: createCard({ title: "Intermediate" }), detailRevision: "11" });
+    const result = read.apply(createCardDetail({ revision: "12", card: createCard({ title: "Latest" }) }));
+    expect(result.card.title).toBe("Latest");
+  });
+
+  it("applies a response below the cached revision, so a restored server never pins stale data", () => {
+    state.setCardDetail(createCardDetail({ revision: "20", card: createCard({ title: "Current" }) }));
+    const read = state.beginCardDetailRead("card-1");
+    expect(read.apply(createCardDetail({ revision: "19", card: createCard({ title: "Restored" }) })).card.title).toBe("Restored");
+  });
+
+  it("keeps the same detail snapshot while only other cards change", () => {
+    state.cards.set([createCardSummary(), createCardSummary({ id: "card-2", title: "Other" })]);
+    state.setCardDetail(createCardDetail());
+    const first = state.detailSnapshotForCard("card-1");
+    state.updateCard(createCard({ id: "card-2", title: "Renamed" }));
+    expect(state.detailSnapshotForCard("card-1")).toBe(first);
+    state.setCardLabels("card-1", ["label-1"]);
+    const next = state.detailSnapshotForCard("card-1");
+    expect(next).not.toBe(first);
+    expect(next?.labelIds).toEqual(["label-1"]);
+  });
+
+  it("uses each card's own revision for a rebalance racing two detail reads", () => {
+    state.cards.set([createCard(), createCard({ id: "card-2" })]);
+    const socket = new SocketStub();
+    bridge.attach(socket.asSocket(), "board-1");
+    const first = state.beginCardDetailRead("card-1");
+    const second = state.beginCardDetailRead("card-2");
+    socket.trigger(SERVER_EVENTS.CARD_REBALANCED, {
+      boardId: "board-1",
+      listId: "list-1",
+      positions: [{ id: "card-1", position: "100" }, { id: "card-2", position: "200" }],
+      detailRevisions: { "card-1": "2", "card-2": "200" },
+    });
+    expect(first.apply(createCardDetail({ revision: "3", card: createCard({ position: "300" }) })).card.position).toBe("300");
+    expect(second.apply(createCardDetail({ revision: "199", card: createCard({ id: "card-2", position: "0" }) })).card.position).toBe("200");
+    expect(state.cardById("card-1")?.position).toBe("300");
+  });
+
   it("preserves cover metadata across full-card realtime updates and clears it for an unknown cover", () => {
     state.hydrate({
       board: createBoard(),

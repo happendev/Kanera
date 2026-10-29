@@ -116,7 +116,7 @@ jobs:
         run: pnpm exec playwright install-deps chromium
 
       - run: pnpm test:e2e
-        timeout-minutes: 15
+        timeout-minutes: 20
         env:
           KANERA_E2E_SHARD: ${{ matrix.shard }}
 

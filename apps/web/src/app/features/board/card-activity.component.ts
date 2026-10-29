@@ -1,3 +1,5 @@
+import { CardDetailRequest } from "./card-detail-request";
+import { CardDetailPersistence } from "./card-detail-persistence.service";
 import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef } from "@angular/core";
 import {
@@ -114,10 +116,13 @@ const NO = () => $localize`:Checkbox field value in card activity:No`;
 })
 export class CardActivityComponent {
   private readonly api = inject(ApiClient);
+  private readonly feedRequest = new CardDetailRequest(this.api);
+  private readonly feedPageRequest = new CardDetailRequest(this.api);
   private readonly auth = inject(AuthService);
   private readonly editorDrafts = inject(EditorDrafts);
   private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly unsavedDraftSource = Symbol("comment-draft");
+  private readonly persistence = inject(CardDetailPersistence);
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly sockets = inject(SocketService);
   private readonly state = inject(BoardState);
@@ -260,6 +265,7 @@ export class CardActivityComponent {
   // replacing) if it advanced mid-flight, so a comment/reaction that arrives during the fetch is
   // not clobbered by a slightly-stale server page. See CLAUDE.md on realtime-fanout ordering.
   private feedRealtimeVersion = 0;
+  private feedServerRevision: string | undefined;
   // Keys ("type:id") of feed items deleted via realtime for the current card. A server page that was
   // built before the delete (a stale first-page refresh or an older pagination page) still contains
   // the item; without a tombstone, mergeFeedPage would resurrect it. Cleared on card change and
@@ -288,6 +294,7 @@ export class CardActivityComponent {
       this.savedEditCommentDraftId.set(null);
       this.feedItems.set([]);
       this.feedTombstones.clear();
+      this.feedServerRevision = undefined;
       this.pendingReactionOperations.clear();
       // Enter the loading state as we clear the feed so there is no "No activity yet" flash
       // between the reset here and the fetch kicked off by the network effect below.
@@ -365,15 +372,27 @@ export class CardActivityComponent {
         },
       };
 
+      for (const event of Object.keys(handlers) as Array<keyof ServerToClientEvents>) {
+        const handler = handlers[event] as (payload: Parameters<ServerToClientEvents[typeof event]>[0]) => void;
+        handlers[event] = ((payload: Parameters<ServerToClientEvents[typeof event]>[0]) => {
+          const stamp = "detailRevision" in payload ? payload.detailRevision : undefined;
+          if ("cardId" in payload && payload.cardId === cardId && stamp
+            && (!this.feedServerRevision || BigInt(stamp) > BigInt(this.feedServerRevision))) {
+            this.feedServerRevision = stamp;
+          }
+          handler(payload);
+        }) as never;
+      }
       onCleanup(registerSocketHandlers(socket, handlers));
     });
 
-    effect(() => {
+    effect((onCleanup) => {
       const cardId = this.cardId();
+      onCleanup(() => { this.feedLoadSeq++; this.feedRequest.cancel(); this.feedPageRequest.cancel(); });
       if (this.sockets.displayedOnline()) {
-        void this.refreshFeedFromNetwork(cardId);
+        untracked(() => void this.refreshFeedFromNetwork(cardId));
       } else {
-        void this.loadCachedFeed(cardId);
+        untracked(() => void this.loadCachedFeed(cardId));
       }
     });
 
@@ -409,12 +428,15 @@ export class CardActivityComponent {
     // touched this card's feed while the fetch was in flight (see feedRealtimeVersion).
     const realtimeVersion = this.feedRealtimeVersion;
     try {
-      const page = await this.api.get<CardFeedPage>(`/cards/${cardId}/feed?limit=${CARD_FEED_PAGE_SIZE}`);
+      const page = await this.feedRequest.get<CardFeedPage>(`/cards/${cardId}/feed?limit=${CARD_FEED_PAGE_SIZE}`);
       if (seq !== this.feedLoadSeq) return;
       // Realtime-vs-network ordering: if no realtime event landed during the request the server
       // page is authoritative and we replace; if one did, union-merge so a just-received
       // comment/reaction isn't clobbered by the slightly-stale page.
-      const next = this.feedRealtimeVersion === realtimeVersion
+      const includesRealtime = page.revision && this.feedServerRevision
+        ? BigInt(page.revision) >= BigInt(this.feedServerRevision)
+        : this.feedRealtimeVersion === realtimeVersion;
+      const next = includesRealtime
         ? page.items
         : this.mergeFeedPage(this.feedItems(), page.items);
       this.feedItems.set(next);
@@ -774,7 +796,7 @@ export class CardActivityComponent {
     const seq = this.feedLoadSeq;
     this.feedLoadingMore.set(true);
     try {
-      const page = await this.api.get<CardFeedPage>(
+      const page = await this.feedPageRequest.get<CardFeedPage>(
         `/cards/${cardId}/feed?limit=${CARD_FEED_PAGE_SIZE}&cursor=${encodeURIComponent(cursor)}`,
       );
       if (seq !== this.feedLoadSeq) return;
@@ -782,6 +804,8 @@ export class CardActivityComponent {
       this.feedItems.set(next);
       this.feedNextCursor.set(page.nextCursor);
       this.persistFeedSnapshot(cardId, next);
+    } catch (error) {
+      if (seq === this.feedLoadSeq) throw error;
     } finally {
       // Only release the guard for the request we started. If the card switched mid-flight, the new
       // card owns feedLoadingMore now — clearing it here would unlock its loader and allow a duplicate
@@ -960,6 +984,15 @@ export class CardActivityComponent {
         // Key only, like relations: this feed's readers may not be able to open the blocker.
         const other = this.v(this.activityPayloadText(p, "otherCardKey") ?? "?");
         return $localize`:Card activity shown without a person - the card's planned start is before the planned finish of the named card that blocks it:Scheduling conflict: this card is planned to start before ${other}:card: finishes`;
+      }
+      case "githubPull:linked": {
+        const pull = this.v(`${this.activityPayloadText(p, "repoFullName") ?? "?"}#${typeof p["number"] === "number" ? p["number"] : "?"}`);
+        const title = this.v(this.activityPayloadText(p, "title") ?? "");
+        return $localize`:Card activity shown without a person - a GitHub pull request named this card's key in its branch, title or description; pullRequest is like acme/api#12:Linked to GitHub pull request ${pull}:pullRequest:, ${title}:title:`;
+      }
+      case "githubPull:stateChanged": {
+        const pull = this.v(`${this.activityPayloadText(p, "repoFullName") ?? "?"}#${typeof p["number"] === "number" ? p["number"] : "?"}`);
+        return icu($localize`:Card activity shown without a person - a linked GitHub pull request changed state; pullRequest is like acme/api#12:{state, select, open {GitHub pull request {pullRequest} is open for review} draft {GitHub pull request {pullRequest} went back to draft} merged {GitHub pull request {pullRequest} was merged} closed {GitHub pull request {pullRequest} was closed without merging} other {GitHub pull request {pullRequest} changed}}`, { state: this.activityPayloadText(p, "state"), pullRequest: pull });
       }
       case "deleted":
         return ` ${$localize`:Card activity after a person's name:deleted this card`}`;
@@ -1273,7 +1306,7 @@ export class CardActivityComponent {
   }
 
   activityActorText(event: ActivityFeedEvent): string | null {
-    if ((event.action === "overdue" || event.action === "inProgress:tooLong" || event.action === "schedule:conflict") && event.actorKind === "system") return null;
+    if ((event.action === "overdue" || event.action === "inProgress:tooLong" || event.action === "schedule:conflict" || event.action.startsWith("githubPull:")) && event.actorKind === "system") return null;
     const copiedName = this.activityPayloadText(event.payload as Record<string, unknown>, "copiedActorName");
     return copiedName && event.actorKind === "system" ? `${event.actorName} (${copiedName})` : event.actorName;
   }
@@ -1425,19 +1458,8 @@ export class CardActivityComponent {
   }
 
   private persistFeedSnapshot(cardId: string, feed: CardFeedItem[]) {
-    const detail = this.state.detailForCard(cardId);
-    if (detail) {
-      void this.offlineCache.saveCardDetail(cardId, detail, feed).catch(() => undefined);
-      return;
-    }
-    // Feed and detail load independently; if a mutation lands first, preserve the
-    // fresh comments/activity against the last cached detail instead of dropping it.
-    void this.offlineCache.loadCardDetail(cardId)
-      .then((cached) => {
-        if (cached) return this.offlineCache.saveCardDetail(cardId, cached.detail, feed);
-        return undefined;
-      })
-      .catch(() => undefined);
+    const detail = this.state.detailSnapshotForCard(cardId);
+    this.persistence.schedule(cardId, { ...(detail ? { detail } : {}), feed });
   }
 
   private applyReactionAdded(

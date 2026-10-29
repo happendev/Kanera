@@ -113,6 +113,12 @@ export const ACTIVITY_ACTIONS = [
   // Thumbs-up on a comment (entity `comment`) or an attachment (entity `card`, payload.attachmentId).
   // Recorded hidden from feeds: it exists to carry the author's "reacted" notification.
   "reaction:added",
+  // System: a GitHub pull request named the card by its key (payload repoFullName, number, title,
+  // url, state). Recorded once per card and pull request from the GitHub App's webhooks.
+  "githubPull:linked",
+  // System: a linked pull request moved between draft, open, merged and closed (payload as above
+  // plus fromState). Edits that leave the state alone are not recorded.
+  "githubPull:stateChanged",
 ] as const;
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];
 export const ACTIVITY_ACTION = {
@@ -168,6 +174,8 @@ export const ACTIVITY_ACTION = {
   BLOCKERS_CLEARED: "blockers:cleared",
   BLOCKERS_REOPENED: "blockers:reopened",
   SCHEDULE_CONFLICT: "schedule:conflict",
+  GITHUB_PULL_LINKED: "githubPull:linked",
+  GITHUB_PULL_STATE_CHANGED: "githubPull:stateChanged",
 } as const satisfies Record<string, ActivityAction>;
 
 export const ACTIVITY_COALESCE_KEYS = [

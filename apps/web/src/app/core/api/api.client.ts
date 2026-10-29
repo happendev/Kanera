@@ -15,13 +15,18 @@ const OFFLINE_PAUSED_MESSAGE = $localize`:Error when trying to save while offlin
 const UPLOAD_CANCELLED_MESSAGE = $localize`:File upload status:Upload cancelled`;
 const UPLOAD_FAILED_MESSAGE = $localize`:File upload status:Upload failed`;
 
+export interface ConditionalResponse<T> {
+  etag?: string;
+  value?: T;
+}
+
 @Injectable({ providedIn: "root" })
 export class ApiClient {
   private readonly auth = inject(AuthService);
   private readonly sockets = inject(SocketService);
   private readonly reloadAfterOrganisationSwitch = inject(ORGANISATION_SWITCH_NAVIGATOR);
 
-  async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async request<T>(path: string, init: RequestInit = {}, conditional?: ConditionalResponse<T>): Promise<T> {
     if (untracked(() => this.auth.offlineSession?.())) {
       throw new ApiError(0, { message: OFFLINE_COPY_MESSAGE });
     }
@@ -37,6 +42,7 @@ export class ApiClient {
 
     const doFetch = async (token: string | null): Promise<Response> => {
       const headers = new Headers(init.headers);
+      if (conditional?.etag && conditional.value !== undefined) headers.set("If-None-Match", conditional.etag);
       if (init.body && !(init.body instanceof FormData)) {
         headers.set("Content-Type", "application/json");
       }
@@ -73,12 +79,23 @@ export class ApiClient {
         // route-scoped store and rebuilds the active-org sidebar/cache from one coherent snapshot.
       }
     }
+    if (res.status === 304 && conditional?.value !== undefined) {
+      // A 304 validates the representation. Its card revision can still advance for changes
+      // outside this page (e.g. older feed rows); keep the validated revision for reconciliation.
+      const revision = res.headers.get("X-Card-Revision");
+      const value = conditional.value;
+      return revision && value && typeof value === "object" ? { ...value, revision } : value;
+    }
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => ({ message: res.statusText }));
       throw new ApiError(res.status, body);
     }
     if (res.status === 204) return undefined as T;
     const body: unknown = await res.json();
+    if (conditional) {
+      conditional.etag = res.headers.get("ETag") ?? undefined;
+      conditional.value = body as T;
+    }
     return body as T;
   }
 
@@ -178,8 +195,9 @@ export class ApiClient {
     return this.auth.refresh();
   }
 
-  get<T>(path: string) {
-    return this.request<T>(path, { method: "GET" });
+  get<T>(path: string, options: Pick<RequestInit, "signal"> & { conditional?: ConditionalResponse<T> } = {}) {
+    const { conditional, ...init } = options;
+    return this.request<T>(path, { ...init, method: "GET", ...(conditional ? { cache: "no-store" } : {}) }, conditional);
   }
   post<T>(path: string, body: unknown) {
     return this.request<T>(path, { method: "POST", body: JSON.stringify(body) });

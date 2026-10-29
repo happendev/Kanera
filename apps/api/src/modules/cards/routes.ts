@@ -1,12 +1,14 @@
+import { conditionalCardResponse } from "../../lib/conditional-card-response.js";
 import { dto } from "@kanera/shared";
 import { inProgressClockOf, SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, boards, clients, workspaces, automationInProgressRuns, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardInProgressAlerts, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, boards, clients, workspaces, automationInProgressRuns, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardInProgressAlerts, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, externalLinks, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { assertWorkspaceFeature, featureDisabledError, loadWorkspaceFeatures } from "../../lib/workspace-features.js";
 import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import { db, type Db, type Tx, type TxOnly } from "../../db.js";
+import { lockCardsForWrite } from "../../lib/card-write-lock.js";
 import { env } from "../../env.js";
 import type { Mailer } from "../../lib/mailer.js";
 import { assignedCardVisibility, assertBatchCardVisibility, assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "../../lib/access.js";
@@ -27,7 +29,8 @@ import { loadChecklistsForCard, loadChecklistsForCards } from "../../lib/checkli
 import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
-import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { assertExternalLinkWriteAccess, findExternalLink } from "../../lib/external-links.js";
+import { AppError, badRequest, conflict, notFound } from "../../lib/errors.js";
 import { clampStartToDue, resolveDueDatePatch, resolveStartDatePatch } from "../../lib/due-date.js";
 import { allocateCardKeys, resolveCardKey } from "../../lib/card-keys.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls } from "../../lib/media-keys.js";
@@ -598,6 +601,13 @@ type CardCompletionWrite = {
  * window collapses to a single "A -> C" entry and a round-trip back to the original value hides
  * itself from the feed.
  */
+/** Bulk completion repeats applyCardCompletion per card; its per-card locks must not interleave. */
+async function lockCompletionBatch(tx: TxOnly, workspaceId: string, cardIds: string[], completed: boolean): Promise<void> {
+  const blocked = await captureBlockedDependents(tx, workspaceId, cardIds);
+  const ready = completed ? [] : await captureUnblockedDependents(tx, workspaceId, cardIds);
+  await lockCardsForWrite(tx, [...cardIds, ...blocked.map((row) => row.dependentId), ...ready]);
+}
+
 async function applyCardCompletion(
   tx: Parameters<Parameters<Db["transaction"]>[0]>[0],
   opts: {
@@ -612,6 +622,8 @@ async function applyCardCompletion(
   const { card: current, completed, completedAt } = opts;
   const before = await captureBlockedDependents(tx, opts.workspaceId, [current.id]);
   const readyBefore = completed ? [] : await captureUnblockedDependents(tx, opts.workspaceId, [current.id]);
+  // The handoff below writes activity on every dependent; hold them with this card in one order.
+  await lockCardsForWrite(tx, [current.id, ...before.map((row) => row.dependentId), ...readyBefore]);
   const [card] = await tx
     .update(cards)
     .set({ completedAt, updatedAt: new Date() })
@@ -712,7 +724,7 @@ export async function cardRoutes(
     return { ...card, url: absoluteCardUrl(card.organisationKey, card.key) };
   });
 
-  app.get("/cards/:id/detail", async (req): Promise<WireCardDetail> => {
+  app.get("/cards/:id/detail", async (req, reply) => {
     const { id } = req.params as { id: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
@@ -750,11 +762,14 @@ export async function cardRoutes(
     // Healing with the viewer's claims can reveal links the author could not record, but its
     // workspace-wide note scan must not block this read; the next open can consume the repair. It
     // starts only once this read's own queries are done so it never competes with them for the pool.
+    // A repair that changes links is an ordinary write: it advances the card's revision and publishes
+    // card:links:changed, so an open drawer re-reads its linked items rather than this response.
     void repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId).catch((err: unknown) =>
       req.log.warn({ err, cardId: id }, "failed to repair internal links around card"),
     );
 
-    return {
+    const detail: WireCardDetail = {
+      revision: String(card.detailRevision),
       // A start date is kept, unreported, while the workspace has the timeline switched off.
       card: toWireCard(features.timeline ? card : { ...card, startDateLocalDate: null }, req.auth.cid),
       customFieldValues,
@@ -771,6 +786,7 @@ export async function cardRoutes(
       relations: relations.relations,
       hiddenBlockerCount: relations.hiddenBlockerCount,
     };
+    return conditionalCardResponse(req, reply, detail);
   });
 
   app.post("/boards/:boardId/cards/content/query", async (req) => {
@@ -884,6 +900,7 @@ export async function cardRoutes(
     description: string | null;
     assigneeIds: string[];
     labelIds: string[];
+    customFieldValues: Array<{ fieldId: string } & CustomFieldValueColumns>;
     dueDate: { dueDateLocalDate: string; dueDateSlot: dto.DueDateSlot; dueDateTimezone: string } | null;
     startDateLocalDate: string | null;
   }
@@ -954,6 +971,24 @@ export async function cardRoutes(
         .where(and(eq(cardLabels.workspaceId, ctx.workspaceId), inArray(cardLabels.id, labelIds), isNull(cardLabels.archivedAt)));
       if (validLabels.length !== labelIds.length) throw badRequest("one or more label ids are invalid");
     }
+    const customFieldValues: CardCreatePlan["customFieldValues"] = [];
+    for (const [fieldId, input] of Object.entries(body.customFields ?? {})) {
+      // Fields belong to the workspace shared by its boards, never to an individual board.
+      const [field] = await db.select().from(customFields).where(and(
+        eq(customFields.id, fieldId), eq(customFields.workspaceId, ctx.workspaceId), isNull(customFields.archivedAt),
+      )).limit(1);
+      if (!field) throw notFound("custom field not found");
+      customFieldValues.push({ fieldId, ...await buildCustomFieldValueColumns(field, input, { workspaceId: ctx.workspaceId }) });
+    }
+    if (body.externalRef) {
+      // Creation must not bypass the workspace-level policy for integration metadata.
+      await assertExternalLinkWriteAccess(auth, ctx.workspaceId);
+      const { provider, type, id } = body.externalRef;
+      if (provider.startsWith("mirror:")) throw badRequest("the mirror provider namespace is reserved");
+      if (await findExternalLink({ workspaceId: ctx.workspaceId, provider, externalType: type, externalId: id })) {
+        throw conflict("external reference already exists");
+      }
+    }
     // A due date set at creation captures the creator's zone, exactly as a later PATCH would.
     const dueDate = body.dueDateLocalDate
       ? { dueDateLocalDate: body.dueDateLocalDate, dueDateSlot: body.dueDateSlot ?? "anyTime" as const, dueDateTimezone: await actorTimezone(auth.sub) }
@@ -963,11 +998,11 @@ export async function cardRoutes(
     const startDateLocalDate = body.startDateLocalDate ?? null;
     if (startDateLocalDate) await assertWorkspaceFeature(ctx.workspaceId, "timeline");
 
-    return { kind: "ready", plan: { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate, startDateLocalDate } };
+    return { kind: "ready", plan: { boardId, listId, ctx, body, description, assigneeIds, labelIds, customFieldValues, dueDate, startDateLocalDate } };
   }
 
   async function commitCardCreate(auth: AuthClaims, plan: CardCreatePlan): Promise<WireCard> {
-    const { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate, startDateLocalDate } = plan;
+    const { boardId, listId, ctx, body, description, assigneeIds, labelIds, customFieldValues, dueDate, startDateLocalDate } = plan;
     const result = await db.transaction(async (tx) => {
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
@@ -1049,6 +1084,20 @@ export async function cardRoutes(
         await tx.insert(cardLabelAssignments).values(labelIds.map((labelId) => ({ cardId: card.id, labelId })));
       }
 
+      const createdFieldValues = customFieldValues.length > 0
+        ? await tx.insert(cardCustomFieldValues).values(customFieldValues.map((value) => ({ cardId: card.id, ...value }))).returning()
+        : [];
+      if (body.externalRef) {
+        const { provider, type, id } = body.externalRef;
+        // Never repoint an existing external identity. A conflict rolls back the card and values
+        // too, including when another writer claimed the identity after preparation.
+        const [link] = await tx.insert(externalLinks).values({
+          workspaceId: ctx.workspaceId, provider, externalType: type, externalId: id,
+          entityType: "card", entityId: card.id,
+        }).onConflictDoNothing().returning({ id: externalLinks.id });
+        if (!link) throw conflict("external reference already exists");
+      }
+
       await replaceCardMentions({
         tx,
         boardId,
@@ -1085,10 +1134,22 @@ export async function cardRoutes(
           // Labels and due date set at creation belong to the creation event; the card's history
           // records no separate label or due-date change for them.
           ...(labelIds.length > 0 && { labelIds }),
+          ...(customFieldValues.length > 0 && { customFields: body.customFields }),
+          ...(body.externalRef && { externalRef: body.externalRef }),
           ...(dueDate && dueDate),
           ...(startDateLocalDate && { startDateLocalDate }),
         },
       });
+      // Initial values participate in the same field-change rules as create-then-set. Store all
+      // values first so every rule (including list-entry rules) sees the fully described card.
+      const customFieldAutomationEffects: AutomationEffects = { effects: [] };
+      for (const value of createdFieldValues) {
+        const effects = await runCustomFieldValueChangedAutomations(tx, {
+          cardId: card.id, fieldId: value.fieldId, previousValue: undefined, currentValue: value,
+          boardId, workspaceId: ctx.workspaceId, clientId: ctx.clientId, triggerActorId: auth.sub,
+        });
+        customFieldAutomationEffects.effects.push(...effects.effects);
+      }
       // App and public API card creation share this route; keep list-entry
       // automations here so both surfaces behave the same.
       const automationEffects = await runListEntryAutomations(tx, {
@@ -1133,10 +1194,10 @@ export async function cardRoutes(
       // card:created keeps the pre-automation snapshot (automation effects emit their own events)
       // but must carry the rebalanced position, or clients would place it by a stale number.
       const createdCard = rebalanced && finalCard ? { ...card, position: finalCard.position } : card;
-      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects, labelAutomationEffects, rebalanced, laneRebalanced, linkFanout } as const;
+      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, customFieldAutomationEffects, automationEffects, assignmentAutomationEffects, labelAutomationEffects, rebalanced, laneRebalanced, linkFanout } as const;
     });
     if (result.kind === "replayed") return toWireCard(result.card, auth.cid);
-    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects, labelAutomationEffects, rebalanced, laneRebalanced, linkFanout } = result;
+    const { card, finalCard, activity, customFieldAutomationEffects, automationEffects, assignmentAutomationEffects, labelAutomationEffects, rebalanced, laneRebalanced, linkFanout } = result;
     if (rebalanced) await emitLaneRebalanced(boardId, listId, rebalanced);
     if (laneRebalanced) await emitWorkspaceLaneRebalanced(listId, laneRebalanced);
     if (assigneeIds.length > 0) {
@@ -1154,18 +1215,21 @@ export async function cardRoutes(
     await emitCardActivityFeedItem(boardId, card.id, activity);
     // A description that links existing cards or notes adds this card to their linked items/backlinks.
     await emitInternalLinksChanged(linkFanout);
-    await emitAutomationEffects(automationEffects);
+    // All requested values were stored before any automation ran. Publish those snapshots first
+    // so field/list/assignment/label rules can replace them without a stale initial value winning.
+    for (const value of customFieldValues) {
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, { boardId, cardId: card.id, ...value });
+    }
     if (assigneeIds.length > 0) {
-      // Emit the requested assignment first because automation effects contain the final set;
-      // clients use last-write-wins semantics when applying assignee snapshots.
       await emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
-      await emitAutomationEffects(assignmentAutomationEffects);
     }
     if (labelIds.length > 0) {
-      // Same ordering rule as assignees: the requested set first, then any automation snapshots.
       await emitToBoard(boardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId, cardId: card.id, labelIds });
-      await emitAutomationEffects(labelAutomationEffects);
     }
+    await emitAutomationEffects(customFieldAutomationEffects);
+    await emitAutomationEffects(automationEffects);
+    await emitAutomationEffects(assignmentAutomationEffects);
+    await emitAutomationEffects(labelAutomationEffects);
     // Card activity stays in Kanera's audit log. PostHog receives only the durable activation
     // milestone below, never one event per card mutation.
     await evaluateWorkspaceAnalyticsMilestones({
@@ -1190,8 +1254,14 @@ export async function cardRoutes(
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkCreateCardsBody.parse(req.body);
     const plans: CardCreatePlan[] = [];
+    const externalIdentities = new Set<string>();
     for (const [index, { listId, ...item }] of body.cards.entries()) {
       try {
+        if (item.externalRef) {
+          const identity = JSON.stringify([item.externalRef.provider, item.externalRef.type, item.externalRef.id]);
+          if (externalIdentities.has(identity)) throw conflict("external reference already exists");
+          externalIdentities.add(identity);
+        }
         const prepared = await prepareCardCreate(req.auth, boardId, listId, item);
         // Bulk items carry no clientToken, so nothing can replay; the public API's Idempotency-Key
         // covers the whole batch instead.
@@ -1235,6 +1305,8 @@ export async function cardRoutes(
 
     const completedAt = body.completed ? new Date() : null;
     const updates = await db.transaction(async (tx) => {
+      // Lock the batch and its dependents before the first per-card write (see lockCardsForWrite).
+      await lockCompletionBatch(tx, ctx.workspaceId, targetCards.map((row) => row.card.id), body.completed);
       const rows: CardCompletionWrite[] = [];
       for (const row of targetCards) {
         rows.push(await applyCardCompletion(tx, {
@@ -1264,6 +1336,8 @@ export async function cardRoutes(
 
     const completedAt = body.completed ? new Date() : null;
     const updates = await db.transaction(async (tx) => {
+      // Lock the batch and its dependents before the first per-card write (see lockCardsForWrite).
+      await lockCompletionBatch(tx, ctx.workspaceId, changingCards.map((card) => card.id), body.completed);
       const rows: CardCompletionWrite[] = [];
       for (const current of changingCards) {
         rows.push(await applyCardCompletion(tx, {
@@ -1375,6 +1449,7 @@ export async function cardRoutes(
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
       await lockWorkspaceRelations(tx, ctx.workspaceId);
+      await lockCardsForWrite(tx, targetCards.map((card) => card.id));
       const rows: CardLabelsWrite[] = [];
       for (const card of targetCards) {
         const previous = await tx
@@ -1425,6 +1500,7 @@ export async function cardRoutes(
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
       await lockWorkspaceRelations(tx, ctx.workspaceId);
+      await lockCardsForWrite(tx, targetCards.map((card) => card.id));
       const rows: CardAssigneesWrite[] = [];
       for (const card of targetCards) {
         const previous = await tx
@@ -1470,6 +1546,7 @@ export async function cardRoutes(
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
       await lockWorkspaceRelations(tx, ctx.workspaceId);
+      await lockCardsForWrite(tx, movingCards.map((card) => card.id));
       await tx.select({ id: lists.id }).from(lists).where(eq(lists.id, body.listId)).for("update").limit(1);
       const positions = await bottomPositionsForCards(body.listId, movingCards.length, tx);
       const rows: {
@@ -1542,6 +1619,7 @@ export async function cardRoutes(
     const archivedAt = new Date();
     const { rows: updates, deletedNotifications, handoffs, unblockedEffects } = await db.transaction(async (tx) => {
       const before = await captureBlockedDependents(tx, ctx.workspaceId, targetCards.map((card) => card.id));
+      await lockCardsForWrite(tx, [...targetCards.map((card) => card.id), ...before.map((row) => row.dependentId)]);
       const rows: { card: typeof cards.$inferSelect; activity: ActivityEvent }[] = [];
       for (const current of targetCards) {
         const [card] = await tx
@@ -2395,6 +2473,7 @@ export async function cardRoutes(
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
       await lockWorkspaceRelations(tx, ctx.workspaceId);
+      await lockCardsForWrite(tx, targetCards.map((card) => card.id));
       const set: { value: typeof cardCustomFieldValues.$inferSelect; activity: CoalescedActivityResult; automationEffects: AutomationEffects }[] = [];
       const cleared: { cardId: string; activity: CoalescedActivityResult; automationEffects: AutomationEffects }[] = [];
       for (const card of targetCards) {
@@ -2623,6 +2702,7 @@ export async function cardRoutes(
     if (changingUpdates.length === 0) return { updated: 0, items: [], unchangedItemIds };
 
     const updates = await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, changingUpdates.map((update) => update.cardId));
       const rows: Array<{
         card: typeof cards.$inferSelect;
         checklist: typeof cardChecklists.$inferSelect;
@@ -2752,6 +2832,7 @@ export async function cardRoutes(
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
       await lockWorkspaceRelations(tx, ctx.workspaceId);
+      await lockCardsForWrite(tx, [id]);
       const now = new Date();
       const [checklist] = await tx
         .insert(cardChecklists)
@@ -2810,6 +2891,7 @@ export async function cardRoutes(
 
     const requestedTemplateIds = Array.from(new Set(body.templateIds));
     const applied = await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, [id]);
       const applied = await applyChecklistTemplates(tx, {
         cardId: id,
         boardId: card.boardId,
@@ -2850,11 +2932,13 @@ export async function cardRoutes(
     if (body.title === current.title) return (await loadChecklistsForCard(id)).find((entry) => entry.id === checklistId)!;
 
     const { checklist, activity } = await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, [id]);
       const [updated] = await tx
         .update(cardChecklists)
         .set({ title: body.title, updatedAt: new Date() })
         .where(eq(cardChecklists.id, checklistId))
         .returning();
+      if (!updated) throw notFound("checklist not found");
       await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
       const activity = await recordCoalescedActivity(tx, {
         boardId: card.boardId,
@@ -2890,6 +2974,7 @@ export async function cardRoutes(
       // notification fanout; the realtime deletion event is still emitted below for client sync.
       // Read the direct items before the cascade so the realtime event can carry the badge counts a
       // viewer without cached detail needs to subtract.
+      await lockCardsForWrite(tx, [id]);
       const directItems = await tx
         .select({ completedAt: cardChecklistItems.completedAt })
         .from(cardChecklistItems)
@@ -2967,6 +3052,7 @@ export async function cardRoutes(
     const prevPosition = current.position;
 
     const { position, rebalancedPositions } = await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, [id]);
       const { prev, next } = await neighbourChecklistPositions(id, current.parentItemId, body.afterChecklistId, body.beforeChecklistId, tx);
       const result = between(prev, next);
       let position = result.position;
@@ -3014,8 +3100,9 @@ export async function cardRoutes(
     }
 
     const { items, activities, inserts } = await db.transaction(async (tx) => {
-      // All item creators lock the checklist row before reading its tail position. Sorting the lock
-      // order prevents overlapping multi-checklist batches from deadlocking each other.
+      // Cards precede checklist/item locks in every writer. Lock the whole batch first, then each
+      // checklist before reading its tail so single and batch appends share the position guard.
+      await lockCardsForWrite(tx, cardIds);
       const lockedChecklists = await tx
         .select({ id: cardChecklists.id })
         .from(cardChecklists)
@@ -3101,6 +3188,7 @@ export async function cardRoutes(
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
       await lockWorkspaceRelations(tx, ctx.workspaceId);
+      await lockCardsForWrite(tx, [id]);
       // Share the checklist lock used by bulk creation so concurrent single and batch appends cannot
       // calculate the same numeric position from a stale tail row.
       const [lockedChecklist] = await tx
@@ -3251,6 +3339,7 @@ export async function cardRoutes(
       // Graph lock first: automations below may complete or reopen a blocker, and every write that
       // touches the dependency graph takes this lock before any row, so lock order never inverts.
       await lockWorkspaceRelations(tx, ctx.workspaceId);
+      await lockCardsForWrite(tx, [id]);
       const items = await tx
         .update(cardChecklistItems)
         .set({
@@ -3484,7 +3573,7 @@ export async function cardRoutes(
     };
   }
 
-  async function writeChecklistItemUpdate(tx: Tx, prepared: PreparedChecklistItemUpdate): Promise<WrittenChecklistItemUpdate> {
+  async function writeChecklistItemUpdate(tx: TxOnly, prepared: PreparedChecklistItemUpdate): Promise<WrittenChecklistItemUpdate> {
     const { card, ctx, checklist, current, body, actorId } = prepared;
     const { dueDateLocalDate, dueDateSlot, dueDateTimezone, nextText, nextAssigneeId } = prepared;
     const id = card.id;
@@ -3505,7 +3594,10 @@ export async function cardRoutes(
     // it before the card row is touched below, in the same order as every other automation-running
     // transaction (lock, then card writes), or a concurrent completion of this card can deadlock.
     const completingItem = body.completed === true && !current.completedAt;
-    if (completingItem) await lockWorkspaceRelations(tx as TxOnly, ctx.workspaceId);
+    if (completingItem) await lockWorkspaceRelations(tx, ctx.workspaceId);
+    // Bulk descriptions and checklist cascades already hold the card before touching an item.
+    // Take the same lock first for text/date/completion edits, including item-addressed routes.
+    await lockCardsForWrite(tx, [id]);
     const reopeningCompletedChecklist = body.completed === false
       && Boolean(current.completedAt)
       && (await tx
@@ -3529,6 +3621,7 @@ export async function cardRoutes(
       })
       .where(eq(cardChecklistItems.id, itemId))
       .returning();
+    if (!item) throw notFound("checklist item not found");
     await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
 
     // Completing an item or clearing its due date drops any standing overdue
@@ -3794,6 +3887,7 @@ export async function cardRoutes(
   async function deleteChecklistItem(req: FastifyRequest, reply: FastifyReply, params: { id: string; checklistId?: string; itemId: string }) {
     const { card, checklist, current } = await loadChecklistItemTarget(req, params);
     await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, [card.id]);
       await tx.delete(cardChecklistItems).where(eq(cardChecklistItems.id, current.id));
       await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, card.id));
     });
@@ -3824,6 +3918,7 @@ export async function cardRoutes(
     const prevPosition = current.position;
 
     const { position, sourceRebalanced, targetRebalanced } = await db.transaction(async (tx) => {
+      await lockCardsForWrite(tx, [id]);
       const { prev, next } = await neighbourChecklistItemPositions(targetChecklistId, itemId, body.afterItemId, body.beforeItemId, tx);
       const result = between(prev, next);
       let position = result.position;

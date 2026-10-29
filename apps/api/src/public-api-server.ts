@@ -243,6 +243,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     origin: true,
     credentials: false,
     methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    exposedHeaders: ["ETag", "X-Card-Revision"],
     maxAge: 600,
   });
   await app.register(cookie);

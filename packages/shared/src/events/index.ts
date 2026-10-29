@@ -54,7 +54,7 @@ export type WireGlobalWorkSeparator = Omit<GlobalWorkSeparator, "position"> & { 
 export type WireSeparator = WireBoardSeparator | WireGlobalWorkSeparator;
 // clientToken is an internal request-deduplication key, not card data for API or realtime clients.
 // `listEnteredAt` is trigger bookkeeping for time in progress (see the card schema), not a client field.
-export type WireCard = Omit<Card, "position" | "searchVector" | "clientToken" | "listEnteredAt"> & { position: string; url?: string };
+export type WireCard = Omit<Card, "position" | "searchVector" | "clientToken" | "listEnteredAt" | "detailRevision"> & { position: string; url?: string };
 /**
  * A card's time-in-progress clock, owned by the `card_track_in_progress` trigger: the running
  * stint's start (null outside progress) and the tracked working seconds banked from finished stints
@@ -307,6 +307,8 @@ export function expandCardSummary(card: CompactCardSummary): WireCardSummary {
 }
 
 export interface WireCardDetail {
+  /** Card-local committed detail/feed revision. Reads never advance it. Decimal integer. */
+  revision?: string;
   card: WireCard;
   customFieldValues: CardCustomFieldValue[];
   labelIds: string[];
@@ -425,6 +427,17 @@ export interface WireChecklistAssignment {
   dueDateTimezone: string | null;
 }
 
+/**
+ * Board events about one card carry that card's committed detail revision, read after the write
+ * commits (see cardDetailRevisionForEvent on the server). An open drawer compares it with the
+ * revision of a detail response in flight: an event at or below the response is already in it, a
+ * newer one is replayed on top. Absent on older servers and when the lookup fails; the client then
+ * replays conservatively.
+ */
+export type Stamped<P> = P & { detailRevision?: string };
+/** A rebalance touches many cards, each with its own counter, so the stamp is keyed by card. */
+export type StampedPerCard<P> = P & { detailRevisions?: Record<string, string> };
+
 export interface ServerToClientEvents {
   "list:created": (payload: { workspaceId: string; list: WireList }) => void;
   "list:updated": (payload: { workspaceId: string; list: WireList }) => void;
@@ -509,18 +522,18 @@ export interface ServerToClientEvents {
   // event so the durable delivery pipeline (retries, delivery log) handles it; the webhook enqueue
   // step delivers it to `endpointId` only, ignoring that endpoint's eventTypes filter. Web clients
   // receive and ignore it.
-  "automation:webhook:called": (payload: {
+  "automation:webhook:called": (payload: Stamped<{
     boardId: string;
     cardId: string;
     automationId: string;
     endpointId: string;
     card: WireCard;
     list: { id: string; name: string } | null;
-  }) => void;
+  }>) => void;
 
   // `blockedByCount` rides along when the card already exists elsewhere and arrives on this board
   // (move to board): a brand-new card has no blockers, but a moved one keeps its Blocked chip.
-  "card:created": (payload: { boardId: string; card: CompactWireCard; blockedByCount?: number }) => void;
+  "card:created": (payload: Stamped<{ boardId: string; card: CompactWireCard; blockedByCount?: number }>) => void;
   // `blockedByCount` is present only when the emit knows the card's open-blocker count changed (a
   // relation was added or removed, or one of its blockers was completed, reopened, archived or
   // deleted). Absent means unchanged: the card row itself does not carry the count.
@@ -529,8 +542,8 @@ export interface ServerToClientEvents {
   // scheduleTransition marks a boundary the schedule engine found when a board was rechecked (see
   // apps/api/src/lib/schedule-events.ts); like dependencyTransition it is written for integrations
   // only and is what MCP turns into the schedule.* occurrences. Browsers ignore it.
-  "card:updated": (payload: { boardId: string; card: CompactWireCard; blockedByCount?: number; dependencyTransition?: "blocked" | "unblocked"; scheduleTransition?: ScheduleTransition }) => void;
-  "card:moved": (payload: {
+  "card:updated": (payload: Stamped<{ boardId: string; card: CompactWireCard; blockedByCount?: number; dependencyTransition?: "blocked" | "unblocked"; scheduleTransition?: ScheduleTransition }>) => void;
+  "card:moved": (payload: Stamped<{
     boardId: string;
     cardId: string;
     fromListId: string;
@@ -540,13 +553,13 @@ export interface ServerToClientEvents {
     // The card's persisted time-in-progress clock after this move (set by the database trigger;
     // see `InProgressClock`). Clients take it as-is rather than deriving it, so every client and the
     // REST API agree regardless of client clocks or delivery delay.
-  } & InProgressClock) => void;
-  "card:rebalanced": (payload: {
+  } & InProgressClock>) => void;
+  "card:rebalanced": (payload: StampedPerCard<{
     boardId: string;
     listId: string;
     positions: { id: string; position: string }[];
-  }) => void;
-  "card:deleted": (payload: { boardId: string; cardId: string }) => void;
+  }>) => void;
+  "card:deleted": (payload: Stamped<{ boardId: string; cardId: string }>) => void;
   "separator:created": (payload: { boardId: string; separator: WireSeparator }) => void;
   "separator:updated": (payload: { boardId: string; separator: WireSeparator }) => void;
   "separator:moved": (payload: {
@@ -606,7 +619,7 @@ export interface ServerToClientEvents {
    * a partially deployed frontend degrades to refetching rather than to stale ranks.
    */
   "cardPriority:queueChanged": (payload: WorkPriorityQueueSnapshot) => void;
-  "card:customFieldValue:set": (payload: {
+  "card:customFieldValue:set": (payload: Stamped<{
     boardId: string;
     cardId: string;
     fieldId: string;
@@ -617,59 +630,59 @@ export interface ServerToClientEvents {
     valueUrl?: string | null;
     valueOptionIds?: string[] | null;
     valueUserIds?: string[] | null;
-  }) => void;
-  "card:customFieldValue:cleared": (payload: { boardId: string; cardId: string; fieldId: string }) => void;
-  "card:labels:set": (payload: { boardId: string; cardId: string; labelIds: string[] }) => void;
-  "card:assignees:set": (payload: { boardId: string; cardId: string; assigneeIds: string[] }) => void;
-  "card:visibility:granted": (payload: { boardId: string; cardId: string }) => void;
-  "card:visibility:revoked": (payload: { boardId: string; cardId: string }) => void;
+  }>) => void;
+  "card:customFieldValue:cleared": (payload: Stamped<{ boardId: string; cardId: string; fieldId: string }>) => void;
+  "card:labels:set": (payload: Stamped<{ boardId: string; cardId: string; labelIds: string[] }>) => void;
+  "card:assignees:set": (payload: Stamped<{ boardId: string; cardId: string; assigneeIds: string[] }>) => void;
+  "card:visibility:granted": (payload: Stamped<{ boardId: string; cardId: string }>) => void;
+  "card:visibility:revoked": (payload: Stamped<{ boardId: string; cardId: string }>) => void;
   // Invalidation only: a card's linked items changed — a link to or from it was added or removed, a
   // linked card/note was renamed, or a card relation (blocks / relates to) involving it changed.
   // Linked items and relations are filtered per viewer by board/note access, so the board room
   // cannot be sent one shared list; clients showing the card re-read GET /cards/:id/linked-items and
   // GET /cards/:id/relations, and re-resolve the link chips in its description.
-  "card:links:changed": (payload: { boardId: string; cardId: string }) => void;
-  "card:attachment:created": (payload: { boardId: string; cardId: string; attachment: CardAttachmentRow }) => void;
-  "card:attachment:deleted": (payload: { boardId: string; cardId: string; attachmentId: string }) => void;
-  "card:attachment:reaction:added": (payload: {
+  "card:links:changed": (payload: Stamped<{ boardId: string; cardId: string }>) => void;
+  "card:attachment:created": (payload: Stamped<{ boardId: string; cardId: string; attachment: CardAttachmentRow }>) => void;
+  "card:attachment:deleted": (payload: Stamped<{ boardId: string; cardId: string; attachmentId: string }>) => void;
+  "card:attachment:reaction:added": (payload: Stamped<{
     boardId: string;
     cardId: string;
     attachmentId: string;
     type: ReactionType;
     user: ReactionUserSummary;
-  }) => void;
-  "card:attachment:reaction:removed": (payload: {
+  }>) => void;
+  "card:attachment:reaction:removed": (payload: Stamped<{
     boardId: string;
     cardId: string;
     attachmentId: string;
     type: ReactionType;
     userId: string;
-  }) => void;
-  "card:checklist:created": (payload: { boardId: string; cardId: string; checklist: WireCardChecklist }) => void;
-  "card:checklist:updated": (payload: { boardId: string; cardId: string; checklist: WireCardChecklist }) => void;
-  "card:checklist:moved": (payload: {
+  }>) => void;
+  "card:checklist:created": (payload: Stamped<{ boardId: string; cardId: string; checklist: WireCardChecklist }>) => void;
+  "card:checklist:updated": (payload: Stamped<{ boardId: string; cardId: string; checklist: WireCardChecklist }>) => void;
+  "card:checklist:moved": (payload: Stamped<{
     boardId: string;
     cardId: string;
     checklistId: string;
     position: string;
     prevPosition: string;
-  }) => void;
-  "card:checklist:rebalanced": (payload: {
+  }>) => void;
+  "card:checklist:rebalanced": (payload: Stamped<{
     boardId: string;
     cardId: string;
     positions: { id: string; position: string }[];
-  }) => void;
+  }>) => void;
   // checklistParentItemId/itemCount/completedItemCount describe the deleted checklist's own (direct)
   // items. A client that has not opened the card holds no checklist detail to subtract from its
   // progress badge, so the event must carry the top-level contribution being removed.
-  "card:checklist:deleted": (payload: {
+  "card:checklist:deleted": (payload: Stamped<{
     boardId: string;
     cardId: string;
     checklistId: string;
     checklistParentItemId: string | null;
     itemCount: number;
     completedItemCount: number;
-  }) => void;
+  }>) => void;
   // cardTitle/listId are included so assignee-centric consumers can build a
   // checklist work item without an extra fetch; board + list display come from the consumer's
   // own board/list sets.
@@ -677,9 +690,9 @@ export interface ServerToClientEvents {
   // checklist, the owning item's id for a nested item-detail checklist. It lets a client whose card
   // detail isn't cached tell top-level items (which drive the card's checklist badge) from nested
   // sub-items without having to look the checklist up locally.
-  "card:checklistItem:created": (payload: { boardId: string; cardId: string; cardTitle: string; listId: string; checklistId: string; checklistParentItemId: string | null; item: WireCardChecklistItem }) => void;
-  "card:checklistItem:updated": (payload: { boardId: string; cardId: string; cardTitle: string; listId: string; checklistId: string; checklistParentItemId: string | null; item: WireCardChecklistItem; prevCompletedAt?: Date | string | null }) => void;
-  "card:checklistItem:moved": (payload: {
+  "card:checklistItem:created": (payload: Stamped<{ boardId: string; cardId: string; cardTitle: string; listId: string; checklistId: string; checklistParentItemId: string | null; item: WireCardChecklistItem }>) => void;
+  "card:checklistItem:updated": (payload: Stamped<{ boardId: string; cardId: string; cardTitle: string; listId: string; checklistId: string; checklistParentItemId: string | null; item: WireCardChecklistItem; prevCompletedAt?: Date | string | null }>) => void;
+  "card:checklistItem:moved": (payload: Stamped<{
     boardId: string;
     cardId: string;
     itemId: string;
@@ -687,14 +700,14 @@ export interface ServerToClientEvents {
     toChecklistId: string;
     position: string;
     prevPosition: string;
-  }) => void;
-  "card:checklistItem:rebalanced": (payload: {
+  }>) => void;
+  "card:checklistItem:rebalanced": (payload: Stamped<{
     boardId: string;
     cardId: string;
     checklistId: string;
     positions: { id: string; position: string }[];
-  }) => void;
-  "card:checklistItem:deleted": (payload: { boardId: string; cardId: string; checklistId: string; checklistParentItemId: string | null; itemId: string; completedAt: Date | string | null }) => void;
+  }>) => void;
+  "card:checklistItem:deleted": (payload: Stamped<{ boardId: string; cardId: string; checklistId: string; checklistParentItemId: string | null; itemId: string; completedAt: Date | string | null }>) => void;
 
   "cardLabel:created": (payload: { workspaceId: string; cardLabel: WireCardLabel }) => void;
   "cardLabel:updated": (payload: { workspaceId: string; cardLabel: WireCardLabel }) => void;
@@ -710,26 +723,26 @@ export interface ServerToClientEvents {
   }) => void;
   "cardLabel:deleted": (payload: { workspaceId: string; labelId: string }) => void;
 
-  "comment:created": (payload: { boardId: string; cardId: string; comment: WireComment }) => void;
-  "comment:updated": (payload: { boardId: string; cardId: string; comment: WireComment }) => void;
-  "comment:deleted": (payload: { boardId: string; cardId: string; commentId: string }) => void;
-  "comment:reaction:added": (payload: {
+  "comment:created": (payload: Stamped<{ boardId: string; cardId: string; comment: WireComment }>) => void;
+  "comment:updated": (payload: Stamped<{ boardId: string; cardId: string; comment: WireComment }>) => void;
+  "comment:deleted": (payload: Stamped<{ boardId: string; cardId: string; commentId: string }>) => void;
+  "comment:reaction:added": (payload: Stamped<{
     boardId: string;
     cardId: string;
     commentId: string;
     type: ReactionType;
     user: ReactionUserSummary;
-  }) => void;
-  "comment:reaction:removed": (payload: {
+  }>) => void;
+  "comment:reaction:removed": (payload: Stamped<{
     boardId: string;
     cardId: string;
     commentId: string;
     type: ReactionType;
     userId: string;
-  }) => void;
-  "card:feedItem:created": (payload: { boardId: string; cardId: string; item: CardFeedItem }) => void;
-  "card:feedItem:updated": (payload: { boardId: string; cardId: string; item: CardFeedItem }) => void;
-  "card:feedItem:deleted": (payload: { boardId: string; cardId: string; type: CardFeedItem["type"]; itemId: string }) => void;
+  }>) => void;
+  "card:feedItem:created": (payload: Stamped<{ boardId: string; cardId: string; item: CardFeedItem }>) => void;
+  "card:feedItem:updated": (payload: Stamped<{ boardId: string; cardId: string; item: CardFeedItem }>) => void;
+  "card:feedItem:deleted": (payload: Stamped<{ boardId: string; cardId: string; type: CardFeedItem["type"]; itemId: string }>) => void;
 
   "board:created": (payload: { workspaceId: string; board: WireBoard }) => void;
   // features is present when an organisation or workspace switched an optional planning feature

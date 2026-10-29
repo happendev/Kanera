@@ -83,6 +83,22 @@ void test("hosted webhook fanout and delivery require trial or Pro", async () =>
   }
 });
 
+void test("webhook payloads omit the revision stamps that serve the web client's read journal", async () => {
+  const { workspace } = await seedFixture();
+  const cardId = randomUUID();
+  const [event] = await db.insert(eventOutbox).values({
+    scope: "board",
+    scopeId: randomUUID(),
+    workspaceId: workspace.id,
+    eventType: "card:created",
+    payload: { boardId: randomUUID(), cardId, detailRevision: "7" },
+  }).returning();
+  await enqueueWebhookDeliveriesForOutboxEvent(event!);
+  const [delivery] = await db.select().from(webhookDeliveries).where(eq(webhookDeliveries.outboxEventId, event!.id));
+  assert.ok(delivery);
+  assert.deepEqual((delivery.payload as { data: unknown }).data, { boardId: (event!.payload as { boardId: string }).boardId, cardId });
+});
+
 void test("the outbound delivery boundary does not fire stale enabled endpoints for hosted Free", async () => {
   const previousMode = env.KANERA_DEPLOYMENT_MODE;
   const originalFetch = globalThis.fetch;

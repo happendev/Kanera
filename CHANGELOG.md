@@ -6,6 +6,8 @@ All notable changes to Kanera are documented here.
 
 ### Added
 
+- **Richer card creation:** the public API, MCP, SDK and CLI accept custom-field values by ID and an external reference in single and bulk card creation. Each card, its values and its reference are saved atomically.
+
 - **Timeline view:** a Gantt-style board view with one bar per card from its start date to its due date, grouped by list, assignee or label. Zoom smoothly from days to years with the zoom buttons, the slider, Ctrl + scroll or a trackpad pinch, **Fit all** to show every scheduled card at once (how the chart opens until you pick a zoom of your own), and drag the chart's background to pan. Each row shows the card's labels in full on a line under its title, so a blocking bug is visible without regrouping; drag the edge of the names column to widen it for long titles (double-click to reset). Drag a bar to reschedule it keeping its working-day length, pull an end to change its length, click an empty lane to place an unscheduled card, and drag from a bar's end onto another card to make it wait on the first. **Critical path** highlights the chain with no slack and shows how far each other card could slip; prerequisites planned to finish after their dependents start are flagged as scheduling conflicts. Keyboard shortcut `7`.
 - **My overview:** My Cards has an **Overview** display like Team Cards', for just your own work: what you have in progress and for how long, what you recently touched, the head of your Up next, the rest of your open cards and what you finished in the last 7 days. The stats open each set of cards in full.
 - **Timeline on My Cards and Team Cards:** the Timeline view is also a display on My Cards and Team Cards, over every board in scope. Rows group by board until you choose another grouping; dependency wires and the critical path follow chains within each workspace, and a card can be rescheduled or linked wherever you can edit its board.
@@ -17,8 +19,11 @@ All notable changes to Kanera are documented here.
 - **Example automations reworked:** the automations Examples menu now offers rules real teams run, modelled on the workspace templates and matched to your own list, label and field names: label work by the list it lands in, set a response target for new requests, send finished checklists to review, escalate overdue work, flag stalled or over-estimate work as at risk, move ticked-off cards to Done, and a new **Planning** group for start dates, unblocked work and scheduling conflicts. Examples whose planning feature is switched off are not offered, and an example the workspace cannot build sensibly is shown greyed out with what it needs instead of guessing.
 - **In-progress limits for automations:** **Card in progress too long** can use its own limit in hours or days, or a number field such as an estimate, firing when a card's tracked working time passes it (a working day is 8 hours). It fires once per card; raising an estimate runs it again only when the card passes that too. Cards already past the limit when a rule is turned on are skipped unless **Include cards already past the limit** is on.
 - **Editor shortcuts:** in descriptions, comments, notes and the scratchpad, Ctrl + backtick toggles inline code on selected text (including keyboards where backtick is a dead key), Ctrl+K inserts or edits a link, and Ctrl+backslash clears inline formatting while preserving text, headings and lists. Command equivalents are also supported on Mac. Strikethrough now stays visible in rendered descriptions, comments and notes after saving.
+- **GitHub pull requests on cards:** with the GitHub App connected, a pull request whose branch, title or description names a card key (such as `KAN-123`) appears in that card's new **Pull requests** section and activity, and its state stays current as it moves from draft to open, merged or closed. Pull requests from forks are ignored. **Copy branch name** in card detail and the card menu gives a branch that links itself. Self-hosted deployments set `GITHUB_APP_WEBHOOK_SECRET` and the App's webhook URL (see DEPLOY.md).
 
 ### Changed
+
+- **Faster card details:** sections render independently, large collections defer offscreen rendering, and realtime bursts share one offline-cache write. Detail/feed loads are cancellable and deduplicated, unchanged reconnects use conditional requests, and per-card revisions preserve live edits without retrying the initial detail load.
 
 - **Onboarding templates:** lists now start with colors suited to their workflow stages, carried through to workspace and standalone boards.
 
@@ -26,6 +31,7 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
+- A card moved into progress outside working hours no longer looks stuck at "<1m": its time-in-progress chip shows a pause icon, card detail says **Paused until** the next working start, and the tooltip explains that only weekday 09:00–17:00 counts. Nothing tracked yet now reads "0m" on the tile and in card detail alike.
 - Offline, My Cards and Team Cards now say once that you're looking at a saved copy, in the page's banner, instead of repeating it inside Overview, Timeline, Dependencies and Work done.
 - Cards completed by an automation (for example, moving a card to Done) now count as done for their assignees on the My Cards and Team Cards overviews and their Work done timelines, instead of disappearing from **Recently done** and the **Done** count.
 - A teammate's change that arrives while you're searching on My Cards or Team Cards now shows up in the overview, Work done and Dependencies straight away, instead of waiting for the next change.

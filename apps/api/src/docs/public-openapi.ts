@@ -810,6 +810,12 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         type: "object",
         description: "A card plus assignees, labels, custom field values, checklists, attachments, comments, relations, and activity metadata.",
         allOf: [ref("Card")],
+        properties: {
+          revision: {
+            type: "string",
+            description: "Card-local revision as a decimal integer string. Every write to the card or one of its detail rows (checklists, attachments, comments, fields, labels, assignees, relations, links, activity) advances it; reads never do. Compare numerically. The same value is sent as the X-Card-Revision header beside a weak ETag, which If-None-Match can validate for a 304.",
+          },
+        },
         additionalProperties: true,
       },
       CardRelation: {
@@ -2439,7 +2445,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/boards/{boardId}/lists/{id}/cards": pathItem("post", operation({
       tags: ["Cards"],
       summary: "Create a card",
-      description: "Creates a card on a board in one of the workspace's shared lists. Use the list ids returned by opening the board or workspace detail.",
+      description: "Creates a card on a board in one of the workspace's shared lists. Use the list ids returned by opening the board or workspace detail. Optional customFields maps workspace field UUIDs to typed values (for example {valueText: \"production\"}); externalRef is {provider, type, id}. Both are saved atomically with the card. External references require a write-scoped workspace key or workspace admin access; existing identities return 409 and mirror: providers are reserved.",
       operationId: "createCard",
       parameters: [idParam("boardId"), idParam("id", "List id.")],
       requestBody: jsonBody(ref("CreateCardBody")),
@@ -2477,7 +2483,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/boards/{boardId}/cards/bulk/create": pathItem("post", operation({
       tags: ["Cards"],
       summary: "Create several cards",
-      description: `Creates up to ${dto.BULK_CREATE_CARDS_MAX} cards on one board, each with optional labels, assignees, and due date, appended to the bottom of its list in request order. Every card is validated before any is created, so an invalid label, assignee, or list rejects the whole request and names the offending \`cards[i]\`. Each card then fires the same automations, notifications, and webhooks as a single create. Send an Idempotency-Key to retry safely.`,
+      description: `Creates up to ${dto.BULK_CREATE_CARDS_MAX} cards on one board, each with optional labels, assignees, customFields, externalRef, start date, and due date, appended to the bottom of its list in request order. Every card is validated before any is created, so an invalid label, assignee, list, custom field, or external reference rejects the whole request and names the offending \`cards[i]\`. Each card commits atomically with its custom fields and external reference; the batch is not a single transaction. External references follow the permissions and uniqueness rules of single-card creation. Each card then fires the same automations, notifications, and webhooks as a single create. Send an Idempotency-Key to retry safely.`,
       operationId: "bulkCreateCards",
       parameters: [idParam("boardId")],
       requestBody: jsonBody(ref("BulkCreateCardsBody")),

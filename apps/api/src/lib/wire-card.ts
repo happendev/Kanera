@@ -15,7 +15,7 @@ export function absoluteCardUrl(organisationKey: string, cardKey: string, webOri
  * the reader's organisation, and the canonical URL is attached.
  */
 export function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
-  const { clientToken: _clientToken, listEnteredAt: _listEnteredAt, ...publicCard } = card;
+  const { clientToken: _clientToken, listEnteredAt: _listEnteredAt, detailRevision: _detailRevision, ...publicCard } = card;
   return {
     ...publicCard,
     description: signEmbeddedMediaUrls(card.description, clientId),

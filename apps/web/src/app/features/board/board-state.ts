@@ -36,6 +36,7 @@ export type AnyCustomField = CustomField | WireCustomField;
 const EMPTY_LABELS: (CardLabel | WireCardLabel)[] = [];
 const EMPTY_MEMBERS: WireBoardMemberUser[] = [];
 const EMPTY_IDS: string[] = [];
+const sameItems = <T>(a: readonly T[], b: readonly T[]) => a.length === b.length && a.every((item, index) => item === b[index]);
 const EMPTY_ATTACHMENTS: CardAttachmentRow[] = [];
 const EMPTY_CHECKLISTS: WireCardChecklist[] = [];
 const EMPTY_AGENT_RUNS: WireAgentRun[] = [];
@@ -97,12 +98,9 @@ export class BoardState {
   // Insertion order is the LRU order. Detail rows can include comments, checklists, attachments,
   // and hidden custom fields, so retaining every drawer ever opened grows for the whole route.
   private readonly detailCacheRecency = new Map<string, true>();
-  // Per-card counter of realtime mutations to a card's detail-scoped state (summary, labels, assignees,
-  // custom-field values, attachments, checklists). The card detail drawer snapshots this before a
-  // /cards/:id/detail fetch and skips mirroring the response back via setCardDetail if it advanced
-  // mid-flight — otherwise a slow (stale) detail response reverts a socket update that landed while the
-  // request was in flight. Bumped only from the realtime bridge (see BoardSocketBridge), so setCardDetail
-  // and local optimistic writes don't inflate it.
+  // Local mutation markers identify which pending card reads a board event affected. The journal
+  // retains only those reducers; server publication watermarks determine whether to replay them.
+  // Local optimistic writes do not inflate this counter.
   private readonly cardDetailRealtimeRevisions = new Map<string, number>();
   readonly customFields = signal<AnyCustomField[]>([]);
   readonly customFieldValues = signal<CardCustomFieldValue[]>([]);
@@ -1049,6 +1047,107 @@ export class BoardState {
     }
   }
 
+  private snapshotMemo: {
+    cardId: string;
+    detail: WireCardDetail;
+    card: AnyCard | undefined;
+    attachments: CardAttachmentRow[];
+    customFieldValues: CardCustomFieldValue[];
+    labelIds: string[];
+    assigneeIds: string[];
+    snapshot: WireCardDetail;
+  } | null = null;
+
+  /**
+   * Assemble storage/network reconciliation from the same collections the live drawer reads.
+   * The per-card collections are rebuilt on any board event and the drawer persists by identity,
+   * so the previous snapshot is returned while this card's own slices are unchanged; otherwise
+   * every edit to an unrelated card would write the open card to storage again.
+   */
+  detailSnapshotForCard(cardId: string): WireCardDetail | null {
+    const detail = this.detailForCard(cardId);
+    if (!detail) return null;
+    const current = this.cardById(cardId);
+    const attachments = this.attachmentsForCard(cardId);
+    const customFieldValues = [...this.customFieldValuesForCard(cardId).values()];
+    const labelIds = this.labelIdsForCard(cardId);
+    const assigneeIds = this.assigneeIdsForCard(cardId);
+    const memo = this.snapshotMemo;
+    if (memo && memo.cardId === cardId && memo.detail === detail && memo.card === current
+      && sameItems(memo.attachments, attachments) && sameItems(memo.customFieldValues, customFieldValues)
+      && sameItems(memo.labelIds, labelIds) && sameItems(memo.assigneeIds, assigneeIds)) return memo.snapshot;
+    // Carry current summary fields without turning the full card into a summary-shaped object.
+    const card = Object.fromEntries(Object.keys(detail.card).map((key) => [
+      key, current && key in current ? current[key as keyof AnyCard] : detail.card[key as keyof WireCard],
+    ])) as WireCard;
+    const snapshot = { ...detail, card, attachments, customFieldValues, labelIds, assigneeIds };
+    this.snapshotMemo = { cardId, detail, card: current, attachments, customFieldValues, labelIds, assigneeIds, snapshot };
+    return snapshot;
+  }
+
+  private replayingDetail = false;
+  private readonly pendingDetailReads = new Map<string, Set<{ events: { revision?: string; replay: () => void }[] }>>();
+
+  /** Retain only events racing an active read; cleanup on response, cancellation and card close. */
+  beginCardDetailRead(cardId: string) {
+    const read = { events: [] as { revision?: string; replay: () => void }[] };
+    const reads = this.pendingDetailReads.get(cardId) ?? new Set();
+    reads.add(read);
+    this.pendingDetailReads.set(cardId, reads);
+    const cancel = () => {
+      reads.delete(read);
+      if (!reads.size) this.pendingDetailReads.delete(cardId);
+    };
+    return {
+      cancel,
+      apply: (detail: WireCardDetail) => {
+        cancel();
+        // A response below the cached revision is applied all the same. Requests are single-flight,
+        // so that only happens after the server's counters restarted (restore, reset), and keeping
+        // the cached copy would then refuse every fresh read until the card left the LRU.
+        this.setCardDetail(detail);
+        // The server reads the card-local revision with the card, before loading its detail rows.
+        // Triggers advance it in each mutation transaction; publication reads committed revisions.
+        // Events at/below the response watermark are already represented. Newer events replace
+        // stale values (including deletions) while the response hydrates otherwise missing data.
+        // This also handles first open, where rejecting the whole response would require a retry.
+        let revision = detail.revision;
+        this.replayingDetail = true;
+        try {
+          for (const event of read.events) {
+            if (!detail.revision || !event.revision || BigInt(event.revision) > BigInt(detail.revision)) event.replay();
+            if (event.revision && (!revision || BigInt(event.revision) > BigInt(revision))) revision = event.revision;
+          }
+        } finally {
+          this.replayingDetail = false;
+        }
+        const reconciled = { ...this.detailSnapshotForCard(cardId)!, revision };
+        this.detailedCards.update((details) => new Map(details).set(cardId, reconciled));
+        // Summary deltas were already applied when the event arrived. Derive exact totals after
+        // replay, instead of double-counting those deltas (nested checklist items are not badges).
+        const items = reconciled.checklists.filter((checklist) => !checklist.parentItemId).flatMap((checklist) => checklist.items);
+        this.cards.update((cards) => cards.map((card) => card.id === cardId && "checklistTotalCount" in card ? {
+          ...card,
+          checklistTotalCount: items.length,
+          checklistDoneCount: items.filter((item) => item.completedAt).length,
+          attachmentCount: reconciled.attachments.length,
+        } : card));
+        return reconciled;
+      },
+    };
+  }
+
+  reconcileDetailEvent(apply: () => void, replay: (cardId: string) => void, revision?: string | ((cardId: string) => string | undefined)) {
+    const before = [...this.pendingDetailReads].map(([cardId, reads]) => ({
+      cardId, reads, version: this.cardDetailRealtimeRevision(cardId),
+    }));
+    apply();
+    for (const { cardId, reads, version } of before) {
+      if (version === this.cardDetailRealtimeRevision(cardId)) continue;
+      for (const read of reads) read.events.push({ revision: typeof revision === "function" ? revision(cardId) : revision, replay: () => replay(cardId) });
+    }
+  }
+
   setCardDetail(detail: WireCardDetail) {
     // The detail drawer becomes the freshest source for one card. Mirror that payload
     // back into the summary collections so list tiles and the open detail stay in sync.
@@ -1568,6 +1667,7 @@ export class BoardState {
   }
 
   private rememberEventId(ids: Set<string>, id: string): boolean {
+    if (this.replayingDetail) return true;
     if (ids.has(id)) return false;
     ids.add(id);
     if (ids.size > BoardState.EVENT_DEDUPE_LIMIT) {

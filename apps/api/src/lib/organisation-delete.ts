@@ -149,6 +149,8 @@ export async function purgeOrganisation(clientId: string, log: FastifyBaseLogger
     // window after every write-capable database object has been removed.
     await storage.deleteAll();
     await db.transaction(async (tx) => {
+      // Every card below is removed outright; bumping each one's revision per cascaded row is wasted work.
+      await tx.execute(sql`SET LOCAL kanera.skip_card_detail_revision = 'on'`);
       await tx.delete(oauthGrants).where(eq(oauthGrants.orgClientId, clientId));
       await tx.delete(workspaceApiKeys).where(eq(workspaceApiKeys.clientId, clientId));
       await clearNotificationsForScope(tx, { clientId });

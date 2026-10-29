@@ -1,7 +1,7 @@
-import { workingMs } from "@kanera/shared/time-in-progress";
+import { nextWorkingStart, trackingTimeZone, workingMs } from "@kanera/shared/time-in-progress";
 import { appLocale } from "../../core/i18n/locale";
 import { icu } from "../../core/i18n/icu";
-import { formatDate } from "../../shared/date-format";
+import { formatDate, formatDateTime, formatTime } from "../../shared/date-format";
 
 type DateLike = Date | string | null | undefined;
 type TimedCard = { inProgressSince?: DateLike; inProgressSeconds?: number | null; completedAt?: DateLike };
@@ -51,6 +51,19 @@ export function isInProgressRunning(card: TimedCard): boolean {
 }
 
 /**
+ * When a running clock starts counting again, or null when it is counting now (or not running).
+ * Outside working hours a running clock adds nothing, and without saying so it reads as broken.
+ */
+function pausedUntil(card: TimedCard, now: number, timeZone: TimeZone): number | null {
+  return isInProgressRunning(card) ? nextWorkingStart(now, timeZone) : null;
+}
+
+/** "09:00" when the clock resumes within a day, otherwise "Mon, 2 Nov, 09:00", in the viewer's zone. */
+function formatResume(resumeMs: number, now: number): string {
+  return resumeMs - now < DAY ? formatTime(resumeMs) : formatDateTime(resumeMs, "weekday", { now: new Date(now) });
+}
+
+/**
  * Total tracked time in progress: every finished stint (banked by the server) plus the running one,
  * counting working hours only (09:00-17:00, Monday to Friday, in the workspace's zone; see
  * `@kanera/shared/time-in-progress`). This is the card's tracked time, so it keeps its value after
@@ -79,9 +92,11 @@ function formatHours(hours: number): string {
 
 /**
  * Compact chip text in hours, never days: tracked time counts at most 8 working hours a day, so
- * "3d" would read as 72 hours of work. "<1m", "45m", "5h", "96h", "1,240h".
+ * "3d" would read as 72 hours of work. "0m", "<1m", "45m", "5h", "96h", "1,240h".
  */
 function formatTimeInProgress(ms: number): string {
+  // Nothing tracked yet (a clock started outside working hours) reads "0m" here and in card detail.
+  if (ms <= 0) return $localize`:Tracked duration of zero minutes:0m`;
   if (ms < MINUTE) return $localize`:Time-in-progress chip - under one minute tracked:<1m`;
   if (ms < HOUR) {
     const minutes = Math.floor(ms / MINUTE);
@@ -96,7 +111,6 @@ function formatTimeInProgress(ms: number): string {
  * hours would hide most of a short number.
  */
 export function formatTrackedDuration(ms: number): string {
-  if (ms < MINUTE) return ms > 0 ? formatTimeInProgress(ms) : $localize`:Tracked duration of zero minutes:0m`;
   const wholeHours = Math.floor(ms / HOUR);
   const minutes = Math.floor((ms % HOUR) / MINUTE);
   if (!wholeHours) return formatTimeInProgress(ms);
@@ -111,6 +125,7 @@ const hoursWords = (count: number) => icu($localize`:Tracked time in words:{coun
 
 /** Tracked time in words: "less than a minute", "45 minutes", "3 hours 20 minutes", "96 hours". */
 function trackedWords(ms: number): string {
+  if (ms <= 0) return minutesWords(0);
   if (ms < MINUTE) return $localize`:Tracked time in words:less than a minute`;
   const hours = Math.floor(ms / HOUR);
   const minutes = Math.floor((ms % HOUR) / MINUTE);
@@ -146,20 +161,25 @@ export function isInProgressTooLong(card: TimedCard, now: number, alertDays: num
 /**
  * Tooltip / accessible text. Running: "In progress since 27 Sep (3 days) · 24 hours tracked", plus
  * "past the 7-day alert" once the stint crosses it; the calendar span and the tracked total differ
- * because tracking counts working hours only. Stopped: "96 hours tracked in progress".
+ * because tracking counts working hours only. Outside working hours a running clock also says it is
+ * paused and when it resumes. Stopped: "96 hours tracked in progress".
  */
-function describeTimeInProgress(card: TimedCard, now: number, alertDays: number, trackedMs: number): string {
+function describeTimeInProgress(card: TimedCard, now: number, alertDays: number, trackedMs: number, resumeMs: number | null, timeZone: TimeZone): string {
   const tracked = trackedWords(trackedMs);
   if (!isInProgressRunning(card)) return $localize`:Tooltip on a stopped time-in-progress total, e.g. 96 hours tracked in progress:${tracked}:tracked: tracked in progress`;
   const since = formatDate(card.inProgressSince ?? null);
   const span = calendarWords(currentStintMs(card, now) ?? 0);
-  if (!isInProgressTooLong(card, now, alertDays)) {
-    return $localize`:Tooltip on a running time-in-progress chip:In progress since ${since}:date: (${span}:span:) · ${tracked}:tracked: tracked`;
-  }
-  return icu(
+  const running = isInProgressTooLong(card, now, alertDays)
+    ? icu(
     $localize`:Tooltip on a running time-in-progress chip past the workspace alert:{days, plural, one {In progress since {since} ({span}) · {tracked} tracked, past the #-day alert} other {In progress since {since} ({span}) · {tracked} tracked, past the #-day alert}}`,
     { days: alertDays, since, span, tracked },
-  );
+  )
+    : $localize`:Tooltip on a running time-in-progress chip:In progress since ${since}:date: (${span}:span:) · ${tracked}:tracked: tracked`;
+  if (resumeMs === null) return running;
+  // The hours are the workspace's and the resume time is the viewer's, so name the workspace zone.
+  const resume = formatResume(resumeMs, now);
+  const zone = trackingTimeZone(timeZone);
+  return $localize`:Tooltip on a running time-in-progress chip outside working hours, appended to the running tooltip - zone is an IANA time zone such as Europe/London:${running}:running: · paused outside working hours (weekdays 09:00-17:00 ${zone}:zone:), resumes ${resume}:resume:`;
 }
 
 /** Everything a surface needs to render the time-in-progress chip, or null when there is nothing to show. */
@@ -169,6 +189,12 @@ export type TimeInProgressChip = {
   label: string;
   /** The clock is ticking: accent styling and the progress icon. Stopped totals render muted. */
   running: boolean;
+  /**
+   * Running, but outside working hours, so it adds nothing until `resumesAt` (viewer-local text,
+   * "09:00" or "Mon, 2 Nov, 09:00"). Surfaces show a pause icon so the clock does not look stuck.
+   */
+  paused: boolean;
+  resumesAt: string | null;
   /** The running stint is past its workspace's alert: amber. */
   alert: boolean;
   ms: number;
@@ -177,11 +203,14 @@ export type TimeInProgressChip = {
 export function timeInProgressChip(card: TimedCard, now: number, alertDays: number, timeZone: TimeZone): TimeInProgressChip | null {
   if (!hasTimeInProgress(card)) return null;
   const ms = timeInProgressMs(card, now, timeZone);
+  const resumeMs = pausedUntil(card, now, timeZone);
   return {
     text: formatTimeInProgress(ms),
     // The tooltip and compact text describe the same total; working-hours calculation is costly.
-    label: describeTimeInProgress(card, now, alertDays, ms),
+    label: describeTimeInProgress(card, now, alertDays, ms, resumeMs, timeZone),
     running: isInProgressRunning(card),
+    paused: resumeMs !== null,
+    resumesAt: resumeMs === null ? null : formatResume(resumeMs, now),
     alert: isInProgressTooLong(card, now, alertDays),
     ms,
   };

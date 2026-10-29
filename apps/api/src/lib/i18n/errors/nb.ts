@@ -1,6 +1,7 @@
 import type { ErrorCatalog } from "./source.js";
 
 export const nb: ErrorCatalog = {
+  "external reference already exists": "den eksterne referansen finnes allerede",
   "AI agent access is turned off for this organisation": "Tilgang for KI-agenter er deaktivert for denne organisasjonen",
   "Additional notification destinations are not available on your plan. Upgrade to configure ntfy, Gotify, or a personal webhook.": "Flere varslingsmål er ikke tilgjengelige med abonnementet ditt. Oppgrader for å konfigurere ntfy, Gotify eller en personlig webhook.",
   "All purchased seats are in use. Buy more seats to add this person.": "Alle kjøpte lisenser er i bruk. Kjøp flere for å legge til denne personen.",

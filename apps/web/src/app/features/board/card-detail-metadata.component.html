@@ -1,0 +1,178 @@
+@let vm = model();
+    <div class="row-top">
+      <!-- Move to list -->
+      <!-- Relocated into .panel-subheader below md to save vertical space; the
+           body copy is hidden there. See .detail-section--relocate. -->
+      @if (vm.canEditRole()) {
+      <section class="detail-section detail-section--relocate card-detail-section">
+        <div class="section-label card-detail-section-label">
+          <i aria-hidden="true" [class]="'ti ti-' + (vm.currentList()?.icon || 'list')"></i>
+          &ngsp;<ng-container i18n="Card detail section heading: the list the card is in">List</ng-container>
+        </div>
+        <div class="move-list-wrap">
+          <button type="button" class="move-list-btn" [class.is-active]="vm.moveToListOpen()" [disabled]="!vm.canEdit()" (click)="vm.toggleMoveToList($event)" kTooltip="Move to a different list" i18n-kTooltip>
+            <i aria-hidden="true" [class]="'ti ti-' + (vm.currentList()?.icon || 'list')" [style.color]="vm.currentList()?.color ? 'var(--color-' + vm.currentList()?.color + ')' : null"></i>
+            <span class="move-list-name">{{ vm.currentList()?.name ?? '…' }}</span>
+          </button>
+        </div>
+      </section>
+      }
+
+      <!-- Assigned To -->
+      <section class="detail-section card-detail-section">
+        <div class="section-label card-detail-section-label">
+          <i aria-hidden="true" class="ti ti-users"></i>
+          &ngsp;<ng-container i18n="Card detail section heading">Assigned To</ng-container>
+        </div>
+        <div class="members-row">
+          @for (m of vm.assignedMembers(); track m.userId) {
+          <span class="member-avatar">
+            <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="32" [userId]="m.userId" [workspaceId]="vm.workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt"
+              [profile]="true" [profileActions]="vm.assigneeProfileActions().get(m.userId) ?? null" />
+          </span>
+          }
+          @if (vm.canEditRole()) {
+          <div class="member-picker-wrap">
+            <button type="button" class="member-add-btn" [class.is-active]="vm.memberPickerOpen()" [disabled]="!vm.canEdit()" (click)="vm.toggleMemberPicker($event)" aria-label="Add member" i18n-aria-label="Button: assign a person to the card" kTooltip="Add member" i18n-kTooltip="Button: assign a person to the card">
+              <i aria-hidden="true" class="ti ti-plus"></i>
+            </button>
+            @if (vm.memberPickerOpen()) {
+            <k-member-picker [members]="vm.members()" [selectedIds]="vm.assigneeIds()" [currentUserId]="vm.currentUserId()" [workspaceId]="vm.workspaceId()" (toggle)="vm.toggleAssignee($event)" (close)="vm.memberPickerOpen.set(false)" />
+            }
+          </div>
+          } @else if (!vm.assignedMembers().length) {
+          <span class="readonly-empty" i18n="Empty state: nobody is assigned to the card">No members</span>
+          }
+        </div>
+      </section>
+
+      <!-- Dates: planned start → due. The start is date-only and feeds the Timeline bar; the due
+           date keeps its time slot. Both reuse the due badge styling so the row reads as one span. -->
+      <section class="detail-section card-detail-section">
+        <div class="section-label card-detail-section-label">
+          <i aria-hidden="true" class="ti ti-calendar-event"></i>
+          &ngsp;<ng-container i18n="Card detail section heading - the card's start and due dates">Dates</ng-container>
+        </div>
+        <div class="due-date-row">
+          @if (vm.timelineEnabled()) {
+          <div class="due-picker-wrap start-picker-wrap">
+            @if (vm.hasStartDate()) {
+            @if (vm.canEditRole()) {
+            <button type="button" class="due-badge due-badge-btn" [class.is-active]="vm.startDatePickerOpen()" [disabled]="!vm.canEdit()" (click)="vm.toggleStartDatePicker($event)" aria-label="Change start date" i18n-aria-label kTooltip="Change start date" i18n-kTooltip>
+              <i aria-hidden="true" class="ti ti-calendar-time"></i>
+              <span class="due-badge-kind" i18n="Prefix on the card's start date badge, e.g. Start 12 Oct">Start</span>
+              {{ vm.startDateText() }}
+              <span type="button" class="due-clear" (click)="vm.setStartDate(''); $event.stopPropagation()" kTooltip="Clear start date" i18n-kTooltip>
+                <i aria-hidden="true" class="ti ti-x"></i>
+              </span>
+            </button>
+            } @else {
+            <span class="due-badge">
+              <i aria-hidden="true" class="ti ti-calendar-time"></i>
+              <span class="due-badge-kind" i18n="Prefix on the card's start date badge, e.g. Start 12 Oct">Start</span>
+              {{ vm.startDateText() }}
+            </span>
+            }
+            } @else if (vm.canEditRole()) {
+            <button type="button" class="due-add-btn" [class.is-active]="vm.startDatePickerOpen()" [disabled]="!vm.canEdit()" (click)="vm.toggleStartDatePicker($event)" aria-label="Set start date" i18n-aria-label kTooltip="Add start date" i18n-kTooltip>
+              <i aria-hidden="true" class="ti ti-plus"></i>&ngsp;<ng-container i18n="Button">Add start date</ng-container>
+            </button>
+            }
+            @if (vm.startDatePickerOpen() && vm.canEditRole()) {
+            <!-- A start after the due date is a 400 from the API, so the picker never offers one. -->
+            <k-date-picker [value]="vm.startDateInputValue()" [showSlots]="false" [max]="vm.dueDateLocalDate()" (applyDate)="vm.setStartDate($event.value)" (clear)="vm.setStartDate('')" (close)="vm.startDatePickerOpen.set(false)" />
+            }
+          </div>
+          }
+          @if (vm.hasStartDate() && vm.hasDueDate()) {
+          <i class="ti ti-arrow-right due-arrow" aria-hidden="true"></i>
+          }
+          <div class="due-picker-wrap">
+            @if (vm.hasDueDate()) {
+            @if (vm.canEditRole()) {
+            <button type="button" class="due-badge due-badge-btn" [class.overdue]="vm.dueDateOverdue()" [class.due-soon]="vm.dueDateDueSoon()" [class.is-active]="vm.dueDatePickerOpen()" [disabled]="!vm.canEdit()" (click)="vm.toggleDueDatePicker($event)" aria-label="Change due date" i18n-aria-label kTooltip="Change due date" i18n-kTooltip>
+              <i aria-hidden="true" class="ti ti-calendar-event"></i>
+              @if (vm.hasStartDate()) {
+              <span class="due-badge-kind" i18n="Prefix on the card's due date badge when a start date is also shown, e.g. Due 16 Oct">Due</span>
+              }
+              {{ vm.dueDateText() }}
+              <span type="button" class="due-clear" (click)="vm.setDueDate(''); $event.stopPropagation()" kTooltip="Clear due date" i18n-kTooltip>
+                <i aria-hidden="true" class="ti ti-x"></i>
+              </span>
+            </button>
+            } @else {
+            <span class="due-badge" [class.overdue]="vm.dueDateOverdue()" [class.due-soon]="vm.dueDateDueSoon()">
+              <i aria-hidden="true" class="ti ti-calendar-event"></i>
+              @if (vm.hasStartDate()) {
+              <span class="due-badge-kind" i18n="Prefix on the card's due date badge when a start date is also shown, e.g. Due 16 Oct">Due</span>
+              }
+              {{ vm.dueDateText() }}
+            </span>
+            }
+            } @else if (vm.canEditRole()) {
+            <button type="button" class="due-add-btn" [class.is-active]="vm.dueDatePickerOpen()" [disabled]="!vm.canEdit()" (click)="vm.toggleDueDatePicker($event)" aria-label="Set due date" i18n-aria-label kTooltip="Add due date" i18n-kTooltip>
+              <i aria-hidden="true" class="ti ti-plus"></i>&ngsp;<ng-container i18n="Button">Add due date</ng-container>
+            </button>
+            } @else {
+            <span class="readonly-empty" i18n>No due date</span>
+            }
+            @if (vm.dueDatePickerOpen() && vm.canEditRole()) {
+            <!-- Nothing is disabled here: a due date before the start clamps the start server-side. -->
+            <k-date-picker [value]="vm.dueDateInputValue()" [slot]="vm.dueDateSlot()" (applyDate)="vm.setDueDate($event.value, $event.slot)" (clear)="vm.setDueDate('')" (close)="vm.dueDatePickerOpen.set(false)" />
+            }
+          </div>
+          @if (vm.durationHint(); as hint) {
+          <span class="due-duration-hint">{{ hint }}</span>
+          }
+        </div>
+      </section>
+
+      <!-- Labels -->
+      <section class="detail-section card-detail-section">
+        <div class="section-label card-detail-section-label">
+          <i aria-hidden="true" class="ti ti-tag"></i>
+          &ngsp;<ng-container i18n="Card detail section heading">Labels</ng-container>
+        </div>
+        <div class="label-chips">
+          @for (label of vm.assignedLabels(); track label.id) {
+          @if (vm.canEditRole()) {
+          <button type="button" class="label-chip is-active" [disabled]="!vm.canEdit()" [style.--label-color]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'" (click)="vm.toggleLabel(label.id)" [kTooltip]="vm.labels.removeLabel(label.name)">
+            {{ label.name }}
+          </button>
+          } @else {
+          <span class="label-chip is-active" [style.--label-color]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'">
+            {{ label.name }}
+          </span>
+          }
+          }
+          @if (vm.canEditRole()) {
+          <div class="label-picker-wrap">
+            <button type="button" class="label-add-btn" [class.is-active]="vm.labelPickerOpen()" [disabled]="!vm.canEdit()" (click)="vm.toggleLabelPicker($event)" aria-label="Add label" i18n-aria-label kTooltip="Add or remove labels" i18n-kTooltip>
+              <i aria-hidden="true" class="ti ti-plus"></i>
+            </button>
+            @if (vm.labelPickerOpen()) {
+            <k-label-picker [labels]="vm.cardLabels()" [selectedIds]="vm.cardLabelIds()" [canCreate]="vm.canCreateLabels()" (toggle)="vm.toggleLabel($event)" (create)="vm.createLabel($event)" (close)="vm.labelPickerOpen.set(false)" />
+            }
+          </div>
+          } @else if (!vm.assignedLabels().length) {
+          <span class="readonly-empty" i18n>No labels</span>
+          }
+        </div>
+      </section>
+
+      <!-- Board: shows the card's source board, useful when viewing cards from cross-board views -->
+      <!-- Relocated into .panel-subheader below md to save vertical space. -->
+      @if (vm.boardSummary(); as board) {
+      <section class="detail-section detail-section--relocate card-detail-section">
+        <div class="section-label card-detail-section-label">
+          <i aria-hidden="true" class="ti ti-layout-kanban"></i>
+          &ngsp;<ng-container i18n="Card detail section heading: the board the card belongs to">Board</ng-container>
+        </div>
+        <button type="button" class="card-board-badge is-clickable" (click)="vm.goToBoard()" [attr.aria-label]="vm.labels.goToBoard(board.name)">
+          <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <span class="card-board-name">{{ board.name }}</span>
+        </button>
+      </section>
+      }
+    </div>
+

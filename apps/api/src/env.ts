@@ -22,7 +22,7 @@ function matchesSha256(value: string, expectedSha256: string) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-function isLocalUrl(value: string) {
+export function isLocalUrl(value: string) {
   try {
     const hostname = new URL(value).hostname.toLowerCase();
     return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
@@ -267,6 +267,9 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   // bind installations without them.
   GITHUB_APP_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   GITHUB_APP_CLIENT_SECRET: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  // Webhook secret of the same GitHub App. Pull request webhooks link pull requests to the cards
+  // they name and are refused without it. Apps bootstrapped in-app store their own secret instead.
+  GITHUB_APP_WEBHOOK_SECRET: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   TRELLO_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   SMTP_HOST: z.preprocess(emptyToUndefined, z.string().optional()),
   SMTP_PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(65535).optional()),

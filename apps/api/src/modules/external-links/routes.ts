@@ -4,25 +4,8 @@ import { and, desc, eq, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
-import { badRequest, forbidden, notFound } from "../../lib/errors.js";
-import { upsertExternalLink } from "../../lib/external-links.js";
-
-async function assertExternalLinkWriteAccess(
-  req: Parameters<FastifyInstance["authenticate"]>[0],
-  workspaceId: string,
-) {
-  if (req.auth.authKind === "apiKey" && req.auth.apiKeyKind !== "personal") {
-    // External links are integration-maintained sync metadata: write-scoped workspace API keys may
-    // mutate them, while human users still need workspace-admin power because this is workspace-scoped.
-    await assertWorkspaceAccess(req.auth, workspaceId);
-    if ((req.auth.apiKeyScope ?? "read") === "read") throw forbidden();
-    return;
-  }
-
-  // Personal credentials follow their owner's permissions, like a human request. Only a workspace
-  // admin may mutate this workspace-scoped integration metadata.
-  await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-}
+import { badRequest, notFound } from "../../lib/errors.js";
+import { assertExternalLinkWriteAccess, upsertExternalLink } from "../../lib/external-links.js";
 
 async function assertEntityBelongsToWorkspace(
   workspaceId: string,
@@ -128,7 +111,7 @@ export async function externalLinkRoutes(app: FastifyInstance) {
   app.post("/workspaces/:id/external-links", async (req): Promise<dto.ExternalLinkRow> => {
     const { id: workspaceId } = req.params as { id: string };
     const body = dto.upsertExternalLinkBody.parse(req.body);
-    await assertExternalLinkWriteAccess(req, workspaceId);
+    await assertExternalLinkWriteAccess(req.auth, workspaceId);
     // Built-in mirror links are worker-owned idempotency metadata. Reserving the namespace prevents
     // an integration key from redirecting a source entity onto an arbitrary target entity.
     if (body.provider.startsWith("mirror:")) throw badRequest("the mirror provider namespace is reserved");
@@ -138,7 +121,7 @@ export async function externalLinkRoutes(app: FastifyInstance) {
 
   app.delete("/workspaces/:workspaceId/external-links/:linkId", async (req, reply) => {
     const { workspaceId, linkId } = req.params as { workspaceId: string; linkId: string };
-    await assertExternalLinkWriteAccess(req, workspaceId);
+    await assertExternalLinkWriteAccess(req.auth, workspaceId);
     const [row] = await db
       .delete(externalLinks)
       .where(and(eq(externalLinks.id, linkId), eq(externalLinks.workspaceId, workspaceId)))

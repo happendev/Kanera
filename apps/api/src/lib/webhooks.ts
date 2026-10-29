@@ -298,7 +298,8 @@ export async function enqueueWebhookDeliveriesForOutboxEvent(
     if (!hasPaidPlanEntitlement(org?.plan, org?.billingStatus)) return;
   }
 
-  const body = event.payload as unknown;
+  // Revision stamps serve the web client's read journal; integrations receive the entity payload alone.
+  const body = withoutRevisionStamps(event.payload);
   const webhookPayload: WebhookPayload = {
     id: event.id,
     type: String(event.eventType),
@@ -577,4 +578,10 @@ async function claimWebhookDeliveries(): Promise<WebhookDelivery[]> {
       .where(inArray(webhookDeliveries.id, rows.map((row) => row.id)))
       .returning();
   });
+}
+
+function withoutRevisionStamps(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const { detailRevision: _detailRevision, detailRevisions: _detailRevisions, ...rest } = payload as Record<string, unknown>;
+  return rest;
 }
