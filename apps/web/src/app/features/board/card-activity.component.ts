@@ -67,6 +67,15 @@ function cardFeedSortPriority(item: CardFeedItem): number {
   return item.type === "activity" && item.data.entityType === "card" && item.data.action === "created" ? 0 : 1;
 }
 
+// Work an AI agent did on the card: comments and changes it made for a person, plus run outcomes.
+// A stalled run's outcome is recorded by the system rather than the agent, but it is still the
+// agent's run, so it belongs here too.
+function isAgentFeedItem(item: CardFeedItem): boolean {
+  return item.type === "comment"
+    ? item.data.authorKind === "agent"
+    : item.data.actorKind === "agent" || item.data.action === "agentRun:ended";
+}
+
 // Precomputed render shape for a feed row. The activity-only fields (html, actorText, isSystem)
 // and the relative time are pure functions of immutable item data, so deriving them once in a
 // computed avoids re-running the ~170-line activityText switch / Date parsing for every row on
@@ -151,7 +160,7 @@ export class CardActivityComponent {
   readonly feedLoadingMore = signal(false);
   readonly feedHasMore = computed(() => this.feedNextCursor() !== null);
   readonly feedLoadMoreSentinel = viewChild<ElementRef<HTMLElement>>("feedLoadMoreSentinel");
-  readonly feedFilter = signal<"all" | "comments">("all");
+  readonly feedFilter = signal<"all" | "comments" | "agents">("all");
   readonly commentSearchQuery = signal("");
   readonly commentSearchOpen = signal(false);
   readonly selectedDescriptionDiffId = signal<string | null>(null);
@@ -176,12 +185,24 @@ export class CardActivityComponent {
       item.type !== "activity" || (item.data.coalesceKey !== "card:mirrorSync" && item.data.action !== "agentRun:started"),
     ),
   );
+  // The Agents filter only appears once an agent has written a comment on the card; an agent that
+  // only changed fields doesn't earn a tab. If that last comment goes away while the tab is
+  // selected, the feed falls back to All rather than leaving a hidden filter applied.
+  readonly showAgentsFilter = computed(() =>
+    this.renderableFeedItems().some((item) => item.type === "comment" && item.data.authorKind === "agent"),
+  );
+  readonly activeFeedFilter = computed(() =>
+    this.feedFilter() === "agents" && !this.showAgentsFilter() ? "all" : this.feedFilter(),
+  );
   readonly filteredFeedItems = computed(() => {
     const q = this.commentSearchQuery().trim().toLowerCase();
     const renderableItems = this.renderableFeedItems();
-    const visibleItems = this.feedFilter() === "comments"
+    const filter = this.activeFeedFilter();
+    const visibleItems = filter === "comments"
       ? renderableItems.filter((item) => item.type === "comment")
-      : renderableItems;
+      : filter === "agents"
+        ? renderableItems.filter(isAgentFeedItem)
+        : renderableItems;
     if (!q) return visibleItems;
     return visibleItems.filter((item) => item.type === "comment" && item.data.body.toLowerCase().includes(q));
   });

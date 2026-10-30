@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import type { ListNotificationsQuery, NotificationGroupCountsResponse, NotificationWorkspaceRule, NotificationsPage, PersonalNotificationTestResponse, PushTestResponse, WatcherUser } from "@kanera/shared/dto";
-import { activityEvents, boards, boardWatchers, cardChecklistItems, cardKeyPrefixReservations, cards, cardWatchers, lists, notificationSettings, notifications, PUSH_QUEUE_STATUS, pushQueue, userNotificationWorkspaceRules, users } from "@kanera/shared/schema";
+import { activityEvents, boards, boardWatchers, cardChecklistItems, cardKeyPrefixReservations, cards, cardWatchers, lists, NOTIFICATION_REASON, notificationSettings, notifications, PUSH_QUEUE_STATUS, pushQueue, userNotificationWorkspaceRules, users } from "@kanera/shared/schema";
 import { and, asc, desc, eq, exists, gte, ilike, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
@@ -141,7 +141,7 @@ async function validatePersonalDestination(url: string, baseUrl: boolean): Promi
 
 function notificationFeedConditions(
   req: FastifyRequest,
-  query: Pick<ListNotificationsQuery, "includeRead" | "agentOnly" | "boardId" | "actorId" | "q">,
+  query: Pick<ListNotificationsQuery, "includeRead" | "agentOnly" | "mentionsOnly" | "boardId" | "actorId" | "q">,
   options?: { includeRead?: boolean; cursor?: { createdAt: Date; id: string } | null },
 ): SQL[] {
   const includeRead = options?.includeRead ?? query.includeRead;
@@ -154,6 +154,7 @@ function notificationFeedConditions(
   if (query.boardId) conditions.push(eq(notifications.boardId, query.boardId));
   if (query.actorId) conditions.push(eq(activityEvents.actorId, query.actorId));
   if (query.agentOnly) conditions.push(eq(activityEvents.actorKind, "agent"));
+  if (query.mentionsOnly) conditions.push(eq(notifications.reason, NOTIFICATION_REASON.MENTIONED));
   if (query.q) {
     const pattern = notificationSearchPattern(query.q);
     const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.q.trim());
@@ -290,25 +291,24 @@ export async function notificationsRoutes(app: FastifyInstance) {
     return { count };
   });
 
-  // Whether the drawer should offer an Agent tab at all, and its unread badge. `total` deliberately
-  // ignores the seven-day read window used by the feed: once a person has ever received agent
-  // activity the tab stays, so it never flickers in and out as old rows age past the window.
-  app.get("/notifications/agent-counts", async (req): Promise<dto.NotificationAgentCounts> => {
+  // Whether the drawer should offer an Agent or Mentions tab at all, and its unread badge. `total`
+  // deliberately ignores the seven-day read window used by the feed: once a person has ever received
+  // such a notification the tab stays, so it never flickers in and out as old rows age past the window.
+  async function feedCounts(userId: string, condition: SQL): Promise<dto.NotificationFeedCounts> {
     const [row] = await db
       .select({
         total: sql<number>`count(*)::int`,
         unread: sql<number>`count(*) filter (where ${notifications.readAt} is null)::int`,
       })
       .from(notifications)
-      .innerJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
+      .leftJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
       .leftJoin(cards, eq(cards.id, notifications.cardId))
-      .where(and(
-        eq(notifications.userId, req.auth.sub),
-        eq(activityEvents.actorKind, "agent"),
-        inboxVisibleNotificationCondition(),
-      ));
+      .where(and(eq(notifications.userId, userId), condition, inboxVisibleNotificationCondition()));
     return { total: row?.total ?? 0, unread: row?.unread ?? 0 };
-  });
+  }
+
+  app.get("/notifications/agent-counts", (req) => feedCounts(req.auth.sub, eq(activityEvents.actorKind, "agent")));
+  app.get("/notifications/mention-counts", (req) => feedCounts(req.auth.sub, eq(notifications.reason, NOTIFICATION_REASON.MENTIONED)));
 
   app.get("/notifications/org-unread-counts", async (req) => {
     return db
@@ -786,13 +786,14 @@ export async function notificationsRoutes(app: FastifyInstance) {
           .where(and(eq(activityEvents.id, notifications.activityId), eq(activityEvents.actorKind, "agent"))),
       ));
     }
+    if (body.mentionsOnly) conditions.push(eq(notifications.reason, NOTIFICATION_REASON.MENTIONED));
     const updated = await db
       .update(notifications)
       .set({ readAt })
       .where(and(...conditions))
       .returning({ id: notifications.id });
     const readIds = updated.map((r) => r.id);
-    if (body.agentOnly) {
+    if (body.agentOnly || body.mentionsOnly) {
       // Per-id read event, like the board-scoped read, so sibling tabs re-sync every badge and
       // keep the user's other unread notifications.
       if (readIds.length > 0) emitToUser(req.auth.sub, "notification:read", { notificationIds: readIds, readAt: readAt.toISOString() });

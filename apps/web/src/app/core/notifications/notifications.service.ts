@@ -1,5 +1,5 @@
-import { Injectable, computed, DestroyRef, effect, inject, signal } from "@angular/core";
-import type { CardFollowState, NotificationGroupBy, NotificationGroupCountsResponse, NotificationRow, NotificationsPage, WatcherUser, NotificationAgentCounts, WireCardReminder, WireCardReminderListItem } from "@kanera/shared/dto";
+import { Injectable, computed, DestroyRef, effect, inject, signal, type WritableSignal } from "@angular/core";
+import type { CardFollowState, NotificationGroupBy, NotificationGroupCountsResponse, NotificationRow, NotificationsPage, WatcherUser, NotificationFeedCounts, WireCardReminder, WireCardReminderListItem } from "@kanera/shared/dto";
 import { SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
 import { ApiClient } from "../api/api.client";
 import { AuthService } from "../auth/auth.service";
@@ -29,10 +29,26 @@ interface ActiveCardViewEntry {
   updatedAt: number;
 }
 
-export type NotificationFeedMode = "unread" | "agent" | "all";
+export type NotificationFeedMode = "unread" | "mentions" | "agent" | "all";
 
-function isAgentNotification(notification: NotificationRow): boolean {
-  return notification.activity?.actorKind === "agent";
+/**
+ * Tabs that list one slice of the inbox, read and unread, each with its own cache, cursor and badge.
+ * `matches` must agree with the API's filter for `param`: rows arriving over the socket are routed
+ * into these caches client-side.
+ */
+type FilteredFeedMode = Extract<NotificationFeedMode, "mentions" | "agent">;
+const FILTERED_FEEDS: Record<FilteredFeedMode, { param: string; countsPath: string; matches: (notification: NotificationRow) => boolean }> = {
+  mentions: { param: "mentionsOnly", countsPath: "/notifications/mention-counts", matches: (n) => n.reason === "mentioned" },
+  agent: { param: "agentOnly", countsPath: "/notifications/agent-counts", matches: (n) => n.activity?.actorKind === "agent" },
+};
+const FILTERED_FEED_MODES = Object.keys(FILTERED_FEEDS) as FilteredFeedMode[];
+
+function isFilteredFeed(mode: NotificationFeedMode): mode is FilteredFeedMode {
+  return mode in FILTERED_FEEDS;
+}
+
+function emptyFeedSignals<T>(value: () => T): Record<FilteredFeedMode, WritableSignal<T>> {
+  return { mentions: signal(value()), agent: signal(value()) };
 }
 
 @Injectable({ providedIn: "root" })
@@ -46,21 +62,25 @@ export class NotificationsService {
   readonly unreadCount = signal<number>(0);
   readonly nextCursor = computed(() => {
     const mode = this.feedMode();
-    return mode === "agent" ? this.agentNextCursor() : mode === "all" ? this.allNextCursor() : this.unreadNextCursor();
+    return isFilteredFeed(mode) ? this.filteredNextCursor[mode]() : mode === "all" ? this.allNextCursor() : this.unreadNextCursor();
   });
   readonly hasMore = computed(() => this.nextCursor() !== null);
   readonly loading = signal<boolean>(false);
   readonly loadError = signal<string | null>(null);
   readonly initialised = signal<boolean>(false);
   /**
-   * Which drawer tab is active. `unread` and `all` are read-state views; `agent` is the review
-   * queue of everything AI agents did for the viewer (read and unread), which only exists once
-   * such a notification has ever arrived so people without an agent never see the tab.
+   * Which drawer tab is active. `unread` and `all` are read-state views; `mentions` is everywhere
+   * someone @-mentioned the viewer and `agent` the review queue of everything AI agents did for
+   * them (both read and unread). Each filtered tab only exists once such a notification has ever
+   * arrived, so a solo user never sees Mentions and people without an agent never see Agent.
    */
   readonly feedMode = signal<NotificationFeedMode>("unread");
   readonly includeRead = computed(() => this.feedMode() !== "unread");
-  readonly agentCounts = signal<NotificationAgentCounts>({ total: 0, unread: 0 });
+  private readonly feedCounts = emptyFeedSignals<NotificationFeedCounts>(() => ({ total: 0, unread: 0 }));
+  readonly agentCounts = this.feedCounts.agent;
+  readonly mentionCounts = this.feedCounts.mentions;
   readonly hasAgentNotifications = computed(() => this.agentCounts().total > 0 || this.feedMode() === "agent");
+  readonly hasMentionNotifications = computed(() => this.mentionCounts().total > 0 || this.feedMode() === "mentions");
   readonly online = this.sockets.displayedOnline;
   readonly boardUnreadCounts = signal<Record<string, number>>({});
   readonly organisationUnreadCounts = signal<Record<string, number>>({});
@@ -92,10 +112,10 @@ export class NotificationsService {
   private detach: (() => void) | null = null;
   private readonly unreadItems = signal<NotificationRow[]>([]);
   private readonly allItems = signal<NotificationRow[]>([]);
-  private readonly agentItems = signal<NotificationRow[]>([]);
+  private readonly filteredItems = emptyFeedSignals<NotificationRow[]>(() => []);
   private readonly unreadNextCursor = signal<string | null>(null);
   private readonly allNextCursor = signal<string | null>(null);
-  private readonly agentNextCursor = signal<string | null>(null);
+  private readonly filteredNextCursor = emptyFeedSignals<string | null>(() => null);
   private readonly activeCardBoards = signal<Record<string, string>>({});
   private readonly createdCardWatches = new Set<string>();
   private readonly activeCardViewerId = `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -169,9 +189,11 @@ export class NotificationsService {
     this.feedMode.set("unread");
     this.unreadItems.set([]);
     this.allItems.set([]);
-    this.agentItems.set([]);
-    this.agentNextCursor.set(null);
-    this.agentCounts.set({ total: 0, unread: 0 });
+    for (const mode of FILTERED_FEED_MODES) {
+      this.filteredItems[mode].set([]);
+      this.filteredNextCursor[mode].set(null);
+      this.feedCounts[mode].set({ total: 0, unread: 0 });
+    }
     this.unreadCount.set(0);
     this.boardUnreadCounts.set({});
     this.organisationUnreadCounts.set({});
@@ -219,9 +241,10 @@ export class NotificationsService {
     await this.refreshCount<{ count: number }>("/notifications/unread-count", ({ count }) => this.unreadCount.set(count));
   }
 
-  async refreshAgentCounts(): Promise<void> {
-    await this.refreshCount<NotificationAgentCounts>("/notifications/agent-counts", (counts) =>
-      this.agentCounts.set({ total: counts.total ?? 0, unread: counts.unread ?? 0 }));
+  async refreshFeedCounts(): Promise<void> {
+    await Promise.all(FILTERED_FEED_MODES.map((mode) =>
+      this.refreshCount<NotificationFeedCounts>(FILTERED_FEEDS[mode].countsPath, (counts) =>
+        this.feedCounts[mode].set({ total: counts.total ?? 0, unread: counts.unread ?? 0 }))));
   }
 
   async refreshOrganisationUnreadCounts(): Promise<void> {
@@ -308,7 +331,7 @@ export class NotificationsService {
     }
   }
 
-  async loadFirstPage({ refreshAgentCounts = true, refreshUserOptions = true } = {}): Promise<void> {
+  async loadFirstPage({ refreshFeedCounts = true, refreshUserOptions = true } = {}): Promise<void> {
     this.feedLoaded = true;
     if (this.pendingReadChanges > 0) return;
     if (!this.online()) {
@@ -327,9 +350,9 @@ export class NotificationsService {
         this.fetchGroupCounts(mode).catch(() => null),
         refreshUserOptions ? this.fetchNotificationUserOptions().catch(() => null) : Promise.resolve(null),
       ]);
-      // Standalone feed loads need Agent tab metadata; reconciliation already fetched it.
+      // Standalone feed loads need Mentions/Agent tab metadata; reconciliation already fetched it.
       if (requestVersion !== this.feedRequestVersion) return;
-      if (refreshAgentCounts) void this.refreshAgentCounts().catch(() => undefined);
+      if (refreshFeedCounts) void this.refreshFeedCounts().catch(() => undefined);
       const visibleItems = page.items.filter((n) => this.isVisibleNotification(n));
       this.setFeed(mode, visibleItems, page.nextCursor);
       if (groupCounts && groupRequestVersion === this.groupRequestVersion) this.setGroupCounts(groupCounts);
@@ -394,7 +417,7 @@ export class NotificationsService {
       limit: String(PAGE_SIZE),
     });
     if (mode !== "unread") params.set("includeRead", "true");
-    if (mode === "agent") params.set("agentOnly", "true");
+    if (isFilteredFeed(mode)) params.set(FILTERED_FEEDS[mode].param, "true");
     if (cursor) params.set("cursor", cursor);
     const boardId = this.boardFilter();
     if (boardId) params.set("boardId", boardId);
@@ -412,7 +435,7 @@ export class NotificationsService {
       timeZone: viewerTimeZone(),
     });
     if (mode !== "unread") params.set("includeRead", "true");
-    if (mode === "agent") params.set("agentOnly", "true");
+    if (isFilteredFeed(mode)) params.set(FILTERED_FEEDS[mode].param, "true");
     const boardId = this.boardFilter();
     if (boardId) params.set("boardId", boardId);
     const actorId = this.userFilter();
@@ -467,14 +490,14 @@ export class NotificationsService {
   }
 
   private feedItems(mode: NotificationFeedMode): NotificationRow[] {
-    if (mode === "agent") return this.agentItems();
+    if (isFilteredFeed(mode)) return this.filteredItems[mode]();
     return mode === "all" ? this.allItems() : this.unreadItems();
   }
 
   private setFeed(mode: NotificationFeedMode, items: NotificationRow[], nextCursor: string | null): void {
-    if (mode === "agent") {
-      this.agentItems.set(items.filter(isAgentNotification));
-      this.agentNextCursor.set(nextCursor);
+    if (isFilteredFeed(mode)) {
+      this.filteredItems[mode].set(items.filter(FILTERED_FEEDS[mode].matches));
+      this.filteredNextCursor[mode].set(nextCursor);
     } else if (mode === "all") {
       this.allItems.set(items);
       this.allNextCursor.set(nextCursor);
@@ -488,10 +511,12 @@ export class NotificationsService {
     this.feedRequestVersion += 1;
     this.unreadItems.set([]);
     this.allItems.set([]);
-    this.agentItems.set([]);
     this.unreadNextCursor.set(null);
     this.allNextCursor.set(null);
-    this.agentNextCursor.set(null);
+    for (const mode of FILTERED_FEED_MODES) {
+      this.filteredItems[mode].set([]);
+      this.filteredNextCursor[mode].set(null);
+    }
     this.groupCounts.set({});
   }
 
@@ -617,7 +642,7 @@ export class NotificationsService {
         this.incrementCardUnreadCount(target.cardId);
       }
       this.unreadCount.update((c) => c + targets.length);
-      this.adjustAgentUnread(targets.filter(isAgentNotification).length);
+      this.adjustFeedUnread(targets, 1);
     }
   }
 
@@ -636,20 +661,21 @@ export class NotificationsService {
       this.unreadCount.update((c) => Math.max(0, c - 1));
       this.decrementBoardUnreadCardCount(target.boardId, target.cardId);
       this.decrementCardUnreadCount(target.cardId);
-      this.adjustAgentUnread(-Number(isAgentNotification(target)));
+      this.adjustFeedUnread([target], -1);
     }
   }
 
   async markAllRead(): Promise<void> {
     if (!this.online()) return;
-    // On the Agent tab, "Mark all read" means the agent notifications the tab lists, never the
-    // person-to-person ones the user hasn't seen yet.
-    if (this.feedMode() === "agent") return this.markAgentNotificationsRead();
+    // On the Mentions and Agent tabs, "Mark all read" means the notifications the tab lists, never
+    // the rest of the inbox the user hasn't seen yet.
+    const mode = this.feedMode();
+    if (isFilteredFeed(mode)) return this.markFilteredFeedRead(mode);
     const readAt = new Date().toISOString();
     const unreadIds = this.allKnownNotifications().filter((n) => !n.readAt).map((n) => n.id);
     this.applyReadLocal(unreadIds, readAt);
     this.unreadCount.set(0);
-    this.agentCounts.update((counts) => ({ ...counts, unread: 0 }));
+    this.clearFeedUnreadCounts();
     this.boardUnreadCounts.set({});
     this.cardUnreadCounts.set({});
     this.organisationUnreadCounts.set({});
@@ -667,14 +693,15 @@ export class NotificationsService {
     }
   }
 
-  private async markAgentNotificationsRead(): Promise<void> {
-    const unreadIds = this.allKnownNotifications().filter((n) => !n.readAt && isAgentNotification(n)).map((n) => n.id);
+  private async markFilteredFeedRead(mode: FilteredFeedMode): Promise<void> {
+    const { matches, param } = FILTERED_FEEDS[mode];
+    const unreadIds = this.allKnownNotifications().filter((n) => !n.readAt && matches(n)).map((n) => n.id);
     this.applyReadLocal(unreadIds, new Date().toISOString());
-    this.agentCounts.update((counts) => ({ ...counts, unread: 0 }));
+    this.feedCounts[mode].update((counts) => ({ ...counts, unread: 0 }));
 
     const session = this.sessionVersion;
     try {
-      await this.postReadChange(`/notifications/read-all`, { agentOnly: true });
+      await this.postReadChange(`/notifications/read-all`, { [param]: true });
     } catch {
       if (session !== this.sessionVersion) return;
       await this.loadFirstPage().catch(() => undefined);
@@ -712,11 +739,11 @@ export class NotificationsService {
     const loadedUnreadCount = this.allKnownNotifications().filter((n) => n.cardId === cardId && !n.readAt).length;
     const unreadDelta = Math.max(knownCardCount, loadedUnreadCount);
     if (unreadDelta > 0) {
-      this.adjustAgentUnread(-this.allKnownNotifications().filter((n) => n.cardId === cardId && !n.readAt && isAgentNotification(n)).length);
+      this.adjustFeedUnread(this.allKnownNotifications().filter((n) => n.cardId === cardId && !n.readAt), -1);
       const markCardRead = (current: NotificationRow[]) =>
         current.map((n) => (n.cardId === cardId && !n.readAt ? { ...n, readAt } : n)).filter((n) => this.isVisibleNotification(n));
       this.allItems.update(markCardRead);
-      this.agentItems.update(markCardRead);
+      for (const mode of FILTERED_FEED_MODES) this.filteredItems[mode].update(markCardRead);
       this.unreadItems.update((current) => current.filter((n) => n.cardId !== cardId));
       this.unreadCount.update((count) => Math.max(0, count - unreadDelta));
       this.decrementBoardUnreadCount(boardId);
@@ -964,7 +991,7 @@ export class NotificationsService {
       .map((n) => (idSet.has(n.id) && !n.readAt ? { ...n, readAt: readAtDate } : n))
       .filter((n) => this.isVisibleNotification(n));
     this.allItems.update(markRead);
-    this.agentItems.update(markRead);
+    for (const mode of FILTERED_FEED_MODES) this.filteredItems[mode].update(markRead);
     this.unreadItems.update((current) => current.filter((n) => !idSet.has(n.id)));
     for (const row of affected) {
       this.decrementBoardUnreadCardCount(row.boardId, row.cardId);
@@ -972,7 +999,7 @@ export class NotificationsService {
     }
     if (affected.length > 0) {
       this.unreadCount.update((c) => Math.max(0, c - affected.length));
-      this.adjustAgentUnread(-affected.filter(isAgentNotification).length);
+      this.adjustFeedUnread(affected, -1);
     }
   }
 
@@ -982,7 +1009,7 @@ export class NotificationsService {
     const affected = this.knownNotifications(ids).filter((n) => n.readAt).map((n) => ({ ...n, readAt: null }));
     const markUnread = (current: NotificationRow[]) => current.map((n) => (idSet.has(n.id) && n.readAt ? { ...n, readAt: null } : n));
     this.allItems.update(markUnread);
-    this.agentItems.update(markUnread);
+    for (const mode of FILTERED_FEED_MODES) this.filteredItems[mode].update(markUnread);
     for (const row of affected) {
       this.upsertUnreadItem(row);
       this.incrementBoardUnreadCardCount(row.boardId, row.cardId);
@@ -990,17 +1017,31 @@ export class NotificationsService {
     }
     if (affected.length > 0) {
       this.unreadCount.update((c) => c + affected.length);
-      this.adjustAgentUnread(affected.filter(isAgentNotification).length);
+      this.adjustFeedUnread(affected, 1);
     }
   }
 
-  private adjustAgentUnread(delta: number): void {
-    if (delta === 0) return;
-    this.agentCounts.update((counts) => ({ ...counts, unread: Math.max(0, counts.unread + delta) }));
+  /** Moves each filtered tab's unread badge by the rows (just read: -1, just unread: +1) that tab lists. */
+  private adjustFeedUnread(rows: NotificationRow[], direction: 1 | -1): void {
+    for (const mode of FILTERED_FEED_MODES) {
+      const delta = rows.filter(FILTERED_FEEDS[mode].matches).length * direction;
+      if (delta !== 0) this.feedCounts[mode].update((counts) => ({ ...counts, unread: Math.max(0, counts.unread + delta) }));
+    }
+  }
+
+  private clearFeedUnreadCounts(): void {
+    for (const mode of FILTERED_FEED_MODES) this.feedCounts[mode].update((counts) => ({ ...counts, unread: 0 }));
+  }
+
+  private removeFromFeeds(ids: Set<string>): void {
+    const keep = (current: NotificationRow[]) => current.filter((n) => !ids.has(n.id));
+    for (const mode of FILTERED_FEED_MODES) this.filteredItems[mode].update(keep);
+    this.allItems.update(keep);
+    this.unreadItems.update(keep);
   }
 
   private allKnownNotifications(): NotificationRow[] {
-    return this.mergeUniqueById([...this.items(), ...this.unreadItems(), ...this.allItems(), ...this.agentItems()]);
+    return this.mergeUniqueById([...this.items(), ...this.unreadItems(), ...this.allItems(), ...FILTERED_FEED_MODES.flatMap((mode) => this.filteredItems[mode]())]);
   }
 
   private knownNotifications(ids: string[]): NotificationRow[] {
@@ -1010,8 +1051,9 @@ export class NotificationsService {
 
   private upsertNotificationInFeeds(notification: NotificationRow): void {
     this.allItems.update((current) => this.upsertNotification(current, notification).filter((n) => this.isVisibleNotification(n)));
-    if (isAgentNotification(notification)) {
-      this.agentItems.update((current) => this.upsertNotification(current, notification).filter((n) => this.isVisibleNotification(n)));
+    for (const mode of FILTERED_FEED_MODES) {
+      if (!FILTERED_FEEDS[mode].matches(notification)) continue;
+      this.filteredItems[mode].update((current) => this.upsertNotification(current, notification).filter((n) => this.isVisibleNotification(n)));
     }
     if (notification.readAt) {
       this.unreadItems.update((current) => current.filter((n) => n.id !== notification.id));
@@ -1059,9 +1101,7 @@ export class NotificationsService {
     if (this.includeRead() && this.isVisibleNotification(readNotification)) {
       this.upsertNotificationInFeeds(readNotification);
     } else {
-      this.agentItems.update((current) => current.filter((n) => n.id !== notification.id));
-      this.allItems.update((current) => current.filter((n) => n.id !== notification.id));
-      this.unreadItems.update((current) => current.filter((n) => n.id !== notification.id));
+      this.removeFromFeeds(new Set([notification.id]));
     }
     this.requestActiveCardRead(notification.cardId, notification.boardId ?? activeBoardId);
     return true;
@@ -1168,7 +1208,7 @@ export class NotificationsService {
       this.refreshUnreadCount().catch(() => undefined),
       this.refreshBoardUnreadCounts().catch(() => undefined),
       this.refreshCardUnreadCounts().catch(() => undefined),
-      this.refreshAgentCounts().catch(() => undefined),
+      this.refreshFeedCounts().catch(() => undefined),
       this.refreshOrganisationUnreadCounts().catch(() => undefined),
       ...(readActiveCards ? [
         this.loadWatchedCards().catch(() => undefined),
@@ -1185,7 +1225,7 @@ export class NotificationsService {
     if (revision === this.stateRevision && this.feedLoaded) {
       // Read changes cannot change the available actors. Reconnects refresh those options;
       // every reconciliation still refills the feed and its group counts from server truth.
-      await this.loadFirstPage({ refreshAgentCounts: false, refreshUserOptions: readActiveCards || this.userOptionsDirty }).catch(() => undefined);
+      await this.loadFirstPage({ refreshFeedCounts: false, refreshUserOptions: readActiveCards || this.userOptionsDirty }).catch(() => undefined);
     }
   }
 
@@ -1216,8 +1256,10 @@ export class NotificationsService {
           this.unreadCount.update((c) => c + 1);
           this.incrementBoardUnreadCardCount(notification.boardId, notification.cardId);
           this.incrementCardUnreadCount(notification.cardId);
-          // First agent notification ever is what makes the Agent tab appear, so bump the total too.
-          if (isAgentNotification(notification)) this.agentCounts.update((counts) => ({ total: counts.total + 1, unread: counts.unread + 1 }));
+          // The first mention or agent notification ever is what makes its tab appear, so bump the total too.
+          for (const mode of FILTERED_FEED_MODES) {
+            if (FILTERED_FEEDS[mode].matches(notification)) this.feedCounts[mode].update((counts) => ({ total: counts.total + 1, unread: counts.unread + 1 }));
+          }
         }
         if (visible && !alreadyKnown && !notification.readAt && this.shouldPlayAttentionSound(notification)) {
           this.mentionSound.playMention();
@@ -1229,19 +1271,14 @@ export class NotificationsService {
           return;
         }
         if (!this.isVisibleNotification(notification)) {
-          this.agentItems.update((current) => current.filter((n) => n.id !== notification.id));
-          this.allItems.update((current) => current.filter((n) => n.id !== notification.id));
-          this.unreadItems.update((current) => current.filter((n) => n.id !== notification.id));
+          this.removeFromFeeds(new Set([notification.id]));
           return;
         }
         const previous = this.knownNotifications([notification.id])[0];
         this.upsertNotificationInFeeds(previous ? { ...previous, ...notification } : notification);
       },
       [SERVER_EVENTS.NOTIFICATION_DELETED]: ({ notificationIds }) => {
-        const deletedIds = new Set(notificationIds);
-        this.agentItems.update((current) => current.filter((notification) => !deletedIds.has(notification.id)));
-        this.allItems.update((current) => current.filter((notification) => !deletedIds.has(notification.id)));
-        this.unreadItems.update((current) => current.filter((notification) => !deletedIds.has(notification.id)));
+        this.removeFromFeeds(new Set(notificationIds));
       },
       [SERVER_EVENTS.NOTIFICATION_READ]: ({ notificationIds, readAt }) => {
         this.applyReadLocal(notificationIds, readAt);
@@ -1257,7 +1294,7 @@ export class NotificationsService {
         // Compatibility with older servers; current events carry the exact changed ids.
         this.applyReadLocal(this.allKnownNotifications().filter((n) => !n.readAt).map((n) => n.id), readAt);
         this.unreadCount.set(0);
-        this.agentCounts.update((counts) => ({ ...counts, unread: 0 }));
+        this.clearFeedUnreadCounts();
         this.boardUnreadCounts.set({});
         this.cardUnreadCounts.set({});
         this.organisationUnreadCounts.set({});

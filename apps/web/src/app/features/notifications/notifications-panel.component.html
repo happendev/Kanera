@@ -19,27 +19,34 @@
       <span class="title-count">{{ unreadCount() }}</span>
       }
     </div>
+    <!-- Phones only (the toolbar copy is hidden there): up here, the read-state tabs and search get the
+         toolbar's full width. -->
+    <button type="button" class="ghost icon header-mark-all" (click)="markAllRead()" [disabled]="markAllUnreadCount() === 0 || !online()"
+      [attr.aria-label]="markAllReadLabel" [kTooltip]="online() ? markAllReadLabel : offlineTitle">
+      <i aria-hidden="true" class="ti ti-checks"></i>
+    </button>
     <button type="button" class="ghost icon close-btn" cdkFocusInitial (click)="close()" aria-label="Close notifications" i18n-aria-label>
       <i aria-hidden="true" class="ti ti-x"></i>
     </button>
   </header>
 
-  <div class="drawer-toolbar">
+  <div class="drawer-toolbar" [class.is-crowded]="crowdedToolbar()">
     <div class="toolbar-left">
       <k-segmented
         class="toolbar-toggle"
         [options]="readFilterOptions()"
         [value]="feedMode()"
         [showLabels]="true"
-        [equalWidths]="true"
+        [equalWidths]="!crowdedToolbar()"
         size="sm"
         ariaLabel="Read state"
-        i18n-ariaLabel="Label for the Unread / Agent / All notification tabs"
+        i18n-ariaLabel="Label for the Unread / Mentions / Agent / All notification tabs"
         (valueChange)="setReadFilter($any($event))"
       />
       <div class="filter-selects">
         <label class="filter-select-wrap" kTooltip="Group notifications" i18n-kTooltip="Tooltip on the notification grouping menu">
           <i aria-hidden="true" class="ti ti-category"></i>
+          <span class="filter-short-label" aria-hidden="true" i18n="Grouping menu|Short name of the notification grouping menu on phones">Group</span>
           <select class="filter-select" [value]="groupBy()" aria-label="Group notifications" i18n-aria-label="Label for the notification grouping menu" (change)="setGroupBy($any($event.target).value)">
             <option value="day" [selected]="groupBy() === 'day'" i18n="Notification grouping option">Group by day</option>
             <option value="board" [selected]="groupBy() === 'board'" i18n="Notification grouping option">Group by board</option>
@@ -49,6 +56,9 @@
         </label>
         <label class="filter-select-wrap" kTooltip="Filter by board" i18n-kTooltip="Tooltip on the notification board filter">
           <i aria-hidden="true" class="ti ti-layout-kanban"></i>
+          @if (!boardFilter()) {
+          <span class="filter-short-label" aria-hidden="true" i18n="Short name of the notification board filter on phones">Board</span>
+          }
           <select class="filter-select" [class.is-active]="!!boardFilter()" [value]="boardFilter() ?? ''" aria-label="Filter notifications by board" i18n-aria-label (change)="setBoardFilter($any($event.target).value || null)">
             @if (selectedBoardFilterFallbackId(); as boardId) {
             <option [value]="boardId" selected i18n="Board filter option for a board no longer in the list">Selected board</option>
@@ -61,6 +71,9 @@
         </label>
         <label class="filter-select-wrap" kTooltip="Filter by user" i18n-kTooltip="Tooltip on the notification user filter">
           <i aria-hidden="true" class="ti ti-user"></i>
+          @if (!userFilter()) {
+          <span class="filter-short-label" aria-hidden="true" i18n="Short name of the notification user filter on phones">User</span>
+          }
           <select class="filter-select" [class.is-active]="!!userFilter()" [value]="userFilter() ?? ''" aria-label="Filter notifications by user" i18n-aria-label (change)="setUserFilter($any($event.target).value || null)">
             @if (selectedUserFilterFallbackId(); as userId) {
             <option [value]="userId" selected i18n="User filter option for a person no longer in the list">Selected user</option>
@@ -101,6 +114,8 @@
       [text]="filteredEmptyText()">
       <button type="button" class="ghost empty-all-btn" (click)="clearFilters()" i18n="Button: clear the notification filters">Clear filters</button>
     </k-empty-state>
+    } @else if (feedMode() === 'mentions') {
+    <k-empty-state class="drawer-empty" plain icon="at" title="No mentions yet" i18n-title="Empty state title" text="When someone @-mentions you in a comment, it'll show up here." i18n-text="Empty state text" />
     } @else if (feedMode() === 'agent') {
     <k-empty-state class="drawer-empty" plain icon="sparkles" title="No agent activity yet" i18n-title="Empty state title" text="When an AI agent connected to your account changes a card, comments, or starts a run, it'll show up here." i18n-text="Empty state text" />
     } @else if (includeRead()) {
