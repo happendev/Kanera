@@ -3976,6 +3976,41 @@ describe("CardDetailComponent realtime regressions", () => {
     ]);
   });
 
+  it("offers an Agents filter only once an agent has commented on the card", async () => {
+    const fixture = createComponentFixture(CardActivityComponent);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalledTimes(1));
+
+    const trigger = (item: CardFeedItem) => socket.trigger("card:feedItem:created", { boardId: "board-1", cardId: "card-1", item });
+    trigger({ type: "activity", data: createActivity() });
+    trigger({ type: "comment", data: createComment() });
+    trigger({ type: "activity", data: createActivity({ id: "activity-agent", actorKind: "agent", agentName: "Claude" }) });
+    // A stalled run is closed by the system, but the outcome still belongs to the agent's work.
+    trigger({ type: "activity", data: createActivity({ id: "activity-stalled", action: "agentRun:ended", actorKind: "system" }) });
+
+    // Agent changes alone don't earn the tab.
+    expect(fixture.componentInstance.showAgentsFilter()).toBe(false);
+
+    trigger({ type: "comment", data: createComment({ id: "comment-agent", authorKind: "agent", agentName: "Claude" }) });
+
+    expect(fixture.componentInstance.showAgentsFilter()).toBe(true);
+    fixture.componentInstance.feedFilter.set("agents");
+
+    expect(fixture.componentInstance.filteredFeedItems().map((item) => item.data.id).sort()).toEqual(
+      ["activity-agent", "activity-stalled", "comment-agent"],
+    );
+
+    socket.trigger("card:feedItem:deleted", { boardId: "board-1", cardId: "card-1", type: "comment", itemId: "comment-agent" });
+
+    expect(fixture.componentInstance.showAgentsFilter()).toBe(false);
+    expect(fixture.componentInstance.activeFeedFilter()).toBe("all");
+  });
+
   it("hides comment reaction controls for observer viewers", async () => {
     viewerRole.set("observer");
 
