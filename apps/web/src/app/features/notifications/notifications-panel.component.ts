@@ -96,8 +96,14 @@ export class NotificationsPanelComponent {
   readonly includeRead = this.notifications.includeRead;
   readonly feedMode = this.notifications.feedMode;
   readonly agentCounts = this.notifications.agentCounts;
-  /** What "Mark all read" would clear: only agent notifications on the Agent tab. */
-  readonly markAllUnreadCount = computed(() => (this.feedMode() === "agent" ? this.agentCounts().unread : this.unreadCount()));
+  readonly mentionCounts = this.notifications.mentionCounts;
+  /** What "Mark all read" would clear: only the tab's own notifications on the Mentions and Agent tabs. */
+  readonly markAllUnreadCount = computed(() => {
+    const mode = this.feedMode();
+    if (mode === "agent") return this.agentCounts().unread;
+    if (mode === "mentions") return this.mentionCounts().unread;
+    return this.unreadCount();
+  });
   readonly online = this.notifications.online;
   readonly loading = this.notifications.loading;
   readonly loadError = this.notifications.loadError;
@@ -331,16 +337,26 @@ export class NotificationsPanelComponent {
   }
 
   /**
-   * Unread / Agent / All as a segmented control. The pill treatment is the shared one, so this reads
-   * the same as every other switch in the app; `size="sm"` keeps it inside the drawer's dense toolbar
-   * grid, which a 36px control would not fit. The Agent segment exists only once the viewer has ever
-   * received agent activity: people without an agent should never see a tab they cannot fill. Its
-   * label carries the unread agent count so what the agent did is visible from the Unread tab too.
+   * Unread / Mentions / Agent / All as a segmented control. The pill treatment is the shared one, so
+   * this reads the same as every other switch in the app; `size="sm"` keeps it inside the drawer's
+   * dense toolbar grid, which a 36px control would not fit. The Mentions and Agent segments exist only
+   * once the viewer has ever received such a notification: nobody should see a tab they cannot fill.
+   * Their labels carry the tab's unread count so it is visible from the Unread tab too.
    */
   readonly readFilterOptions = computed<SegmentedOption<NotificationFeedMode>[]>(() => {
     const agentUnread = this.agentCounts().unread;
+    const mentionUnread = this.mentionCounts().unread;
     return [
       { id: "unread", label: $localize`:Notification filter tab:Unread` },
+      ...(this.notifications.hasMentionNotifications()
+        ? [{
+          id: "mentions" as const,
+          label: mentionUnread > 0
+            ? $localize`:Notification filter tab with its unread count:Mentions (${mentionUnread > 99 ? "99+" : mentionUnread}:count:)`
+            : $localize`:Notification filter tab - where someone @-mentioned you:Mentions`,
+          tooltip: $localize`:Tooltip on the Mentions notification tab:Where someone @-mentioned you`,
+        }]
+        : []),
       ...(this.notifications.hasAgentNotifications()
         ? [{
           id: "agent" as const,
@@ -353,6 +369,9 @@ export class NotificationsPanelComponent {
       { id: "all", label: $localize`:Notification filter tab:All` },
     ];
   });
+
+  /** Mentions and Agent both showing: four tabs no longer fit beside "Mark all read" (see the .is-crowded styles). */
+  readonly crowdedToolbar = computed(() => this.readFilterOptions().length > 3);
 
   async setReadFilter(value: NotificationFeedMode): Promise<void> {
     await this.notifications.setFeedMode(value);

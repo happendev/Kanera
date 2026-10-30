@@ -115,9 +115,11 @@ describe("NotificationsPanelComponent", () => {
     items: ReturnType<typeof signal<NotificationRow[]>>;
     unreadCount: ReturnType<typeof signal<number>>;
     includeRead: ReturnType<typeof signal<boolean>>;
-    feedMode: ReturnType<typeof signal<"unread" | "agent" | "all">>;
+    feedMode: ReturnType<typeof signal<"unread" | "mentions" | "agent" | "all">>;
     agentCounts: ReturnType<typeof signal<{ total: number; unread: number }>>;
     hasAgentNotifications: ReturnType<typeof signal<boolean>>;
+    mentionCounts: ReturnType<typeof signal<{ total: number; unread: number }>>;
+    hasMentionNotifications: ReturnType<typeof signal<boolean>>;
     online: ReturnType<typeof signal<boolean>>;
     loading: ReturnType<typeof signal<boolean>>;
     loadError: ReturnType<typeof signal<string | null>>;
@@ -179,9 +181,11 @@ describe("NotificationsPanelComponent", () => {
       items: signal<NotificationRow[]>([]),
       unreadCount: signal(0),
       includeRead: signal(false),
-      feedMode: signal<"unread" | "agent" | "all">("unread"),
+      feedMode: signal<"unread" | "mentions" | "agent" | "all">("unread"),
       agentCounts: signal({ total: 0, unread: 0 }),
       hasAgentNotifications: signal(false),
+      mentionCounts: signal({ total: 0, unread: 0 }),
+      hasMentionNotifications: signal(false),
       online: signal(true),
       loading: signal(false),
       loadError: signal<string | null>(null),
@@ -200,7 +204,7 @@ describe("NotificationsPanelComponent", () => {
         service.feedMode.set(value ? "all" : "unread");
         return Promise.resolve();
       }),
-      setFeedMode: vi.fn((mode: "unread" | "agent" | "all") => {
+      setFeedMode: vi.fn((mode: "unread" | "mentions" | "agent" | "all") => {
         service.feedMode.set(mode);
         service.includeRead.set(mode !== "unread");
         return Promise.resolve();

@@ -161,6 +161,9 @@ export const listNotificationsQuery = z.object({
   // The drawer's Agent tab: only notifications whose activity was performed by an AI agent acting
   // for someone. Combines with includeRead so the tab can show the agent's read history too.
   agentOnly: z.preprocess((value) => value === "true" ? true : value === "false" ? false : value, z.boolean()).default(false),
+  // The drawer's Mentions tab: only notifications that exist because someone @-mentioned the viewer
+  // (reason `mentioned`), read and unread, so the tab doubles as a history of who asked for them.
+  mentionsOnly: z.preprocess((value) => value === "true" ? true : value === "false" ? false : value, z.boolean()).default(false),
   boardId: z.uuid().optional(),
   actorId: z.uuid().optional(),
   q: z.string().trim().min(1).max(200).optional(),
@@ -231,9 +234,10 @@ export const markNotificationsReadBody = z.object({
 export type MarkNotificationsReadBody = z.infer<typeof markNotificationsReadBody>;
 
 export const markAllNotificationsReadBody = z.object({
-  // The drawer's Agent tab clears only notifications for changes an AI agent made, matching the
-  // feed's `agentOnly` filter; every other tab clears the whole inbox.
+  // The drawer's Agent and Mentions tabs clear only the notifications they list, matching the feed's
+  // `agentOnly` / `mentionsOnly` filters; every other tab clears the whole inbox.
   agentOnly: z.boolean().default(false),
+  mentionsOnly: z.boolean().default(false),
 });
 export type MarkAllNotificationsReadBody = z.infer<typeof markAllNotificationsReadBody>;
 
@@ -292,8 +296,8 @@ export interface WatcherUser {
   avatarUrl: string | null;
 }
 
-/** Drives the Agent tab in the notifications drawer: hidden entirely while `total` is 0. */
-export interface NotificationAgentCounts {
+/** Drives the Agent and Mentions tabs in the notifications drawer: each is hidden entirely while its `total` is 0. */
+export interface NotificationFeedCounts {
   total: number;
   unread: number;
 }

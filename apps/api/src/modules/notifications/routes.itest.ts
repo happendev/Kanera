@@ -237,14 +237,14 @@ void test("restricted notifications disappear from the inbox and every aggregate
   const f = await seed();
   await db.update(boardMembers).set({ assignedItemsOnly: true }).where(and(eq(boardMembers.boardId, f.publicBoard.id), eq(boardMembers.userId, f.member.id)));
   const headers = { authorization: `Bearer ${f.memberToken}` };
-  const paths = ["/notifications/unread", "/notifications?includeRead=true", "/notifications/unread-count", "/notifications/org-unread-counts", "/notifications/board-unread-counts", "/notifications/card-unread-counts", "/notifications/group-counts", "/notifications/agent-counts", "/notifications/boards", "/notifications/users"];
+  const paths = ["/notifications/unread", "/notifications?includeRead=true", "/notifications/unread-count", "/notifications/org-unread-counts", "/notifications/board-unread-counts", "/notifications/card-unread-counts", "/notifications/group-counts", "/notifications/agent-counts", "/notifications/mention-counts", "/notifications/boards", "/notifications/users"];
   for (const path of paths) {
     const response = await f.app.inject({ method: "GET", url: path, headers });
     assert.equal(response.statusCode, 200, path);
     const body = response.json<Record<string, unknown> | unknown[]>();
     if (Array.isArray(body)) assert.deepEqual(body, [], path);
     else if (path.includes("group-counts")) assert.deepEqual(body.groups, [], path);
-    else if (path.includes("agent-counts")) assert.deepEqual(body, { total: 0, unread: 0 }, path);
+    else if (path.endsWith("-counts") && !path.includes("unread")) assert.deepEqual(body, { total: 0, unread: 0 }, path);
     else if (path.endsWith("unread-count")) assert.equal(body.count, 0, path);
     else { assert.deepEqual(body.items, [], path); assert.equal(body.unreadCount, 0, path); }
   }
@@ -494,6 +494,38 @@ void test("the Agent tab: agentOnly filters to agent-attributed activity and age
   assert.equal(humanUnread?.readAt, null);
   const afterCounts = await f.app.inject({ method: "GET", url: "/notifications/agent-counts", headers: { authorization: `Bearer ${f.memberToken}` } });
   assert.deepEqual(afterCounts.json(), { total: 2, unread: 0 });
+});
+
+void test("the Mentions tab: mentionsOnly filters to @-mentions and mention-counts drives the tab", async () => {
+  const f = await seed();
+  const headers = { authorization: `Bearer ${f.memberToken}` };
+  const before = await f.app.inject({ method: "GET", url: "/notifications/mention-counts", headers });
+  assert.equal(before.statusCode, 200);
+  assert.deepEqual(before.json(), { total: 0, unread: 0 });
+
+  const mention = { userId: f.member.id, cardId: f.publicCard.id, listId: f.publicCard.listId, boardId: f.publicBoard.id, workspaceId: f.workspace.id, reason: "mentioned" as const };
+  const [mentionUnread] = await insertTestNotifications(db, { ...mention, createdAt: new Date(Date.now() + 2000) }).returning();
+  const [mentionRead] = await insertTestNotifications(db, { ...mention, readAt: new Date(), createdAt: new Date(Date.now() + 1000) }).returning();
+
+  const counts = await f.app.inject({ method: "GET", url: "/notifications/mention-counts", headers });
+  assert.deepEqual(counts.json(), { total: 2, unread: 1 });
+
+  // Read-inclusive, and every watching/assigned row in the seed stays out.
+  const tab = await f.app.inject({ method: "GET", url: "/notifications?includeRead=true&mentionsOnly=true", headers });
+  assert.equal(tab.statusCode, 200);
+  assert.deepEqual(tab.json().items.map((n: { id: string }) => n.id), [mentionUnread!.id, mentionRead!.id]);
+
+  const groups = await f.app.inject({ method: "GET", url: `/notifications/group-counts?groupBy=board&includeRead=true&mentionsOnly=true&timeZone=UTC`, headers });
+  assert.deepEqual(groups.json().groups, [{ key: `board:${f.publicBoard.id}`, count: 2 }]);
+
+  // Mark all read from the Mentions tab leaves the rest of the inbox unread.
+  const readAll = await f.app.inject({ method: "POST", url: "/notifications/read-all", headers, payload: { mentionsOnly: true } });
+  assert.equal(readAll.statusCode, 200);
+  assert.deepEqual(readAll.json().readIds, [mentionUnread!.id]);
+  const [otherUnread] = await db.select().from(notifications).where(eq(notifications.id, f.unread.id)).limit(1);
+  assert.equal(otherUnread?.readAt, null);
+  const after = await f.app.inject({ method: "GET", url: "/notifications/mention-counts", headers });
+  assert.deepEqual(after.json(), { total: 2, unread: 0 });
 });
 
 void test("keyset pagination does not skip notifications that share a createdAt across a page boundary", async () => {

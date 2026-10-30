@@ -203,6 +203,7 @@
       "src/app/features/board/table-view/table-view.types.ts",
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/notes/note-editor.component.ts",
+      "src/app/features/notifications/notifications-panel.component.html",
       "src/app/features/share-target/share-target.page.html",
       "src/app/features/workspace-settings/api/api.page.html",
       "src/app/features/workspace-settings/automations/automation-presentation.util.ts",
@@ -7064,6 +7065,7 @@
     "x-files": [
       "src/app/features/account-settings/users/users.page.html",
       "src/app/features/board/description-editor.component.ts",
+      "src/app/features/notifications/notifications-panel.component.html",
       "src/app/features/workspace-settings/fields/fields.page.html"
     ]
   },
@@ -9974,6 +9976,13 @@
   },
   "5674957325491829010": "Feed filter",
   "@5674957325491829010": {
+    "x-files": [
+      "src/app/features/board/card-activity.component.html"
+    ]
+  },
+  "6729916752786542046": "Agents",
+  "@6729916752786542046": {
+    "description": "Activity feed filter: show only comments, changes and run outcomes from AI agents",
     "x-files": [
       "src/app/features/board/card-activity.component.html"
     ]
@@ -20529,7 +20538,7 @@
   },
   "4288896391391303535": "Read state",
   "@4288896391391303535": {
-    "description": "Label for the Unread / Agent / All notification tabs",
+    "description": "Label for the Unread / Mentions / Agent / All notification tabs",
     "x-files": [
       "src/app/features/notifications/notifications-panel.component.html"
     ]
@@ -20537,6 +20546,13 @@
   "2328429285909673722": "Group notifications",
   "@2328429285909673722": {
     "description": "Tooltip on the notification grouping menu",
+    "x-files": [
+      "src/app/features/notifications/notifications-panel.component.html"
+    ]
+  },
+  "5470485117214617946": "Group",
+  "@5470485117214617946": {
+    "description": "Short name of the notification grouping menu on phones",
     "x-files": [
       "src/app/features/notifications/notifications-panel.component.html"
     ]
@@ -20659,6 +20675,20 @@
       "src/app/features/notifications/notifications-panel.component.html"
     ]
   },
+  "3046466695254109621": "No mentions yet",
+  "@3046466695254109621": {
+    "description": "Empty state title",
+    "x-files": [
+      "src/app/features/notifications/notifications-panel.component.html"
+    ]
+  },
+  "7134416187765716121": "When someone @-mentions you in a comment, it'll show up here.",
+  "@7134416187765716121": {
+    "description": "Empty state text",
+    "x-files": [
+      "src/app/features/notifications/notifications-panel.component.html"
+    ]
+  },
   "2607479242157458258": "No agent activity yet",
   "@2607479242157458258": {
     "description": "Empty state title",
@@ -20761,6 +20791,27 @@
   "2290303892563689208": "Kanera support",
   "@2290303892563689208": {
     "description": "Actor name for changes made by Kanera staff",
+    "x-files": [
+      "src/app/features/notifications/notifications-panel.component.ts"
+    ]
+  },
+  "4663215111855593400": "Mentions ({$count})",
+  "@4663215111855593400": {
+    "description": "Notification filter tab with its unread count",
+    "x-files": [
+      "src/app/features/notifications/notifications-panel.component.ts"
+    ]
+  },
+  "6493310206552837004": "Mentions",
+  "@6493310206552837004": {
+    "description": "Notification filter tab - where someone @-mentioned you",
+    "x-files": [
+      "src/app/features/notifications/notifications-panel.component.ts"
+    ]
+  },
+  "137588941545716393": "Where someone @-mentioned you",
+  "@137588941545716393": {
+    "description": "Tooltip on the Mentions notification tab",
     "x-files": [
       "src/app/features/notifications/notifications-panel.component.ts"
     ]

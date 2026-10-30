@@ -696,6 +696,29 @@ describe("NotificationsService", () => {
     expect(service.items().map((n) => n.id)).toEqual(["human-1"]);
   });
 
+  it("routes a live mention into the Mentions tab and marks only mentions read there", async () => {
+    service.initialise();
+    await service.setFeedMode("mentions");
+    expect(service.hasMentionNotifications()).toBe(true);
+    service.unreadCount.set(1);
+    // An agent can @-mention too: the row belongs to both filtered tabs and moves both badges.
+    const agentMention = notification({ id: "agent-mention", cardId: "card-2", reason: "mentioned", activity: { actorKind: "agent" } as NotificationRow["activity"] });
+    socket.trigger("notification:created", { notification: agentMention });
+    socket.trigger("notification:created", { notification: notification({ id: "watching", cardId: "card-3" }) });
+    expect(service.items().map((n) => n.id)).toEqual(["agent-mention"]);
+    expect(service.mentionCounts()).toEqual({ total: 1, unread: 1 });
+    expect(service.agentCounts()).toEqual({ total: 1, unread: 1 });
+
+    await service.markAllRead();
+
+    expect(api.post).toHaveBeenCalledWith("/notifications/read-all", { mentionsOnly: true });
+    expect(service.items()[0]?.readAt).toBeTruthy();
+    expect(service.mentionCounts().unread).toBe(0);
+    expect(service.agentCounts().unread).toBe(0);
+    service.feedMode.set("unread");
+    expect(service.items().map((n) => n.id)).toEqual(["watching"]);
+  });
+
   it("marks only one board's notifications read", async () => {
     seedFeed(service, [
       notification(),

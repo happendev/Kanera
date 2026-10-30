@@ -279,6 +279,13 @@
   @include drawer-chrome.drawer-close-btn;
 }
 
+.header-mark-all {
+  @include drawer-chrome.drawer-close-btn;
+  display: none;
+  // Sits beside the close button rather than in the middle of the space-between header.
+  margin-left: auto;
+}
+
 .drawer-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -388,17 +395,45 @@
   color: var(--text);
 }
 
-// Three equal selects in a narrow drawer leave each about 100px, which clipped every label
-// ("Group b", "All boar"). Below that width grouping takes its own row and the two filters share
-// the next, so every label reads in full; long board/user names still ellipsize.
+.filter-short-label {
+  display: none;
+}
+
+// Three equal selects in a narrow drawer leave each about 90px, which clipped every label
+// ("Group b", "All boar"). Below that width an unset select names just its dimension (Group,
+// Board, User) over its own text, so all three stay on one row at equal widths. A set board or user
+// filter drops the short name and shows the chosen name, so a narrowed list is never disguised.
+// The native picker still lists every option in full.
 @container notif-toolbar (max-width: 440px) {
-  .filter-selects {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .filter-short-label {
+    display: block;
+    position: absolute;
+    left: 24px;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    pointer-events: none;
   }
 
-  .filter-select-wrap:first-child {
-    grid-column: 1 / -1;
+  // Transparent rather than font-size: 0, which desktop Chrome would also apply to the open list.
+  .filter-select-wrap:has(.filter-short-label) .filter-select {
+    color: transparent;
+
+    option {
+      color: var(--text);
+    }
+  }
+
+  // 20px still clears the 10px chevron at right 8px.
+  .filter-select {
+    padding-right: 20px;
   }
 }
 
@@ -407,6 +442,27 @@
   grid-column: 1;
   grid-row: 1;
   justify-self: start;
+}
+
+// Four tabs with counts ("Mentions (12)", "Agent (3)") overflow the first row beside "Mark all
+// read", even on desktop. The tabs take the whole row and size to their own labels, since equal
+// widths would make all four as wide as the longest one, and mark-all moves up beside search.
+// Phones have their own arrangement below, with mark-all in the header.
+.drawer-toolbar.is-crowded {
+  .toolbar-toggle {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    --sg-fill-width: 100%;
+    --sg-fill-flex: 1 1 auto;
+  }
+
+  .notification-search {
+    grid-column: 1;
+  }
+
+  .mark-all-btn {
+    grid-row: 2;
+  }
 }
 
 .mark-all-btn {
@@ -1187,8 +1243,79 @@
     font-size: var(--text-base);
   }
 
+  .filter-short-label {
+    font-size: var(--text-base);
+  }
+
   .mark-all-btn {
     height: var(--h-lg);
+  }
+}
+
+// A plain row's time-and-dot column must not run the card's full height: every line below the
+// first would be squeezed beside empty space under the timestamp. The body's lines join the row
+// grid instead: the first (card key, organisation or breadcrumb) shares its line with
+// the time and dot, and the rest run the full width beneath. Each line takes over the body's
+// stacking, so the card link stays underneath and the board chip stays clickable.
+.notif-item:not(.notif-cluster) {
+  row-gap: 3px;
+
+  .notif-actor {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .notif-aside {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .notif-body {
+    display: contents;
+  }
+
+  .notif-body > * {
+    position: relative;
+    z-index: 2;
+    grid-column: 2 / -1;
+    min-width: 0;
+    pointer-events: none;
+  }
+
+  .notif-body > :first-child {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+// The same for an entry inside a card+day block: its action line shares the timestamp's line and
+// a comment or attachment beneath uses the full width. The entry tray already sits above the card
+// link, so the lines need no stacking of their own.
+.notif-entry {
+  row-gap: 4px;
+
+  .notif-entry-body {
+    display: contents;
+  }
+
+  .notif-entry-body > * {
+    grid-column: 2 / -1;
+    min-width: 0;
+  }
+
+  .notif-entry-body > :first-child {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  > .notif-time {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  // The grid's row gap now separates the action line from the comment.
+  .notif-comment-body {
+    margin-top: 0;
   }
 }
 
@@ -1211,23 +1338,32 @@
     gap: 9px;
   }
 
+
   .notif-cluster-entries {
     padding-left: 12px;
   }
 
-  .mark-all-btn {
-    width: 36px;
-    height: var(--h-lg);
-    padding: 0;
+  // Mark all read lives in the header here, so the tabs and search each get a full-width row.
+  .header-mark-all {
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
-    overflow: hidden;
-    white-space: nowrap;
-    font-size: 0;
+  }
 
-    i {
-      margin: 0;
-      font-size: 15px;
-    }
+  .mark-all-btn {
+    display: none;
+  }
+
+  .toolbar-toggle {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    --sg-fill-width: 100%;
+    --sg-fill-flex: 1 1 auto;
+  }
+
+  // Undoes the crowded layout's room for mark-all beside search.
+  .drawer-toolbar.is-crowded .notification-search {
+    grid-column: 1 / -1;
   }
 }
 
