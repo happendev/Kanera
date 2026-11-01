@@ -7,6 +7,7 @@ import { routes } from "./app.routes";
 import { SignedMediaRecoveryService } from "./core/media/signed-media-recovery.service";
 import { AppTitleStrategy } from "./core/title/app-title.service";
 import { UpdatesService } from "./core/updates/updates.service";
+import { registerAfterFirstScreen } from "./core/updates/sw-registration";
 import { AnalyticsService } from "./core/analytics/analytics.service";
 import type { AnalyticsRuntimeConfig } from "./core/analytics/analytics.types";
 import { AuthService } from "./core/auth/auth.service";
@@ -21,7 +22,7 @@ export const appConfig: ApplicationConfig = {
     { provide: TitleStrategy, useClass: AppTitleStrategy },
     provideServiceWorker("push-worker.js", {
       enabled: environment.production || !isDevMode(),
-      registrationStrategy: "registerWhenStable:5000",
+      registrationStrategy: registerAfterFirstScreen,
     }),
     provideAppInitializer(() => { inject(PwaInstallService).init(); }),
     provideAppInitializer(() => { inject(UpdatesService); }),

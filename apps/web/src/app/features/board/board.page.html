@@ -1,3 +1,5 @@
+<!-- Conditional views keep their existing lifetime; defer their code until the selected branch
+     mounts so a kanban visit does not download every view or the rich-text composer. -->
 @if (state.board(); as board) {
 <div class="board-bg" [class.has-gradient]="!!board.backgroundGradient" [style.--board-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null"></div>
 }
@@ -352,6 +354,7 @@
 <!-- showSearch/showFilterBar off: the page toolbar above owns both for every view, so the table
      renders only what is genuinely table-specific (columns, collapse, breakdown, export). The
      filter inputs stay bound because a single selected list is also what "Add row" creates into. -->
+@defer (on immediate) {
 <k-board-table-view [boardId]="boardId()" [boardName]="state.board()?.name ?? boardFallbackTitle" [workspaceId]="state.board()?.workspaceId ?? null" [cards]="activeCards()" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()"
   [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [filteredCardIds]="filteredCardIds()" [priorityRanksByCard]="viewerPriorityRanks()" [selectedCardId]="openCardId()" [bulkSelectedCardIds]="bulkSelectedCardIds()"
   [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()" [currentUserId]="currentUserId()" [loading]="state.board() === null"
@@ -360,23 +363,32 @@
   (filterValueChange)="onFilterValueChange($event)" (filterOpened)="onFilterOpened()" (completedChange)="applyCompletedRange($event)" (completedClear)="clearCompletedRange()" (archivedChange)="onArchivedChange($event)" (filterClearAll)="clearFilters()"
   (cardCreated)="state.addCard($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)"
   (bulkListSelectionRequested)="onBulkListSelectionRequested($event)" (bulkSelectionCleared)="clearBulkSelection()" (cardDropped)="onCardDrop($event)" />
+}
 } @else if (effectiveView() === 'calendar') {
+@defer (on immediate) {
 <k-board-calendar-view [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"
   (cardOpened)="openCardDetail($event)" />
+}
 } @else if (effectiveView() === 'timeline') {
 <!-- Bars come from this page's cards; only the blocks edges are read by the view itself. -->
+@defer (on immediate) {
 <k-board-timeline-view [scope]="timelineScope()" [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"
   [dependenciesEnabled]="state.dependenciesEnabled()"
   [hideCompleted]="hideCompleted()" (hideCompletedChange)="onHideCompletedChange($event)"
   [preferenceScope]="'board:' + boardId()" [groupBy]="timelineGroupByState.groupBy()" (cardOpened)="openCardDetail($event)" />
+}
 } @else if (effectiveView() === 'dependencies') {
 <!-- The map reads its own graph (chains cross into boards this page never loaded). Search and the
      filter bar still apply: a chain stays while any of this board's cards in it matches. A
      standalone board's workspace is the board itself, so it offers no workspace scope. -->
+@defer (on immediate) {
 <k-dependency-map [boardId]="boardId()" [workspaceId]="state.workspaceKind() === 'board' ? null : (state.board()?.workspaceId ?? null)" [preferenceScope]="'board:' + boardId()" [layoutMode]="dependencyLayoutState.layout()"
   [hostCardIds]="showArchived() ? null : filteredCardIds()" [selectedCardId]="openCardId()" (cardOpened)="openDependencyCard($event)" />
+}
 } @else if (effectiveView() === 'history') {
+@defer (on immediate) {
 <k-work-done-view scope="board" [boardId]="boardId()" [workspaceId]="state.board()?.workspaceId ?? null" [timeZonesByWorkspace]="workDoneTimeZones()" [lists]="state.visibleLists()" [selectedCardId]="openCardId()" [searchQuery]="searchQuery()" [filterLabelIds]="filterLabelIds()" [filterMemberIds]="filterMemberIds()" [filterListIds]="filterListIds()" [filterCfConditions]="filterCfConditions()" [eventTypeFilter]="workDoneEventType()" [layout]="workDoneLayout()" [refreshVersion]="workDoneRefreshVersion()" (cardOpened)="openCardDetail($event)" />
+}
 } @else {
 <k-board #listsEl [tooltip]="offlineTooltip()" (scrolled)="onListsScroll($event)" (backgroundClicked)="onListsBackgroundClick($event)" (cardDragStateChanged)="onCardDragStateChanged($event)" (edgeScrolledRight)="onEdgeScrolledRight()">
   @if (state.board() === null) {
@@ -429,9 +441,11 @@
 }
 
 @if (composerOpen()) {
+@defer (on immediate) {
 <k-card-composer [boardId]="boardId()" [workspaceId]="state.board()?.workspaceId ?? null" [lists]="state.visibleLists()" [labels]="sortedLabels()" [members]="assignableMembers()" [customFields]="filterableCustomFields()"
   [checklistTemplates]="state.checklistTemplates()" [currentUserId]="currentUserId()" [canEdit]="state.canEdit() && !showArchived()" [seed]="composerSeed()"
   (created)="onComposerCreated($event)" (dismissed)="closeComposer()" />
+}
 }
 
 @if (completedPanelOpen()) {

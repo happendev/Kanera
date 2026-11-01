@@ -61,7 +61,7 @@ Use Claude, ChatGPT, Codex, Cursor, or another agent you already work with to pi
 
 An agent opens a run before multi-step work and updates it with a short progress note. Everyone viewing the board sees a live chip on the card; it turns amber when the agent is waiting on a person. Open the card to see the agent, its current work, and when it last reported. A pull request or session link can take you straight to the result.
 
-![Kanera card detail showing a live Claude run with a progress note and agent-attributed comments and finished work in the activity feed](docs/readme-assets/agent-runs.jpg?v=20261025noportfolio)
+![Kanera card detail showing a live Claude run, an agent-attributed comment, and the All, Comments and Agents activity filters](docs/readme-assets/agent-runs.jpg?v=20261030mentionsagents)
 
 When the run ends, its outcome and closing summary stay in the card's activity. Runs that stop reporting are marked stalled after fifteen minutes, so an interrupted agent does not leave work looking active. A blocked run makes the wait visible; the agent should also comment with its question so watchers and assignees are notified.
 
@@ -69,7 +69,7 @@ When the run ends, its outcome and closing summary stay in the card's activity. 
 
 With an OAuth connection, comments and changes show the person the agent acted for plus a **via Claude**, **via Codex**, or other agent badge. That includes browser sign-in through the CLI: name the agent with `kanera auth login --agent "Claude Code"`. Personal API keys attribute actions to their owner without a via badge; workspace and board keys use the key's name.
 
-![Kanera notification drawer on the Agent tab showing a comment on the campaign tracking card attributed to Amelia Hart via Codex](docs/readme-assets/agent-notifications.jpg?v=20261025separators)
+![Kanera notification drawer on the Agent tab showing a comment on the campaign tracking card attributed to Amelia Hart via Codex](docs/readme-assets/agent-notifications.jpg?v=20261030mentionsagents)
 
 Your agent's changes can notify you even though it acts on your behalf. The **Agent** tab brings those updates together, and **Work Done** distinguishes agent output from your own actions. Agents still operate within the connected person's current board permissions, and read-only credentials prevent writes at the server.
 
@@ -197,7 +197,7 @@ Public repository previews work without a GitHub App connection. Connect the App
 
 Review mentions, assignments, comments, due-date changes, and other updates without losing the board context behind them. Group the feed by day, board, or person, narrow it to one board or one colleague, and search it by card, board, or list.
 
-![Kanera notification drawer over a project board](docs/readme-assets/notifications.jpg?v=20261025separators)
+![Kanera notification drawer over a project board](docs/readme-assets/notifications.jpg?v=20261030mentionsagents)
 
 Then decide where each notification type reaches you: email, browser push, ntfy, Gotify, or a signed webhook of your own. Per-workspace rules pause or narrow a single noisy workspace without weakening your account defaults, and the in-app drawer always keeps the complete history regardless of what is switched off elsewhere.
 

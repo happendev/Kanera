@@ -23,7 +23,7 @@ import type { ColorToken } from "@kanera/shared/colors";
 import { AuthService } from "../../core/auth/auth.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { ToastService } from "../../shared/toast.service";
-import { EditorDrafts } from "../../core/browser/editor-drafts";
+import { EditorDrafts, type EditorDraft } from "../../core/browser/editor-drafts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { MediaDownloadService } from "../../core/media/media-download.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
@@ -62,6 +62,7 @@ const SOMEONE = $localize`:Fallback name for an unknown person editing a note:So
 const UNTITLED = $localize`:Fallback title for a note without one:Untitled`;
 const OFFLINE_PAUSED = $localize`:Tooltip on a disabled control while offline:You're offline - changes are paused`;
 const DRAFT_TAKEN = $localize`:Error banner on a note:Someone else started editing this note. Your draft was preserved.`;
+const DRAFT_STALE = $localize`:Error banner on a note:This note changed since you started editing. Your draft was preserved.`;
 const SESSION_EXPIRED = $localize`:Error banner on a note when the sign-in session expired:Your session expired. Refresh the page and sign in again.`;
 const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1, maximumFractionDigits: 1 };
 @Component({
@@ -408,6 +409,9 @@ export class NoteEditorComponent implements OnDestroy {
   private currentLockedId: string | null = null;
   private displayedNoteId: string | null = null;
   private editBaseUpdatedAt: string | null = null;
+  private bodyBaseMarkdown: string | null = null;
+  private bodyBaseUpdatedAt: string | undefined;
+  private bodyDraftConflict = false;
   private titleSaveInFlight: symbol | null = null;
   private destroyed = false;
   private lockGeneration = 0;
@@ -450,6 +454,9 @@ export class NoteEditorComponent implements OnDestroy {
         this.color.set(n?.color ?? null);
         this.editorInitialValue.set(n?.content ?? "");
         this.editBaseUpdatedAt = n ? this.dateString(n.updatedAt) : null;
+        this.bodyBaseMarkdown = null;
+        this.bodyBaseUpdatedAt = undefined;
+        this.bodyDraftConflict = false;
         this.editingTitle.set(false);
         this.titleSaveInFlight = null;
         this.editing.set(false);
@@ -465,8 +472,12 @@ export class NoteEditorComponent implements OnDestroy {
         this.title.set(n?.title ?? "");
         this.icon.set(n?.icon ?? null);
         this.color.set(n?.color ?? null);
-        this.editorInitialValue.set(n?.content ?? "");
-        this.editBaseUpdatedAt = n ? this.dateString(n.updatedAt) : null;
+        // A recovered body is still local work while read-only (offline or locked by someone
+        // else). Refresh metadata without replacing that draft's preview or concurrency base.
+        if (!this.recoveredBodyDraft()) {
+          this.editorInitialValue.set(n?.content ?? "");
+          this.editBaseUpdatedAt = n ? this.dateString(n.updatedAt) : null;
+        }
       }
     });
     effect(() => {
@@ -604,15 +615,17 @@ export class NoteEditorComponent implements OnDestroy {
   onIconChange(icon: string) {
     const n = this.note();
     if (!n || !this.canEdit() || this.lockedByOther()) return;
+    const generation = this.lockGeneration;
     this.icon.set(icon);
     void this.notesState
       .updateNote(n.id, { icon })
       .then((updated) => {
+        if (this.destroyed || this.note()?.id !== n.id || this.lockGeneration !== generation) return;
         // The icon write bumps the note's updatedAt. If a title or body edit is
         // in progress, advance the optimistic-concurrency base so the user's own
         // icon change doesn't make their pending save look stale (NOTE_STALE).
         if (this.editing() || this.editingTitle()) {
-          this.editBaseUpdatedAt = this.dateString(updated.updatedAt);
+          this.advanceEditBase(updated);
         }
       })
       .catch(() => undefined);
@@ -621,15 +634,17 @@ export class NoteEditorComponent implements OnDestroy {
   onColorChange(color: ColorToken | null) {
     const n = this.note();
     if (!n || !this.canEdit() || this.lockedByOther()) return;
+    const generation = this.lockGeneration;
     this.color.set(color);
     void this.notesState
       .updateNote(n.id, { color })
       .then((updated) => {
+        if (this.destroyed || this.note()?.id !== n.id || this.lockGeneration !== generation) return;
         // Like the icon write, the color write bumps the note's updatedAt. Advance the
         // optimistic-concurrency base for any in-progress title/body edit so the user's own
         // color change doesn't make their pending save look stale (NOTE_STALE).
         if (this.editing() || this.editingTitle()) {
-          this.editBaseUpdatedAt = this.dateString(updated.updatedAt);
+          this.advanceEditBase(updated);
         }
       })
       .catch(() => undefined);
@@ -670,7 +685,7 @@ export class NoteEditorComponent implements OnDestroy {
       // Saving the title bumps updatedAt. If the body editor is still open,
       // advance the base so the user's own title save doesn't make a following
       // body save look stale.
-      this.editBaseUpdatedAt = this.dateString(updated.updatedAt);
+      this.advanceEditBase(updated);
       this.releaseLockIfIdle();
     } catch (err) {
       if (!current()) return;
@@ -701,11 +716,17 @@ export class NoteEditorComponent implements OnDestroy {
       return;
     }
     const editor = this.descriptionEditor();
+    if (this.bodyDraftConflict) {
+      this.preserveBodyDraft(event.markdown);
+      this.saveError.set(DRAFT_STALE);
+      editor?.setSaving(false);
+      return;
+    }
     const generation = this.lockGeneration;
     const current = () => !this.destroyed && this.note()?.id === n.id && this.lockGeneration === generation;
     this.saveError.set(null);
     try {
-      const updated = await this.notesState.updateNote(n.id, { content: event.markdown, baseUpdatedAt: this.editBaseUpdatedAt ?? this.dateString(n.updatedAt) });
+      const updated = await this.notesState.updateNote(n.id, { content: event.markdown, baseUpdatedAt: this.bodyBaseUpdatedAt ?? this.editBaseUpdatedAt ?? this.dateString(n.updatedAt) });
       if (!current()) return;
       // Advance the base in case the title input is still open — a following
       // title save should build on the timestamp this write just produced.
@@ -748,10 +769,7 @@ export class NoteEditorComponent implements OnDestroy {
     const acquired = await this.syncLock(n);
     if (!acquired || this.destroyed || this.note()?.id !== n.id) return;
     const recovered = this.editorDrafts.load(this.currentUserId(), "note-body", n.id);
-    this.editorInitialValue.set(recovered?.markdown ?? n.content ?? "");
-    this.recoveredBodyDraft.set(Boolean(recovered));
-    if (recovered) this.preservedDraft.set(null);
-    this.editBaseUpdatedAt = this.dateString(n.updatedAt);
+    this.seedBodyDraft(n, recovered);
     this.editing.set(true);
   }
 
@@ -771,7 +789,8 @@ export class NoteEditorComponent implements OnDestroy {
       entityId: n.id,
       noteId: n.id,
       markdown,
-      baseMarkdown: n.content ?? "",
+      baseMarkdown: this.bodyBaseMarkdown ?? n.content ?? "",
+      baseUpdatedAt: this.bodyBaseUpdatedAt ?? (this.bodyDraftConflict ? undefined : this.dateString(n.updatedAt)),
     });
   }
 
@@ -779,6 +798,9 @@ export class NoteEditorComponent implements OnDestroy {
     const n = this.note();
     if (n) this.editorDrafts.clear(this.currentUserId(), "note-body", n.id);
     this.editorInitialValue.set(n?.content ?? "");
+    this.bodyBaseMarkdown = null;
+    this.bodyBaseUpdatedAt = undefined;
+    this.bodyDraftConflict = false;
     this.recoveredBodyDraft.set(false);
     this.preservedDraft.set(null);
     this.saveError.set(null);
@@ -860,11 +882,10 @@ export class NoteEditorComponent implements OnDestroy {
     if (!n || !this.canEdit()) return;
     const draft = this.editorDrafts.load(this.currentUserId(), "note-body", n.id);
     if (!draft) return;
+    this.seedBodyDraft(n, draft);
+    if (!this.recoveredBodyDraft()) return;
 
     if (this.lockedByOther()) {
-      this.editorInitialValue.set(draft.markdown);
-      this.recoveredBodyDraft.set(true);
-      this.preservedDraft.set(null);
       this.saveError.set($localize`This note is being edited by someone else.`);
       return;
     }
@@ -872,18 +893,52 @@ export class NoteEditorComponent implements OnDestroy {
     const acquired = await this.syncLock(n);
     if (this.destroyed || this.note()?.id !== n.id) return;
     if (!acquired) {
-      this.editorInitialValue.set(draft.markdown);
-      this.recoveredBodyDraft.set(true);
-      this.preservedDraft.set(null);
       this.saveError.set($localize`This note is being edited by someone else.`);
       return;
     }
 
     if (this.note()?.id !== n.id) return;
-    this.editorInitialValue.set(draft.markdown);
-    this.editBaseUpdatedAt = this.dateString(n.updatedAt);
-    this.recoveredBodyDraft.set(true);
     this.editing.set(true);
+  }
+
+  private seedBodyDraft(note: WireNote, draft: EditorDraft | null) {
+    // A save can commit after navigation, when its acknowledgement no longer owns this editor.
+    // If that exact draft is already published, retire it instead of reporting a false conflict.
+    if (draft && this.bodyComparison(draft.markdown) === this.bodyComparison(note.content ?? "")) {
+      this.editorDrafts.clear(this.currentUserId(), "note-body", note.id);
+      draft = null;
+    }
+    this.editorInitialValue.set(draft?.markdown ?? note.content ?? "");
+    this.bodyBaseMarkdown = draft?.baseMarkdown ?? note.content ?? "";
+    this.bodyBaseUpdatedAt = draft ? draft.baseUpdatedAt : this.dateString(note.updatedAt);
+    // Recovery must not bless an old draft with today's revision. Legacy drafts have only their
+    // original body to compare; keep them recoverable, but refuse to silently replace newer text.
+    this.bodyDraftConflict = Boolean(draft && (draft.baseUpdatedAt
+      ? new Date(draft.baseUpdatedAt).getTime() !== new Date(note.updatedAt).getTime()
+      : this.bodyComparison(draft.baseMarkdown) !== this.bodyComparison(note.content ?? "")));
+    if (!this.bodyDraftConflict) this.bodyBaseUpdatedAt ??= this.dateString(note.updatedAt);
+    this.editBaseUpdatedAt = this.bodyBaseUpdatedAt ?? this.dateString(note.updatedAt);
+    this.recoveredBodyDraft.set(Boolean(draft));
+    this.preservedDraft.set(null);
+    this.saveError.set(this.bodyDraftConflict ? DRAFT_STALE : null);
+  }
+
+  private advanceEditBase(note: WireNote) {
+    this.editBaseUpdatedAt = this.dateString(note.updatedAt);
+    if (this.bodyBaseMarkdown === null || this.bodyDraftConflict) return;
+    // An unguarded metadata save can succeed after a remote body edit. Its acknowledgement is
+    // not permission to rebase our old body over that text, even though the metadata is ours.
+    if (this.bodyComparison(note.content ?? "") !== this.bodyComparison(this.bodyBaseMarkdown)) return;
+    this.bodyBaseUpdatedAt = this.editBaseUpdatedAt;
+    // A successful sibling title/icon/colour write is part of this edit session. Persist its
+    // revision immediately so reopening the body without another keystroke doesn't conflict.
+    if (this.editing() || this.recoveredBodyDraft()) this.onBodyDraftChange(this.editorInitialValue());
+  }
+
+  private bodyComparison(markdown: string): string {
+    // Media signatures rotate without changing the document. Compare only their stable path,
+    // retaining all other text and URLs so a legacy draft never mistakes a real edit for a refresh.
+    return markdown.replace(/(\/api\/media\/[^\s?"'<>()[\]]+)\?t=[\w%-]+&e=\d+(?:&s=share)?/g, "$1");
   }
 
   private releaseCurrentLock() {
@@ -918,7 +973,7 @@ export class NoteEditorComponent implements OnDestroy {
         const body = err.body as { code?: string; lock?: WireNoteLock } | null;
         if (body?.lock) this.notesState.receiveLock(body.lock);
         this.saveError.set(body?.code === "NOTE_STALE"
-          ? $localize`:Error banner on a note:This note changed since you started editing. Your draft was preserved.`
+          ? DRAFT_STALE
           : DRAFT_TAKEN);
         return;
       }
@@ -952,7 +1007,8 @@ export class NoteEditorComponent implements OnDestroy {
       entityId: n.id,
       noteId: n.id,
       markdown,
-      baseMarkdown: n.content ?? "",
+      baseMarkdown: this.bodyBaseMarkdown ?? n.content ?? "",
+      baseUpdatedAt: this.bodyBaseUpdatedAt ?? (this.bodyDraftConflict ? undefined : this.dateString(n.updatedAt)),
     });
     this.editorInitialValue.set(draft?.markdown ?? markdown);
     this.recoveredBodyDraft.set(Boolean(draft));

@@ -263,6 +263,9 @@ export class NotesState {
     const rows = this.notes();
     const existing = rows.findIndex((row) => row.id === note.id);
     const current = rows[existing];
+    // Attachment reads, saves and realtime echoes can finish out of order. Never roll an
+    // acknowledged body back. Equal revisions still carry fresh media URLs and lock metadata.
+    if (current && new Date(note.updatedAt).getTime() < new Date(current.updatedAt).getTime()) return false;
     // A local HTTP result and its realtime echo describe the same complete row. Preserve identity
     // so neither the note tree/editor nor the offline cache process that acknowledgement twice.
     // Dates arrive as strings over HTTP/socket and as Dates from older IndexedDB snapshots.

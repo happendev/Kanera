@@ -16,7 +16,7 @@ export default defineConfig({
     launchOptions: { args: ["--host-resolver-rules=MAP board.kanera.test 127.0.0.1", "--disable-blink-features=AutomationControlled"] },
   },
   webServer: {
-    command: "pnpm --filter @kanera/web exec ng serve --configuration push-https --host 0.0.0.0 --port 4223 --allowed-hosts --watch=false --hmr=false --live-reload=false",
+    command: "pnpm --filter @kanera/web icons:css && pnpm --filter @kanera/web exec ng serve --configuration push-https --host 0.0.0.0 --port 4223 --allowed-hosts --watch=false --hmr=false --live-reload=false",
     url: "http://127.0.0.1:4223",
     timeout: 180_000,
     reuseExistingServer: false,

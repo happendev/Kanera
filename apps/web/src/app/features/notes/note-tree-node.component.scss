@@ -31,28 +31,24 @@
     .nt-title { font-weight: 600; }
   }
 
-  // Drop target uses a subtle accent fill for "inside" and a 2-px guide-line for
-  // before/after so the placement is unambiguous without a hard color flash.
+  // The tree draws the between-rows line itself; rows only show which note receives the drop.
+  // "inside" rings the target, and a between-rows drop washes its future parent, so the level the
+  // note lands on reads from the tree rather than from a line's indent alone.
   &.is-drop-inside {
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
-    box-shadow: inset 0 0 0 1px var(--accent);
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 2px var(--accent);
     color: var(--text);
   }
 
-  &.is-drop-before::before,
-  &.is-drop-after::after {
-    content: "";
-    position: absolute;
-    left: calc(8px + var(--nt-indent, 0px));
-    right: 8px;
-    height: 2px;
-    border-radius: 2px;
-    background: var(--accent);
-    pointer-events: none;
+  &.is-drop-parent {
+    background: var(--accent-soft);
+    color: var(--text);
   }
 
-  &.is-drop-before::before { top: -1px; }
-  &.is-drop-after::after { bottom: -1px; }
+  // The dragged note and its descendants stay in place, dimmed, until the drop lands.
+  &.is-dragging {
+    opacity: 0.45;
+  }
 }
 
 .nt-expand {
