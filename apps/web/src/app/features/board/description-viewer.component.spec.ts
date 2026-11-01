@@ -46,6 +46,27 @@ describe("DescriptionViewerComponent mentions", () => {
     expect(mention?.dataset["userId"]).toBe("123e4567-e89b-12d3-a456-426614174000");
   });
 
+  it("looks up the avatar of a mentioned user missing from the member list", async () => {
+    const userId = "6f1c2b3a-0000-4000-8000-000000000001";
+    const get = vi.fn(async () => ({ user: { id: userId, displayName: "Grace Hopper", avatarUrl: "https://media.test/grace.png" } }));
+    const { el, fixture } = await render(`Ping @[Grace Hopper](kanera-user:${userId})`, { post: vi.fn(async () => ({ links: {} })), get } as unknown as Partial<ApiClient>);
+    await new Promise((resolve) => setTimeout(resolve));
+    fixture.detectChanges();
+
+    expect(get).toHaveBeenCalledWith(expect.stringContaining(`/users/${userId}/profile`));
+    expect(el.querySelector(".mention-chip-avatar img")?.getAttribute("src")).toBe("https://media.test/grace.png");
+  });
+
+  it("does not look up mentioned users the host already supplied", async () => {
+    const userId = "6f1c2b3a-0000-4000-8000-000000000002";
+    const get = vi.fn();
+    const member = { userId, displayName: "Ada", avatarUrl: "https://media.test/ada.png", role: "editor", source: "board" } as WireBoardMemberUser;
+    const { el } = await render(`Ping @[Ada](kanera-user:${userId})`, { post: vi.fn(async () => ({ links: {} })), get } as unknown as Partial<ApiClient>, undefined, [member]);
+
+    expect(get).not.toHaveBeenCalled();
+    expect(el.querySelector(".mention-chip-avatar img")?.getAttribute("src")).toBe("https://media.test/ada.png");
+  });
+
   it("colors mention chips with the tagged user's avatar color bucket", async () => {
     const userId = "123e4567-e89b-12d3-a456-426614174000";
     const { el } = await render(`Ping @[Ada Lovelace](kanera-user:${userId}) today.`);
