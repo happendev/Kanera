@@ -17,7 +17,7 @@ import type { ResolveGitHubLinksResponse, ResolvedGitHubLink, ResolveInternalLin
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ApiError } from "../../core/api/api.client";
 import { MediaDownloadService } from "../../core/media/media-download.service";
 import { isSignedMediaUrlExpired, visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { attachmentIconClass } from "../../shared/attachment-icons";
@@ -25,6 +25,7 @@ import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/
 import { avatarFallbackColorStyle, blobatarFallbackUri, documentThemeIsDark } from "../../shared/avatar.component";
 import { stripEmptyTaskItems } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { UserProfileCardService } from "../../shared/user-profile/user-profile-card.service";
 import { githubStateLabel } from "./github-state-label";
 
 marked.setOptions({ gfm: true, breaks: true });
@@ -48,6 +49,17 @@ const ALLOWED_TAGS = [
 
 const ALLOWED_ATTR = ["href", "title", "src", "alt", "target", "rel", "class", "style", "data-user-id", "type", "checked", "disabled"];
 const MENTION_RE = /@\[([^\]]+)\]\(kanera-user:([0-9a-fA-F-]{36})\)/g;
+
+type MentionUser = Pick<WireBoardMemberUser, "userId" | "displayName" | "avatarUrl">;
+
+/**
+ * Mentioned people missing from the host's member list (removed from the board since, or a surface
+ * without a roster), shared by every viewer so a thread full of one departed colleague asks once.
+ * A miss (404: the viewer no longer shares any work with them) is cached too, and keeps the
+ * placeholder. Entries expire well inside the signed avatar URL lifetime.
+ */
+const MENTION_USER_CACHE_MS = 10 * 60_000;
+const mentionUserCache = new Map<string, { at: number; promise: Promise<MentionUser | null> }>();
 const BOARD_PATH_RE = /^\/b\/([0-9a-fA-F-]{36})(?:\/)?$/;
 const CARD_PATH_RE = /^\/b\/([0-9a-fA-F-]{36})\/c\/([0-9a-fA-F-]{36})(?:\/)?$/;
 const CARD_KEY_PATH_RE = /^\/o\/[A-Fa-f0-9]{16}\/c\/[A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]*(?:\/)?$/;
@@ -651,11 +663,14 @@ export class DescriptionViewerComponent {
   private readonly api = inject(ApiClient, { optional: true });
   private readonly router = inject(Router, { optional: true });
   private readonly mediaDownloads = inject(MediaDownloadService);
+  private readonly profiles = this.api ? inject(UserProfileCardService) : null;
 
   readonly value = input.required<string>();
   readonly compact = input<boolean>(false);
   readonly workspaceId = input<string | null>(null);
-  readonly mentionMembers = input<WireBoardMemberUser[]>([]);
+  // Chips only need identity and avatar, so surfaces without a board roster (the notifications
+  // panel) can pass plain user summaries.
+  readonly mentionMembers = input<MentionUser[]>([]);
   readonly emptyLabel = input<string>($localize`:Placeholder shown where an empty card description would be:Add a description…`);
   readonly copyTextLabel = $localize`:Button - copy the description as plain text:Copy text`;
   readonly copiedTextLabel = $localize`:Button state after copying the description:Copied text`;
@@ -684,6 +699,7 @@ export class DescriptionViewerComponent {
   private readonly resolvedLinks = signal<Record<string, ResolvedInternalLink>>({});
   private seenLinkRevision: number | null = null;
   private readonly resolvedGitHubLinks = signal<Record<string, ResolvedGitHubLink>>({});
+  private readonly resolvedMentionUsers = signal<Record<string, MentionUser>>({});
   private copyResetTimer: number | null = null;
 
   private readonly cleanHtml = computed(() => {
@@ -707,6 +723,18 @@ export class DescriptionViewerComponent {
   });
 
   constructor() {
+    effect(() => {
+      const known = new Set(this.mentionMembers().map((member) => member.userId));
+      const resolved = untracked(() => this.resolvedMentionUsers());
+      const missing = [...new Set([...this.visibleValue().matchAll(MENTION_RE)].map((match) => match[2]!.toLowerCase()))]
+        .filter((userId) => !known.has(userId) && !resolved[userId]);
+      for (const userId of missing) {
+        void this.loadMentionUser(userId).then((user) => {
+          if (user) this.resolvedMentionUsers.update((users) => ({ ...users, [userId]: user }));
+        });
+      }
+    });
+
     effect(() => {
       const resolved = this.resolvedLinks();
       const urls = this.extractResolvableUrls(this.cleanHtml()).filter((url) => !resolved[url]);
@@ -835,8 +863,25 @@ export class DescriptionViewerComponent {
     await this.mediaDownloads.download(url, fileName);
   }
 
+  private loadMentionUser(userId: string): Promise<MentionUser | null> {
+    const cached = mentionUserCache.get(userId);
+    if (cached && Date.now() - cached.at < MENTION_USER_CACHE_MS) return cached.promise;
+    if (!this.profiles) return Promise.resolve(null);
+    const profiles = this.profiles;
+    const promise = Promise.resolve()
+      .then(() => profiles.load(userId, null))
+      .then(({ user }) => ({ userId, displayName: user.displayName, avatarUrl: user.avatarUrl }))
+      .catch((error: unknown) => {
+        // Only a 404 is an answer worth keeping; a network blip should be retried by the next render.
+        if (!(error instanceof ApiError && error.status === 404)) mentionUserCache.delete(userId);
+        return null;
+      });
+    mentionUserCache.set(userId, { at: Date.now(), promise });
+    return promise;
+  }
+
   private renderMentionChip(label: string, userId: string): string {
-    const member = this.mentionMembers().find((m) => m.userId === userId);
+    const member = this.mentionMembers().find((m) => m.userId === userId) ?? this.resolvedMentionUsers()[userId.toLowerCase()];
     const displayName = member?.displayName || label;
     const style = avatarFallbackColorStyle(userId, displayName);
     // Drop an expired signed avatar URL (stale cached member list) so the chip

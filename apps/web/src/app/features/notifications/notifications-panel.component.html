@@ -227,7 +227,7 @@
           }
           @if (n.commentBody) {
           <div class="notif-comment-body">
-            <k-description-viewer [value]="n.commentBody" [workspaceId]="n.workspaceId" [compact]="true" [handleImageClicks]="false" />
+            <k-description-viewer [value]="n.commentBody" [workspaceId]="n.workspaceId" [mentionMembers]="mentionMembers()" [compact]="true" [handleImageClicks]="false" />
           </div>
           }
           @if (n.attachment) {
@@ -344,7 +344,7 @@
               </div>
               @if (item.notification.commentBody) {
               <div class="notif-comment-body">
-                <k-description-viewer [value]="item.notification.commentBody" [workspaceId]="item.notification.workspaceId" [compact]="true" [handleImageClicks]="false" />
+                <k-description-viewer [value]="item.notification.commentBody" [workspaceId]="item.notification.workspaceId" [mentionMembers]="mentionMembers()" [compact]="true" [handleImageClicks]="false" />
               </div>
               }
               @if (item.notification.attachment) {
