@@ -38,6 +38,7 @@ async function createCard(api: APIRequestContext, ws: Workspace, list: string, t
 async function moveCard(api: APIRequestContext, ws: Workspace, cardId: string, list: string) {
   const moved = await api.post(`/api/cards/${cardId}/move`, { data: { listId: ws.lists.get(list), afterCardId: null } });
   expect(moved.ok(), await moved.text()).toBe(true);
+  return await moved.json() as { inProgressSince: string | null; inProgressSeconds: number };
 }
 
 function tile(page: Page, title: string): Locator {
@@ -85,12 +86,15 @@ test("marking a list in progress shows time in progress live on tiles, table and
   await expect(tile(page, earlier).locator(".card-time-in-progress")).toHaveText(/^\s*(<1|\d+)m\s*$/);
   await expect(tile(page, later).locator(".card-time-in-progress")).toHaveCount(0);
 
-  // Entering starts the clock, leaving stops it: both as realtime moves. A stopped total stays on the
-  // card (time-tracking.spec.ts), but one under a minute, like this stint, is not shown.
+  // Entering starts the clock, leaving stops it: both as realtime moves. Use the banked result
+  // rather than assuming setup finished within a minute on every CI runner.
   await moveCard(api, ws, laterId, "Doing");
   await expect(tile(page, later).locator(".card-time-in-progress")).toBeVisible();
-  await moveCard(api, ws, earlierId, "Done");
-  await expect(tile(page, earlier).locator(".card-time-in-progress")).toHaveCount(0);
+  const stopped = await moveCard(api, ws, earlierId, "Done");
+  expect(stopped.inProgressSince).toBeNull();
+  const earlierChip = tile(page, earlier).locator(".card-time-in-progress");
+  if (stopped.inProgressSeconds < 60) await expect(earlierChip).toHaveCount(0);
+  else await expect(earlierChip).toHaveClass(/\bis-done\b/);
   // Finished work placed into an in-progress list: the clock only runs for open work, so there is
   // no measured time to show (not a made-up "1m").
   await moveCard(api, ws, finishedId, "Doing");
@@ -103,7 +107,11 @@ test("marking a list in progress shows time in progress live on tiles, table and
   // Card detail shows it above the description.
   await tile(page, later).click();
   const detail = page.getByRole("dialog", { name: `Card detail: ${later}` });
-  await expect(detail.locator(".col-main .detail-time-in-progress")).toContainText("In progress");
+  // The caption changes to "Paused until…" outside working hours; the accessible status still
+  // identifies the current stint, and its tracked total must be present in either state.
+  const timer = detail.locator(".col-main .detail-time-in-progress");
+  await expect(timer).toHaveAccessibleName(/^In progress since /);
+  await expect(timer.locator("strong")).toHaveText(/^(?:<1|\d+)m$/);
   await page.screenshot({ path: test.info().outputPath("card-detail.png") });
   await page.keyboard.press("Escape");
   await expect(detail).toBeHidden();
@@ -113,7 +121,9 @@ test("marking a list in progress shows time in progress live on tiles, table and
   const table = page.locator("k-board-table-view");
   await expect(table).toContainText("Time in progress");
   await expect(table.locator(`.tv-row[data-card-id="${laterId}"] [data-col="inProgress"] .tv-time-in-progress`)).toBeVisible();
-  await expect(table.locator(`.tv-row[data-card-id="${earlierId}"] [data-col="inProgress"] .tv-time-in-progress`)).toHaveCount(0);
+  const earlierTableChip = table.locator(`.tv-row[data-card-id="${earlierId}"] [data-col="inProgress"] .tv-time-in-progress`);
+  if (stopped.inProgressSeconds < 60) await expect(earlierTableChip).toHaveCount(0);
+  else await expect(earlierTableChip).toHaveClass(/\bis-done\b/);
 
   // Converged with the server after a reload; the dismissed explanation stays dismissed.
   await page.reload();
