@@ -20,6 +20,8 @@ export interface EditorDraft {
   entityId: string;
   markdown: string;
   baseMarkdown: string;
+  /** Server revision the draft started from; absent on drafts written by older clients. */
+  baseUpdatedAt?: string;
   updatedAt: string;
   cardId?: string;
   commentId?: string;
@@ -32,6 +34,7 @@ export interface EditorDraftInput {
   entityId: string;
   markdown: string;
   baseMarkdown: string;
+  baseUpdatedAt?: string;
   cardId?: string;
   commentId?: string;
   noteId?: string;
@@ -72,6 +75,7 @@ export class EditorDrafts {
       entityId: input.entityId,
       markdown: input.markdown,
       baseMarkdown: input.baseMarkdown,
+      baseUpdatedAt: input.baseUpdatedAt,
       updatedAt: new Date().toISOString(),
       cardId: input.cardId,
       commentId: input.commentId,

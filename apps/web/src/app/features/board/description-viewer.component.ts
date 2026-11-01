@@ -597,6 +597,10 @@ function normalizePlainText(value: string): string {
       padding: 6px 8px;
       text-align: left;
       vertical-align: top;
+      /* The table scrolls sideways (display: block above), so cells keep whole words on narrow
+         screens instead of squeezing to "Shippin / g". */
+      overflow-wrap: normal;
+      word-break: normal;
     }
 
     .dv-body th {

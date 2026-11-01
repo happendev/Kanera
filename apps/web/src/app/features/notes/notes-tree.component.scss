@@ -12,6 +12,7 @@
 }
 
 .nt-root {
+  position: relative; // anchors the drop line
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -59,6 +60,75 @@
   &.is-active {
     border-color: var(--accent);
     color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    background: var(--accent-soft);
   }
+}
+
+// One line for the whole tree. Its left edge starts where a row at the target level starts, the dot
+// marks that indent, and the chip names the note it will land under, so level never has to be judged
+// from the indent alone.
+.nt-drop-line {
+  position: absolute;
+  right: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 2;
+  transition: left var(--dur) ease;
+
+  &::before {
+    content: "";
+    position: absolute;
+    left: -4px;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border: 2px solid var(--accent);
+    border-radius: 999px;
+    background: var(--surface);
+    transform: translateY(-50%);
+    box-sizing: border-box;
+  }
+
+  &.is-blocked {
+    background: transparent;
+
+    &::before { display: none; }
+
+    .nt-drop-chip {
+      background: var(--surface);
+      color: var(--text-muted);
+      box-shadow: inset 0 0 0 1px var(--border);
+    }
+  }
+}
+
+.nt-drop-chip {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 70%;
+  height: var(--h-xs);
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--shadow-pop);
+
+  i { font-size: var(--text-sm); flex: none; }
+}
+
+.nt-drop-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

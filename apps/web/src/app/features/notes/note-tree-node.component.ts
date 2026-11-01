@@ -2,28 +2,22 @@ import { ChangeDetectionStrategy, Component, inject, input, output, signal } fro
 import { ActivatedRoute, Router } from "@angular/router";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { MenuDirective } from "../../shared/menu.directive";
-import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
+import type { AnchoredPanelPlacement, AnchorPoint } from "../../shared/anchored-panel";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import type { NoteTreeNode } from "./notes.types";
 
 export interface TreeDragState {
   draggingId: string | null;
-  dragOverId: string | null;
-}
-
-export type DropPlacement = "before" | "inside" | "after";
-
-export interface NodeDropEvent {
-  targetId: string;
-  targetParentId: string | null;
-  noteId: string;
-  placement: DropPlacement;
+  /** Row the dragged note would be dropped into (middle of the row). */
+  insideId: string | null;
+  /** Note that becomes the parent for a between-rows drop, so the level is visible on the tree itself. */
+  parentId: string | null;
 }
 
 /**
- * Recursive tree node. Stateless: receives expansion + drag state from the
- * parent NotesTreeComponent and emits events upward. Computes a fine-grained
- * drop placement (before / inside / after) based on cursor Y within the row.
+ * Recursive tree node. Stateless: receives expansion + drag state from the parent
+ * NotesTreeComponent and emits events upward. The tree resolves drop targets itself from the
+ * rows' `data-note-id`, because a gap's level depends on the rows around it, not just this one.
  */
 @Component({
   selector: "k-note-tree-node",
@@ -34,16 +28,15 @@ export interface NodeDropEvent {
     <div
       class="nt-row"
       [class.is-selected]="selectedId() === node().id"
-      [class.is-drop-before]="isDragTarget() && placement() === 'before'"
-      [class.is-drop-after]="isDragTarget() && placement() === 'after'"
-      [class.is-drop-inside]="isDragTarget() && placement() === 'inside'"
+      [class.is-dragging]="isDragged()"
+      [class.is-drop-inside]="dragState().insideId === node().id"
+      [class.is-drop-parent]="dragState().parentId === node().id"
+      [attr.data-note-id]="node().id"
       [style.--nt-indent.px]="depth() * 16"
       [attr.draggable]="canEdit() ? 'true' : 'false'"
       (dragstart)="onDragStart($event)"
       (dragend)="dragEnd.emit()"
-      (dragover)="onDragOver($event)"
-      (dragleave)="onDragLeaveRow()"
-      (drop)="onDropNative($event)">
+      (contextmenu)="openContextMenu($event)">
       <button
         type="button"
         class="nt-expand"
@@ -68,18 +61,28 @@ export interface NodeDropEvent {
           <i aria-hidden="true" class="ti ti-dots"></i>
         </button>
         @if (actionsOpen()) {
-        <div class="nt-actions-menu k-menu" kMenu kAnchoredPanel [apAnchor]="actionsTrigger" [apPlacement]="actionsMenuPlacement" (apDismissed)="actionsOpen.set(false)" role="menu">
+        <div class="nt-actions-menu k-menu" kMenu kAnchoredPanel
+          [apAnchor]="menuAt() ?? actionsTrigger"
+          [apPlacement]="menuAt() ? contextMenuPlacement : actionsMenuPlacement"
+          (apDismissed)="closeActions()" (contextmenu)="$event.preventDefault()" role="menu">
+          <button type="button" class="k-menu-item" (click)="openInNewTab()" role="menuitem">
+            <i aria-hidden="true" class="ti ti-external-link"></i><span i18n="Context menu item">Open in new tab</span>
+          </button>
+          <!-- Right-click still opens the menu offline, so the note can be opened in a new tab; the
+               edit actions are hidden rather than disabled because they cannot run. -->
+          @if (canEdit()) {
           @if (canAddChild()) {
-          <button type="button" class="k-menu-item" (click)="onNewChild(); actionsOpen.set(false)" role="menuitem">
+          <button type="button" class="k-menu-item" (click)="onNewChild(); closeActions()" role="menuitem">
             <i aria-hidden="true" class="ti ti-plus"></i><span i18n="Menu item: create a child note">Add sub-note</span>
           </button>
           }
-          <button type="button" class="k-menu-item" (click)="onDuplicate(); actionsOpen.set(false)" role="menuitem">
+          <button type="button" class="k-menu-item" (click)="onDuplicate(); closeActions()" role="menuitem">
             <i aria-hidden="true" class="ti ti-copy"></i><span i18n="Menu item: duplicate the note">Duplicate</span>
           </button>
-          <button class="k-menu-item danger" type="button" (click)="onDelete(); actionsOpen.set(false)" role="menuitem">
+          <button class="k-menu-item danger" type="button" (click)="onDelete(); closeActions()" role="menuitem">
             <i aria-hidden="true" class="ti ti-trash"></i><span i18n="Menu item: delete the note">Delete</span>
           </button>
+          }
         </div>
         }
       </div>
@@ -94,16 +97,14 @@ export interface NodeDropEvent {
           [canEdit]="canEdit()"
           [expanded]="expanded()"
           [dragState]="dragState()"
+          [inDraggedSubtree]="isDragged()"
           (selectNode)="selectNode.emit($event)"
           (newChild)="newChild.emit($event)"
           (duplicateNode)="duplicateNode.emit($event)"
           (deleteNode)="deleteNode.emit($event)"
           (toggleExpand)="toggleExpand.emit($event)"
           (dragStart)="dragStart.emit($event)"
-          (dragEnd)="dragEnd.emit()"
-          (dragOver)="dragOver.emit($event)"
-          (dragLeave)="dragLeave.emit($event)"
-          (nodeDrop)="nodeDrop.emit($event)" />
+          (dragEnd)="dragEnd.emit()" />
       }
     }
   `,
@@ -119,7 +120,9 @@ export class NoteTreeNodeComponent {
   readonly currentUserId = input<string | null>(null);
   readonly canEdit = input(true);
   readonly expanded = input<Record<string, boolean>>({});
-  readonly dragState = input<TreeDragState>({ draggingId: null, dragOverId: null });
+  readonly dragState = input<TreeDragState>({ draggingId: null, insideId: null, parentId: null });
+  /** True for descendants of the dragged note: they travel with it, so they dim with it. */
+  readonly inDraggedSubtree = input(false);
 
   readonly selectNode = output<string>();
   readonly newChild = output<string | null>();
@@ -128,17 +131,15 @@ export class NoteTreeNodeComponent {
   readonly toggleExpand = output<string>();
   readonly dragStart = output<{ noteId: string; event: DragEvent }>();
   readonly dragEnd = output<void>();
-  readonly dragOver = output<{ targetId: string; event: DragEvent }>();
-  readonly dragLeave = output<string>();
-  readonly nodeDrop = output<NodeDropEvent>();
 
   protected readonly collapseLabel = $localize`:Button label - collapse a note's children in the tree:Collapse`;
   protected readonly expandLabel = $localize`:Button label - expand a note's children in the tree:Expand`;
   protected readonly untitledLabel = $localize`:Fallback title for a note without one:Untitled`;
   protected readonly noteActionsLabel = $localize`:Tooltip on the note actions menu button:Note actions`;
 
-  readonly placement = signal<DropPlacement>("inside");
   readonly actionsOpen = signal(false);
+  /** Cursor position when the menu was opened by right-click; null when opened from the dots button. */
+  readonly menuAt = signal<AnchorPoint | null>(null);
   readonly actionsMenuPlacement: AnchoredPanelPlacement = {
     side: "bottom",
     align: "end",
@@ -148,6 +149,7 @@ export class NoteTreeNodeComponent {
     gap: 4,
     margin: 6,
   };
+  readonly contextMenuPlacement: AnchoredPanelPlacement = { width: 190, maxHeight: 220, minHeight: 116 };
 
   noteHref(noteId: string): string {
     const tree = this.router.createUrlTree([], {
@@ -168,9 +170,8 @@ export class NoteTreeNodeComponent {
     return this.expanded()[this.node().id] !== false;
   }
 
-  isDragTarget(): boolean {
-    const state = this.dragState();
-    return state.dragOverId === this.node().id && state.draggingId !== this.node().id;
+  isDragged(): boolean {
+    return this.inDraggedSubtree() || this.dragState().draggingId === this.node().id;
   }
 
   canAddChild(): boolean {
@@ -183,7 +184,25 @@ export class NoteTreeNodeComponent {
 
   toggleActions() {
     if (!this.canEdit()) return;
+    this.menuAt.set(null);
     this.actionsOpen.update((open) => !open);
+  }
+
+  openContextMenu(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.menuAt.set({ x: event.clientX, y: event.clientY });
+    this.actionsOpen.set(true);
+  }
+
+  closeActions() {
+    this.actionsOpen.set(false);
+    this.menuAt.set(null);
+  }
+
+  openInNewTab() {
+    this.closeActions();
+    window.open(this.noteHref(this.node().id), "_blank", "noopener");
   }
 
   onNewChild() {
@@ -208,35 +227,38 @@ export class NoteTreeNodeComponent {
     }
     event.dataTransfer?.setData("text/plain", this.node().id);
     event.dataTransfer!.effectAllowed = "move";
+    this.setDragPreview(event);
     this.dragStart.emit({ noteId: this.node().id, event });
   }
 
-  onDragOver(event: DragEvent) {
-    if (!this.canEdit()) return;
-    const state = this.dragState();
-    if (!state.draggingId || state.draggingId === this.node().id) return;
-    event.preventDefault();
-    event.dataTransfer!.dropEffect = "move";
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const ratio = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5;
-    this.placement.set(ratio < 0.28 ? "before" : ratio > 0.72 ? "after" : (this.canAddChild() ? "inside" : "after"));
-    this.dragOver.emit({ targetId: this.node().id, event });
-  }
-
-  onDragLeaveRow() {
-    this.dragLeave.emit(this.node().id);
-  }
-
-  onDropNative(event: DragEvent) {
-    event.preventDefault();
-    if (!this.canEdit()) return;
-    const state = this.dragState();
-    if (!state.draggingId || state.draggingId === this.node().id) return;
-    this.nodeDrop.emit({
-      targetId: this.node().id,
-      targetParentId: this.node().parentNoteId,
-      noteId: state.draggingId,
-      placement: this.placement(),
-    });
+  /**
+   * The browser's default preview is a full-width copy of the row centred where it was grabbed, which
+   * covers the tree's drop line and its level chip. A compact pill below and right of the pointer
+   * keeps the rows around the pointer, and the line between them, in view.
+   */
+  private setDragPreview(event: DragEvent) {
+    if (!event.dataTransfer?.setDragImage) return;
+    const node = this.node();
+    // The transparent padding is the offset: setDragImage's own offset cannot go negative everywhere.
+    const ghost = document.createElement("div");
+    ghost.style.cssText = "position:fixed;top:-1000px;left:-1000px;padding:20px 0 0 18px;pointer-events:none;";
+    const pill = document.createElement("div");
+    pill.style.cssText = [
+      "display:flex", "align-items:center", "gap:6px", "max-width:200px", "height:var(--h-sm)", "padding:0 10px",
+      "border-radius:var(--radius)", "background:var(--surface)", "color:var(--text)", "font-size:var(--text-sm)", "font-weight:600",
+      "box-shadow:var(--shadow-drag), inset 0 0 0 1px var(--border)", "white-space:nowrap",
+    ].join(";");
+    const icon = document.createElement("i");
+    icon.className = `ti ti-${node.icon || "file-text"}`;
+    icon.style.color = node.color ? `var(--color-${node.color})` : "var(--accent)";
+    const title = document.createElement("span");
+    title.style.cssText = "overflow:hidden;text-overflow:ellipsis;";
+    title.textContent = node.title || this.untitledLabel;
+    pill.append(icon, title);
+    ghost.append(pill);
+    document.body.append(ghost);
+    event.dataTransfer.setDragImage(ghost, 0, 0);
+    // The image is captured when dragstart returns; the element is not needed after that.
+    setTimeout(() => ghost.remove());
   }
 }

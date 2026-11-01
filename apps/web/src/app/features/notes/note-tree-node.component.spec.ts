@@ -37,6 +37,7 @@ describe("NoteTreeNodeComponent", () => {
 
     const actions = [...host.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
     expect(actions.map((button) => button.textContent?.trim())).toEqual([
+      "Open in new tab",
       "Add sub-note",
       "Duplicate",
       "Delete",
@@ -60,6 +61,29 @@ describe("NoteTreeNodeComponent", () => {
 
     expect(duplicate).toHaveBeenCalledWith("note-1");
     expect(host.querySelector("[role=menu]")).toBeNull();
+  });
+
+  it("opens the note in a new tab from the right-click menu, even when read-only", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const fixture = TestBed.createComponent(NoteTreeNodeComponent);
+    fixture.componentRef.setInput("node", createNode());
+    fixture.componentRef.setInput("canEdit", false);
+    await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 20 });
+    host.querySelector(".nt-row")!.dispatchEvent(event);
+    await fixture.whenStable();
+
+    expect(event.defaultPrevented).toBe(true);
+    const actions = [...host.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
+    expect(actions.map((button) => button.textContent?.trim())).toEqual(["Open in new tab"]);
+    actions[0]!.click();
+    await fixture.whenStable();
+
+    expect(open).toHaveBeenCalledWith("/notes?noteId=note-1", "_blank", "noopener");
+    expect(host.querySelector("[role=menu]")).toBeNull();
+    open.mockRestore();
   });
 });
 

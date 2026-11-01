@@ -241,7 +241,7 @@
   // Show toggle button only on mobile.
   .nv-sidebar-toggle {
     display: inline-flex;
-    margin: 8px 10px 0;
+    margin: 8px 16px 0; // lines up with the note's 16px phone gutter
     align-self: flex-start;
   }
 }

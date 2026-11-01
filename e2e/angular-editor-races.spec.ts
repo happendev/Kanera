@@ -330,6 +330,12 @@ test("a saved note response cannot close the next note's unsaved editor", async 
   await expect(editor).toHaveCount(0);
   const persisted = await (await api.get(`/api/notes/${notes[1]!.id}`)).json() as { content: string };
   expect(persisted.content).toBe("Keep the second note's draft after acknowledgement");
+  // The first save committed after navigation, so its old local draft may still exist. Recovery
+  // should recognise that published body rather than reopen it on an obsolete revision.
+  await page.locator("k-notes-tree").getByText("Saving note", { exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(page.locator("k-note-editor .ne-viewer")).toContainText("Saved on the first note");
+  await expect(page.locator("k-note-editor k-draft-banner")).toHaveCount(0);
 });
 
 async function setVisibility(page: Page, state: "hidden" | "visible") {
