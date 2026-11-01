@@ -1,7 +1,16 @@
 {
-  "initialRaw": 921600,
-  "initialBrotli": 235520,
-  "totalJavaScriptBrotli": 1638400,
-  "largestScriptRaw": 1075200,
-  "tablerFontsRaw": 593920
+  "bootstrapGzip": 300000,
+  "prefetchGzip": 1900000,
+  "translationGzip": 122880,
+  "largestScriptRaw": 1000000,
+  "coreIconFontRaw": 110000,
+  "allIconFontsRaw": 675840,
+  "routes": {
+    "login": { "codeGzip": 300000, "firstVisitGzip": 480000 },
+    "home": { "codeGzip": 500000, "firstVisitGzip": 680000 },
+    "board": { "codeGzip": 580000, "firstVisitGzip": 760000 },
+    "globalWork": { "codeGzip": 580000, "firstVisitGzip": 760000 },
+    "workspaceSettings": { "codeGzip": 570000, "firstVisitGzip": 750000 },
+    "accountSettings": { "codeGzip": 530000, "firstVisitGzip": 710000 }
+  }
 }

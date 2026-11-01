@@ -1,6 +1,8 @@
 import { execFileSync, spawn } from "node:child_process";
 
 execFileSync(process.execPath, ["scripts/write-build-info.mjs"], { stdio: "inherit" });
+// Font subsets are generated assets, so direct tests must also work from a fresh checkout.
+execFileSync(process.execPath, ["scripts/generate-tabler-webfont-css.mjs"], { stdio: "inherit" });
 execFileSync(process.execPath, ["--test", "scripts/push-worker.test.mjs", "scripts/pwa-manifest.test.mjs"], { stdio: "inherit" });
 
 const rawArgs = process.argv.slice(2);

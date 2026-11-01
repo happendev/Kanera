@@ -130,3 +130,8 @@ Timeline planning regressions (`timeline.spec.ts`): filtered blockers retain con
 
 - `global-work-foreground.spec.ts`: My Cards and Team Cards avoid brief-return reloads, flush hidden realtime updates, and recover after long absences and socket outages; desktop/phone screenshots.
 - `card-links.spec.ts`: description saves preserve live two-way links without full detail or agent-run reloads, and coalesce linked-item refreshes.
+
+`pnpm test:web:bundles` adds local production-build checks for immutable bundle headers, deferred
+composer/views, custom icon subsets, service-worker registration timing and cold offline reload.
+It uses the seeded local API and production Nginx on ports 3000/4200; traces/screenshots are saved
+in `e2e/artifacts/bundle-loading/`.

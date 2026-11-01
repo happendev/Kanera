@@ -14,6 +14,7 @@
     "prebuild": "node scripts/write-build-info.mjs && pnpm assets:generate",
     "build": "ng build --configuration production --stats-json && node scripts/report-bundle.mjs --check && node scripts/precompress.mjs",
     "bundle:report": "node scripts/report-bundle.mjs",
+    "prebundle:analyze": "node scripts/write-build-info.mjs && pnpm assets:generate",
     "bundle:analyze": "ng build --configuration production --stats-json && pnpm bundle:report",
     "bundle:check": "pnpm build",
     "prelint": "node scripts/write-build-info.mjs && pnpm assets:generate",
@@ -72,6 +73,7 @@
     "@types/node": "^24.13.3",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
+    "subset-font": "2.9.0",
     "typescript": "~6.0.3",
     "vitest": "4.1.11",
     "zone.js": "~0.16.2"

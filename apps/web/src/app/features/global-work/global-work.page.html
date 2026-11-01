@@ -1,3 +1,5 @@
+<!-- Conditional views keep their existing lifetime; defer their code until the selected branch
+     mounts so a kanban visit does not download every view or the rich-text composer. -->
 <section
   class="work-page"
   [class.is-single-workspace-board]="effectiveDisplay() === 'board' && fillsBoardFrame()"
@@ -500,6 +502,7 @@
     <div class="work-content">
     <div class="work-main">
     @if (effectiveDisplay() === "history") {
+      @defer (on immediate) {
       <k-work-done-view
         [hostShowsOffline]="offlineBannerShown()"
         scope="global"
@@ -524,6 +527,7 @@
         (hostCollapsedDayKeysChange)="state.setCollapsedHistoryDayKeys($event)"
         (cardSummaryOpened)="openHistoryCard($event)"
       />
+      }
     } @else if (effectiveDisplay() === "overview") {
       <!-- Whole-team summary, one panel per teammate. The card-derived sections follow scope,
            search and filters; the queue heads keep their true ranks (see TeamOverviewComponent).
@@ -541,6 +545,7 @@
         </div>
       }
       @if (lens() === "team") {
+        @defer (on immediate) {
         <k-team-overview
           [people]="teamPeople()"
           [guestUserIds]="teamGuestUserIds()"
@@ -562,8 +567,10 @@
           (focusChanged)="setOverviewFocus($event)"
           (upNextToggled)="toggleOverviewDock($event)"
         />
+        }
       } @else {
         <!-- The viewer's own panel, always focused; its Up next Edit opens the lens's own dock. -->
+        @defer (on immediate) {
         <k-team-overview
           lens="my"
           [people]="myOverviewPeople()"
@@ -584,6 +591,7 @@
           (personFocused)="selectDisplay('board')"
           (upNextToggled)="toggleUpNextPanel()"
         />
+        }
       }
     } @else if (effectiveDisplay() === "dependencies") {
       <!-- Seeded with every loaded open card, so it waits for paging like the board display does;
@@ -599,6 +607,7 @@
           <span i18n><strong>Showing chains for {{ state.cards().length // i18n(ph="loaded") }} of {{ state.response().totals.cards // i18n(ph="total") }} matching cards.</strong> Narrow the scope or filters to map every chain.</span>
         </div>
       }
+      @defer (on immediate) {
       <k-dependency-map
         [hostShowsOffline]="offlineBannerShown()"
         [stacked]="true"
@@ -609,6 +618,7 @@
         [refreshVersion]="state.reconciliationVersion()"
         (cardOpened)="openDependencyCard($event)"
       />
+      }
     } @else {
       <section class="totals-strip">
         <span i18n="Totals strip">{ state.response().totals.cards, plural, one {<strong>{{ state.response().totals.cards }}</strong> card} other {<strong>{{ state.response().totals.cards }}</strong> cards} }</span>
@@ -732,6 +742,7 @@
       } @else if (effectiveDisplay() === "calendar") {
         <!-- The same calendar the board page uses, in stacked mode: every month
              holding a card, in date order, scrolled with the page instead of paged by a toolbar. -->
+        @defer (on immediate) {
         <k-board-calendar-view
           navigation="stacked"
           [cards]="state.cards()"
@@ -744,6 +755,7 @@
           [editableCardIds]="roleEditableCardIds()"
           (cardOpened)="openCardById($event)"
         />
+        }
         @if (!datedCardCount()) {
           <k-empty-state icon="calendar" title="No cards with a due date" i18n-title text="The calendar only shows dated cards. Switch to the table or board view to see the rest." i18n-text />
         }
@@ -762,6 +774,7 @@
             <span i18n><strong>Showing {{ state.cards().length // i18n(ph="loaded") }} of {{ state.response().totals.cards // i18n(ph="total") }} matching cards.</strong> Narrow the scope or filters to plan every card.</span>
           </div>
         }
+        @defer (on immediate) {
         <k-board-timeline-view
           [hostShowsOffline]="offlineBannerShown()"
           class="work-timeline-view"
@@ -782,6 +795,7 @@
           (hideCompletedChange)="onHideCompletedChange($event)"
           (cardOpened)="openCardById($event)"
         />
+        }
       } @else {
         <!--
           The board Table view, over the cross-board result set. Grouping and sorting come from the
@@ -793,6 +807,7 @@
           the lens: that is always true on My Cards (the viewer is the target) and true on Team Cards
           only while one person is focused, so the column never defaults on with nothing to put in it.
         -->
+        @defer (on immediate) {
         <k-board-table-view
           class="work-table-view"
           [boardId]="'global-work-' + lens()"
@@ -835,6 +850,7 @@
           (cardOpened)="openCardById($event)"
           (boardOpened)="openBoard($event)"
         />
+        }
       }
 
       @if (state.response().checklistItems.length) {
@@ -968,6 +984,7 @@
      composerBoardId, which the dialog itself drives via boardIdChange. Checklist templates are not
      in the work catalog, so that chip stays hidden here. -->
 @if (composerOpen()) {
+  @defer (on immediate) {
   <k-card-composer
     [boardId]="composerBoardId()"
     [workspaceId]="composerBoard()?.workspaceId ?? null"
@@ -983,6 +1000,7 @@
     (created)="onCardCreated()"
     (dismissed)="closeComposer()"
   />
+  }
 }
 
 
