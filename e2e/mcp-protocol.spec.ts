@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Client, ProtocolError, StreamableHTTPClientTransport, type Transport, type VersionNegotiationOptions } from "@modelcontextprotocol/client";
+import { Client, ProtocolError, StreamableHTTPClientTransport, type JsonSchemaType, type Transport, type VersionNegotiationOptions } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
 import ports from "./ports.json";
 import { expect, test } from "./support/scenario";
 import { boardIdOf, cardTile, createWorkspaceApiKey, expectCardTileMounted, openBoard, workspaceSettingsHref } from "./support/ui";
@@ -58,10 +59,27 @@ async function exercise(client: Client, cell: string, target: { boardId: string;
   const tools = await client.listTools();
   const toolNames = tools.tools.map((tool) => tool.name);
   expect(toolNames, cell).toEqual(expect.arrayContaining(["boards.get", "cards.create", "cards.list", "session.get"]));
-  // Tool schemas stay pinned to draft-07 (nullable fields as anyOf) across the SDK upgrade, so no
-  // client sees a different contract than the v1 SDK published.
+  // A Draft 7 host must be able to compile the advertised schema and validate real arguments.
+  // Both anyOf and type arrays are legal: checking their serialization confuses new nullable
+  // fields with a dialect change. Use the official SDK's bundled Draft 7 validator instead.
   const cardsCreate = tools.tools.find((tool) => tool.name === "cards.create")!;
-  expect(JSON.stringify(cardsCreate.inputSchema), cell).not.toContain('"type":["');
+  expect(cardsCreate.inputSchema.$schema, cell).toBe("http://json-schema.org/draft-07/schema#");
+  const validateCreate = new AjvJsonSchemaValidator().getValidator(cardsCreate.inputSchema as JsonSchemaType);
+  const createArguments = { boardId: target.boardId, listId: target.listId, title: target.title };
+  expect(validateCreate(createArguments), cell).toMatchObject({ valid: true });
+  const fieldId = randomUUID();
+  for (const value of [{ valueNumber: 0 }, { valueNumber: "0.5" }, { valueNumber: null }, { valueCheckbox: false }, { valueCheckbox: null }]) {
+    expect(validateCreate({ ...createArguments, customFields: { [fieldId]: value } }), `${cell}: schema accepts ${JSON.stringify(value)}`).toMatchObject({ valid: true });
+  }
+  for (const invalid of [
+    { ...createArguments, boardId: "not-a-uuid" },
+    { boardId: target.boardId, title: target.title },
+    { ...createArguments, customFields: { [fieldId]: { valueNumber: {} } } },
+    { ...createArguments, customFields: { [fieldId]: { valueCheckbox: "false" } } },
+  ]) {
+    expect(validateCreate(invalid), `${cell}: schema rejects ${JSON.stringify(invalid)}`).toMatchObject({ valid: false });
+  }
+  record("input-schema", { dialect: cardsCreate.inputSchema.$schema, validArguments: true, invalidArgumentsRejected: true });
   // Hosts use these labels to gate irreversible publication and external workflow sends.
   // Check the advertised wire catalog in both eras and transports, not just the registry.
   for (const name of ["comments.add", "automations.create", "automations.update", "automations.set_enabled"]) {
@@ -83,7 +101,7 @@ async function exercise(client: Client, cell: string, target: { boardId: string;
   expect(detail.board.id, cell).toBe(target.boardId);
   expect(detail.lists.some((list) => list.id === target.listId), cell).toBe(true);
 
-  const created = await client.callTool({ name: "cards.create", arguments: { boardId: target.boardId, listId: target.listId, title: target.title } });
+  const created = await client.callTool({ name: "cards.create", arguments: createArguments });
   expect(created.isError, cell).not.toBe(true);
   record("cards.create", { id: (created.structuredContent as { id?: string } | undefined)?.id });
 

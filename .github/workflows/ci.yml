@@ -50,8 +50,8 @@ jobs:
 
       - run: pnpm test:sdk
 
-      # Production builds report advisory bundle sizes locally, in Docker and in CI.
-      # Angular size error limits, compilation and offline packaging errors still fail this step.
+      # Production builds enforce gzip route/first-visit budgets, deferred-view boundaries and
+      # offline packaging locally, in Docker and in CI.
       - run: pnpm bundle:web:check
 
   e2e-shard:

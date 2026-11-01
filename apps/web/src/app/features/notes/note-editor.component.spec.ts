@@ -374,6 +374,29 @@ describe("NoteEditorComponent locking", () => {
     expect(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS)).toContain("Recovered locked body");
   });
 
+  // Signing windows last days, so reproduce token rotation deterministically rather than
+  // making E2E depend on the wall clock. A changed media path must still count as a real edit.
+  it.each([false, true])("compares legacy draft media paths independently of rotated signatures (changed=%s)", async (changed) => {
+    const key = "note-body:user-1:note-1";
+    const original = "![Image](/api/media/client-1/original.png?t=old-token&e=1900000000000)";
+    const current = `![Image](/api/media/client-1/${changed ? "replacement" : "original"}.png?t=new-token&e=1901000000000)`;
+    const markdown = "Recovered body with an image";
+    localStorage.setItem(STORAGE_KEYS.EDITOR_DRAFTS, JSON.stringify({
+      [key]: { key, userId: "user-1", kind: "note-body", entityId: "note-1", noteId: "note-1",
+        markdown, baseMarkdown: original, updatedAt: new Date().toISOString() },
+    }));
+    fixture.componentRef.setInput("note", createNote({ scope: "personal", content: current, editingUserId: null, editingExpiresAt: null }));
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.editing()).toBe(true));
+    await fixture.componentInstance.onContentSave({ markdown, attachmentIds: [] });
+    if (changed) {
+      expect(state.updateNote).not.toHaveBeenCalled();
+      expect(fixture.componentInstance.saveError()).toContain("This note changed since you started editing");
+    } else {
+      expect(state.updateNote).toHaveBeenCalledWith("note-1", expect.objectContaining({ content: markdown }));
+    }
+  });
+
   it("renders note attachments with description source metadata", async () => {
     api.get.mockImplementation(async (path: string) => path.endsWith("/attachments") ? [createAttachment()] : { backlinks: [] });
     fixture.componentRef.setInput("note", createNote({ editingUserId: null, editingExpiresAt: null }));

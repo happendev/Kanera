@@ -198,7 +198,9 @@
   font-size: 28px;
   font-weight: 700;
   line-height: 1.2;
-  overflow-wrap: anywhere;
+  // break-word only splits a word too long for the line; anywhere split ordinary words mid-way
+  // ("Handboo / k") whenever the pickers squeezed the title column.
+  overflow-wrap: break-word;
   cursor: pointer;
 
   &.is-readonly {
@@ -351,20 +353,20 @@
 
 .ne-editor {
   flex: 1;
-  min-height: clamp(320px, calc(100vh - 360px), 640px);
+  min-height: clamp(320px, calc(100dvh - 360px), 640px);
 }
 
 :host ::ng-deep .ne-editor k-description-editor .de-host {
-  min-height: clamp(320px, calc(100vh - 360px), 640px);
-  max-height: calc(100vh - 280px);
+  min-height: clamp(320px, calc(100dvh - 360px), 640px);
+  max-height: calc(100dvh - 280px);
 }
 
 :host ::ng-deep .ne-editor k-description-editor .de-host .ProseMirror {
-  min-height: clamp(300px, calc(100vh - 380px), 620px);
+  min-height: clamp(300px, calc(100dvh - 380px), 620px);
 }
 
 .ne-viewer {
-  min-height: clamp(320px, calc(100vh - 360px), 640px);
+  min-height: clamp(320px, calc(100dvh - 360px), 640px);
   padding: 12px 14px;
   border: 1px solid transparent;
   border-radius: var(--radius);
@@ -611,6 +613,50 @@
 }
 
 @media (max-width: 640px) {
+  .ne-doc {
+    padding: 12px 16px 48px;
+    gap: 12px;
+  }
+
+  // The pickers and copy-link button share the first row; the title takes the full width below
+  // them, so a phone never has to fit a 28px title beside three controls.
+  .ne-head {
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 0;
+  }
+
+  .ne-copy-link {
+    margin-left: auto;
+  }
+
+  .ne-title,
+  .ne-title-input {
+    order: 1;
+    flex: 1 0 100%;
+    font-size: 22px;
+  }
+
+  .ne-meta {
+    gap: 6px 10px;
+    padding-left: 0;
+  }
+
+  // The edit time drops under the editor's name rather than leading a wrapped line with a "·".
+  .ne-last-edit {
+    flex-wrap: wrap;
+    row-gap: 2px;
+
+    time {
+      flex-basis: 100%;
+      padding-left: 26px; // avatar (20px) + gap (6px): aligns under "Last edited by"
+    }
+  }
+
+  .ne-meta-separator {
+    display: none;
+  }
+
   .ne-attach-dropzone {
     align-items: flex-start;
     flex-direction: column;

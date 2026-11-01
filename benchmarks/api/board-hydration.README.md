@@ -244,5 +244,6 @@ drawer on the final page; checks overview and export against the complete set; i
 create/move/delete/custom-field changes while page requests are held; disconnects and reconnects
 after loading more pages; rejects stale navigation responses; and exercises offline partial versus
 complete caches and guest access revocation. Assert exact persisted and rendered data, not a
-machine-dependent timing threshold. Include desktop and phone screenshots. Record caught failures
-in `e2e/COVERAGE.md` and report the runner's `e2e/artifacts/<run>/` path and reproduction command.
+machine-dependent timing threshold. Include desktop and phone screenshots. Update the relevant
+behavior summary in `e2e/COVERAGE.md` when coverage changes, and report the runner's
+`e2e/artifacts/<run>/` path and reproduction command.

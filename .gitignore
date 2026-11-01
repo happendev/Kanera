@@ -43,3 +43,6 @@ __pycache__/
 apps/api/src/lib/email-templates/preview/*/
 # Lock directories held briefly by `node apps/web/scripts/i18n.mjs merge`.
 apps/web/src/locale/.lock-*
+
+# Rebuilt from the pinned Tabler package by web assets:generate.
+apps/web/src/fonts/

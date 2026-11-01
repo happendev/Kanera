@@ -9812,6 +9812,7 @@
   "@6371588679924903737": {
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
+      "src/app/features/notes/note-tree-node.component.ts",
       "src/app/features/shell/app-shell.component.html"
     ]
   },
@@ -11933,6 +11934,7 @@
       "src/app/features/board/card-detail.component.ts",
       "src/app/features/notes/note-editor.component.ts",
       "src/app/features/notes/note-tree-node.component.ts",
+      "src/app/features/notes/notes-tree.component.ts",
       "src/app/features/notes/notes-view.component.ts",
       "src/app/features/scratchpad/scratchpad-panel.component.ts"
     ]
@@ -20169,6 +20171,13 @@
       "src/app/features/notes/note-editor.component.ts"
     ]
   },
+  "4507961137585978344": "This note changed since you started editing. Your draft was preserved.",
+  "@4507961137585978344": {
+    "description": "Error banner on a note",
+    "x-files": [
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
   "6026682609929516881": "Your session expired. Refresh the page and sign in again.",
   "@6026682609929516881": {
     "description": "Error banner on a note when the sign-in session expired",
@@ -20307,13 +20316,6 @@
       "src/app/features/notes/note-editor.component.ts"
     ]
   },
-  "4507961137585978344": "This note changed since you started editing. Your draft was preserved.",
-  "@4507961137585978344": {
-    "description": "Error banner on a note",
-    "x-files": [
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
   "696228858907475808": "Failed to save: {$reason}",
   "@696228858907475808": {
     "description": "Error banner on a note; the reason comes from the server",
@@ -20400,6 +20402,20 @@
   "1581135143924681573": "Drop here to move to top level",
   "@1581135143924681573": {
     "description": "Drop zone in the notes tree",
+    "x-files": [
+      "src/app/features/notes/notes-tree.component.ts"
+    ]
+  },
+  "1182866853296343305": "Top level",
+  "@1182866853296343305": {
+    "description": "Drag-and-drop hint in the notes tree - the dragged note will become a top-level note",
+    "x-files": [
+      "src/app/features/notes/notes-tree.component.ts"
+    ]
+  },
+  "8330719237890183834": "Notes nest up to 3 levels",
+  "@8330719237890183834": {
+    "description": "Drag-and-drop hint in the notes tree - the note cannot be dropped here because it would be nested too deep",
     "x-files": [
       "src/app/features/notes/notes-tree.component.ts"
     ]

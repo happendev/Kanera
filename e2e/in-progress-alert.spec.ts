@@ -139,7 +139,10 @@ test("a board flags work in progress too long and filters to work in progress", 
   await alert.fill("0");
   await alert.press("Tab");
   await expect(agedChip).not.toHaveClass(/\bis-alert\b/);
-  await expect(agedChip).toHaveAttribute("aria-label", /^In progress since .* \(2 weeks\) · 80 hours tracked$/);
+  // Turning the alert off removes its accessible warning too. An after-hours pause explanation
+  // may follow the tracked total; it is independent of the alert setting.
+  await expect(agedChip).toHaveAccessibleName(/^In progress since .* \(2 weeks\) · 80 hours tracked/);
+  await expect(agedChip).not.toHaveAccessibleName(/past the \d+-day alert/);
   await settings.screenshot({ path: test.info().outputPath("settings-alert.png") });
 });
 

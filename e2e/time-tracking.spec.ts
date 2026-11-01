@@ -38,7 +38,7 @@ async function createWorkspace(api: APIRequestContext, name: string): Promise<Wo
 type ImportedCard = { title: string; list: "Todo" | "Doing"; runningForSeconds: number | null; bankedSeconds: number };
 
 /** Imports a board whose cards carry the given clocks; returns the new board's id. */
-async function importTrackedBoard(api: APIRequestContext, ws: Workspace, boardName: string, cards: ImportedCard[]): Promise<string> {
+async function importTrackedBoard(api: APIRequestContext, ws: Workspace, boardName: string, cards: ImportedCard[], now = Date.now()): Promise<string> {
   const scratch = await api.post(`/api/workspaces/${ws.workspaceId}/boards`, { data: { name: `${boardName} export` } });
   expect(scratch.ok(), await scratch.text()).toBe(true);
   const scratchId = ((await scratch.json()) as { id: string }).id;
@@ -52,7 +52,7 @@ async function importTrackedBoard(api: APIRequestContext, ws: Workspace, boardNa
   const byTitle = new Map(cards.map((card) => [card.title, card]));
   archive.cards = archive.cards.map((row) => {
     const card = byTitle.get(row.title as string)!;
-    const since = card.runningForSeconds === null ? null : new Date(Date.now() - card.runningForSeconds * 1000).toISOString();
+    const since = card.runningForSeconds === null ? null : new Date(now - card.runningForSeconds * 1000).toISOString();
     return { ...row, listId: ws.lists.get(card.list), listEnteredAt: since ?? row.listEnteredAt, inProgressSince: since, inProgressSeconds: card.bankedSeconds };
   });
 
@@ -95,10 +95,14 @@ test("time in progress accumulates across stints and shows on tiles, card detail
   const running = uniqueName("E2E running 96 hours");
   // Three hours from earlier stints, not in progress now.
   const stopped = uniqueName("E2E stopped three hours");
+  // Freeze only the browser's Date, not timers or the server. This makes the displayed working
+  // time and exact table aggregates independent of how long navigation and assertions take.
+  const now = Date.now();
+  await page.clock.setFixedTime(new Date(now));
   const boardId = await importTrackedBoard(api, ws, boardName, [
     { title: running, list: "Doing", runningForSeconds: 14 * DAY_S, bankedSeconds: 16 * HOUR_S },
     { title: stopped, list: "Todo", runningForSeconds: null, bankedSeconds: 3 * HOUR_S },
-  ]);
+  ], now);
   const runningId = await cardIdByTitle(api, boardId, running);
 
   await signIn(page, "amelia");
@@ -112,7 +116,7 @@ test("time in progress accumulates across stints and shows on tiles, card detail
   await expect(runningChip).toHaveText(/^\s*96h\s*$/);
   await expect(runningChip).not.toHaveClass(/\bis-done\b/);
   // The alert reads the current stint's calendar span (two weeks); the label names it and the total.
-  await expect(runningChip).toHaveAttribute("aria-label", /^In progress since .* \(2 weeks\) · 96 hours tracked, past the 7-day alert$/);
+  await expect(runningChip).toHaveAttribute("aria-label", /^In progress since .* \(2 weeks\) · 96 hours tracked, past the 7-day alert/);
   await expect(stoppedChip).toHaveText(/^\s*3h\s*$/);
   await expect(stoppedChip).toHaveClass(/\bis-done\b/);
   await expect(stoppedChip).toHaveAttribute("aria-label", "3 hours tracked in progress");
@@ -121,7 +125,7 @@ test("time in progress accumulates across stints and shows on tiles, card detail
   await tile(page, running).click();
   const detail = page.getByRole("dialog", { name: `Card detail: ${running}` });
   const timer = detail.locator(".col-main .detail-time-in-progress");
-  await expect(timer).toContainText("In progress");
+  await expect(timer).toHaveAccessibleName(/^In progress since /);
   await expect(timer.locator("strong")).toHaveText(/^96h( \d+m)?$/);
   const aboveDescription = await timer.evaluate((element) => {
     const description = Array.from(element.closest(".col-main")!.querySelectorAll(".section-label")).find((label) => label.textContent?.includes("Description"));
@@ -132,15 +136,8 @@ test("time in progress accumulates across stints and shows on tiles, card detail
   await page.keyboard.press("Escape");
   await expect(detail).toBeHidden();
 
-  // Leaving progress banks the stint's working time: the tile keeps its 96 hours, stopped, live.
-  const moved = await api.post(`/api/cards/${runningId}/move`, { data: { listId: ws.lists.get("Done"), afterCardId: null } });
-  expect(moved.ok(), await moved.text()).toBe(true);
-  expect(((await moved.json()) as { inProgressSeconds: number }).inProgressSeconds).toBeGreaterThanOrEqual(96 * HOUR_S);
-  await expect(runningChip).toHaveClass(/\bis-done\b/);
-  await expect(runningChip).toHaveText(/^\s*96h\s*$/);
-  await page.screenshot({ path: test.info().outputPath("board-stopped-time.png") });
-
-  // The table sums and averages it like a number field.
+  // Check exact aggregates at the fixed browser time, before the real server banks any seconds
+  // spent running this test. The table sums and averages tracked time like a number field.
   await page.getByRole("button", { name: "Table view" }).click();
   const table = page.locator("k-board-table-view");
   await expect(table.locator(`.tv-row[data-card-id="${runningId}"] [data-col="inProgress"] .tv-time-in-progress`)).toHaveText(/96h/);
@@ -159,6 +156,15 @@ test("time in progress accumulates across stints and shows on tiles, card detail
   await page.reload();
   await expect(table.locator(".tv-footer .tv-aggregate-btn strong")).toHaveText("49h 30m");
 
+  await page.getByRole("button", { name: "Board view" }).click();
+  // Leaving progress banks the stint's working time: the tile keeps its 96 hours, stopped, live.
+  const moved = await api.post(`/api/cards/${runningId}/move`, { data: { listId: ws.lists.get("Done"), afterCardId: null } });
+  expect(moved.ok(), await moved.text()).toBe(true);
+  expect(((await moved.json()) as { inProgressSeconds: number }).inProgressSeconds).toBeGreaterThanOrEqual(96 * HOUR_S);
+  await expect(runningChip).toHaveClass(/\bis-done\b/);
+  await expect(runningChip).toHaveText(/^\s*96h\s*$/);
+  await page.screenshot({ path: test.info().outputPath("board-stopped-time.png") });
+
   // Completing keeps the total, and Work done shows it beside what happened.
   const completed = await api.patch(`/api/cards/${runningId}/completion`, { data: { completed: true } });
   expect(completed.ok(), await completed.text()).toBe(true);
@@ -169,4 +175,84 @@ test("time in progress accumulates across stints and shows on tiles, card detail
   await expect(workDoneChip).toHaveText(/^\s*96h\s*$/);
   await expect(workDoneChip).not.toHaveClass(/\bis-running\b/);
   await page.screenshot({ path: test.info().outputPath("work-done-time.png") });
+});
+
+test("running clocks count working hours, pause overnight and over weekends, and resume on Monday", async ({ page, signIn, apiAs, uniqueName }) => {
+  const api = await apiAs("amelia");
+  const ws = await createWorkspace(api, uniqueName("E2E Hours WS"));
+  const boardName = uniqueName("E2E Hours Board");
+  const running = uniqueName("E2E working hours clock");
+  const stopped = uniqueName("E2E stopped clock");
+  const brief = uniqueName("E2E stopped under a minute");
+  // Historical import provides a known Friday stint and a banked total without changing the
+  // server's clock. Only read these cards: writes would bank time using the real server date.
+  const friday = Date.parse("2026-10-30T16:30:00Z");
+  await page.clock.setFixedTime(new Date(friday));
+  const boardId = await importTrackedBoard(api, ws, boardName, [
+    { title: running, list: "Doing", runningForSeconds: 30 * 60, bankedSeconds: 2 * HOUR_S },
+    { title: stopped, list: "Todo", runningForSeconds: null, bankedSeconds: 3 * HOUR_S },
+    { title: brief, list: "Todo", runningForSeconds: null, bankedSeconds: 30 },
+  ], friday);
+  const runningId = await cardIdByTitle(api, boardId, running);
+  await signIn(page, "amelia");
+
+  const cases = [
+    { name: "friday-working", at: "2026-10-30T16:30:00Z", compact: "2h", total: "2h 30m", paused: false, resume: "" },
+    { name: "friday-closed", at: "2026-10-30T17:00:00Z", compact: "3h", total: "3h", paused: true, resume: "Mon 2 Nov, 9:00" },
+    { name: "sunday", at: "2026-11-01T12:00:00Z", compact: "3h", total: "3h", paused: true, resume: "9:00" },
+    { name: "monday-resumed", at: "2026-11-02T09:30:00Z", compact: "3h", total: "3h 30m", paused: false, resume: "" },
+  ];
+  for (const sample of cases) {
+    await test.step(sample.name, async () => {
+      await page.clock.setFixedTime(new Date(sample.at));
+      // A fresh route reads the controlled Date into the app's clock without accelerating socket,
+      // auth or retry timers. No backend responses or time-calculation code are mocked.
+      await page.goto(`/b/${boardId}`);
+      await expectBoardLoaded(page, boardName);
+      const chip = tile(page, running).locator(".card-time-in-progress");
+      await expect(chip).toHaveText(sample.compact);
+      await expect(chip).not.toHaveClass(/\bis-done\b/);
+      if (sample.paused) {
+        await expect(chip).toHaveClass(/\bis-paused\b/);
+        await expect(chip).toHaveAccessibleName(/paused outside working hours \(weekdays 09:00-17:00 UTC\), resumes /);
+        await expect(chip).toHaveAccessibleName(new RegExp(`${sample.resume}$`));
+      } else {
+        await expect(chip).not.toHaveClass(/\bis-paused\b/);
+        await expect(chip).not.toHaveAccessibleName(/paused outside working hours/);
+      }
+      // An exact imported short stint covers the suppression threshold without depending on
+      // setup/navigation completing within a minute.
+      await expect(tile(page, brief).locator(".card-time-in-progress")).toHaveCount(0);
+      const stoppedChip = tile(page, stopped).locator(".card-time-in-progress");
+      await expect(stoppedChip).toHaveText("3h");
+      await expect(stoppedChip).toHaveClass(/\bis-done\b/);
+      await expect(stoppedChip).not.toHaveClass(/\bis-paused\b/);
+
+      await tile(page, running).click();
+      const detail = page.getByRole("dialog", { name: `Card detail: ${running}` });
+      const timer = detail.locator(".col-main .detail-time-in-progress");
+      await expect(timer.locator(".detail-time-caption")).toHaveText(sample.paused ? `Paused until ${sample.resume}` : "In progress");
+      await expect(timer.locator("strong")).toHaveText(sample.total);
+      await page.screenshot({ animations: "disabled", path: test.info().outputPath(`${sample.name}.png`) });
+      await page.keyboard.press("Escape");
+      await expect(detail).toBeHidden();
+
+      await page.getByRole("button", { name: "Table view" }).click();
+      const tableChip = page.locator(`k-board-table-view .tv-row[data-card-id="${runningId}"] [data-col="inProgress"] .tv-time-in-progress`);
+      await expect(tableChip).toHaveText(sample.compact);
+      if (sample.paused) await expect(tableChip).toHaveClass(/\bis-paused\b/);
+      else await expect(tableChip).not.toHaveClass(/\bis-paused\b/);
+      // Persist the board view for the next sample; also cover the paused detail on a phone.
+      await page.getByRole("button", { name: "Board view" }).click();
+      if (sample.name === "sunday") {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await tile(page, running).click();
+        await expect(timer).toContainText(`Paused until ${sample.resume}`);
+        await expect(timer.locator("strong")).toHaveText(sample.total);
+        await page.screenshot({ animations: "disabled", path: test.info().outputPath("paused-phone.png") });
+        await page.keyboard.press("Escape");
+        await page.setViewportSize({ width: 1440, height: 900 });
+      }
+    });
+  }
 });

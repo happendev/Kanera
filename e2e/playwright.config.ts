@@ -95,7 +95,7 @@ export default defineConfig({
     {
       // Test the startup build: disable HMR as well as watching so component patch imports
       // cannot invalidate modules while a browser is navigating during a test.
-      command: `pnpm --dir ../apps/web exec ng serve --configuration e2e --watch=false --hmr=false --live-reload=false --port ${ports.web} --proxy-config ../../e2e/web-proxy.config.mjs > "$KANERA_E2E_ARTIFACT_DIR/web.log" 2>&1`,
+      command: `pnpm --dir ../apps/web icons:css && pnpm --dir ../apps/web exec ng serve --configuration e2e --watch=false --hmr=false --live-reload=false --port ${ports.web} --proxy-config ../../e2e/web-proxy.config.mjs > "$KANERA_E2E_ARTIFACT_DIR/web.log" 2>&1`,
       url: `${webOrigin}/login`,
       reuseExistingServer: false,
       timeout: 180_000,
