@@ -122,6 +122,14 @@ export class NotificationsPanelComponent {
     for (const actor of this.notifications.notificationUserOptions()) byId.set(actor.userId, actor);
     return [...byId.values()].sort((a, b) => a.displayName.localeCompare(b.displayName) || a.userId.localeCompare(b.userId));
   });
+  // Mention chips in comment previews resolve avatars from this list. The viewer is added because
+  // the Mentions tab is mostly chips of them, and a cross-org guest is absent from workspace rosters.
+  readonly mentionMembers = computed(() => {
+    const me = this.auth.user();
+    const users = this.availableUsers();
+    if (!me || users.some((user) => user.userId === me.id)) return users;
+    return [...users, { userId: me.id, displayName: me.displayName, avatarUrl: me.avatarUrl }];
+  });
   readonly drawerBody = viewChild<ElementRef<HTMLElement>>("drawerBody");
   readonly loadMoreSentinel = viewChild<ElementRef<HTMLElement>>("loadMoreSentinel");
   readonly actionsMenuNotificationId = signal<string | null>(null);
