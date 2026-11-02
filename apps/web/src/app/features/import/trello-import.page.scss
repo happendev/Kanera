@@ -144,29 +144,6 @@
   }
 }
 
-.segmented {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-
-  button {
-    height: var(--h-md);
-    border: 0;
-    border-right: 1px solid var(--border);
-    border-radius: 0;
-    background: var(--surface-2);
-    color: var(--text-muted);
-    font-size: var(--text-sm);
-
-    &:last-child { border-right: 0; }
-    &.is-selected {
-      background: var(--accent);
-      color: var(--accent-fg);
-    }
-  }
-}
-
 .mapping-controls {
   grid-column: 1 / -1;
   display: flex;

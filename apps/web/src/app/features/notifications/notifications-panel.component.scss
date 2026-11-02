@@ -437,11 +437,14 @@
   }
 }
 
-// Unread / All is k-segmented at size="sm"; only its grid placement belongs here.
+// Unread / All is k-segmented; only its grid placement belongs here. On coarse pointers it keeps the
+// --h-lg track instead of the 44px floor: a taller first row pushes the feed down on a phone, and the
+// tabs are never the only way to reach a notification.
 .toolbar-toggle {
   grid-column: 1;
   grid-row: 1;
   justify-self: start;
+  --sg-touch-track-height: var(--h-lg);
 }
 
 // Four tabs with counts ("Mentions (12)", "Agent (3)") overflow the first row beside "Mark all
@@ -472,9 +475,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  // Height matches the k-segmented sm track beside it; the global button rule
-  // would otherwise leave a 36px button on a 28px row.
-  height: 28px;
+  // Height matches the k-segmented track beside it.
+  height: var(--h-lg);
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-muted);
@@ -1235,7 +1237,7 @@
 }
 
 // Coarse pointers: the selects take the shared 44px touch floor (they are the toolbar's only
-// small targets a thumb aims at between scrolls); the segmented and mark-all keep the 36px sm
+// small targets a thumb aims at between scrolls); the segmented and mark-all keep the --h-lg
 // height they share on row one.
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
   .filter-select {

@@ -14,14 +14,15 @@
 
       <k-card-detail-metadata [model]="viewModel.metadata" />
 
-    <div class="col-tabs">
-      <button type="button" class="tab-btn" [class.is-active]="activeTab() === 'detail'" (click)="activeTab.set('detail')">
-        <i aria-hidden="true" class="ti ti-file-text"></i>&ngsp;<ng-container i18n="Tab in card detail on small screens: fields, checklists and attachments">Detail</ng-container>
-      </button>
-      <button type="button" class="tab-btn" [class.is-active]="activeTab() === 'comments'" (click)="activeTab.set('comments')">
-        <i aria-hidden="true" class="ti ti-message-circle"></i>&ngsp;<ng-container i18n="Tab in card detail on small screens: comments and history">Activity</ng-container>
-      </button>
-    </div>
+    <k-segmented
+      class="col-tabs"
+      [options]="tabOptions"
+      [value]="activeTab()"
+      [showLabels]="true"
+      ariaLabel="Card detail sections"
+      i18n-ariaLabel
+      (valueChange)="activeTab.set($event)"
+    />
 
     <!-- cdkScrollable registers this inner scroller with CDK drag-drop so the manual checklist
          auto-scroll (below) re-sorts the drag as rows scroll into view under a stationary pointer. -->

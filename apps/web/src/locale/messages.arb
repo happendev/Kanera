@@ -164,6 +164,7 @@
       "src/app/features/board/board.page.ts",
       "src/app/features/board/card-detail.component.ts",
       "src/app/features/home/getting-started.component.ts",
+      "src/app/features/notes/notes-view.component.ts",
       "src/app/features/notes/workspace-notes.page.ts",
       "src/app/features/search/global-search-overlay.component.ts",
       "src/app/features/shell/app-shell.component.html",
@@ -6710,7 +6711,7 @@
     "description": "File type filter option — all files",
     "x-files": [
       "src/app/features/account-settings/storage/storage.page.ts",
-      "src/app/features/board/card-activity.component.html",
+      "src/app/features/board/card-activity.component.ts",
       "src/app/features/notifications/notifications-panel.component.ts"
     ]
   },
@@ -8572,7 +8573,7 @@
     "description": "Board export spreadsheet column, number of comments",
     "x-files": [
       "src/app/features/board/board-export.util.ts",
-      "src/app/features/board/card-activity.component.html",
+      "src/app/features/board/card-activity.component.ts",
       "src/app/features/search/global-search-overlay.component.ts"
     ]
   },
@@ -9970,20 +9971,13 @@
     "description": "Section heading in card detail: comments and history",
     "x-files": [
       "src/app/features/board/card-activity.component.html",
-      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/card-detail.component.ts",
       "src/app/features/board/work-done-view/work-done-view.component.ts",
       "src/app/shared/activity-strip.component.ts"
     ]
   },
   "5674957325491829010": "Feed filter",
   "@5674957325491829010": {
-    "x-files": [
-      "src/app/features/board/card-activity.component.html"
-    ]
-  },
-  "6729916752786542046": "Agents",
-  "@6729916752786542046": {
-    "description": "Activity feed filter: show only comments, changes and run outcomes from AI agents",
     "x-files": [
       "src/app/features/board/card-activity.component.html"
     ]
@@ -10151,6 +10145,13 @@
     "x-files": [
       "src/app/features/board/card-activity.component.ts",
       "src/app/features/board/table-view/group-by.util.ts"
+    ]
+  },
+  "6729916752786542046": "Agents",
+  "@6729916752786542046": {
+    "description": "Activity feed filter - show only comments, changes and run outcomes from AI agents",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
     ]
   },
   "710756679370077640": "{$person} wrote:",
@@ -11635,9 +11636,8 @@
       "src/app/features/notes/note-editor.component.ts"
     ]
   },
-  "5612709566632732179": "Detail",
-  "@5612709566632732179": {
-    "description": "Tab in card detail on small screens: fields, checklists and attachments",
+  "5917989080153022070": "Card detail sections",
+  "@5917989080153022070": {
     "x-files": [
       "src/app/features/board/card-detail.component.html"
     ]
@@ -12103,6 +12103,13 @@
       "src/app/features/board/card-detail.component.ts",
       "src/app/features/board/description-viewer.component.ts",
       "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "5612709566632732179": "Detail",
+  "@5612709566632732179": {
+    "description": "Tab in card detail on small screens - fields, checklists and attachments",
+    "x-files": [
+      "src/app/features/board/card-detail.component.ts"
     ]
   },
   "1133994986091402323": "Edit title",
@@ -18232,7 +18239,7 @@
     "description": "Getting started step button",
     "x-files": [
       "src/app/features/home/getting-started.component.ts",
-      "src/app/features/import/trello-import.page.html",
+      "src/app/features/import/trello-import.page.ts",
       "src/app/features/workspace-settings/api/api.page.html"
     ]
   },
@@ -19363,16 +19370,9 @@
       "src/app/features/import/trello-import.page.html"
     ]
   },
-  "5813867925497374051": "Map",
-  "@5813867925497374051": {
-    "description": "Import mapping choice: map to an existing item",
-    "x-files": [
-      "src/app/features/import/trello-import.page.html"
-    ]
-  },
-  "4563965495368336177": "Skip",
-  "@4563965495368336177": {
-    "description": "Import mapping choice: do not import",
+  "8408437218086642714": "Import choice",
+  "@8408437218086642714": {
+    "description": "Label for the Create / Map / Skip choice on an imported item",
     "x-files": [
       "src/app/features/import/trello-import.page.html"
     ]
@@ -19764,6 +19764,20 @@
   },
   "3975607546374913895": "The CSV rows have been imported into a new Kanera board.",
   "@3975607546374913895": {
+    "x-files": [
+      "src/app/features/import/trello-import.page.ts"
+    ]
+  },
+  "5813867925497374051": "Map",
+  "@5813867925497374051": {
+    "description": "Import mapping choice - map to an existing item",
+    "x-files": [
+      "src/app/features/import/trello-import.page.ts"
+    ]
+  },
+  "4563965495368336177": "Skip",
+  "@4563965495368336177": {
+    "description": "Import mapping choice - do not import",
     "x-files": [
       "src/app/features/import/trello-import.page.ts"
     ]
@@ -20420,13 +20434,6 @@
       "src/app/features/notes/notes-tree.component.ts"
     ]
   },
-  "29049426696083952": "My notes",
-  "@29049426696083952": {
-    "description": "Notes tab: the viewer's private notes",
-    "x-files": [
-      "src/app/features/notes/notes-view.component.ts"
-    ]
-  },
   "404345349657011258": "New note",
   "@404345349657011258": {
     "description": "Button: create a note",
@@ -20437,6 +20444,13 @@
   "924272981906905234": "Notes menu",
   "@924272981906905234": {
     "description": "Button: open the notes sidebar on small screens",
+    "x-files": [
+      "src/app/features/notes/notes-view.component.ts"
+    ]
+  },
+  "29049426696083952": "My notes",
+  "@29049426696083952": {
+    "description": "Notes tab - the viewer's private notes",
     "x-files": [
       "src/app/features/notes/notes-view.component.ts"
     ]

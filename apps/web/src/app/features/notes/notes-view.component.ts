@@ -19,6 +19,7 @@ import { AuthService } from "../../core/auth/auth.service";
 import { ApiError } from "../../core/api/api.client";
 import { notesSelectionKey, notesTabKey } from "../../core/browser/browser-contracts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
+import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { ToastService } from "../../shared/toast.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { NoteEditorComponent } from "./note-editor.component";
@@ -39,34 +40,22 @@ const UNTITLED = $localize`:Fallback title for a note without one:Untitled`;
 @Component({
   selector: "k-notes-view",
   standalone: true,
-  imports: [NotesTreeComponent, NoteEditorComponent, TooltipDirective],
+  imports: [SegmentedComponent, NotesTreeComponent, NoteEditorComponent, TooltipDirective],
   providers: [NotesState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="nv-shell" [class.sidebar-open]="sidebarOpen()">
       <div class="nv-backdrop" (click)="closeSidebar()" aria-hidden="true"></div>
       <aside class="nv-sidebar">
-        <div class="nv-tabs" role="tablist">
-          <button
-            type="button"
-            class="nv-tab"
-            role="tab"
-            [attr.aria-selected]="activeTab() === 'personal'"
-            [class.active]="activeTab() === 'personal'"
-            (click)="setTab('personal')">
-            <i aria-hidden="true" class="ti ti-user"></i>
-            <span i18n="Notes tab: the viewer's private notes">My notes</span>
-          </button>
-          <button
-            type="button"
-            class="nv-tab"
-            role="tab"
-            [attr.aria-selected]="activeTab() === 'team'"
-            [class.active]="activeTab() === 'team'"
-            (click)="setTab('team')">
-            <i aria-hidden="true" class="ti ti-users"></i>
-            <span i18n="Notes tab: notes shared with the team">Team</span>
-          </button>
+        <div class="nv-tabs">
+          <k-segmented
+            [options]="tabOptions"
+            [value]="activeTab()"
+            [showLabels]="true"
+            ariaLabel="Notes"
+            i18n-ariaLabel="Label for the My notes / Team switch"
+            (valueChange)="setTab($event)"
+          />
         </div>
         <div class="nv-tab-description">
           {{ tabDescription() }}
@@ -141,6 +130,10 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
   readonly canEditTeamRole = input(false);
 
   readonly activeTab = signal<NoteScopeValue>("personal");
+  readonly tabOptions: SegmentedOption<NoteScopeValue>[] = [
+    { id: "personal", icon: "user", label: $localize`:Notes tab - the viewer's private notes:My notes` },
+    { id: "team", icon: "users", label: $localize`:Notes tab - notes shared with the team:Team` },
+  ];
   readonly sidebarOpen = signal(false);
   protected readonly closeSidebarLabel = $localize`:Button label:Close notes sidebar`;
   protected readonly openSidebarLabel = $localize`:Button label:Open notes sidebar`;

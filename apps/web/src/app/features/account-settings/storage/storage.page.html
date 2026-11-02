@@ -83,8 +83,8 @@
   </p>
 
   <div class="storage-filters">
-    <k-segmented [options]="kindOptions" [value]="kind()" [showLabels]="true" size="sm" ariaLabel="File type" i18n-ariaLabel (valueChange)="kind.set($event)" />
-    <k-segmented [options]="sortOptions" [value]="sort()" [showLabels]="true" size="sm" ariaLabel="Sort files" i18n-ariaLabel (valueChange)="sort.set($event)" />
+    <k-segmented [options]="kindOptions" [value]="kind()" [showLabels]="true" ariaLabel="File type" i18n-ariaLabel (valueChange)="kind.set($event)" />
+    <k-segmented [options]="sortOptions" [value]="sort()" [showLabels]="true" ariaLabel="Sort files" i18n-ariaLabel (valueChange)="sort.set($event)" />
     <select class="storage-filter-select" aria-label="Minimum file size" i18n-aria-label (input)="minBytes.set(+$any($event.target).value)">
       @for (option of sizeFilters; track option.value) {
       <option [value]="option.value" [selected]="option.value === minBytes()">{{ option.label }}</option>

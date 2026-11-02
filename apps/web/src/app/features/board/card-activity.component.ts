@@ -39,6 +39,7 @@ import { DescriptionViewerComponent } from "./description-viewer.component";
 import { formatDueDate, type DueDateSlotSelection } from "./due-date.util";
 import { ImageLightboxService } from "./image-lightbox.service";
 import { ReactionPopoverComponent } from "./reaction-popover.component";
+import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { feedDayGroup, feedDayGroupLabel, formatFeedTime, type FeedDayGroup } from "../../shared/date-format";
 import { icu } from "../../core/i18n/icu";
 import { appLocale } from "../../core/i18n/locale";
@@ -117,6 +118,7 @@ const NO = () => $localize`:Checkbox field value in card activity:No`;
     DescriptionEditorComponent,
     DescriptionViewerComponent,
     ReactionPopoverComponent,
+    SegmentedComponent,
     TooltipDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -191,6 +193,13 @@ export class CardActivityComponent {
   readonly showAgentsFilter = computed(() =>
     this.renderableFeedItems().some((item) => item.type === "comment" && item.data.authorKind === "agent"),
   );
+  readonly feedFilterOptions = computed((): SegmentedOption<"all" | "comments" | "agents">[] => [
+    { id: "all", label: $localize`:Activity feed filter - show comments and history:All` },
+    { id: "comments", label: $localize`:Activity feed filter - show only comments:Comments` },
+    ...(this.showAgentsFilter()
+      ? [{ id: "agents" as const, label: $localize`:Activity feed filter - show only comments, changes and run outcomes from AI agents:Agents` }]
+      : []),
+  ]);
   readonly activeFeedFilter = computed(() =>
     this.feedFilter() === "agents" && !this.showAgentsFilter() ? "all" : this.feedFilter(),
   );

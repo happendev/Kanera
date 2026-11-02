@@ -21,7 +21,7 @@ for (const width of [1280, 390]) {
     await expect(authorDetail.locator(".comment").filter({ hasText: "Original question" })).toHaveCount(1);
 
     const detail = await openCard(page, title);
-    const activityTab = detail.locator(".tab-btn").filter({ hasText: "Activity" });
+    const activityTab = detail.locator(".col-tabs").getByRole("button", { name: "Activity" });
     if (await activityTab.isVisible()) await activityTab.click();
     await detail.getByRole("button", { name: "Comments", exact: true }).click();
     const editor = detail.locator("k-description-editor .tiptap[contenteditable='true']");

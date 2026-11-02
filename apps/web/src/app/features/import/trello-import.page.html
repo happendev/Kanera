@@ -144,11 +144,15 @@
         <strong>{{ list.name }}</strong>
         <span><ng-container i18n="Number of cards in an imported list">{ list.cardCount, plural, =1 {{{ list.cardCount }} card} other {{{ list.cardCount }} cards} }</ng-container>@if (list.closed) { <span i18n="Suffix after a list's card count"> · archived in source</span> }</span>
       </div>
-      <div class="segmented">
-        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'create'" (click)="setListAction(list.id, 'create')" i18n="Import mapping choice: create a new item">Create</button>
-        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'map'" (click)="setListAction(list.id, 'map')" i18n="Import mapping choice: map to an existing item">Map</button>
-        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'skip'" (click)="setListAction(list.id, 'skip')" i18n="Import mapping choice: do not import">Skip</button>
-      </div>
+      <k-segmented
+        [options]="actionOptions"
+        [value]="listMappings()[list.id].action"
+        [showLabels]="true"
+        [equalWidths]="true"
+        ariaLabel="Import choice"
+        i18n-ariaLabel="Label for the Create / Map / Skip choice on an imported item"
+        (valueChange)="setListAction(list.id, $event)"
+      />
       @if (listMappings()[list.id].action === 'create') {
       <div class="mapping-controls">
         <k-icon-picker [value]="listMappings()[list.id].icon || 'list'" (valueChange)="updateList(list.id, { icon: $event })" />
@@ -171,11 +175,15 @@
     @for (label of manifest.labels; track label.id) {
     <div class="mapping-row">
       <div class="mapping-main"><strong>{{ label.name || copy.unnamedLabel }}</strong><span>{{ label.trelloColor || copy.noSourceColor }}</span></div>
-      <div class="segmented">
-        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'create'" (click)="setLabelAction(label.id, 'create')" i18n="Import mapping choice: create a new item">Create</button>
-        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'map'" (click)="setLabelAction(label.id, 'map')" i18n="Import mapping choice: map to an existing item">Map</button>
-        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'skip'" (click)="setLabelAction(label.id, 'skip')" i18n="Import mapping choice: do not import">Skip</button>
-      </div>
+      <k-segmented
+        [options]="actionOptions"
+        [value]="labelMappings()[label.id].action"
+        [showLabels]="true"
+        [equalWidths]="true"
+        ariaLabel="Import choice"
+        i18n-ariaLabel="Label for the Create / Map / Skip choice on an imported item"
+        (valueChange)="setLabelAction(label.id, $event)"
+      />
       @if (labelMappings()[label.id].action === 'create') {
       <div class="mapping-controls">
         <k-color-picker [value]="labelMappings()[label.id].color" (valueChange)="updateLabel(label.id, { color: $event })" />
@@ -197,11 +205,15 @@
     @for (field of manifest.customFields; track field.id) {
     <div class="mapping-row">
       <div class="mapping-main"><strong>{{ field.name }}</strong><span>{{ field.trelloType }} → {{ field.suggestedType }}</span></div>
-      <div class="segmented">
-        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'create'" (click)="setFieldAction(field.id, 'create')" i18n="Import mapping choice: create a new item">Create</button>
-        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'map'" (click)="setFieldAction(field.id, 'map')" i18n="Import mapping choice: map to an existing item">Map</button>
-        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'skip'" (click)="setFieldAction(field.id, 'skip')" i18n="Import mapping choice: do not import">Skip</button>
-      </div>
+      <k-segmented
+        [options]="actionOptions"
+        [value]="fieldMappings()[field.id].action"
+        [showLabels]="true"
+        [equalWidths]="true"
+        ariaLabel="Import choice"
+        i18n-ariaLabel="Label for the Create / Map / Skip choice on an imported item"
+        (valueChange)="setFieldAction(field.id, $event)"
+      />
       @if (fieldMappings()[field.id].action === 'create') {
       <div class="mapping-controls">
         <k-icon-picker [value]="fieldMappings()[field.id].icon" (valueChange)="updateField(field.id, { icon: $event })" />

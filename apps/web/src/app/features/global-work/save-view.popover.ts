@@ -15,6 +15,7 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AutofocusDirective } from "../../shared/autofocus.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { PickerListComponent } from "../../shared/picker-list.component";
+import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { GlobalWorkState } from "./global-work.state";
 
 /**
@@ -27,7 +28,7 @@ import { GlobalWorkState } from "./global-work.state";
 @Component({
   selector: "k-save-view",
   standalone: true,
-  imports: [AutofocusDirective, AvatarComponent, PickerListComponent],
+  imports: [AutofocusDirective, AvatarComponent, PickerListComponent, SegmentedComponent],
   hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -59,19 +60,16 @@ import { GlobalWorkState } from "./global-work.state";
           @if (selected.editable) {
             <div class="sv-field">
               <span class="sv-label" i18n="Field label: who can open a saved view">Visibility</span>
-              <div class="sv-segmented" role="group" aria-label="Visibility" i18n-aria-label="Field label: who can open a saved view">
-                @for (option of visibilityOptions; track option.value) {
-                  <button
-                    type="button"
-                    [class.active]="selected.visibility === option.value"
-                    [disabled]="!state.interactionReady()"
-                    (click)="setVisibility(option.value)"
-                  >
-                    <i aria-hidden="true" class="ti ti-{{ option.icon }}"></i>
-                    {{ option.label }}
-                  </button>
-                }
-              </div>
+              <k-segmented
+                class="sv-segmented"
+                [options]="editableVisibilityOptions()"
+                [value]="selected.visibility"
+                [showLabels]="true"
+                [equalWidths]="true"
+                ariaLabel="Visibility"
+                i18n-ariaLabel="Field label: who can open a saved view"
+                (valueChange)="setVisibility($event)"
+              />
               <p class="sv-help">{{ visibilityHelp(selected.visibility) }}</p>
             </div>
 
@@ -151,18 +149,16 @@ import { GlobalWorkState } from "./global-work.state";
 
           <div class="sv-field">
             <span class="sv-label" i18n="Field label: who can open a saved view">Visibility</span>
-            <div class="sv-segmented" role="group" aria-label="Visibility" i18n-aria-label="Field label: who can open a saved view">
-              @for (option of visibilityOptions; track option.value) {
-                <button
-                  type="button"
-                  [class.active]="newViewVisibility() === option.value"
-                  (click)="newViewVisibility.set(option.value)"
-                >
-                  <i aria-hidden="true" class="ti ti-{{ option.icon }}"></i>
-                  {{ option.label }}
-                </button>
-              }
-            </div>
+            <k-segmented
+              class="sv-segmented"
+              [options]="visibilityOptions"
+              [value]="newViewVisibility()"
+              [showLabels]="true"
+              [equalWidths]="true"
+              ariaLabel="Visibility"
+              i18n-ariaLabel="Field label: who can open a saved view"
+              (valueChange)="newViewVisibility.set($event)"
+            />
             <p class="sv-help">{{ visibilityHelp(newViewVisibility()) }}</p>
           </div>
 
@@ -204,40 +200,11 @@ import { GlobalWorkState } from "./global-work.state";
         line-height: 1.45;
       }
 
-      /* Segmented control instead of a select: two options read faster as a toggle, and it
-         matches the page's display switch. */
+      /* k-segmented instead of a select: two options read faster as a toggle. Stretched so the
+         two halves span the field like the inputs around it. */
       .sv-segmented {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 2px;
-        padding: 3px;
-        background: var(--surface-2);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-
-        button {
-          height: 28px;
-          padding: 0 8px;
-          color: var(--text-muted);
-          background: transparent;
-          border: 0;
-          border-radius: calc(var(--radius) - 3px);
-          font-size: var(--text-sm);
-          font-weight: 600;
-          cursor: pointer;
-
-          &:hover:not(:disabled):not(.active) { color: var(--text); }
-
-          &.active {
-            color: var(--text);
-            background: var(--surface);
-            box-shadow: var(--shadow-sm);
-          }
-
-          &:disabled { cursor: not-allowed; opacity: 0.6; }
-
-          i { font-size: var(--text-md); }
-        }
+        --sg-fill-width: 100%;
+        --sg-fill-flex: 1 1 0;
       }
 
       .sv-chips { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -346,10 +313,14 @@ export class SaveViewPopover {
   readonly newViewName = signal("");
   readonly newViewVisibility = signal<WorkViewVisibility>("private");
 
-  readonly visibilityOptions: { value: WorkViewVisibility; label: string; icon: string }[] = [
-    { value: "private", label: $localize`:Saved view visibility option, only the owner and people it is shared with:Private`, icon: "lock" },
-    { value: "organisation", label: $localize`:Saved view visibility option, everyone in the organisation:Everyone`, icon: "building" },
+  readonly visibilityOptions: SegmentedOption<WorkViewVisibility>[] = [
+    { id: "private", label: $localize`:Saved view visibility option, only the owner and people it is shared with:Private`, icon: "lock" },
+    { id: "organisation", label: $localize`:Saved view visibility option, everyone in the organisation:Everyone`, icon: "building" },
   ];
+  /** Editing an applied view waits for the page to be interactive, like its other controls. */
+  readonly editableVisibilityOptions = computed(() =>
+    this.visibilityOptions.map((option) => ({ ...option, disabled: !this.state.interactionReady() })),
+  );
 
   readonly shareCandidatesById = computed(() =>
     new Map(this.state.shareCandidates().map((person) => [person.userId, person]))
