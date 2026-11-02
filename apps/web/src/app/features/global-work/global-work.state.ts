@@ -1637,7 +1637,18 @@ export class GlobalWorkState {
     this.socket = socket;
     const refreshCards = () => this.scheduleRealtimeRefresh(false);
     const refreshCatalog = () => this.scheduleRealtimeRefresh(true);
+    // A teammate's change applied mid-drag shifts lanes and rows under the pointer: CDK sorts
+    // against the geometry it measured at drag start, so the drop would land one slot off. While a
+    // drag is in flight the live patch is skipped and only the refetch is scheduled, which
+    // scheduleRealtimeRefresh already holds until the pointer is released. One refetch then
+    // converges the whole view, the same way the board's socket bridge recovers.
+    const holdForDrag = (): boolean => {
+      if (!this.cardDrag.active()) return false;
+      refreshCards();
+      return true;
+    };
     const refreshCardActivity = ({ cardId }: { cardId: string }) => {
+      if (holdForDrag()) return;
       // Focused child events carry no card entity, though their API writes already advance
       // cards.updatedAt. Patch the visible row now and let the debounced query reconcile it.
       this.response.update((response) => ({
@@ -1648,10 +1659,12 @@ export class GlobalWorkState {
     };
     this.detachRealtime = registerSocketHandlers(socket, {
       [SERVER_EVENTS.CARD_UPDATED]: ({ card }) => {
+        if (holdForDrag()) return;
         this.patchVisibleCard(card);
         refreshCards();
       },
       [SERVER_EVENTS.CARD_MOVED]: ({ cardId, toListId, position, ...reported }) => {
+        if (holdForDrag()) return;
         // Our own drops already moved the row optimistically, so a list change here is someone
         // else's and washes where it lands, as on the board.
         const arrived = this.response().cards.some((card) => card.id === cardId && card.listId !== toListId);
@@ -1666,6 +1679,7 @@ export class GlobalWorkState {
         refreshCards();
       },
       [SERVER_EVENTS.CARD_REBALANCED]: ({ positions }) => {
+        if (holdForDrag()) return;
         const positionsById = new Map(positions.map((position) => [position.id, position.position]));
         this.response.update((response) => ({
           ...response,
@@ -1677,6 +1691,7 @@ export class GlobalWorkState {
         refreshCards();
       },
       [SERVER_EVENTS.CARD_DELETED]: ({ cardId }) => {
+        if (holdForDrag()) return;
         this.response.update((response) => ({
           ...response,
           cards: response.cards.filter((card) => card.id !== cardId),
@@ -1684,6 +1699,7 @@ export class GlobalWorkState {
         refreshCards();
       },
       [SERVER_EVENTS.CARD_ASSIGNEES_SET]: ({ cardId, assigneeIds }) => {
+        if (holdForDrag()) return;
         this.response.update((response) => ({
           ...response,
           cards: response.cards.map((card) => card.id === cardId ? { ...card, assigneeIds } : card),
@@ -1691,6 +1707,7 @@ export class GlobalWorkState {
         refreshCards();
       },
       [SERVER_EVENTS.CARD_LABELS_SET]: ({ cardId, labelIds }) => {
+        if (holdForDrag()) return;
         this.response.update((response) => ({
           ...response,
           cards: response.cards.map((card) => card.id === cardId ? { ...card, labelIds } : card),

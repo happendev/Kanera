@@ -802,8 +802,9 @@ describe("GlobalWorkState", () => {
       await vi.advanceTimersByTimeAsync(500);
       expect(cardQueries()).toBe(1);
       expect(state.loading()).toBe(false);
-      // The optimistic patch still lands immediately; only the refetch waits.
-      expect(state.response().cards[0]?.listId).toBe("50000000-0000-4000-8000-000000000002");
+      // The live patch waits too: applying it would move the row between lanes under the pointer,
+      // which CDK sorts against the geometry it measured at drag start. The held refetch converges.
+      expect(state.response().cards[0]?.listId).toBe("50000000-0000-4000-8000-000000000001");
 
       drag.end();
       TestBed.tick();

@@ -460,8 +460,8 @@
             [cdkDragData]="card"
             [cdkDragStartDelay]="dragStartDelay"
             [cdkDragDisabled]="!rowDragEnabled(group, card) || (hostCardGroups() !== null && bulkSelectedCardIds().has(card.id))"
-            (cdkDragStarted)="closeMenusForDrag(); hostCardGroups() !== null && hostCardDragStarted.emit()"
-            (cdkDragEnded)="hostCardGroups() !== null && hostCardDragEnded.emit()"
+            (cdkDragStarted)="onRowDragStarted(group, $event)"
+            (cdkDragEnded)="onRowDragEnded()"
             (click)="onRowClick(card, $event)"
             (contextmenu)="onRowContextMenu(card, $event)"
           >

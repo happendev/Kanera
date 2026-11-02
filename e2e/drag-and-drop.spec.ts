@@ -27,14 +27,17 @@ async function dragCard(page: Page, card: Locator, target: Locator, side: "above
   await releaseCard(page);
 }
 
-/** Starts a drag and parks the pointer over the target without releasing, so the test can act mid-drag. */
-async function holdCardOver(page: Page, card: Locator, target: Locator, side: "above" | "below") {
+/**
+ * Starts a drag and parks the pointer over the target without releasing, so the test can act
+ * mid-drag. `grab` is where the pointer goes down: the tile itself, or a table row's drag handle.
+ */
+async function holdCardOver(page: Page, grab: Locator, target: Locator, side: "above" | "below") {
   // Mouse coordinates do not scroll a tile into view like locator actions do.
   await target.scrollIntoViewIfNeeded();
-  await card.scrollIntoViewIfNeeded();
-  await expect(card).toBeInViewport();
+  await grab.scrollIntoViewIfNeeded();
+  await expect(grab).toBeInViewport();
   await expect(target).toBeInViewport();
-  const from = (await card.boundingBox())!;
+  const from = (await grab.boundingBox())!;
   const to = (await target.boundingBox())!;
   const startX = from.x + from.width / 2;
   const startY = from.y + from.height / 2;
@@ -111,61 +114,107 @@ test("dragged cards reorder within and across lists for every viewer and after r
 });
 
 /**
- * A teammate's change landing mid-drag must not move the lists under the pointer. CDK measured the
+ * A teammate's change landing mid-drag must not move the lanes under the pointer. CDK measured the
  * drop list when the drag started; a card inserted above the hover point shifts every tile down
  * while CDK still sorts against the old geometry, so the drop would commit one slot off from the
- * placeholder the person is looking at. The board holds realtime events for the duration of the
- * drag and converges with one refresh once the card is released.
+ * placeholder the person is looking at. Every surface that drags cards holds realtime changes for
+ * the duration of the drag and converges with one refresh once the card is released: the board's
+ * kanban and table through its socket bridge, My Cards' kanban and table through its own state.
  */
-test("a teammate's card arriving mid-drag waits until the drop, which lands where it was aimed", async ({ page, testWorkspace, signIn, pageAs, apiAs, uniqueName }) => {
-  const dragged = uniqueName("E2E mid-drag card");
-  const anchor = uniqueName("E2E mid-drag anchor");
-  const arriving = uniqueName("E2E mid-drag arrival");
-  const titles = [dragged, anchor, arriving];
-  await signIn(page, "amelia");
-  const boardId = await boardIdOf(page, testWorkspace.boardName);
+// `positional`: the surface orders rows by position, so the drop lands at an exact slot. My Cards'
+// table always sorts by a field (due date by default), so a cross-list drop there only changes the
+// card's list; its rows still must not shift under the pointer.
+const MID_DRAG_SURFACES = [
+  { name: "the board", route: "board", display: "kanban", positional: true },
+  { name: "the board's table", route: "board", display: "table", positional: true },
+  { name: "My Cards", route: "my-cards", display: "kanban", positional: true },
+  { name: "My Cards' table", route: "my-cards", display: "table", positional: false },
+] as const;
 
-  const api = await apiAs("amelia");
-  const board = await api.get(`/api/boards/${boardId}?includeCards=false`);
-  const { lists } = (await board.json()) as { lists: { id: string; name: string }[] };
-  const listId = (name: string) => lists.find((list) => list.name === name)!.id;
-  const backlog = listId("Backlog");
-  const wishlist = listId("Wishlist");
-  for (const [list, title] of [[backlog, dragged], [wishlist, anchor]] as const) {
-    const created = await api.post(`/api/boards/${boardId}/lists/${list}/cards`, { data: { title } });
-    expect(created.ok(), await created.text()).toBe(true);
-  }
+for (const surface of MID_DRAG_SURFACES) {
+  test(`a teammate's card arriving mid-drag on ${surface.name} waits until the drop, which lands where it was aimed`, async ({ page, testWorkspace, signIn, pageAs, apiAs, uniqueName }) => {
+    const dragged = uniqueName("E2E mid-drag card");
+    const anchor = uniqueName("E2E mid-drag anchor");
+    const arriving = uniqueName("E2E mid-drag arrival");
+    const titles = [dragged, anchor, arriving];
+    await signIn(page, "amelia");
+    const boardId = await boardIdOf(page, testWorkspace.boardName);
 
-  // Marcus is the fan-out witness: once his board shows the arrival, the server has emitted the
-  // event, so Amelia's socket has it too.
-  const viewer = await pageAs("marcus");
-  await openBoard(page, testWorkspace.boardName);
-  await openBoard(viewer, testWorkspace.boardName);
-  await expect.poll(() => renderedOrder(page, wishlist, titles)).toEqual([anchor]);
-  await expect.poll(() => renderedOrder(viewer, wishlist, titles)).toEqual([anchor]);
+    const api = await apiAs("amelia");
+    // My Cards shows the viewer's assigned cards, so every card in the scenario is Amelia's.
+    const me = await api.get("/api/me");
+    const { id: ameliaId } = (await me.json()) as { id: string };
+    const board = await api.get(`/api/boards/${boardId}?includeCards=false`);
+    const { lists } = (await board.json()) as { lists: { id: string; name: string }[] };
+    const listId = (name: string) => lists.find((list) => list.name === name)!.id;
+    const backlog = listId("Backlog");
+    const wishlist = listId("Wishlist");
+    for (const [list, title] of [[backlog, dragged], [wishlist, anchor]] as const) {
+      const created = await api.post(`/api/boards/${boardId}/lists/${list}/cards`, { data: { title, assigneeIds: [ameliaId] } });
+      expect(created.ok(), await created.text()).toBe(true);
+    }
 
-  const tile = (p: Page, title: string) => p.locator("k-card").filter({ hasText: title });
+    // Marcus watches the board's kanban as the fan-out witness: once his board shows the arrival,
+    // the server has emitted the event, so Amelia's socket has it too.
+    const viewer = await pageAs("marcus");
+    await openBoard(viewer, testWorkspace.boardName);
+    await expect.poll(() => renderedOrder(viewer, wishlist, titles)).toEqual([anchor]);
 
-  // Amelia lines up a drop directly above the anchor and holds there.
-  await holdCardOver(page, tile(page, dragged), tile(page, anchor), "above");
+    if (surface.route === "board") await openBoard(page, testWorkspace.boardName);
+    else await page.goto("/my-cards");
+    // Both pages open on their kanban. Wait for its lanes before switching: the board ignores a
+    // view change until its payload has hydrated, and the heading alone renders earlier than that.
+    await expect.poll(() => renderedOrder(page, wishlist, titles)).toEqual([anchor]);
+    const table = surface.display === "table";
+    if (table) {
+      await page.getByRole("button", { name: /^Table( view)?$/ }).click();
+      await expect(page.locator("k-board-table-view")).toBeVisible();
+    }
+    if (table && surface.route === "my-cards") {
+      // My Cards groups by due date until told otherwise; only list groups accept a dropped row.
+      await page.locator(".menu-anchor .k-toolbar-trigger").filter({ has: page.locator(".ti-layout-rows") }).click();
+      await page.locator("k-anchored-picker").getByRole("option", { name: "List" }).click();
+    }
 
-  // Marcus puts a new card at the top of the same list while she is still holding.
-  const marcus = await apiAs("marcus");
-  const arrived = await marcus.post(`/api/boards/${boardId}/lists/${wishlist}/cards`, { data: { title: arriving, atTop: true } });
-  expect(arrived.ok(), await arrived.text()).toBe(true);
-  await expect.poll(() => renderedOrder(viewer, wishlist, titles)).toEqual([arriving, anchor]);
-  // Her board must not shift under the pointer: the arrival stays out of the DOM until she lets go.
-  await page.waitForTimeout(300);
-  await expect(tile(page, arriving)).toHaveCount(0);
+    const item = (title: string) => table
+      ? page.locator("k-board-table-view .tv-row").filter({ hasText: title })
+      : page.locator("k-card").filter({ hasText: title });
+    const grab = (title: string) => table ? item(title).locator(".tv-drag-handle") : item(title);
+    // The table groups rows by list; the group is found through the anchor row it holds.
+    const wishlistOrder = () => table
+      ? page.locator("k-board-table-view .tv-run-rows").filter({ has: page.locator(".tv-row", { hasText: anchor }) }).locator(".tv-row").allInnerTexts()
+        .then((rows) => rows.flatMap((text) => titles.filter((title) => text.includes(title))))
+      : renderedOrder(page, wishlist, titles);
+    await expect.poll(wishlistOrder).toEqual([anchor]);
+    await expect(item(dragged)).toBeVisible();
 
-  await releaseCard(page);
+    // Amelia lines up a drop directly above the anchor and holds there.
+    await holdCardOver(page, grab(dragged), item(anchor), "above");
 
-  // The drop lands where it was aimed (directly above the anchor), and the held arrival then shows.
-  await expect.poll(() => renderedOrder(page, wishlist, titles)).toEqual([arriving, dragged, anchor]);
-  await expect.poll(() => renderedOrder(viewer, wishlist, titles)).toEqual([arriving, dragged, anchor]);
-  await expect.poll(() => renderedOrder(page, backlog, titles)).toEqual([]);
+    // Marcus puts a new card at the top of the same list while she is still holding.
+    const marcus = await apiAs("marcus");
+    const arrived = await marcus.post(`/api/boards/${boardId}/lists/${wishlist}/cards`, { data: { title: arriving, atTop: true, assigneeIds: [ameliaId] } });
+    expect(arrived.ok(), await arrived.text()).toBe(true);
+    await expect.poll(() => renderedOrder(viewer, wishlist, titles)).toEqual([arriving, anchor]);
+    // Her view must not shift under the pointer: the arrival stays out of the DOM until she lets go.
+    await page.waitForTimeout(300);
+    await expect(item(arriving)).toHaveCount(0);
 
-  await page.reload();
-  await expectBoardLoaded(page, testWorkspace.boardName);
-  await expect.poll(() => renderedOrder(page, wishlist, titles)).toEqual([arriving, dragged, anchor]);
-});
+    await releaseCard(page);
+
+    // The drop lands where it was aimed (directly above the anchor), and the held arrival then shows.
+    const settled = (order: string[]) => surface.positional ? order : [...order].sort();
+    const expected = settled([arriving, dragged, anchor]);
+    await expect.poll(async () => settled(await wishlistOrder())).toEqual(expected);
+    if (surface.positional) await expect.poll(() => renderedOrder(viewer, wishlist, titles)).toEqual(expected);
+    await expect(item(dragged)).toHaveCount(1);
+
+    // Persisted, not just held in either client's state.
+    const persisted = await api.post(`/api/boards/${boardId}/open`);
+    expect(persisted.ok(), await persisted.text()).toBe(true);
+    const { cards } = (await persisted.json()) as { cards: { title: string; listId: string; position: string }[] };
+    const inWishlist = cards.filter((card) => card.listId === wishlist && titles.includes(card.title))
+      .sort((a, b) => Number(a.position) - Number(b.position)).map((card) => card.title);
+    expect(settled(inWishlist)).toEqual(expected);
+  });
+}

@@ -2125,7 +2125,7 @@ type InProgressLimitRow = {
  * the rule has not handled yet. The limit and the clock it is compared with depend on the rule:
  *
  * - `workspace` / `fixed`: the current stint in calendar time, like the amber chip. A card is handled
- *   once; only an admin correction below the alert clears it (cards/routes.ts), never a list move.
+ *   once; only an admin correction below the alert clears it (cards/update.routes.ts), never a list move.
  * - `custom_field`: total tracked working time against the card's own number ("over its estimate").
  *   The run row keeps the limit it was handled at and only a strictly higher limit is due again, so
  *   the rule repeats only when an estimate is raised and the card then outgrows that too.
