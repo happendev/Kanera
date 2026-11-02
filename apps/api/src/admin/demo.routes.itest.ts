@@ -6,6 +6,7 @@ import { verifyPassword } from "../auth/password.js";
 import { db } from "../db.js";
 import { storageKeyFromMediaUrl } from "../lib/media-keys.js";
 import { getStorageForClient } from "../lib/storage/index.js";
+import { seedCalendar } from "../scripts/seed-calendar.js";
 import { buildAdminIntegrationServer } from "../test/integration.js";
 import { adminAuthHeader, createAdmin, loginAdmin } from "../test/admin-fixtures.js";
 
@@ -101,17 +102,18 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     .select({ dueDate: cards.dueDateLocalDate })
     .from(cards)
     .where(isNotNull(cards.dueDateLocalDate));
-  const today = new Date();
-  const todayKey = today.toISOString().slice(0, 10);
-  const futureCutoff = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 45))
-    .toISOString()
-    .slice(0, 10);
+  // Demo deadlines are authored as London business-day offsets capped at B+15 (seed-calendar.ts),
+  // so the window opens on the first working day on or after the reset and closes at B+15.
+  const calendar = seedCalendar(new Date());
+  const todayKey = calendar.date;
+  const firstWorkingDay = calendar.business(0);
+  const futureCutoff = calendar.business(15);
   const upcomingDueDates = seededDueDates.flatMap(({ dueDate }) => dueDate !== null && dueDate >= todayKey ? [dueDate] : []);
   assert.ok(upcomingDueDates.length > 0);
   assert.ok(upcomingDueDates.every((dueDate) => dueDate <= futureCutoff));
-  assert.ok(upcomingDueDates.includes(todayKey), "upcoming dates begin on the seed date");
-  assert.ok(upcomingDueDates.includes(futureCutoff), "upcoming dates reach 45 days after the seed date");
-  assert.ok(new Set(upcomingDueDates).size >= 10, "upcoming dates are spread across the 45-day window");
+  assert.ok(upcomingDueDates.includes(firstWorkingDay), "upcoming dates begin on the first working day of the seed");
+  assert.ok(upcomingDueDates.includes(futureCutoff), "upcoming dates reach 15 business days after the seed date");
+  assert.ok(new Set(upcomingDueDates).size >= 10, "upcoming dates are spread across the 15-business-day window");
   assert.ok(seededDueDates.some(({ dueDate }) => dueDate !== null && dueDate < todayKey), "intentional overdue examples remain");
 
   const [owner] = await db

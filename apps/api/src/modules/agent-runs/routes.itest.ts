@@ -210,8 +210,11 @@ void test("stalled legacy runs publish the card's current board and workspace", 
   assert.equal(events[0]!.scopeId, card.boardId);
   assert.equal(events[0]!.boardId, card.boardId);
   assert.equal(events[0]!.workspaceId, workspace.id);
+  // emitToBoard stamps every card-scoped event with the card's committed detail revision.
+  const [cardRow] = await db.select({ detailRevision: cards.detailRevision }).from(cards).where(eq(cards.id, card.id));
   assert.deepEqual(events[0]!.payload, {
     boardId: card.boardId, cardId: card.id, run: JSON.parse(JSON.stringify(stalled)) as unknown,
+    detailRevision: String(cardRow!.detailRevision),
   });
   assert.equal(await sweepStalledAgentRuns(), 0);
   const [freshRow] = await db.select().from(agentRuns).where(eq(agentRuns.id, fresh.json<RunRow>().id));

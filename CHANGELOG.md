@@ -32,6 +32,7 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+- A teammate's change that arrives while you're dragging a card no longer shifts the lists or table rows under your pointer, on a board or on My Cards and Team Cards, so the card lands exactly where you dropped it. The view catches up as soon as you let go.
 - A card moved into progress outside working hours no longer looks stuck at "<1m": its time-in-progress chip shows a pause icon, card detail says **Paused until** the next working start, and the tooltip explains that only weekday 09:00–17:00 counts. Nothing tracked yet now reads "0m" on the tile and in card detail alike.
 - **Mention avatars:** @-mention chips in notification comment previews, and mentions of people no longer on the board, now show the person's profile picture instead of a generated placeholder.
 - Offline, My Cards and Team Cards now say once that you're looking at a saved copy, in the page's banner, instead of repeating it inside Overview, Timeline, Dependencies and Work done.

@@ -35,6 +35,16 @@ Skipping the activity write breaks the audit trail and history views. Skipping t
 other client stale. Throw the `AppError` helpers from `src/lib/errors.ts` rather than hand-rolling
 error responses.
 
+Handlers stay thin: validate, authorize, call one use case, emit.
+
+- Use cases live in module-local files named after them (`modules/cards/move-card.ts`), take one
+  object parameter and return a typed result the route emits and responds with.
+- No Fastify types in use-case files; pass `app.mailer` or `req.log` as values.
+- Long or order-sensitive emit sequences are an exported `emit<UseCase>(result)` in the same file.
+- Keep each route's existing validate/authorize order; it decides which error wins.
+- Module-shared helpers go in that module's `route-support.ts`. Large modules split routes by
+  sub-resource (`cards/move.routes.ts`), called from the module's `routes.ts` plugin.
+
 ## Realtime
 
 - Emit with `emitToBoard(...)` / `emitToWorkspace(...)`. These also write a durable `event_outbox`

@@ -1,237 +1,31 @@
 import { dto } from "@kanera/shared";
-import type { ListNotificationsQuery, NotificationGroupCountsResponse, NotificationWorkspaceRule, NotificationsPage, PersonalNotificationTestResponse, PushTestResponse, WatcherUser } from "@kanera/shared/dto";
-import { activityEvents, boards, boardWatchers, cardChecklistItems, cardKeyPrefixReservations, cards, cardWatchers, lists, NOTIFICATION_REASON, notificationSettings, notifications, PUSH_QUEUE_STATUS, pushQueue, userNotificationWorkspaceRules, users } from "@kanera/shared/schema";
-import { and, asc, desc, eq, exists, gte, ilike, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { NotificationGroupCountsResponse, NotificationsPage, PersonalNotificationTestResponse, PushTestResponse, WatcherUser } from "@kanera/shared/dto";
+import { activityEvents, boards, boardWatchers, cards, cardWatchers, lists, NOTIFICATION_REASON, notificationSettings, notifications, users } from "@kanera/shared/schema";
+import { and, asc, desc, eq, gte, isNull, or } from "drizzle-orm";
+import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
-import { env } from "../../env.js";
 import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { requestLocale } from "../../lib/i18n/request-locale.js";
-import { serverMessages } from "../../lib/i18n/messages/index.js";
-import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import {
   countUnreadNotifications,
-  enrichNotifications,
   inboxVisibleNotificationCondition,
 } from "../../lib/notifications.js";
 import { signedAvatarUrl } from "../../lib/media-keys.js";
-import { getNotificationSettings, getNotificationWorkspaceRules, toEffectiveNotificationSettings, type EffectiveNotificationWorkspaceRule } from "../../lib/notification-settings.js";
-import { deliverPersonalNotificationTestRow, deliverPushRow, enqueuePersonalNotification, enqueuePushImmediate } from "../../lib/push-queue.js";
-import { encryptSecret } from "../../lib/secrets.js";
-import { assertNotificationDestinationAllowed } from "../../lib/ssrf.js";
-import { newWebhookSecret } from "../../lib/webhook-signing.js";
-import { assertPersonalNotificationChannelsAllowed } from "../../lib/tier-limits.js";
+import { getNotificationSettings } from "../../lib/notification-settings.js";
 import {
   deletePushSubscriptionForUser,
   getWebPushPublicConfig,
   refreshPushSubscription,
-  upsertPushSubscriptionForUser
 } from "../../lib/web-push.js";
 import { verifyLifecycleUnsubscribeToken } from "../../lib/lifecycle-emails.js";
-import { emitToUser } from "../../realtime/emit.js";
-
-function toWorkspaceRuleResponse(rule: EffectiveNotificationWorkspaceRule): NotificationWorkspaceRule {
-  return {
-    workspaceId: rule.workspaceId,
-    paused: rule.paused,
-    types: rule.types,
-  };
-}
-
-function workspaceRuleMatrixValues(types: NotificationWorkspaceRule["types"]) {
-  return {
-    cardAssignedEmail: types.cardAssigned.email,
-    cardAssignedPush: types.cardAssigned.push,
-    cardAssignedNtfy: types.cardAssigned.ntfy,
-    cardAssignedGotify: types.cardAssigned.gotify,
-    cardAssignedWebhook: types.cardAssigned.webhook,
-    cardCommentAddedEmail: types.cardCommentAdded.email,
-    cardCommentAddedPush: types.cardCommentAdded.push,
-    cardCommentAddedNtfy: types.cardCommentAdded.ntfy,
-    cardCommentAddedGotify: types.cardCommentAdded.gotify,
-    cardCommentAddedWebhook: types.cardCommentAdded.webhook,
-    commentMentionedEmail: types.commentMentioned.email,
-    commentMentionedPush: types.commentMentioned.push,
-    commentMentionedNtfy: types.commentMentioned.ntfy,
-    commentMentionedGotify: types.commentMentioned.gotify,
-    commentMentionedWebhook: types.commentMentioned.webhook,
-    cardDueDateChangedEmail: types.cardDueDateChanged.email,
-    cardDueDateChangedPush: types.cardDueDateChanged.push,
-    cardDueDateChangedNtfy: types.cardDueDateChanged.ntfy,
-    cardDueDateChangedGotify: types.cardDueDateChanged.gotify,
-    cardDueDateChangedWebhook: types.cardDueDateChanged.webhook,
-    cardOverdueEmail: types.cardOverdue.email,
-    cardOverduePush: types.cardOverdue.push,
-    cardOverdueNtfy: types.cardOverdue.ntfy,
-    cardOverdueGotify: types.cardOverdue.gotify,
-    cardOverdueWebhook: types.cardOverdue.webhook,
-    cardReminderEmail: types.cardReminder.email,
-    cardReminderPush: types.cardReminder.push,
-    cardReminderNtfy: types.cardReminder.ntfy,
-    cardReminderGotify: types.cardReminder.gotify,
-    cardReminderWebhook: types.cardReminder.webhook,
-    reactionAddedEmail: types.reactionAdded.email,
-    reactionAddedPush: types.reactionAdded.push,
-    reactionAddedNtfy: types.reactionAdded.ntfy,
-    reactionAddedGotify: types.reactionAdded.gotify,
-    reactionAddedWebhook: types.reactionAdded.webhook,
-    cardDependencyEmail: types.cardDependency.email,
-    cardDependencyPush: types.cardDependency.push,
-    cardDependencyNtfy: types.cardDependency.ntfy,
-    cardDependencyGotify: types.cardDependency.gotify,
-    cardDependencyWebhook: types.cardDependency.webhook,
-  };
-}
-
-async function visibleWorkspaceRuleResponses(req: FastifyRequest): Promise<NotificationWorkspaceRule[]> {
-  // The accessible-board catalog includes workspace members, organisation admins, standalone
-  // boards, and cross-organisation guests. Using it here keeps settings visibility aligned with
-  // the places from which a user can actually receive card notifications.
-  const accessibleBoards = await loadAccessibleBoards(req.auth);
-  const workspaceIds = Array.from(new Set(accessibleBoards.map((board) => board.workspaceId)));
-  const rules = await getNotificationWorkspaceRules(db, req.auth.sub, workspaceIds);
-  return Array.from(rules.values())
-    .map(toWorkspaceRuleResponse)
-    .sort((a, b) => a.workspaceId.localeCompare(b.workspaceId));
-}
-
-// Keyset pagination cursor. createdAt alone is not unique, so a createdAt-only
-// cursor silently skips any rows that share the boundary timestamp. We encode
-// the row id as a tiebreaker and page on the (createdAt, id) tuple instead.
-function encodeNotificationCursor(row: { createdAt: Date; id: string }): string {
-  return `${row.createdAt.toISOString()}|${row.id}`;
-}
-
-function decodeNotificationCursor(raw: string): { createdAt: Date; id: string } | null {
-  const sep = raw.indexOf("|");
-  const iso = sep === -1 ? raw : raw.slice(0, sep);
-  // Legacy createdAt-only cursors carry no id. An empty id never satisfies
-  // `id < ''`, so the keyset condition below degrades to createdAt-only — the
-  // old behaviour — keeping any in-flight cursor from a prior deploy working.
-  const id = sep === -1 ? "" : raw.slice(sep + 1);
-  const createdAt = new Date(iso);
-  if (Number.isNaN(createdAt.getTime())) return null;
-  return { createdAt, id };
-}
-
-function notificationSearchPattern(query: string): string {
-  // Treat SQL wildcard characters as ordinary search text. Notification search
-  // is a substring search, not a user-authored LIKE expression.
-  return `%${query.replace(/[\\%_]/g, "\\$&")}%`;
-}
-
-function normalizedOptional(value: string | null | undefined, fallback: string | null): string | null {
-  if (value === undefined) return fallback;
-  const normalized = value?.trim() ?? "";
-  return normalized || null;
-}
-
-async function validatePersonalDestination(url: string, baseUrl: boolean): Promise<void> {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw badRequest("invalid notification destination url");
-  }
-  if (parsed.hash) throw badRequest("notification destination url must not contain a fragment");
-  if (baseUrl && parsed.search) throw badRequest("notification server url must not contain a query string");
-  await assertNotificationDestinationAllowed(url);
-}
-
-function notificationFeedConditions(
-  req: FastifyRequest,
-  query: Pick<ListNotificationsQuery, "includeRead" | "agentOnly" | "mentionsOnly" | "boardId" | "actorId" | "q">,
-  options?: { includeRead?: boolean; cursor?: { createdAt: Date; id: string } | null },
-): SQL[] {
-  const includeRead = options?.includeRead ?? query.includeRead;
-  const recentReadCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const conditions: SQL[] = [
-    eq(notifications.userId, req.auth.sub),
-    or(isNull(notifications.readAt), gte(notifications.createdAt, recentReadCutoff))!,
-  ];
-  if (!includeRead) conditions.push(isNull(notifications.readAt));
-  if (query.boardId) conditions.push(eq(notifications.boardId, query.boardId));
-  if (query.actorId) conditions.push(eq(activityEvents.actorId, query.actorId));
-  if (query.agentOnly) conditions.push(eq(activityEvents.actorKind, "agent"));
-  if (query.mentionsOnly) conditions.push(eq(notifications.reason, NOTIFICATION_REASON.MENTIONED));
-  if (query.q) {
-    const pattern = notificationSearchPattern(query.q);
-    const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.q.trim());
-    const historicalKeyMatch = keyMatch
-      ? sql`(${cards.number} = ${Number(keyMatch[2])} and exists (
-          select 1 from ${cardKeyPrefixReservations} notification_key_alias
-          where notification_key_alias.workspace_id = ${cards.workspaceId}
-            and notification_key_alias.prefix = ${keyMatch[1]!.toUpperCase()}
-        ))`
-      : sql`false`;
-    // Search deliberately stays on work-item context. Actor names and comment
-    // bodies are excluded so the drawer's search semantics remain predictable.
-    conditions.push(or(
-      ilike(boards.name, pattern),
-      ilike(lists.name, pattern),
-      ilike(cards.title, pattern),
-      ilike(cards.key, pattern),
-      historicalKeyMatch,
-      ilike(cardChecklistItems.text, pattern),
-    )!);
-  }
-  if (options?.cursor) {
-    conditions.push(
-      or(
-        lt(notifications.createdAt, options.cursor.createdAt),
-        and(eq(notifications.createdAt, options.cursor.createdAt), lt(notifications.id, options.cursor.id)),
-      )!,
-    );
-  }
-  conditions.push(inboxVisibleNotificationCondition());
-  return conditions;
-}
-
-function notificationFeedQueryJoins() {
-  return db
-    .select({ id: notifications.id, createdAt: notifications.createdAt })
-    .from(notifications)
-    .leftJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
-    .leftJoin(cards, eq(cards.id, notifications.cardId))
-    .leftJoin(cardChecklistItems, eq(cardChecklistItems.id, notifications.checklistItemId))
-    .leftJoin(lists, eq(lists.id, notifications.listId))
-    .leftJoin(boards, eq(boards.id, notifications.boardId));
-}
-
-async function listNotificationsPage(req: FastifyRequest, options?: { includeRead?: boolean }): Promise<NotificationsPage> {
-  const query = dto.listNotificationsQuery.parse(req.query ?? {});
-  const cursor = query.cursor ? decodeNotificationCursor(query.cursor) : null;
-  const conditions = notificationFeedConditions(req, query, { includeRead: options?.includeRead, cursor });
-
-  // The badge count is independent of paging and notification hydration.
-  const [{ items, hasMore, pageRows }, unreadCount] = await Promise.all([
-    (async () => {
-      const rows = await notificationFeedQueryJoins()
-        .where(and(...conditions))
-        .orderBy(desc(notifications.createdAt), desc(notifications.id))
-        .limit(query.limit + 1);
-
-      const hasMore = rows.length > query.limit;
-      const pageRows = hasMore ? rows.slice(0, query.limit) : rows;
-      const enrichedItems = await enrichNotifications(db, pageRows.map((r) => r.id));
-      // The browser also filters realtime rows locally. Preserve that this fetched page matched the
-      // server predicate because only the server knows permanent historical card-prefix aliases.
-      const items = query.q
-        ? enrichedItems.map((item) => ({ ...item, searchMatched: true }))
-        : enrichedItems;
-      // enrichNotifications orders by the same (createdAt, id) tuple, so the
-      // returned order already matches the page query and what the client expects.
-      return { items, hasMore, pageRows };
-    })(),
-    countUnreadNotifications(req.auth.sub),
-  ]);
-  return {
-    items,
-    nextCursor: hasMore ? encodeNotificationCursor(pageRows[pageRows.length - 1]!) : null,
-    unreadCount,
-  };
-}
+import { markAllNotificationsRead, markBoardNotificationsRead, markCardNotificationsRead, markNotificationsRead, markNotificationsUnread } from "./mark-notifications-read.js";
+import { boardUnreadCounts, cardUnreadCounts, feedCounts, listNotificationsPage, notificationGroupCounts, orgUnreadCounts } from "./notification-feed.js";
+import { visibleWorkspaceRuleResponses } from "./notification-rules.js";
+import { deleteNotificationWorkspaceRule, putNotificationWorkspaceRule } from "./notification-workspace-rules.js";
+import { rotateWebhookSecret, testPersonalChannel } from "./personal-channels.js";
+import { savePushSubscription, testPush } from "./push-subscriptions.js";
+import { updateNotificationSettings } from "./update-notification-settings.js";
 
 export async function notificationsRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
@@ -240,50 +34,15 @@ export async function notificationsRoutes(app: FastifyInstance) {
   // includeRead=true here for All and /notifications/unread below for Unread, so
   // the two tabs page independently and never share a cursor.
   app.get("/notifications", async (req): Promise<NotificationsPage> => {
-    return listNotificationsPage(req);
+    return listNotificationsPage({ userId: req.auth.sub, rawQuery: req.query });
   });
 
   app.get("/notifications/unread", async (req): Promise<NotificationsPage> => {
-    return listNotificationsPage(req, { includeRead: false });
+    return listNotificationsPage({ userId: req.auth.sub, rawQuery: req.query, includeRead: false });
   });
 
   app.get("/notifications/group-counts", async (req): Promise<NotificationGroupCountsResponse> => {
-    const query = dto.notificationGroupCountsQuery.parse(req.query ?? {});
-    const conditions = notificationFeedConditions(req, query);
-    const groupKey = query.groupBy === "day"
-      ? sql<string>`'day:' || to_char(timezone(${query.timeZone}, ${notifications.createdAt}), 'YYYY-MM-DD')`
-      : query.groupBy === "organisation"
-        ? sql<string>`'organisation:' || ${notifications.clientId}::text`
-      : query.groupBy === "board"
-        ? sql<string>`case when ${notifications.boardId} is not null then 'board:' || ${notifications.boardId}::text else 'workspace:' || ${notifications.workspaceId}::text end`
-        : sql<string>`case
-            when ${activityEvents.actorKind} = 'user' and ${activityEvents.actorId} is not null then 'user:' || ${activityEvents.actorId}::text
-            when ${activityEvents.actorKind} = 'apiKey' then 'apiKey:' || coalesce(${activityEvents.apiKeyId}::text, ${activityEvents.apiKeyName}, 'unknown')
-            when ${activityEvents.actorKind} = 'agent' then 'agent:' || coalesce(${activityEvents.agentGrantId}::text, ${activityEvents.agentName}, 'unknown') || ':' || coalesce(${activityEvents.actorId}::text, '')
-            when ${activityEvents.actorKind} = 'support' then 'support:' || coalesce(${activityEvents.supportSessionId}::text, ${activityEvents.supportActorEmail}, 'unknown')
-            else 'system'
-          end`;
-
-    const groups = await db
-      .select({
-        key: groupKey,
-        count: sql<number>`count(*)::int`,
-        latestAt: sql<Date>`max(${notifications.createdAt})`,
-      })
-      .from(notifications)
-      .leftJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
-      .leftJoin(cards, eq(cards.id, notifications.cardId))
-      .leftJoin(cardChecklistItems, eq(cardChecklistItems.id, notifications.checklistItemId))
-      .leftJoin(lists, eq(lists.id, notifications.listId))
-      .leftJoin(boards, eq(boards.id, notifications.boardId))
-      .where(and(...conditions))
-      // Group by the selected key's ordinal. Repeating the day expression would
-      // bind the same timezone twice as distinct SQL parameters, which Postgres
-      // does not consider the same GROUP BY expression.
-      .groupBy(sql.raw("1"))
-      .orderBy(desc(sql`max(${notifications.createdAt})`));
-
-    return { groups: groups.map(({ key, count }) => ({ key, count })) };
+    return notificationGroupCounts(req.auth.sub, req.query);
   });
 
   app.get("/notifications/unread-count", async (req) => {
@@ -291,275 +50,57 @@ export async function notificationsRoutes(app: FastifyInstance) {
     return { count };
   });
 
-  // Whether the drawer should offer an Agent or Mentions tab at all, and its unread badge. `total`
-  // deliberately ignores the seven-day read window used by the feed: once a person has ever received
-  // such a notification the tab stays, so it never flickers in and out as old rows age past the window.
-  async function feedCounts(userId: string, condition: SQL): Promise<dto.NotificationFeedCounts> {
-    const [row] = await db
-      .select({
-        total: sql<number>`count(*)::int`,
-        unread: sql<number>`count(*) filter (where ${notifications.readAt} is null)::int`,
-      })
-      .from(notifications)
-      .leftJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
-      .leftJoin(cards, eq(cards.id, notifications.cardId))
-      .where(and(eq(notifications.userId, userId), condition, inboxVisibleNotificationCondition()));
-    return { total: row?.total ?? 0, unread: row?.unread ?? 0 };
-  }
-
   app.get("/notifications/agent-counts", (req) => feedCounts(req.auth.sub, eq(activityEvents.actorKind, "agent")));
   app.get("/notifications/mention-counts", (req) => feedCounts(req.auth.sub, eq(notifications.reason, NOTIFICATION_REASON.MENTIONED)));
 
   app.get("/notifications/org-unread-counts", async (req) => {
-    return db
-      .select({
-        clientId: notifications.clientId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(notifications)
-      .leftJoin(cards, eq(cards.id, notifications.cardId))
-      .where(and(
-        eq(notifications.userId, req.auth.sub),
-        isNull(notifications.readAt),
-        inboxVisibleNotificationCondition(),
-      ))
-      .groupBy(notifications.clientId);
+    return orgUnreadCounts(req.auth.sub);
   });
 
   app.get("/notifications/board-unread-counts", async (req) => {
-    const rows = await db
-      .select({
-        boardId: notifications.boardId,
-        count: sql<number>`count(distinct ${notifications.cardId})::int`,
-      })
-      .from(notifications)
-      .leftJoin(cards, eq(cards.id, notifications.cardId))
-      .where(and(
-        eq(notifications.userId, req.auth.sub),
-        isNull(notifications.readAt),
-        isNotNull(notifications.boardId),
-        isNotNull(notifications.cardId),
-        inboxVisibleNotificationCondition(),
-      ))
-      .groupBy(notifications.boardId);
-    return rows.filter((row): row is { boardId: string; count: number } => row.boardId !== null);
+    return boardUnreadCounts(req.auth.sub);
   });
 
   app.get("/notifications/card-unread-counts", async (req) => {
-    const rows = await db
-      .select({
-        cardId: notifications.cardId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(notifications)
-      .leftJoin(cards, eq(cards.id, notifications.cardId))
-      .where(and(
-        eq(notifications.userId, req.auth.sub),
-        isNull(notifications.readAt),
-        isNotNull(notifications.cardId),
-        inboxVisibleNotificationCondition(),
-      ))
-      .groupBy(notifications.cardId);
-    return rows.filter((row): row is { cardId: string; count: number } => row.cardId !== null);
+    return cardUnreadCounts(req.auth.sub);
   });
 
   app.get("/notifications/settings", async (req) => {
     const [settings, push, workspaceRules] = await Promise.all([
       getNotificationSettings(db, req.auth.sub),
       getWebPushPublicConfig(req.auth.cid),
-      visibleWorkspaceRuleResponses(req),
+      visibleWorkspaceRuleResponses(req.auth),
     ]);
     return dto.notificationSettingsResponse.parse({ ...settings, push, workspaceRules });
   });
 
   app.patch("/notifications/settings", async (req) => {
     const body = dto.updateNotificationSettingsBody.parse(req.body ?? {});
-    if (body.personalChannels !== undefined) await assertPersonalNotificationChannelsAllowed(req.auth.cid);
-    const [existing] = await db.select().from(notificationSettings).where(eq(notificationSettings.userId, req.auth.sub)).limit(1);
-    const personal = body.personalChannels;
-    const ntfyServerUrl = normalizedOptional(personal?.ntfy?.serverUrl, existing?.ntfyServerUrl ?? null);
-    const ntfyTopic = normalizedOptional(personal?.ntfy?.topic, existing?.ntfyTopic ?? null);
-    const encryptedNtfyToken = personal?.ntfy?.token === undefined
-      ? existing?.encryptedNtfyToken ?? null
-      : personal.ntfy.token?.trim()
-        ? encryptSecret(personal.ntfy.token.trim())
-        : null;
-    const gotifyServerUrl = normalizedOptional(personal?.gotify?.serverUrl, existing?.gotifyServerUrl ?? null);
-    const encryptedGotifyToken = personal?.gotify?.token === undefined
-      ? existing?.encryptedGotifyToken ?? null
-      : personal.gotify.token?.trim()
-        ? encryptSecret(personal.gotify.token.trim())
-        : null;
-    const webhookUrl = normalizedOptional(personal?.webhook?.url, existing?.webhookUrl ?? null);
-    let encryptedWebhookSecret = webhookUrl ? existing?.encryptedWebhookSecret ?? null : null;
-    let generatedWebhookSecret: string | undefined;
-    if (webhookUrl && !encryptedWebhookSecret) {
-      generatedWebhookSecret = newWebhookSecret();
-      encryptedWebhookSecret = encryptSecret(generatedWebhookSecret);
-    }
-
-    if (ntfyServerUrl) await validatePersonalDestination(ntfyServerUrl, true);
-    if (gotifyServerUrl) await validatePersonalDestination(gotifyServerUrl, true);
-    if (webhookUrl) await validatePersonalDestination(webhookUrl, false);
-
-    const requestedNtfyEnabled = personal?.ntfy?.enabled ?? existing?.ntfyEnabled ?? false;
-    const requestedGotifyEnabled = personal?.gotify?.enabled ?? existing?.gotifyEnabled ?? false;
-    const requestedWebhookEnabled = personal?.webhook?.enabled ?? existing?.webhookEnabled ?? false;
-    if (personal?.ntfy?.enabled === true && (!ntfyServerUrl || !ntfyTopic)) throw badRequest("ntfy requires a server URL and topic");
-    if (personal?.gotify?.enabled === true && (!gotifyServerUrl || !encryptedGotifyToken)) throw badRequest("Gotify requires a server URL and app token");
-    if (personal?.webhook?.enabled === true && (!webhookUrl || !encryptedWebhookSecret)) throw badRequest("webhook requires a URL and signing secret");
-
-    const values = {
-      ...(body.emailEnabled !== undefined ? { emailEnabled: body.emailEnabled } : {}),
-      ...(body.pushEnabled !== undefined ? { pushEnabled: body.pushEnabled } : {}),
-      ...(body.watchedActivityOutbound !== undefined ? { watchedActivityOutbound: body.watchedActivityOutbound } : {}),
-      ...(body.lifecycleEmail !== undefined ? { lifecycleEmail: body.lifecycleEmail } : {}),
-      ...(personal ? {
-        ntfyEnabled: requestedNtfyEnabled && Boolean(ntfyServerUrl && ntfyTopic),
-        ntfyServerUrl,
-        ntfyTopic,
-        encryptedNtfyToken,
-        gotifyEnabled: requestedGotifyEnabled && Boolean(gotifyServerUrl && encryptedGotifyToken),
-        gotifyServerUrl,
-        encryptedGotifyToken,
-        webhookEnabled: requestedWebhookEnabled && Boolean(webhookUrl && encryptedWebhookSecret),
-        webhookUrl,
-        encryptedWebhookSecret,
-      } : {}),
-      ...(body.types?.cardAssigned?.email !== undefined ? { cardAssignedEmail: body.types.cardAssigned.email } : {}),
-      ...(body.types?.cardAssigned?.push !== undefined ? { cardAssignedPush: body.types.cardAssigned.push } : {}),
-      ...(body.types?.cardAssigned?.ntfy !== undefined ? { cardAssignedNtfy: body.types.cardAssigned.ntfy } : {}),
-      ...(body.types?.cardAssigned?.gotify !== undefined ? { cardAssignedGotify: body.types.cardAssigned.gotify } : {}),
-      ...(body.types?.cardAssigned?.webhook !== undefined ? { cardAssignedWebhook: body.types.cardAssigned.webhook } : {}),
-      ...(body.types?.cardCommentAdded?.email !== undefined ? { cardCommentAddedEmail: body.types.cardCommentAdded.email } : {}),
-      ...(body.types?.cardCommentAdded?.push !== undefined ? { cardCommentAddedPush: body.types.cardCommentAdded.push } : {}),
-      ...(body.types?.cardCommentAdded?.ntfy !== undefined ? { cardCommentAddedNtfy: body.types.cardCommentAdded.ntfy } : {}),
-      ...(body.types?.cardCommentAdded?.gotify !== undefined ? { cardCommentAddedGotify: body.types.cardCommentAdded.gotify } : {}),
-      ...(body.types?.cardCommentAdded?.webhook !== undefined ? { cardCommentAddedWebhook: body.types.cardCommentAdded.webhook } : {}),
-      ...(body.types?.commentMentioned?.email !== undefined ? { commentMentionedEmail: body.types.commentMentioned.email } : {}),
-      ...(body.types?.commentMentioned?.push !== undefined ? { commentMentionedPush: body.types.commentMentioned.push } : {}),
-      ...(body.types?.commentMentioned?.ntfy !== undefined ? { commentMentionedNtfy: body.types.commentMentioned.ntfy } : {}),
-      ...(body.types?.commentMentioned?.gotify !== undefined ? { commentMentionedGotify: body.types.commentMentioned.gotify } : {}),
-      ...(body.types?.commentMentioned?.webhook !== undefined ? { commentMentionedWebhook: body.types.commentMentioned.webhook } : {}),
-      ...(body.types?.cardDueDateChanged?.email !== undefined ? { cardDueDateChangedEmail: body.types.cardDueDateChanged.email } : {}),
-      ...(body.types?.cardDueDateChanged?.push !== undefined ? { cardDueDateChangedPush: body.types.cardDueDateChanged.push } : {}),
-      ...(body.types?.cardDueDateChanged?.ntfy !== undefined ? { cardDueDateChangedNtfy: body.types.cardDueDateChanged.ntfy } : {}),
-      ...(body.types?.cardDueDateChanged?.gotify !== undefined ? { cardDueDateChangedGotify: body.types.cardDueDateChanged.gotify } : {}),
-      ...(body.types?.cardDueDateChanged?.webhook !== undefined ? { cardDueDateChangedWebhook: body.types.cardDueDateChanged.webhook } : {}),
-      ...(body.types?.cardOverdue?.email !== undefined ? { cardOverdueEmail: body.types.cardOverdue.email } : {}),
-      ...(body.types?.cardOverdue?.push !== undefined ? { cardOverduePush: body.types.cardOverdue.push } : {}),
-      ...(body.types?.cardOverdue?.ntfy !== undefined ? { cardOverdueNtfy: body.types.cardOverdue.ntfy } : {}),
-      ...(body.types?.cardOverdue?.gotify !== undefined ? { cardOverdueGotify: body.types.cardOverdue.gotify } : {}),
-      ...(body.types?.cardOverdue?.webhook !== undefined ? { cardOverdueWebhook: body.types.cardOverdue.webhook } : {}),
-      ...(body.types?.cardReminder?.email !== undefined ? { cardReminderEmail: body.types.cardReminder.email } : {}),
-      ...(body.types?.cardReminder?.push !== undefined ? { cardReminderPush: body.types.cardReminder.push } : {}),
-      ...(body.types?.cardReminder?.ntfy !== undefined ? { cardReminderNtfy: body.types.cardReminder.ntfy } : {}),
-      ...(body.types?.cardReminder?.gotify !== undefined ? { cardReminderGotify: body.types.cardReminder.gotify } : {}),
-      ...(body.types?.cardReminder?.webhook !== undefined ? { cardReminderWebhook: body.types.cardReminder.webhook } : {}),
-      ...(body.types?.reactionAdded?.email !== undefined ? { reactionAddedEmail: body.types.reactionAdded.email } : {}),
-      ...(body.types?.reactionAdded?.push !== undefined ? { reactionAddedPush: body.types.reactionAdded.push } : {}),
-      ...(body.types?.reactionAdded?.ntfy !== undefined ? { reactionAddedNtfy: body.types.reactionAdded.ntfy } : {}),
-      ...(body.types?.reactionAdded?.gotify !== undefined ? { reactionAddedGotify: body.types.reactionAdded.gotify } : {}),
-      ...(body.types?.reactionAdded?.webhook !== undefined ? { reactionAddedWebhook: body.types.reactionAdded.webhook } : {}),
-      ...(body.types?.cardDependency?.email !== undefined ? { cardDependencyEmail: body.types.cardDependency.email } : {}),
-      ...(body.types?.cardDependency?.push !== undefined ? { cardDependencyPush: body.types.cardDependency.push } : {}),
-      ...(body.types?.cardDependency?.ntfy !== undefined ? { cardDependencyNtfy: body.types.cardDependency.ntfy } : {}),
-      ...(body.types?.cardDependency?.gotify !== undefined ? { cardDependencyGotify: body.types.cardDependency.gotify } : {}),
-      ...(body.types?.cardDependency?.webhook !== undefined ? { cardDependencyWebhook: body.types.cardDependency.webhook } : {}),
-      updatedAt: new Date(),
-    };
-    const [row] = await db
-      .insert(notificationSettings)
-      .values({ userId: req.auth.sub, ...values })
-      .onConflictDoUpdate({
-        target: notificationSettings.userId,
-        set: values,
-      })
-      .returning();
-    const [push, workspaceRules] = await Promise.all([
-      getWebPushPublicConfig(req.auth.cid),
-      visibleWorkspaceRuleResponses(req),
-    ]);
-    return dto.notificationSettingsResponse.parse({ ...toEffectiveNotificationSettings(row, req.auth.sub), push, workspaceRules, ...(generatedWebhookSecret ? { generatedWebhookSecret } : {}) });
+    return updateNotificationSettings({ auth: req.auth, body });
   });
 
   app.put("/notifications/settings/workspaces/:workspaceId", async (req) => {
     const rawWorkspaceId = (req.params as { workspaceId: string }).workspaceId;
     const workspaceId = dto.notificationWorkspaceRule.shape.workspaceId.parse(rawWorkspaceId);
     const body = dto.putNotificationWorkspaceRuleBody.parse(req.body);
-    const canAccessWorkspace = (await loadAccessibleBoards(req.auth)).some((board) => board.workspaceId === workspaceId);
-    if (!canAccessWorkspace) throw notFound("workspace not found");
-
-    const rule = await db.transaction(async (tx) => {
-      await tx
-        .insert(userNotificationWorkspaceRules)
-        .values({
-          userId: req.auth.sub,
-          workspaceId,
-          paused: body.paused,
-          ...workspaceRuleMatrixValues(body.types),
-        })
-        .onConflictDoUpdate({
-          target: [userNotificationWorkspaceRules.userId, userNotificationWorkspaceRules.workspaceId],
-          set: {
-            paused: body.paused,
-            ...workspaceRuleMatrixValues(body.types),
-            updatedAt: new Date(),
-          },
-        });
-      return {
-        workspaceId,
-        paused: body.paused,
-        types: body.types,
-      } satisfies NotificationWorkspaceRule;
-    });
-    return dto.notificationWorkspaceRule.parse(rule);
+    return putNotificationWorkspaceRule({ auth: req.auth, workspaceId, body });
   });
 
   app.delete("/notifications/settings/workspaces/:workspaceId", async (req, reply) => {
     const rawWorkspaceId = (req.params as { workspaceId: string }).workspaceId;
     const workspaceId = dto.notificationWorkspaceRule.shape.workspaceId.parse(rawWorkspaceId);
-    const canAccessWorkspace = (await loadAccessibleBoards(req.auth)).some((board) => board.workspaceId === workspaceId);
-    if (!canAccessWorkspace) throw notFound("workspace not found");
-    await db
-      .delete(userNotificationWorkspaceRules)
-      .where(and(
-        eq(userNotificationWorkspaceRules.userId, req.auth.sub),
-        eq(userNotificationWorkspaceRules.workspaceId, workspaceId),
-      ));
+    await deleteNotificationWorkspaceRule({ auth: req.auth, workspaceId });
     return reply.status(204).send();
   });
 
   app.post("/notifications/channels/webhook/secret", async (req) => {
-    await assertPersonalNotificationChannelsAllowed(req.auth.cid);
-    const [existing] = await db.select().from(notificationSettings).where(eq(notificationSettings.userId, req.auth.sub)).limit(1);
-    if (!existing?.webhookUrl) throw badRequest("configure a webhook URL before rotating its secret");
-    const secret = newWebhookSecret();
-    await db.update(notificationSettings).set({ encryptedWebhookSecret: encryptSecret(secret), updatedAt: new Date() }).where(eq(notificationSettings.userId, req.auth.sub));
-    return { secret };
+    return rotateWebhookSecret({ auth: req.auth });
   });
 
   app.post("/notifications/channels/:channel/test", async (req): Promise<PersonalNotificationTestResponse> => {
     const { channel } = req.params as { channel: string };
     const parsedChannel = dto.personalNotificationChannel.parse(channel);
-    await assertPersonalNotificationChannelsAllowed(req.auth.cid);
-    // The person testing is the recipient, so the test reads in the language on their screen.
-    const m = serverMessages(requestLocale(req)).push.channelTest;
-    const row = await enqueuePersonalNotification(db, {
-      clientId: req.auth.cid,
-      userId: req.auth.sub,
-      reason: "test",
-      channel: parsedChannel,
-      payload: {
-        kind: "test",
-        title: m.title,
-        body: m.body({ channel: parsedChannel }),
-        url: `${env.WEB_ORIGIN}/account/settings/notifications`,
-        tag: `test:${parsedChannel}`,
-      },
-    }, true);
-    const result = await deliverPersonalNotificationTestRow(db, row);
-    return { channel: parsedChannel, ...result };
+    return testPersonalChannel({ auth: req.auth, channel: parsedChannel, locale: requestLocale(req) });
   });
 
   app.get("/notifications/push/config", async (req) => {
@@ -568,14 +109,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
 
   app.put("/notifications/push/subscription", async (req, reply) => {
     const body = dto.pushSubscriptionBody.parse(req.body);
-    const userAgentHeader = req.headers["user-agent"];
-    const userAgent = Array.isArray(userAgentHeader) ? userAgentHeader.join(" ") : userAgentHeader;
-    await upsertPushSubscriptionForUser({
-      clientId: req.auth.cid,
-      userId: req.auth.sub,
-      subscription: body,
-      userAgent,
-    });
+    await savePushSubscription({ auth: req.auth, body, userAgentHeader: req.headers["user-agent"] });
     return reply.status(204).send();
   });
 
@@ -590,33 +124,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
 
   app.post("/notifications/push/test", async (req): Promise<PushTestResponse> => {
     const body = dto.pushTestBody.parse(req.body ?? {});
-    const m = serverMessages(requestLocale(req)).push.test;
-    const row = await enqueuePushImmediate(db, {
-      clientId: req.auth.cid,
-      userId: req.auth.sub,
-      reason: "test",
-      payload: { ...body, title: body.title ?? m.title, body: body.body ?? m.body },
-    });
-    const result = await deliverPushRow(db, row);
-    const attempted = result.delivered + result.disabled + result.failed;
-    const now = new Date();
-    // This endpoint intentionally tests the provider synchronously, but its durable audit row must
-    // still reach a terminal state instead of looking like a worker-stranded delivery.
-    await db.update(pushQueue).set({
-      status: result.delivered > 0 && result.failed === 0 ? PUSH_QUEUE_STATUS.success : PUSH_QUEUE_STATUS.error,
-      sentAt: result.delivered > 0 ? now : null,
-      lastError: result.failed > 0 || result.delivered === 0
-        ? `delivered=${result.delivered} disabled=${result.disabled} failed=${result.failed}`
-        : null,
-      processingLeaseExpiresAt: null,
-      updatedAt: now,
-    }).where(eq(pushQueue.id, row.id));
-    return {
-      attempted,
-      delivered: result.delivered,
-      disabled: result.disabled,
-      failed: result.failed,
-    };
+    return testPush({ auth: req.auth, body, locale: requestLocale(req) });
   });
 
   app.get("/notifications/boards", async (req) => {
@@ -673,25 +181,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
 
   app.post("/notifications/read", async (req) => {
     const body = dto.markNotificationsReadBody.parse(req.body);
-    const readAt = new Date();
-    const updated = await db
-      .update(notifications)
-      .set({ readAt })
-      .where(
-        and(
-          eq(notifications.userId, req.auth.sub),
-          inArray(notifications.id, body.notificationIds),
-          isNull(notifications.readAt),
-        ),
-      )
-      .returning({ id: notifications.id });
-    if (updated.length > 0) {
-      emitToUser(req.auth.sub, "notification:read", {
-        notificationIds: updated.map((r) => r.id),
-        readAt: readAt.toISOString(),
-      });
-    }
-    return { readIds: updated.map((r) => r.id) };
+    return markNotificationsRead({ userId: req.auth.sub, body });
   });
 
   app.post("/notifications/cards/:cardId/read", async (req) => {
@@ -703,105 +193,23 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .limit(1);
     if (!card) throw notFound();
     await assertCardAccess(req.auth, card);
-
-    const readAt = new Date();
-    const updated = await db
-      .update(notifications)
-      .set({ readAt })
-      .where(
-        and(
-          eq(notifications.userId, req.auth.sub),
-          eq(notifications.cardId, cardId),
-          isNull(notifications.readAt),
-        ),
-      )
-      .returning({ id: notifications.id });
-    const readIds = updated.map((r) => r.id);
-    if (readIds.length > 0) {
-      emitToUser(req.auth.sub, "notification:read", {
-        notificationIds: readIds,
-        readAt: readAt.toISOString(),
-      });
-    }
-    return { readIds, readAt: readAt.toISOString() };
+    return markCardNotificationsRead({ userId: req.auth.sub, cardId });
   });
 
   app.post("/notifications/boards/:boardId/read", async (req) => {
     const { boardId } = req.params as { boardId: string };
     await assertBoardAccess(req.auth, boardId);
-
-    const readAt = new Date();
-    const updated = await db
-      .update(notifications)
-      .set({ readAt })
-      .where(
-        and(
-          eq(notifications.userId, req.auth.sub),
-          eq(notifications.boardId, boardId),
-          isNull(notifications.readAt),
-        ),
-      )
-      .returning({ id: notifications.id });
-    const readIds = updated.map((row) => row.id);
-    if (readIds.length > 0) {
-      // Emit the affected ids rather than the global all-read event so sibling
-      // tabs preserve unread notifications belonging to every other board.
-      emitToUser(req.auth.sub, "notification:read", {
-        notificationIds: readIds,
-        readAt: readAt.toISOString(),
-      });
-    }
-    return { readIds, readAt: readAt.toISOString() };
+    return markBoardNotificationsRead({ userId: req.auth.sub, boardId });
   });
 
   app.post("/notifications/unread", async (req) => {
     const body = dto.markNotificationsReadBody.parse(req.body);
-    const updated = await db
-      .update(notifications)
-      .set({ readAt: null })
-      .where(
-        and(
-          eq(notifications.userId, req.auth.sub),
-          inArray(notifications.id, body.notificationIds),
-          isNotNull(notifications.readAt),
-        ),
-      )
-      .returning({ id: notifications.id });
-    if (updated.length > 0) {
-      emitToUser(req.auth.sub, "notification:unread", {
-        notificationIds: updated.map((r) => r.id),
-      });
-    }
-    return { unreadIds: updated.map((r) => r.id) };
+    return markNotificationsUnread({ userId: req.auth.sub, body });
   });
 
   app.post("/notifications/read-all", async (req) => {
     const body = dto.markAllNotificationsReadBody.parse(req.body ?? {});
-    const readAt = new Date();
-    const conditions: SQL[] = [eq(notifications.userId, req.auth.sub), isNull(notifications.readAt)];
-    // Same agent test as the Agent feed in notificationFeedConditions: the triggering activity's actor.
-    if (body.agentOnly) {
-      conditions.push(exists(
-        db.select({ id: activityEvents.id }).from(activityEvents)
-          .where(and(eq(activityEvents.id, notifications.activityId), eq(activityEvents.actorKind, "agent"))),
-      ));
-    }
-    if (body.mentionsOnly) conditions.push(eq(notifications.reason, NOTIFICATION_REASON.MENTIONED));
-    const updated = await db
-      .update(notifications)
-      .set({ readAt })
-      .where(and(...conditions))
-      .returning({ id: notifications.id });
-    const readIds = updated.map((r) => r.id);
-    if (body.agentOnly || body.mentionsOnly) {
-      // Per-id read event, like the board-scoped read, so sibling tabs re-sync every badge and
-      // keep the user's other unread notifications.
-      if (readIds.length > 0) emitToUser(req.auth.sub, "notification:read", { notificationIds: readIds, readAt: readAt.toISOString() });
-      return { readIds };
-    }
-    // Exact ids preserve notifications created after this UPDATE but before its event is delivered.
-    emitToUser(req.auth.sub, "notification:allRead", { readAt: readAt.toISOString(), notificationIds: readIds });
-    return { readIds };
+    return markAllNotificationsRead({ userId: req.auth.sub, body });
   });
 
   app.get("/card-watches", async (req) => {
