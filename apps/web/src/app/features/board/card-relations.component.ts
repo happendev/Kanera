@@ -48,7 +48,7 @@ const SEARCH_DEBOUNCE_MS = 200;
         @if (adding()) {
         <div class="cr-add">
           @if (directionOptions().length > 1) {
-          <k-segmented [options]="directionOptions()" [value]="direction()" [showLabels]="true" [equalWidths]="true" size="sm"
+          <k-segmented [options]="directionOptions()" [value]="direction()" [showLabels]="true" [equalWidths]="true"
             ariaLabel="Relation type" i18n-ariaLabel (valueChange)="changeDirection($event)" />
           }
           <div class="cr-search">

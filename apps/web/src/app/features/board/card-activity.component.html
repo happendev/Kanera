@@ -5,13 +5,16 @@
     @if (renderableFeedItems().length) {
     <span class="count">{{ renderableFeedItems().length }}</span>
     }
-    <div class="feed-filter" role="tablist" aria-label="Feed filter" i18n-aria-label>
-      <button type="button" [class.is-active]="activeFeedFilter() === 'all'" (click)="feedFilter.set('all')" i18n="Activity feed filter: show comments and history">All</button>
-      <button type="button" [class.is-active]="activeFeedFilter() === 'comments'" (click)="feedFilter.set('comments')" i18n="Activity feed filter: show only comments">Comments</button>
-      @if (showAgentsFilter()) {
-      <button type="button" [class.is-active]="activeFeedFilter() === 'agents'" (click)="feedFilter.set('agents')" i18n="Activity feed filter: show only comments, changes and run outcomes from AI agents">Agents</button>
-      }
-    </div>
+    <k-segmented
+      class="feed-filter"
+      [options]="feedFilterOptions()"
+      [value]="activeFeedFilter()"
+      [showLabels]="true"
+      [equalWidths]="true"
+      ariaLabel="Feed filter"
+      i18n-ariaLabel
+      (valueChange)="feedFilter.set($event)"
+    />
     <div class="comment-search-wrap">
       <button #commentSearchTrigger class="ghost icon comment-search-btn" [class.is-active]="commentSearchQuery().length > 0 || commentSearchOpen()" (click)="toggleCommentSearch()" kTooltip="Search comments" i18n-kTooltip>
         <i aria-hidden="true" class="ti ti-search"></i>

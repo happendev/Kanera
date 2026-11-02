@@ -21,7 +21,7 @@
   --dm-wire-cleared: color-mix(in srgb, var(--success) 45%, transparent);
   --dm-tile-bg: var(--card-bg, var(--surface));
 
-  // This toolbar needs full touch targets even though its desktop segments use the dense size.
+  // This toolbar's segments take a taller touch track than the shared 44px floor.
   --sg-touch-track-height: 50px;
   --sg-touch-target-size: 44px;
 }

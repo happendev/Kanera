@@ -634,40 +634,6 @@
   display: none;
 }
 
-.tab-btn {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 12px;
-  font-size: var(--text-base);
-  font-weight: 500;
-  background: var(--surface-2);
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-
-  i {
-    font-size: 15px;
-  }
-
-  &:hover:not(.is-active) {
-    background: var(--surface-hover);
-    color: var(--text);
-  }
-
-  &.is-active {
-    background: var(--surface);
-    color: var(--text);
-    border-color: var(--border-strong);
-    font-weight: 600;
-  }
-}
-
 .tab-hidden {
   display: none;
 }
@@ -675,10 +641,12 @@
 // ─── Compressed modal: tab layout (when panel is too narrow for 2 columns) ──
 
 @container card-panel (max-width: 859px) {
+  // The Detail / Activity switch is k-segmented, stretched across the panel.
   .col-tabs {
     display: flex;
-    gap: 4px;
     flex-shrink: 0;
+    --sg-fill-width: 100%;
+    --sg-fill-flex: 1 1 0;
   }
 
   .col-main,
@@ -905,11 +873,6 @@
 
   .panel.mode-modal .panel-header {
     padding-right: max(54px, calc(env(safe-area-inset-right) + 54px));
-  }
-
-  // Increase tab button height for touch.
-  .tab-btn {
-    height: 40px;
   }
 }
 

@@ -3828,7 +3828,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.detectChanges();
 
     const root = fixture.nativeElement as HTMLElement;
-    const commentsTab = Array.from(root.querySelectorAll(".tab-btn"))
+    const commentsTab = Array.from(root.querySelectorAll(".col-tabs .sg-btn"))
       .find((button) => button.textContent?.includes("Activity")) as HTMLButtonElement | undefined;
 
     expect(commentsTab).toBeDefined();
@@ -3855,7 +3855,10 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(fixture.componentInstance.activeTab()).toBe("detail");
     expect(fixture.nativeElement.querySelector("k-card-activity")).toBeNull();
 
-    const observer = ResizeObserverStub.instances.at(-1);
+    // The panel's own observer, not the one the Detail / Activity k-segmented registers.
+    const observer = ResizeObserverStub.instances.find((instance) =>
+      instance.observe.mock.calls.some(([target]) => !(target as Element).matches("k-segmented")),
+    );
     expect(observer).toBeDefined();
     observer?.trigger(900);
     fixture.detectChanges();
