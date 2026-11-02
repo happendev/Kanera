@@ -815,6 +815,15 @@ export class BoardPage implements OnDestroy {
   private filterLoadSeq = 0;
   /** The current route's serialized board refresh; a no-op once its board context is torn down. */
   private refreshBoard: (() => void) | null = null;
+  /** Runs a refresh that was requested while a drop's write was in flight; see `dropWritesInFlight`. */
+  private runQueuedRefresh: (() => void) | null = null;
+  /**
+   * Move requests from drops still awaiting their response. A refresh started meanwhile could read a
+   * snapshot that predates the move's commit and put the card back where it was until the response
+   * lands, so refreshes wait for the drop to settle. Realtime events held during the drag
+   * (BoardSocketBridge) request their refresh right at the drop, which is exactly this window.
+   */
+  private dropWritesInFlight = 0;
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   private hasAny(values: Set<string> | undefined, filters: Set<string>): boolean {
@@ -1372,10 +1381,11 @@ export class BoardPage implements OnDestroy {
       const refreshBoard = () => {
         if (cancelled) return;
         if (!hydrated) return;
-        if (refreshInFlight) {
+        if (refreshInFlight || this.dropWritesInFlight > 0) {
           refreshQueued = true;
           return;
         }
+        refreshQueued = false;
         refreshInFlight = true;
         // A refresh's GET snapshot can predate a card mutation confirmed locally while it was in
         // flight (the create/move/rename race a reconnect-triggered refresh). Capture the local
@@ -1410,6 +1420,9 @@ export class BoardPage implements OnDestroy {
         refreshBoard();
       };
       this.refreshBoard = refreshBoard;
+      this.runQueuedRefresh = () => {
+        if (refreshQueued) refreshBoard();
+      };
 
       this.clearBulkSelection();
       void this.offlineCache.loadBoard(boardId)
@@ -2409,22 +2422,35 @@ export class BoardPage implements OnDestroy {
     if (!this.state.canEdit()) return;
     const cards = this.bulkSelectedCardIds().has(p.cardId)
       ? this.bulkSelectedCards() : [this.state.cardById(p.cardId)].filter((card) => card !== undefined && card !== null);
-    // Place each card against the preceding card's confirmed position. Preparing
-    // the whole selection up front makes later server positions reshuffle the group.
-    let next = p;
-    for (const card of cards) {
-      try {
-        await this.prepareDroppedCard({ ...next, cardId: card.id })();
-        next = { cardId: card.id, toListId: p.toListId, afterItem: { type: "card", id: card.id } };
-      } catch (error) {
-        // Earlier writes are durable and later cards have not moved. Restore only
-        // this card's position, preserving unrelated realtime updates.
-        this.state.moveCard(card.id, card.listId, card.position, inProgressClockOf(card));
-        throw error;
+    await this.trackDropWrite(async () => {
+      // Place each card against the preceding card's confirmed position. Preparing
+      // the whole selection up front makes later server positions reshuffle the group.
+      let next = p;
+      for (const card of cards) {
+        try {
+          await this.prepareDroppedCard({ ...next, cardId: card.id })();
+          next = { cardId: card.id, toListId: p.toListId, afterItem: { type: "card", id: card.id } };
+        } catch (error) {
+          // Earlier writes are durable and later cards have not moved. Restore only
+          // this card's position, preserving unrelated realtime updates.
+          this.state.moveCard(card.id, card.listId, card.position, inProgressClockOf(card));
+          throw error;
+        }
       }
-    }
+    });
     if (cards.length > 1) {
       this.toasts.success(icu($localize`:Toast after dragging several cards:{count, plural, other {# cards moved.}}`, { count: cards.length }), "arrows-transfer-down");
+    }
+  }
+
+  /** Holds board refreshes back until a drop's write has settled, then runs the one that was queued. */
+  private async trackDropWrite(write: () => Promise<void>): Promise<void> {
+    this.dropWritesInFlight += 1;
+    try {
+      await write();
+    } finally {
+      this.dropWritesInFlight -= 1;
+      if (this.dropWritesInFlight === 0) this.runQueuedRefresh?.();
     }
   }
 
@@ -2458,17 +2484,19 @@ export class BoardPage implements OnDestroy {
     const afterItem = p.afterItem ? this.itemForAnchor(p.afterItem) : p.afterItem;
     const optimisticPosition = this.state.positionForItemDrop({ kind: "separator", separator }, p.toListId, beforeItem, afterItem);
     this.state.moveSeparator(p.separatorId, p.toListId, optimisticPosition);
-    try {
-      const moved = await this.api.post<{ id: string; listId: string; position: string }>(`/separators/${p.separatorId}/move`, {
-        listId: p.toListId,
-        ...(p.beforeItem !== undefined ? { beforeItem: p.beforeItem } : {}),
-        ...(p.afterItem !== undefined ? { afterItem: p.afterItem } : {}),
-      });
-      this.state.moveSeparator(moved.id, moved.listId, moved.position);
-    } catch (error) {
-      this.state.separators.set(previousSeparators);
-      throw error;
-    }
+    await this.trackDropWrite(async () => {
+      try {
+        const moved = await this.api.post<{ id: string; listId: string; position: string }>(`/separators/${p.separatorId}/move`, {
+          listId: p.toListId,
+          ...(p.beforeItem !== undefined ? { beforeItem: p.beforeItem } : {}),
+          ...(p.afterItem !== undefined ? { afterItem: p.afterItem } : {}),
+        });
+        this.state.moveSeparator(moved.id, moved.listId, moved.position);
+      } catch (error) {
+        this.state.separators.set(previousSeparators);
+        throw error;
+      }
+    });
   }
 
   private itemForAnchor(anchor: LaneAnchor): BoardLaneItem | null {
