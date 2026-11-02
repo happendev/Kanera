@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, signal } from "@angular/core";
+import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import type { OnDestroy } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import type { ColorToken } from "@kanera/shared/colors";
@@ -115,7 +116,7 @@ const SOURCE_COPY: Record<ImportSource, { title: string; hint: string; upload: s
 @Component({
   selector: "k-trello-import",
   standalone: true,
-  imports: [RouterLink, IconPickerComponent, ColorPickerComponent],
+  imports: [RouterLink, IconPickerComponent, ColorPickerComponent, SegmentedComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./trello-import.page.html",
   styleUrl: "./trello-import.page.scss",
@@ -127,6 +128,12 @@ export class TrelloImportPage implements OnDestroy {
   private readonly importNavigationGuard = inject(ImportNavigationGuardService);
   private importStatusPollId: number | null = null;
   private importStatusPollBusy = false;
+
+  readonly actionOptions: SegmentedOption<Action>[] = [
+    { id: "create", label: $localize`:Import mapping choice - create a new item:Create` },
+    { id: "map", label: $localize`:Import mapping choice - map to an existing item:Map` },
+    { id: "skip", label: $localize`:Import mapping choice - do not import:Skip` },
+  ];
 
   readonly workspaceId = input.required<string>();
   readonly standalone = input(false);

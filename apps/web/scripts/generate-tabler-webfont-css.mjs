@@ -27,6 +27,10 @@ for (const appRoot of [resolve(projectRoot, "src/app"), resolve(projectRoot, "..
   }
 }
 const extra = new Set([...glyphs.values()].filter((code) => !core.has(code)));
+// The core face also claims U+0020 (no icon renders a space, so this costs nothing). CSS sizes
+// each line from the first face covering a space, so without it a platform fallback font sets the
+// .ti line box and every icon sits ~0.06em high in flex rows. The unsplit font never had this problem.
+core.add(0x20);
 const output = resolve(projectRoot, "src/fonts");
 await mkdir(output, { recursive: true });
 

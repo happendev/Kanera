@@ -38,44 +38,14 @@
   }
 }
 
+// The My notes / Team switch is k-segmented, stretched across the sidebar.
 .nv-tabs {
   display: flex;
-  align-items: center;
-  gap: 2px;
   padding: 8px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-}
-
-.nv-tab {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: var(--h-md);
-  padding: 0 10px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  color: var(--text-muted);
-  font-size: var(--text-base);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color var(--motion-fast), color var(--motion-fast);
-
-  i { font-size: var(--text-md); }
-
-  &:hover {
-    background: var(--surface-2);
-    color: var(--text);
-  }
-
-  &.active {
-    background: var(--surface-2);
-    color: var(--text);
-    border-color: var(--border);
-  }
+  --sg-fill-width: 100%;
+  --sg-fill-flex: 1 1 0;
 }
 
 .nv-tab-description {

@@ -2,13 +2,6 @@ import type { AfterViewInit, OnDestroy } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, inject, input, output, signal } from "@angular/core";
 import { TooltipDirective } from "./tooltip.directive";
 
-/**
- * `md` is the toolbar size, matching `.k-toolbar-*` at 36px. `sm` is for dense chrome that is not a
- * page toolbar — the notifications drawer's own header row. Only the height changes: the track/pill
- * treatment is identical, which is the part that had to stop varying.
- */
-export type SegmentedSize = "sm" | "md";
-
 /** The labelled segment's inline padding and icon-to-label gap, mirrored from the `.sg-fits` rules. */
 const LABELLED_PADDING = 10;
 const LABEL_GAP = 6;
@@ -43,6 +36,9 @@ export type SegmentedOption<T extends string = string> = {
  * a recessed `--surface-2` track with a raised `--surface` pill — won because it is the only one
  * that reads correctly on both the board's tinted header and a plain page surface.
  *
+ * One size everywhere: the track is always --h-lg, so a switch in a drawer or a card section lines up
+ * with the 36px buttons and fields beside it. Do not reintroduce a dense variant.
+ *
  * Keep the active treatment here and only here. Divergent per-caller active states are the mess this
  * control exists to have cleaned up.
  *
@@ -59,7 +55,7 @@ export type SegmentedOption<T extends string = string> = {
     "[class.sg-fits]": "fits()",
   },
   template: `
-    <div class="sg-track" [class.is-sm]="size() === 'sm'" [class.is-equal]="equalWidths()" role="group" [attr.aria-label]="ariaLabel()">
+    <div class="sg-track" [class.is-equal]="equalWidths()" role="group" [attr.aria-label]="ariaLabel()">
       @for (option of options(); track option.id) {
         <button
           type="button"
@@ -242,26 +238,8 @@ export type SegmentedOption<T extends string = string> = {
         opacity: 0.55;
       }
 
-      .sg-track.is-sm {
-        height: 28px;
-        padding: 2px;
-      }
-
-      .sg-track.is-sm .sg-btn {
-        min-width: 24px;
-        padding: 0 8px;
-        font-size: var(--text-xs);
-        font-weight: 600;
-      }
-
-      .sg-track.is-sm .sg-btn i {
-        font-size: var(--text-base);
-      }
-
-      /* Coarse pointers get the shared 44px floor; see toolbar-styles.scss. The sm variant stops at
-         36px: it sits in a dense drawer grid where a 44px control would push the rows below it off
-         a phone screen, and it is never the only way to reach what it filters. Standalone toolbars
-         can set --sg-touch-track-height / --sg-touch-target-size to keep full 44px button targets. */
+      /* Coarse pointers get the shared 44px floor; see toolbar-styles.scss. Standalone toolbars can
+         set --sg-touch-track-height / --sg-touch-target-size to keep full 44px button targets. */
       @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
         .sg-track {
           height: var(--sg-touch-track-height, 44px);
@@ -270,14 +248,6 @@ export type SegmentedOption<T extends string = string> = {
         .sg-btn {
           min-width: var(--sg-touch-target-size, 44px);
           min-height: var(--sg-touch-target-size, 0px);
-        }
-
-        .sg-track.is-sm {
-          height: var(--sg-touch-track-height, 36px);
-        }
-
-        .sg-track.is-sm .sg-btn {
-          min-width: var(--sg-touch-target-size, 36px);
         }
       }
 
@@ -317,7 +287,6 @@ export class SegmentedComponent<T extends string = string> implements AfterViewI
    * at intrinsic widths looks like two different controls sharing a track.
    */
   readonly equalWidths = input(false);
-  readonly size = input<SegmentedSize>("md");
   readonly ariaLabel = input.required<string>();
 
   readonly valueChange = output<T>();

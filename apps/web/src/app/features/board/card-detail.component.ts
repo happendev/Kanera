@@ -1,4 +1,5 @@
 import { CdkTrapFocus } from "@angular/cdk/a11y";
+import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
 import { moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
@@ -98,7 +99,7 @@ const SIZE_FORMAT = new Intl.NumberFormat(appLocale(), { minimumFractionDigits: 
 @Component({
   selector: "k-card-detail",
   standalone: true,
-  imports: [CardDetailAttachmentsComponent, CardDetailChecklistsComponent, CardDetailFieldsComponent, CardDetailDescriptionComponent, CardDetailMetadataComponent, CardDetailHeaderComponent, CdkTrapFocus, CardGitHubPullsComponent, CardRelationsComponent,
+  imports: [SegmentedComponent, CardDetailAttachmentsComponent, CardDetailChecklistsComponent, CardDetailFieldsComponent, CardDetailDescriptionComponent, CardDetailMetadataComponent, CardDetailHeaderComponent, CdkTrapFocus, CardGitHubPullsComponent, CardRelationsComponent,
     NgTemplateOutlet,
     CdkScrollable,
     AnchoredPanelDirective,
@@ -768,6 +769,10 @@ export class CardDetailComponent {
   readonly recoveredDescriptionDraft = signal(false);
   readonly archiving = signal(false);
   readonly activeTab = signal<'detail' | 'comments'>('detail');
+  readonly tabOptions: SegmentedOption<'detail' | 'comments'>[] = [
+    { id: 'detail', icon: 'file-text', label: $localize`:Tab in card detail on small screens - fields, checklists and attachments:Detail` },
+    { id: 'comments', icon: 'message-circle', label: $localize`:Tab in card detail on small screens - comments and history:Activity` },
+  ];
   readonly wideLayout = signal(false);
   readonly shouldRenderActivity = computed(() => this.wideLayout() || this.activeTab() === "comments");
   readonly addingChecklist = signal(false);

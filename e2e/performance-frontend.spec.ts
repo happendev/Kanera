@@ -236,7 +236,7 @@ test("editing one note preserves every offline body without rewriting the other 
     expect(await originalView!.evaluate((element) => element.isConnected)).toBe(false);
     await page.getByRole("button", { name: "Board Notes", exact: true }).click();
     await expect.poll(() => [...failedOfflineScopes].sort()).toEqual(["personal", "team"]);
-    await page.getByRole("tab", { name: /Team/ }).click();
+    await page.getByRole("group", { name: "Notes" }).getByRole("button", { name: /Team/ }).click();
     for (const [index, note] of notes.entries()) {
       await page.locator("k-notes-tree").getByText(index === 0 ? renamed : note.title, { exact: true }).click();
       await expect(noteBody).toHaveText(note.body);

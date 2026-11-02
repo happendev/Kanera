@@ -18,7 +18,7 @@
 
   <div class="dm-controls">
     @if (offersWorkspace()) {
-    <k-segmented [options]="scopeOptions" [value]="scopeMode()" [showLabels]="true" size="sm" ariaLabel="Dependencies scope" i18n-ariaLabel (valueChange)="setScope($event)" />
+    <k-segmented [options]="scopeOptions" [value]="scopeMode()" [showLabels]="true" ariaLabel="Dependencies scope" i18n-ariaLabel (valueChange)="setScope($event)" />
     }
     <button type="button" class="dm-toggle" [class.is-on]="density() === 'slim'" [attr.aria-pressed]="density() === 'slim'" (click)="toggleSlim()"
       kTooltip="Show only each card's key and title" i18n-kTooltip>

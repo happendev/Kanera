@@ -47,53 +47,30 @@
   margin-left: auto;
 }
 
+// The All / Comments / Agents switch is k-segmented; only its placement belongs here.
 .feed-filter {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
   margin-left: auto;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
 
   +.comment-search-wrap {
     margin-left: 0;
   }
-
-  button {
-    min-width: 58px;
-    height: 24px;
-    border: 0;
-    border-radius: calc(var(--radius-sm) - 2px);
-    background: transparent;
-    color: var(--text-muted);
-    font: inherit;
-    font-size: var(--text-xs);
-    font-weight: 600;
-    text-transform: none;
-    cursor: pointer;
-
-    &.is-active {
-      background: var(--surface);
-      color: var(--text);
-      box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
-    }
-
-    &:hover {
-      color: var(--text);
-    }
-  }
 }
 
+// Square at the feed filter's height so the two read as one row of controls, including at the
+// 44px coarse-pointer track.
 .comment-search-btn {
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: var(--h-lg);
+  height: var(--h-lg);
 
   &.is-active {
     background: var(--surface-hover);
     color: var(--accent, var(--text));
+  }
+
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    width: 44px;
+    height: 44px;
   }
 }
 
