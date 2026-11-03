@@ -665,6 +665,39 @@ export class NotificationsService {
     }
   }
 
+  /**
+   * One-tap thumbs-up on the comment a notification is about, so a mention can be acknowledged from
+   * the drawer without opening the card. Adding the reaction also marks the notification read: the
+   * thumbs-up is the acknowledgement, so leaving it unread would ask for a second click. Removing the
+   * reaction leaves read state alone.
+   */
+  async toggleThumbsUp(notification: NotificationRow): Promise<void> {
+    const commentId = notification.activity?.entityId;
+    if (!this.online() || !commentId || notification.commentBody === null) return;
+    const next = !notification.viewerThumbsUp;
+    // Every row about the same comment shows the same state; the board's reaction echo does not
+    // reach the inbox, so the drawer converges on this local write.
+    const apply = (value: boolean) => {
+      const patch = (current: NotificationRow[]) => current.map((n) =>
+        n.activity?.entityId === commentId && n.commentBody !== null ? { ...n, viewerThumbsUp: value } : n);
+      this.allItems.update(patch);
+      this.unreadItems.update(patch);
+      for (const mode of FILTERED_FEED_MODES) this.filteredItems[mode].update(patch);
+    };
+    apply(next);
+    if (next && !notification.readAt) void this.markRead(notification.id);
+    const session = this.sessionVersion;
+    try {
+      if (next) {
+        await this.api.post(`/comments/${commentId}/reactions`, { type: "thumbs_up" });
+      } else {
+        await this.api.delete(`/comments/${commentId}/reactions/thumbs_up`);
+      }
+    } catch {
+      if (session === this.sessionVersion) apply(!next);
+    }
+  }
+
   async markAllRead(): Promise<void> {
     if (!this.online()) return;
     // On the Mentions and Agent tabs, "Mark all read" means the notifications the tab lists, never

@@ -469,6 +469,28 @@ export class NotificationsPanelComponent {
     }
   }
 
+  /**
+   * Mentions get a one-tap thumbs-up (which also marks them read) so a ping can be acknowledged
+   * without opening the card. Same
+   * gate as the card's own reaction button: a comment still exists, the board role can write, and
+   * the card is not archived (archived cards are read-only).
+   */
+  canThumbsUp(notification: NotificationRow): boolean {
+    return notification.reason === "mentioned"
+      && notification.commentBody !== null
+      && notification.viewerRole !== "observer"
+      && !notification.cardArchivedAt;
+  }
+
+  async toggleThumbsUp(event: Event, notification: NotificationRow): Promise<void> {
+    event.stopPropagation();
+    await this.notifications.toggleThumbsUp(notification);
+  }
+
+  thumbsUpLabel(notification: NotificationRow): string {
+    return notification.viewerThumbsUp ? this.removeThumbsUpLabel : this.addThumbsUpLabel;
+  }
+
   /** Clears a whole card+day block in one request. Blocks are unread-only, so there is no unread branch. */
   async markClusterRead(event: Event, cluster: NotificationCluster): Promise<void> {
     event.stopPropagation();
@@ -629,6 +651,8 @@ export class NotificationsPanelComponent {
   // Bound attributes in the template that mix text with values, kept here as whole messages.
 
   readonly markReadLabel = $localize`:Button label - mark a notification as read:Mark as read`;
+  readonly addThumbsUpLabel = $localize`:Button on a mention notification - react to the comment without opening the card:React with thumbs up`;
+  readonly removeThumbsUpLabel = $localize`:Button on a mention notification - undo your thumbs-up on the comment:Remove thumbs up`;
   readonly markUnreadLabel = $localize`:Button label - mark a notification as unread:Mark as unread`;
   readonly markAllReadLabel = $localize`:Tooltip on the Mark all read button:Mark all read`;
   readonly aiAgentLabel = $localize`:Fallback name for an AI agent:AI agent`;

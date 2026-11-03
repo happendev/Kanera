@@ -52,6 +52,7 @@ function row(overrides: Partial<NotificationRow> & { id: string }): Notification
     orgLogoUrl: null,
     attachment: null,
     commentBody: null,
+    viewerThumbsUp: false,
     ...overrides,
   } as NotificationRow;
 }

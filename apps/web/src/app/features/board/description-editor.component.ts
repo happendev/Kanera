@@ -114,6 +114,12 @@ type MarkdownParagraphSerializerState = MarkdownBlockSerializerState & {
   renderInline(node: ProseMirrorNode): void;
 };
 
+type MarkdownTextSerializerState = {
+  atBlockStart: boolean;
+  inTable?: boolean;
+  text(value: string): void;
+};
+
 type MarkdownItInlineState = {
   src: string;
   pos: number;
@@ -204,6 +210,31 @@ const MarkdownHorizontalRule = HorizontalRule.extend({
         parse: {},
       },
     };
+  },
+});
+
+/**
+ * Shift+Enter saves a hard break as `\` + newline, so the following text starts a Markdown line.
+ * prosemirror-markdown only escapes line-start syntax at the start of a block, which let a typed
+ * "1. item" after a break reopen as a real list and strand the break's `\` as visible text.
+ * Escape text after a break as a line start too. Table cells write breaks as `<br>`, not newlines.
+ */
+const MarkdownStarterKit = StarterKit.extend({
+  addExtensions() {
+    return (this.parent?.() ?? []).map((extension) => extension.name !== "text" ? extension : extension.extend({
+      addStorage() {
+        return {
+          markdown: {
+            serialize(state: MarkdownTextSerializerState, node: ProseMirrorNode, parent: ProseMirrorNode, index: number) {
+              if (!state.inTable && index > 0 && parent.child(index - 1).type.name === "hardBreak") state.atBlockStart = true;
+              // tiptap-markdown's own text serializer, which this storage replaces.
+              state.text(node.text?.replace(/</g, "&lt;").replace(/>/g, "&gt;") ?? "");
+            },
+            parse: {},
+          },
+        };
+      },
+    }));
   },
 });
 
@@ -1171,7 +1202,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     this.editor = new Editor({
       element: this.hostRef.nativeElement,
       extensions: [
-        StarterKit.configure({
+        MarkdownStarterKit.configure({
           paragraph: false,
           horizontalRule: false,
           codeBlock: { enableTabIndentation: true, tabSize: CODE_BLOCK_TAB_SIZE },

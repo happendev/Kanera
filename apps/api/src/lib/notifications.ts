@@ -16,6 +16,7 @@ import {
   cards,
   clientMembers,
   clients,
+  commentReactions,
   comments,
   directRealtimeOutbox,
   lists,
@@ -554,7 +555,8 @@ export async function enrichNotifications(
   const commentIds = baseRows
     .filter((r) => r.activity_entityType === ACTIVITY_ENTITY_TYPE.COMMENT && r.activity_entityId)
     .map((r) => r.activity_entityId!);
-  const [attachmentRows, commentRows] = await Promise.all([
+  const recipientIds = [...new Set(baseRows.map((r) => r.userId))];
+  const [attachmentRows, commentRows, thumbsUpRows] = await Promise.all([
     attachmentIds.length > 0 ? tx
       .select({
         id: cardAttachments.id,
@@ -569,9 +571,20 @@ export async function enrichNotifications(
       .select({ id: comments.id, body: comments.body })
       .from(comments)
       .where(inArray(comments.id, commentIds)) : [],
+    // Drives the drawer's one-tap thumbs-up on a comment notification, so it opens already lit when
+    // the recipient reacted from the card (or another tab) first.
+    commentIds.length > 0 ? tx
+      .select({ commentId: commentReactions.commentId, userId: commentReactions.userId })
+      .from(commentReactions)
+      .where(and(
+        inArray(commentReactions.commentId, commentIds),
+        inArray(commentReactions.userId, recipientIds),
+        eq(commentReactions.reactionType, "thumbs_up"),
+      )) : [],
   ]);
   const attachmentMap = new Map<string, NotificationCardThumbnail>(attachmentRows.map((row) => [row.id, row]));
   const commentBodyMap = new Map(commentRows.map((row) => [row.id, row.body]));
+  const thumbsUpKeys = new Set(thumbsUpRows.map((row) => `${row.commentId}|${row.userId}`));
 
   return baseRows.map((r) => {
     const attachmentId = notificationAttachmentId(r);
@@ -650,6 +663,7 @@ export async function enrichNotifications(
       orgLogoUrl: withSignedMedia(r.clientId, { logoUrl: r.orgLogoUrl }).logoUrl,
       attachment: signedAttachment,
       commentBody: signedCommentBody,
+      viewerThumbsUp: commentBody !== null && thumbsUpKeys.has(`${r.activity_entityId}|${r.userId}`),
     });
   });
 }

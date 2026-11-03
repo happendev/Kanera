@@ -713,6 +713,7 @@
 
 .board-link,
 .read-dot,
+.notif-thumbs,
 .notif-attachment-preview {
   pointer-events: auto;
 }
@@ -778,9 +779,14 @@
     padding: 6px 8px;
   }
 
-  // Entries carry no control of their own, so the timestamp is the whole third column.
-  .notif-time {
+  // Usually just the timestamp; a mention adds its thumbs-up beside it.
+  .notif-entry-aside {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 18px;
     padding-top: 2px;
+    box-sizing: content-box;
   }
 }
 
@@ -1227,6 +1233,52 @@
   }
 }
 
+// Neutral, not --bell-accent: the accent marks unread and nothing else (see the colour policy at the
+// top). A neutral wash carries the "you reacted" state.
+.notif-thumbs {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  // Off the --h scale on purpose: it shares the 18px aside line with the time and the read dot.
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: color var(--motion-fast) ease, transform var(--dur) ease;
+
+  // Same enlarged-but-short-of-44px target as the read dot, for the same reason: a bigger overlay
+  // would swallow taps meant to open the card.
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+
+  &:hover:not(:disabled) {
+    background: transparent;
+    color: var(--text);
+    transform: scale(1.15);
+  }
+
+  &.is-active,
+  &.is-active:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
 .drawer-scroll-sentinel {
   display: flex;
   justify-content: center;
@@ -1310,7 +1362,7 @@
     grid-row: 1;
   }
 
-  > .notif-time {
+  > .notif-entry-aside {
     grid-column: 3;
     grid-row: 1;
   }
