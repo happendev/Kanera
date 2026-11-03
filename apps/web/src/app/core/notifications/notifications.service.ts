@@ -675,8 +675,8 @@ export class NotificationsService {
     const commentId = notification.activity?.entityId;
     if (!this.online() || !commentId || notification.commentBody === null) return;
     const next = !notification.viewerThumbsUp;
-    // Every row about the same comment shows the same state; the board's reaction echo does not
-    // reach the inbox, so the drawer converges on this local write.
+    // Every row about the same comment shows the same state. The server re-sends these rows to every
+    // tab once the reaction lands; this is the optimistic copy for the acting tab.
     const apply = (value: boolean) => {
       const patch = (current: NotificationRow[]) => current.map((n) =>
         n.activity?.entityId === commentId && n.commentBody !== null ? { ...n, viewerThumbsUp: value } : n);
@@ -685,7 +685,9 @@ export class NotificationsService {
       for (const mode of FILTERED_FEED_MODES) this.filteredItems[mode].update(patch);
     };
     apply(next);
-    if (next && !notification.readAt) void this.markRead(notification.id);
+    // Read first: the reaction's `notification:updated` echo carries the row's server read state,
+    // and an echo from before the read landed would put the mention back in the Unread tab.
+    if (next && !notification.readAt) await this.markRead(notification.id);
     const session = this.sessionVersion;
     try {
       if (next) {

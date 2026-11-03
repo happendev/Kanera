@@ -571,8 +571,9 @@ export async function enrichNotifications(
       .select({ id: comments.id, body: comments.body })
       .from(comments)
       .where(inArray(comments.id, commentIds)) : [],
-    // Drives the drawer's one-tap thumbs-up on a comment notification, so it opens already lit when
-    // the recipient reacted from the card (or another tab) first.
+    // Drives the drawer's one-tap thumbs-up on a comment notification. Only the recipient's own
+    // reaction matters there: the button is lit when they reacted (here or from the card), never
+    // because someone else did.
     commentIds.length > 0 ? tx
       .select({ commentId: commentReactions.commentId, userId: commentReactions.userId })
       .from(commentReactions)
@@ -666,6 +667,28 @@ export async function enrichNotifications(
       viewerThumbsUp: commentBody !== null && thumbsUpKeys.has(`${r.activity_entityId}|${r.userId}`),
     });
   });
+}
+
+/**
+ * Re-sends a user's own notifications about a comment after they react to it or take the reaction
+ * back, so every open drawer (other tabs, other devices) shows their thumbs-up state live. The
+ * board's `comment:reaction:*` events only reach people viewing that board, never the inbox.
+ */
+export async function emitCommentNotificationsUpdated(userId: string, commentId: string): Promise<void> {
+  const rows = await dbSingleton
+    .select({ id: notifications.id })
+    .from(notifications)
+    .innerJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
+    .innerJoin(cards, eq(cards.id, notifications.cardId))
+    .where(and(
+      eq(notifications.userId, userId),
+      eq(activityEvents.entityType, ACTIVITY_ENTITY_TYPE.COMMENT),
+      eq(activityEvents.entityId, commentId),
+      inboxVisibleNotificationCondition(),
+    ));
+  if (rows.length === 0) return;
+  const enriched = await enrichNotifications(dbSingleton, rows.map((row) => row.id));
+  await emitToUsersDurable("notification:updated", enriched.map((row) => ({ userId: row.userId, payload: { notification: row } })));
 }
 
 export async function clearOverdueNotificationsForCards(
