@@ -1,289 +1,18 @@
 import { dto } from "@kanera/shared";
-import { AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
-import { automationActions, automationRuns, automations, cardLabels, checklistTemplates, customFieldOptions, customFields, lists, webhookEndpoints, workspaceMembers, workspaces } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { automationRuns, automations } from "@kanera/shared/schema";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { db, type Tx } from "../../db.js";
-import { env } from "../../env.js";
-import { automationTriggerBlockedBy } from "@kanera/shared/workspace-features";
-import { featureDisabledError, loadWorkspaceFeatures } from "../../lib/workspace-features.js";
+import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
-import { recordActivity } from "../../lib/activity.js";
-import { armInProgressAutomation, loadAutomation, loadAutomations } from "../../lib/automations.js";
-import { badRequest, notFound } from "../../lib/errors.js";
-import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
-import { between, positionAtIndex, workspaceNeighbourPositions } from "../../lib/position.js";
-import { capturePremiumFeatureUsed } from "../../lib/product-analytics.js";
-import { rebalanceAutomations } from "../../lib/rebalance.js";
-import { assertEnabledAutomationLimit } from "../../lib/tier-limits.js";
+import { loadAutomations } from "../../lib/automations.js";
+import { notFound } from "../../lib/errors.js";
 import { emitToWorkspaceAdmins } from "../../realtime/emit.js";
-
-async function capturePremiumAutomationRuleUse(input: {
-  clientId: string;
-  workspaceId: string;
-  actorId: string;
-  supportSession: boolean;
-}): Promise<void> {
-  const [row] = await db.select({ count: sql<number>`count(*)::int` })
-    .from(automations)
-    .innerJoin(workspaces, eq(workspaces.id, automations.workspaceId))
-    .where(and(eq(workspaces.clientId, input.clientId), eq(automations.enabled, true), isNull(automations.archivedAt)));
-  const count = row?.count ?? 0;
-  if (count <= env.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS) return;
-  await capturePremiumFeatureUsed({
-    organizationId: input.clientId,
-    workspaceId: input.workspaceId,
-    actorId: input.actorId,
-    premiumFeature: "automation_rules",
-    currentUsage: count,
-    supportSession: input.supportSession,
-  });
-}
-
-// Reorder requests only need the anchor and its immediate neighbor. Keep this
-// as targeted indexed probes so large workspaces do not pay for a full automation scan.
-const neighbourPositions = workspaceNeighbourPositions(automations, "Automation");
-
-async function assertListInWorkspace(workspaceId: string, listId: string | null | undefined, tx: Tx = db) {
-  if (!listId) return;
-  const [row] = await tx
-    .select({ id: lists.id })
-    .from(lists)
-    .where(and(eq(lists.id, listId), eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)))
-    .limit(1);
-  if (!row) throw badRequest("list not in workspace");
-}
-
-async function assertLabelInWorkspace(workspaceId: string, labelId: string | null | undefined, tx: Tx = db) {
-  if (!labelId) return;
-  const [row] = await tx
-    .select({ id: cardLabels.id })
-    .from(cardLabels)
-    .where(and(eq(cardLabels.id, labelId), eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt)))
-    .limit(1);
-  if (!row) throw badRequest("label not in workspace");
-}
-
-async function validateCustomFieldTrigger(
-  workspaceId: string,
-  fieldId: string | null | undefined,
-  value: dto.AutomationTriggerCustomFieldValueDto | null | undefined,
-  tx: Tx = db,
-) {
-  if (!fieldId || !value) return;
-  const [field] = await tx
-    .select({ id: customFields.id, type: customFields.type })
-    .from(customFields)
-    .where(and(eq(customFields.id, fieldId), eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt)))
-    .limit(1);
-  if (!field) throw badRequest("custom field trigger field is invalid");
-  if (field.type !== value.kind) throw badRequest("custom field trigger value does not match field type");
-  if (value.kind === "select") {
-    const [option] = await tx
-      .select({ id: customFieldOptions.id })
-      .from(customFieldOptions)
-      .where(and(eq(customFieldOptions.id, value.optionId), eq(customFieldOptions.fieldId, field.id), isNull(customFieldOptions.archivedAt)))
-      .limit(1);
-    if (!option) throw badRequest("unknown option for custom field trigger");
-  }
-  if (value.kind === "user") {
-    const [member] = await tx
-      .select({ userId: workspaceMembers.userId })
-      .from(workspaceMembers)
-      .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, value.userId)))
-      .limit(1);
-    if (!member) throw badRequest("custom field trigger user is not a workspace member");
-  }
-}
-
-// An "over the estimate" limit reads a number field on each card; any other type has no amount.
-async function assertThresholdFieldInWorkspace(workspaceId: string, fieldId: string | null | undefined, tx: Tx = db) {
-  if (!fieldId) return;
-  const [field] = await tx
-    .select({ type: customFields.type })
-    .from(customFields)
-    .where(and(eq(customFields.id, fieldId), eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt)))
-    .limit(1);
-  if (!field) throw badRequest("custom field trigger field is invalid");
-  if (field.type !== "number") throw badRequest("in-progress limit field must be a number field");
-}
-
-async function validateActionTargets(workspaceId: string, actions: dto.AutomationActionBody[], tx: Tx = db) {
-  const listIds = actions.flatMap((action) => action.type === "move_to_list" ? [action.config.listId] : []);
-  if (listIds.length > 0) {
-    const rows = await tx
-      .select({ id: lists.id })
-      .from(lists)
-      .where(and(eq(lists.workspaceId, workspaceId), inArray(lists.id, Array.from(new Set(listIds))), isNull(lists.archivedAt)));
-    const validIds = new Set(rows.map((row) => row.id));
-    if (listIds.some((id) => !validIds.has(id))) throw badRequest("one or more action list ids are invalid");
-  }
-
-  const labelIds = actions.flatMap((action) =>
-    action.type === "add_labels" || action.type === "remove_labels" ? action.config.labelIds : [],
-  );
-  if (labelIds.length > 0) {
-    const rows = await tx
-      .select({ id: cardLabels.id })
-      .from(cardLabels)
-      .where(and(eq(cardLabels.workspaceId, workspaceId), inArray(cardLabels.id, Array.from(new Set(labelIds))), isNull(cardLabels.archivedAt)));
-    const validIds = new Set(rows.map((row) => row.id));
-    if (labelIds.some((id) => !validIds.has(id))) throw badRequest("one or more action label ids are invalid");
-  }
-
-  const userIds = actions.flatMap((action) =>
-    action.type === "add_assignees" || action.type === "remove_assignees" ? action.config.userIds : [],
-  );
-  if (userIds.length > 0) {
-    const rows = await tx
-      .select({ userId: workspaceMembers.userId })
-      .from(workspaceMembers)
-      .where(and(
-        eq(workspaceMembers.workspaceId, workspaceId),
-        inArray(workspaceMembers.userId, Array.from(new Set(userIds))),
-      ));
-    const validIds = new Set(rows.map((row) => row.userId));
-    if (userIds.some((id) => !validIds.has(id))) throw badRequest("one or more action user ids are not assignable workspace members");
-  }
-
-  const templateIds = actions.flatMap((action) =>
-    action.type === "apply_checklists" ? action.config.templateIds : [],
-  );
-  if (templateIds.length > 0) {
-    const rows = await tx
-      .select({ id: checklistTemplates.id })
-      .from(checklistTemplates)
-      .where(and(eq(checklistTemplates.workspaceId, workspaceId), inArray(checklistTemplates.id, Array.from(new Set(templateIds))), isNull(checklistTemplates.archivedAt)));
-    const validIds = new Set(rows.map((row) => row.id));
-    if (templateIds.some((id) => !validIds.has(id))) throw badRequest("one or more action checklist template ids are invalid");
-  }
-
-  // call_webhook references an endpoint rather than a URL so the endpoint's secret, SSRF-checked
-  // URL, and delivery log are reused. Only generic (non-chat) endpoints of this workspace qualify;
-  // a disabled endpoint may still be selected, it simply no-ops until re-enabled.
-  const endpointIds = actions.flatMap((action) => action.type === "call_webhook" ? [action.config.endpointId] : []);
-  if (endpointIds.length > 0) {
-    const rows = await tx
-      .select({ id: webhookEndpoints.id })
-      .from(webhookEndpoints)
-      .where(and(eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic"), inArray(webhookEndpoints.id, Array.from(new Set(endpointIds)))));
-    const validIds = new Set(rows.map((row) => row.id));
-    if (endpointIds.some((id) => !validIds.has(id))) throw badRequest("one or more action webhook endpoint ids are invalid");
-  }
-
-  const populateActions = actions.filter((action) => action.type === "populate_custom_field");
-  if (populateActions.length > 0) {
-    // Load both the target field and, for copy-from-field actions, the source field so we can
-    // type-match them below.
-    const populateFieldIds = populateActions.flatMap((action) =>
-      action.config.value.kind === "field" ? [action.config.fieldId, action.config.value.sourceFieldId] : [action.config.fieldId],
-    );
-    const rows = await tx
-      .select({ id: customFields.id, type: customFields.type, allowMultiple: customFields.allowMultiple })
-      .from(customFields)
-      .where(and(eq(customFields.workspaceId, workspaceId), inArray(customFields.id, Array.from(new Set(populateFieldIds))), isNull(customFields.archivedAt)));
-    const fieldsById = new Map(rows.map((field) => [field.id, field]));
-
-    const optionIds = populateActions.flatMap((action) => action.config.value.kind === "select" ? action.config.value.optionIds : []);
-    const validOptionFieldById = new Map<string, string>();
-    if (optionIds.length > 0) {
-      const optionRows = await tx
-        .select({ id: customFieldOptions.id, fieldId: customFieldOptions.fieldId })
-        .from(customFieldOptions)
-        .where(and(inArray(customFieldOptions.id, Array.from(new Set(optionIds))), isNull(customFieldOptions.archivedAt)));
-      for (const option of optionRows) validOptionFieldById.set(option.id, option.fieldId);
-    }
-
-    const customFieldUserIds = populateActions.flatMap((action) => action.config.value.kind === "user" ? action.config.value.userIds : []);
-    const validUserIds = new Set<string>();
-    if (customFieldUserIds.length > 0) {
-      const userRows = await tx
-        .select({ userId: workspaceMembers.userId })
-        .from(workspaceMembers)
-        .where(and(eq(workspaceMembers.workspaceId, workspaceId), inArray(workspaceMembers.userId, Array.from(new Set(customFieldUserIds)))));
-      for (const row of userRows) validUserIds.add(row.userId);
-    }
-
-    for (const action of populateActions) {
-      const field = fieldsById.get(action.config.fieldId);
-      if (!field) throw badRequest("one or more set custom field ids are invalid");
-      const value = action.config.value;
-      if ((value.kind === "text" || value.kind === "text_current_date") && field.type !== "text") throw badRequest("set custom field value does not match field type");
-      if (value.kind === "number" && field.type !== "number") throw badRequest("set custom field value does not match field type");
-      if (value.kind === "date" && field.type !== "date") throw badRequest("set custom field value does not match field type");
-      if (value.kind === "checkbox" && field.type !== "checkbox") throw badRequest("set custom field value does not match field type");
-      if (value.kind === "select") {
-        if (field.type !== "select") throw badRequest("set custom field value does not match field type");
-        if (!field.allowMultiple && value.optionIds.length > 1) throw badRequest("expected a single option");
-        if (value.optionIds.some((optionId) => validOptionFieldById.get(optionId) !== field.id)) throw badRequest("unknown option for set custom field action");
-      }
-      if (value.kind === "user") {
-        if (field.type !== "user") throw badRequest("set custom field value does not match field type");
-        if (!field.allowMultiple && value.userIds.length > 1) throw badRequest("expected a single user");
-        if (value.userIds.some((userId) => !validUserIds.has(userId))) throw badRequest("user is not a workspace member");
-      }
-      if (value.kind === "field") {
-        // Copy-from-field: the source field must exist in the workspace and share the target's
-        // type. Per-card option/member resolution happens at apply time, not here.
-        const source = fieldsById.get(value.sourceFieldId);
-        if (!source) throw badRequest("set custom field copy source is invalid");
-        if (source.type !== field.type) throw badRequest("set custom field value does not match field type");
-      }
-    }
-  }
-}
-
-async function validateTriggerUsers(workspaceId: string, userIds: string[] | null | undefined, tx: Tx = db) {
-  if (!userIds || userIds.length === 0) return;
-  const uniqueIds = Array.from(new Set(userIds));
-  const rows = await tx
-    .select({ userId: workspaceMembers.userId })
-    .from(workspaceMembers)
-    .where(and(
-      eq(workspaceMembers.workspaceId, workspaceId),
-      inArray(workspaceMembers.userId, uniqueIds),
-    ));
-  const validIds = new Set(rows.map((row) => row.userId));
-  if (uniqueIds.some((id) => !validIds.has(id))) throw badRequest("one or more trigger user ids are not assignable workspace members");
-}
-
-function assertEnabledAutomationHasActions(enabled: boolean, actionCount: number) {
-  // Enabled automations must have at least one Do action; otherwise they can
-  // match triggers while doing nothing, which makes audit and UI state misleading.
-  if (enabled && actionCount === 0) throw badRequest("enabled automations require at least one action");
-}
-
-async function hasAutomationActions(automationId: string, tx: Tx = db) {
-  const [action] = await tx
-    .select({ id: automationActions.id })
-    .from(automationActions)
-    .where(eq(automationActions.automationId, automationId))
-    .limit(1);
-  return Boolean(action);
-}
-
-async function replaceActions(tx: Tx, automationId: string, actions: dto.AutomationActionBody[]) {
-  await tx.delete(automationActions).where(eq(automationActions.automationId, automationId));
-  if (actions.length === 0) return;
-  await tx.insert(automationActions).values(
-    actions.map((action, index) => ({
-      automationId,
-      type: action.type,
-      config: action.config,
-      position: positionAtIndex(index),
-    })),
-  );
-}
-
-async function assertWorkspaceAutomationLimit(workspaceId: string, tx: Tx = db) {
-  const [row] = await tx
-    .select({ count: sql<number>`count(*)::int` })
-    .from(automations)
-    .where(and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt)));
-  if ((row?.count ?? 0) >= AUTOMATION_LIMIT) {
-    throw badRequest(`Workspaces can have up to ${AUTOMATION_LIMIT} automations. Contact support if you need more.`);
-  }
-}
+import { createAutomation } from "./create-automation.js";
+import { deleteAutomation } from "./delete-automation.js";
+import { moveAutomation } from "./move-automation.js";
+import { replaceAutomationActions } from "./replace-automation-actions.js";
+import { capturePremiumAutomationRuleUse, loadAutomationRow } from "./route-support.js";
+import { updateAutomation } from "./update-automation.js";
 
 export async function automationRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
@@ -317,68 +46,8 @@ export async function automationRoutes(app: FastifyInstance) {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createAutomationBody.parse(req.body);
-    await assertTriggerFeatureEnabled(workspaceId, body.triggerType);
-    await assertListInWorkspace(workspaceId, body.triggerType === "card_enters_list" || body.triggerType === "card_leaves_list" ? body.triggerListId : null);
-    await validateTriggerUsers(workspaceId, body.triggerType === "card_assigned_to_user" ? body.triggerUserIds : null);
-    await assertLabelInWorkspace(workspaceId, body.triggerType === "card_label_set" ? body.triggerLabelId : null);
-    await validateCustomFieldTrigger(workspaceId, body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldId : null, body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldValue : null);
-    const inProgress = body.triggerType === "card_in_progress_too_long";
-    const thresholdSource = inProgress ? body.triggerThresholdSource ?? "workspace" : null;
-    await assertThresholdFieldInWorkspace(workspaceId, thresholdSource === "custom_field" ? body.triggerCustomFieldId : null);
-    await validateActionTargets(workspaceId, body.actions);
-    assertEnabledAutomationHasActions(body.enabled, body.actions.length);
-    const [first] = await db
-      .select({ position: automations.position })
-      .from(automations)
-      .where(and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt)))
-      .orderBy(asc(automations.position))
-      .limit(1);
-    // New automations should be immediately visible where the user created them:
-    // the automations page renders ascending positions, so insert before the first active rule.
-    const { position } = between(null, first?.position ?? null);
-    const id = await db.transaction(async (tx) => {
-      // Keep automation lists operationally bounded; support can help with heavier workflow needs.
-      await assertWorkspaceAutomationLimit(workspaceId, tx);
-      // Free-tier hosted orgs have a capped number of active rules. Enforce inside the tx
-      // so the cap check and insert share one transaction; the helper takes a tenant row lock to
-      // serialize concurrent enables against the free cap.
-      if (body.enabled) await assertEnabledAutomationLimit(clientId, {}, tx);
-      const [automation] = await tx
-        .insert(automations)
-        .values({
-          workspaceId,
-          enabled: body.enabled,
-          position,
-          triggerType: body.triggerType,
-          triggerListId: body.triggerType === "card_enters_list" || body.triggerType === "card_leaves_list" ? body.triggerListId! : null,
-          triggerUserIds: body.triggerType === "card_assigned_to_user" ? Array.from(new Set(body.triggerUserIds ?? [])) : null,
-          triggerLabelId: body.triggerType === "card_label_set" ? body.triggerLabelId! : null,
-          triggerCustomFieldId: body.triggerType === "custom_field_value_changed" || thresholdSource === "custom_field" ? body.triggerCustomFieldId! : null,
-          triggerCustomFieldValue: body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldValue! : null,
-          triggerDaysBefore: body.triggerType === "due_date_approaching" ? body.triggerDaysBefore! : null,
-          triggerThresholdSource: thresholdSource,
-          triggerThresholdAmount: thresholdSource === "fixed" ? body.triggerThresholdAmount! : null,
-          triggerThresholdUnit: thresholdSource === "fixed" || thresholdSource === "custom_field" ? body.triggerThresholdUnit! : null,
-          triggerIncludeExisting: inProgress && body.triggerIncludeExisting,
-          applyOnCreate: body.applyOnCreate,
-          applyOnMove: body.applyOnMove,
-        })
-        .returning();
-      await replaceActions(tx, automation!.id, body.actions);
-      if (inProgress && body.enabled) await armInProgressAutomation(tx, automation!.id, { limitChanged: false, includeExisting: body.triggerIncludeExisting });
-      await recordActivity(tx, {
-        boardId: null,
-        workspaceId,
-        actorId: req.auth.sub,
-        entityType: "workspace",
-        entityId: workspaceId,
-        action: "automation:created",
-        payload: { automationId: automation!.id },
-      });
-      return automation!.id;
-    });
-    const automation = await loadAutomation(id);
-    await emitToWorkspaceAdmins(workspaceId, "automation:created", { workspaceId, automation: automation! });
+    const automation = await createAutomation({ auth: req.auth, workspaceId, clientId, body });
+    await emitToWorkspaceAdmins(workspaceId, "automation:created", { workspaceId, automation });
     if (body.enabled) void capturePremiumAutomationRuleUse({
       clientId,
       workspaceId,
@@ -391,188 +60,35 @@ export async function automationRoutes(app: FastifyInstance) {
   app.patch("/automations/:id", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.updateAutomationBody.parse(req.body);
-    const [current] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
-    if (!current) throw notFound();
+    const current = await loadAutomationRow(id);
     const { clientId } = await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    const triggerType = body.triggerType ?? current.triggerType;
-    // A rule kept from before a feature was switched off can still be edited or turned off, but not
-    // switched onto, or back on for, a trigger that cannot fire.
-    if (body.triggerType !== undefined || body.enabled === true) await assertTriggerFeatureEnabled(current.workspaceId, triggerType);
-    const triggerListId = triggerType === "card_enters_list" || triggerType === "card_leaves_list"
-      ? body.triggerListId !== undefined ? body.triggerListId : current.triggerListId
-      : null;
-    const triggerUserIds = triggerType === "card_assigned_to_user"
-      ? body.triggerUserIds !== undefined ? body.triggerUserIds : current.triggerUserIds
-      : null;
-    const triggerLabelId = triggerType === "card_label_set"
-      ? body.triggerLabelId !== undefined ? body.triggerLabelId : current.triggerLabelId
-      : null;
-    const inProgress = triggerType === "card_in_progress_too_long";
-    const thresholdSource = inProgress
-      ? (body.triggerThresholdSource !== undefined ? body.triggerThresholdSource : current.triggerThresholdSource) ?? "workspace"
-      : null;
-    const triggerCustomFieldId = triggerType === "custom_field_value_changed" || thresholdSource === "custom_field"
-      ? body.triggerCustomFieldId !== undefined ? body.triggerCustomFieldId : current.triggerCustomFieldId
-      : null;
-    const triggerThresholdAmount = thresholdSource === "fixed"
-      ? body.triggerThresholdAmount !== undefined ? body.triggerThresholdAmount : current.triggerThresholdAmount
-      : null;
-    const triggerThresholdUnit = thresholdSource === "fixed" || thresholdSource === "custom_field"
-      ? (body.triggerThresholdUnit !== undefined ? body.triggerThresholdUnit : current.triggerThresholdUnit)
-      : null;
-    const triggerIncludeExisting = inProgress && (body.triggerIncludeExisting ?? current.triggerIncludeExisting);
-    const triggerCustomFieldValue = triggerType === "custom_field_value_changed"
-      ? body.triggerCustomFieldValue !== undefined ? body.triggerCustomFieldValue : current.triggerCustomFieldValue
-      : null;
-    const triggerDaysBefore = triggerType === "due_date_approaching"
-      ? body.triggerDaysBefore !== undefined ? body.triggerDaysBefore : current.triggerDaysBefore
-      : null;
-    if ((triggerType === "card_enters_list" || triggerType === "card_leaves_list") && !triggerListId) throw badRequest("triggerListId is required");
-    if (triggerType === "card_assigned_to_user" && (!triggerUserIds || triggerUserIds.length === 0)) throw badRequest("triggerUserIds is required");
-    if (triggerType === "card_label_set" && !triggerLabelId) throw badRequest("triggerLabelId is required");
-    if (triggerType === "due_date_approaching" && !triggerDaysBefore) throw badRequest("triggerDaysBefore is required");
-    if (triggerType === "custom_field_value_changed" && (!triggerCustomFieldId || !triggerCustomFieldValue)) throw badRequest("triggerCustomFieldId and triggerCustomFieldValue are required");
-    if (inProgress) {
-      const issue = dto.inProgressThresholdIssue({ triggerThresholdSource: thresholdSource, triggerThresholdAmount, triggerThresholdUnit, triggerCustomFieldId });
-      if (issue) throw badRequest(issue.message);
-    }
-    await assertThresholdFieldInWorkspace(current.workspaceId, thresholdSource === "custom_field" ? triggerCustomFieldId : null);
-    // Which cards a rule has handled only means something against the limit they were handled at.
-    const limitChanged = inProgress && (
-      current.triggerType !== triggerType
-      || (current.triggerThresholdSource ?? "workspace") !== thresholdSource
-      || current.triggerThresholdAmount !== triggerThresholdAmount
-      || current.triggerThresholdUnit !== triggerThresholdUnit
-      || (thresholdSource === "custom_field" && current.triggerCustomFieldId !== triggerCustomFieldId)
-    );
-    await assertListInWorkspace(current.workspaceId, triggerListId);
-    await validateTriggerUsers(current.workspaceId, triggerUserIds);
-    await assertLabelInWorkspace(current.workspaceId, triggerLabelId);
-    await validateCustomFieldTrigger(current.workspaceId, triggerCustomFieldId, triggerCustomFieldValue);
-    if (body.actions !== undefined) await validateActionTargets(current.workspaceId, body.actions);
-    await db.transaction(async (tx) => {
-      // Action replacement also updates this row, so locking it before re-reading actions
-      // serializes enable toggles with action clears and preserves the enabled/action invariant.
-      const [locked] = await tx
-        .select({ enabled: automations.enabled })
-        .from(automations)
-        .where(eq(automations.id, id))
-        .for("update")
-        .limit(1);
-      if (!locked) throw notFound();
-      const nextEnabled = body.enabled ?? (body.actions?.length === 0 ? false : locked.enabled);
-      const nextHasActions = body.actions !== undefined
-        ? body.actions.length > 0
-        : await hasAutomationActions(id, tx);
-      assertEnabledAutomationHasActions(nextEnabled, nextHasActions ? 1 : 0);
-      // Enforce the free-tier enabled-automation cap only when turning a disabled automation on,
-      // excluding this automation from the count so re-enabling the single allowed one is fine.
-      // Runs inside the tx so the cap check, tenant lock, and update share one transaction.
-      if (nextEnabled && !locked.enabled) await assertEnabledAutomationLimit(clientId, { excludeId: id }, tx);
-      if (body.actions !== undefined) await replaceActions(tx, id, body.actions);
-      await tx
-        .update(automations)
-        .set({
-          ...(body.enabled !== undefined || body.actions?.length === 0 ? { enabled: nextEnabled } : {}),
-          ...(body.triggerType !== undefined && { triggerType }),
-          triggerListId,
-          triggerUserIds: triggerUserIds ? Array.from(new Set(triggerUserIds)) : null,
-          triggerLabelId,
-          triggerCustomFieldId,
-          triggerCustomFieldValue,
-          triggerDaysBefore,
-          triggerThresholdSource: thresholdSource,
-          triggerThresholdAmount,
-          triggerThresholdUnit,
-          triggerIncludeExisting,
-          ...(body.applyOnCreate !== undefined && { applyOnCreate: body.applyOnCreate }),
-          ...(body.applyOnMove !== undefined && { applyOnMove: body.applyOnMove }),
-          updatedAt: new Date(),
-        })
-        .where(eq(automations.id, id));
-      // A rule that is off records nothing yet: cards keep crossing while it is off, and the moment it
-      // is turned on is the one that decides which of them count as existing.
-      const turningOn = nextEnabled && !locked.enabled;
-      if (inProgress && (limitChanged || turningOn)) {
-        await armInProgressAutomation(tx, id, { limitChanged, includeExisting: triggerIncludeExisting || !nextEnabled });
-      }
-      await recordActivity(tx, {
-        boardId: null,
-        workspaceId: current.workspaceId,
-        actorId: req.auth.sub,
-        entityType: "workspace",
-        entityId: current.workspaceId,
-        action: "automation:updated",
-        payload: { automationId: id, ...(body.actions !== undefined && { actions: body.actions.length }) },
-      });
-    });
-    const automation = await loadAutomation(id);
-    await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation: automation! });
+    const automation = await updateAutomation({ auth: req.auth, automation: current, clientId, body });
+    await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation });
     if (body.enabled === true && !current.enabled) void capturePremiumAutomationRuleUse({
       clientId,
       workspaceId: current.workspaceId,
       actorId: req.auth.sub,
       supportSession: req.auth.authKind === "support",
     });
-    return automation!;
+    return automation;
   });
 
   app.put("/automations/:id/actions", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.setAutomationActionsBody.parse(req.body);
-    const [current] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
-    if (!current) throw notFound();
+    const current = await loadAutomationRow(id);
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    await validateActionTargets(current.workspaceId, body.actions);
-    await db.transaction(async (tx) => {
-      await replaceActions(tx, id, body.actions);
-      await tx
-        .update(automations)
-        .set({
-          // Removing the final Do action must also disable the automation so it
-          // cannot keep matching triggers with an empty effect set.
-          ...(body.actions.length === 0 && { enabled: false }),
-          updatedAt: new Date(),
-        })
-        .where(eq(automations.id, id));
-      await recordActivity(tx, {
-        boardId: null,
-        workspaceId: current.workspaceId,
-        actorId: req.auth.sub,
-        entityType: "workspace",
-        entityId: current.workspaceId,
-        action: "automation:updated",
-        payload: { automationId: id, actions: body.actions.length },
-      });
-    });
-    const automation = await loadAutomation(id);
-    await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation: automation! });
-    return automation!;
+    const automation = await replaceAutomationActions({ auth: req.auth, automation: current, body });
+    await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation });
+    return automation;
   });
 
   app.post("/automations/:id/move", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.moveAutomationBody.parse(req.body);
-    const [current] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
-    if (!current) throw notFound();
+    const current = await loadAutomationRow(id);
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    const prevPosition = current.position;
-    const { position, rebalancedPositions } = await moveOrderedEntity({
-      table: automations,
-      idColumn: automations.id,
-      id,
-      neighbours: await neighbourPositions(current.workspaceId, body.afterAutomationId, body.beforeAutomationId),
-      rebalance: (tx) => rebalanceAutomations(current.workspaceId, tx),
-      activity: (position) => ({
-        boardId: null,
-        workspaceId: current.workspaceId,
-        actorId: req.auth.sub,
-        entityType: "workspace",
-        entityId: current.workspaceId,
-        action: "moved",
-        payload: { automationId: id, prevPosition, position },
-      }),
-    });
+    const { position, prevPosition, rebalancedPositions } = await moveAutomation({ auth: req.auth, automation: current, body });
     if (rebalancedPositions) {
       await emitToWorkspaceAdmins(current.workspaceId, "automation:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
@@ -582,25 +98,10 @@ export async function automationRoutes(app: FastifyInstance) {
 
   app.delete("/automations/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const [current] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
-    if (!current) throw notFound();
+    const current = await loadAutomationRow(id);
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    await db.update(automations).set({ archivedAt: new Date(), updatedAt: new Date() }).where(eq(automations.id, id));
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId: current.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "workspace",
-      entityId: current.workspaceId,
-      action: "automation:deleted",
-      payload: { automationId: id },
-    });
+    await deleteAutomation({ auth: req.auth, automation: current });
     await emitToWorkspaceAdmins(current.workspaceId, "automation:deleted", { workspaceId: current.workspaceId, automationId: id });
     return reply.status(204).send();
   });
-}
-
-async function assertTriggerFeatureEnabled(workspaceId: string, triggerType: string): Promise<void> {
-  const blockedBy = automationTriggerBlockedBy(triggerType, await loadWorkspaceFeatures(workspaceId));
-  if (blockedBy) throw featureDisabledError(blockedBy);
 }

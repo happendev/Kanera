@@ -282,6 +282,8 @@ export type NotificationRow = Notification & {
   orgLogoUrl: string | null;
   attachment: NotificationCardThumbnail | null;
   commentBody: string | null;
+  /** The recipient has given the notification's comment a thumbs-up. Always false without a comment. */
+  viewerThumbsUp: boolean;
 };
 
 export interface NotificationsPage {

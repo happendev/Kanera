@@ -1,8 +1,9 @@
 import { GettingStartedService } from "../../../core/getting-started/getting-started.service";
+import { CardDragCoordinator } from "../card-drag-coordinator.service";
 import { ToastService } from "../../../shared/toast.service";
 import { NgTemplateOutlet } from "@angular/common";
 import { MenuDirective } from "../../../shared/menu.directive";
-import type { CdkDragDrop } from "@angular/cdk/drag-drop";
+import type { CdkDragDrop, CdkDragStart } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDropList, CdkDropListGroup, moveItemInArray } from "@angular/cdk/drag-drop";
 import type { OnDestroy } from "@angular/core";
 import {
@@ -233,6 +234,13 @@ export class BoardTableViewComponent implements OnDestroy {
   private readonly clock = inject(MinuteClockService);
   private readonly notifications = inject(NotificationsService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
+  /**
+   * Row drags report through the shared coordinator like lane drags do. Each run is a CDK drop list
+   * sorted against the geometry measured at drag start, so the board's socket bridge and Global Work
+   * hold a teammate's changes until the row is released (see BoardSocketBridge).
+   */
+  private readonly cardDrag = inject(CardDragCoordinator);
+  private rowDragGroupKey: string | null = null;
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   /**
@@ -2119,6 +2127,19 @@ export class BoardTableViewComponent implements OnDestroy {
     return $localize`:Hint why drag handles are hidden:Drag to reorder works with manual sort`;
   });
 
+  onRowDragStarted(group: TableRunGroup, event: CdkDragStart<AnyCard>): void {
+    this.closeMenusForDrag();
+    this.rowDragGroupKey = group.key;
+    this.cardDrag.start(group.key, event.source.element.nativeElement);
+    if (this.hostCardGroups() !== null) this.hostCardDragStarted.emit();
+  }
+
+  onRowDragEnded(): void {
+    this.rowDragGroupKey = null;
+    this.cardDrag.end();
+    if (this.hostCardGroups() !== null) this.hostCardDragEnded.emit();
+  }
+
   closeMenusForDrag(): void {
     this.menuCoordinator.closeMenusForDrag();
   }
@@ -2535,6 +2556,7 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.rowDragGroupKey !== null && this.cardDrag.sourceListId() === this.rowDragGroupKey) this.cardDrag.end();
     this.destroyed = true;
     this.endColumnResize();
     this.endBackgroundPan();

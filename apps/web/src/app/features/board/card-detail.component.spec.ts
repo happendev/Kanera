@@ -1897,6 +1897,26 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(fixture.componentInstance.feedItems()).toEqual([]);
   });
 
+  it("lets the person an agent wrote for edit, delete and reply to that comment", async () => {
+    const fixture = createComponentFixture(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    await fixture.whenStable();
+    fixture.componentInstance.feedItems.set([
+      { type: "comment", data: createComment({ id: "mine", authorId: "user-1", authorKind: "agent", agentName: "Codex" }) },
+      { type: "comment", data: createComment({ id: "theirs", authorId: "user-2", authorKind: "agent", agentName: "Codex" }) },
+    ]);
+    await fixture.whenStable();
+
+    const actionLabels = (index: number) => Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(".comment-actions")[index]!.querySelectorAll("button"),
+      (button) => button.textContent?.trim(),
+    );
+    expect(actionLabels(0)).toEqual(["Reply", "Edit", "Delete"]);
+    expect(actionLabels(1)).toEqual(["Reply"]);
+  });
+
   it("resolves the initial mirror provenance URL as an internal Kanera card link", async () => {
     const boardId = "123e4567-e89b-12d3-a456-426614174000";
     const cardId = "123e4567-e89b-12d3-a456-426614174001";

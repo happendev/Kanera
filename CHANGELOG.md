@@ -7,6 +7,7 @@ All notable changes to Kanera are documented here.
 ### Added
 
 - **Mentions tab in notifications:** once someone has @-mentioned you, the notifications drawer gets a **Mentions** tab (with its unread count) listing every comment that mentions you, read or unread. On phones the drawer's Group, Board and User menus now share one row.
+- **Thumbs-up from notifications:** a notification for a comment that @-mentions you has a thumbs-up button beside the read dot, so you can acknowledge it without opening the card. Reacting marks the notification read.
 - **Agents filter in card activity:** cards an AI agent has commented on get an **Agents** tab beside All and Comments, showing only the comments and changes connected agents made and how their runs ended.
 - **Richer card creation:** the public API, MCP, SDK and CLI accept custom-field values by ID and an external reference in single and bulk card creation. Each card, its values and its reference are saved atomically.
 
@@ -32,7 +33,11 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+- Lines that start with "1.", "-" or "#" after a Shift+Enter line break in a description, comment or note no longer reopen as a list or heading with a stray `\` left behind.
+- A teammate's change that arrives while you're dragging a card no longer shifts the lists or table rows under your pointer, on a board or on My Cards and Team Cards, so the card lands exactly where you dropped it. The view catches up as soon as you let go.
 - A card moved into progress outside working hours no longer looks stuck at "<1m": its time-in-progress chip shows a pause icon, card detail says **Paused until** the next working start, and the tooltip explains that only weekday 09:00–17:00 counts. Nothing tracked yet now reads "0m" on the tile and in card detail alike.
+- **Agent comments:** comments an AI agent wrote on your behalf now show **Edit** and **Delete** alongside **Reply**, as your own comments do.
+- **Comment actions on touch:** on phones and tablets, Reply, Edit, Delete and the thumbs-up under each comment are always visible with full-size tap targets, instead of appearing only on mouse hover.
 - **Mention avatars:** @-mention chips in notification comment previews, and mentions of people no longer on the board, now show the person's profile picture instead of a generated placeholder.
 - Offline, My Cards and Team Cards now say once that you're looking at a saved copy, in the page's banner, instead of repeating it inside Overview, Timeline, Dependencies and Work done.
 - Cards completed by an automation (for example, moving a card to Done) now count as done for their assignees on the My Cards and Team Cards overviews and their Work done timelines, instead of disappearing from **Recently done** and the **Done** count.

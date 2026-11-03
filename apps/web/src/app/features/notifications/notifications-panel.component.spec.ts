@@ -68,6 +68,7 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
     orgLogoUrl: null,
     attachment: null,
     commentBody: null,
+    viewerThumbsUp: false,
     ...overrides,
     organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };

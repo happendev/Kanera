@@ -430,7 +430,7 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
     }
     if (archiving) {
       // Propagate the archive onto the target and record it as a first-class archive activity so the
-      // destination feed reads exactly like a native archive (see cards/routes.ts archive route).
+      // destination feed reads exactly like a native archive (see cards/update.routes.ts archive route).
       await upsertExternalLink({
         workspaceId: mirror.targetWorkspaceId,
         provider: providerFor(mirror),

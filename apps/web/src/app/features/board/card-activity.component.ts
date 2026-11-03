@@ -269,8 +269,14 @@ export class CardActivityComponent {
     return comment.authorKind === "user" && comment.authorId === this.currentUserId()?.id;
   }
 
+  // An agent writing through your OAuth grant authors the comment as you, so you own it like
+  // your own comment (the API's canMutateComment agrees), but you may still want to reply to it.
+  canModifyComment(comment: CommentRow): boolean {
+    return (comment.authorKind === "user" || comment.authorKind === "agent") && comment.authorId === this.currentUserId()?.id;
+  }
+
   canDeleteCommentRole(comment: CommentRow): boolean {
-    return this.canEdit() && (this.isOwnComment(comment) || this.canDeleteAnyCommentRole());
+    return this.canEdit() && (this.canModifyComment(comment) || this.canDeleteAnyCommentRole());
   }
   readonly submittingComment = signal(false);
   readonly addingComment = signal(false);

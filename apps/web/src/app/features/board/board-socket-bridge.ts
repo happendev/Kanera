@@ -1,9 +1,10 @@
-import { Injectable, inject } from "@angular/core";
+import { Injectable, effect, inject } from "@angular/core";
 import { CLIENT_EVENTS, expandWireCard, SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
 import { AuthService } from "../../core/auth/auth.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { BoardState } from "./board-state";
+import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardMotionService } from "./card-motion.service";
 
 export type AttachOptions = {
@@ -27,13 +28,49 @@ export class BoardSocketBridge {
   private readonly state = inject(BoardState);
   private readonly cardMotion = inject(CardMotionService);
   private readonly auth = inject(AuthService);
+  private readonly cardDrag = inject(CardDragCoordinator);
+  /**
+   * A card drag is pointer-anchored: CDK measured the lanes when it started and sorts against that
+   * geometry until the drop. A teammate's move, create or tile change applied mid-drag shifts the
+   * tiles under the pointer while CDK keeps its stale indices, so the drop commits one slot off from
+   * the placeholder the person is looking at. Events for the full board are therefore held while a
+   * drag is in flight and, once the card is released, the page converges with one refresh.
+   *
+   * Refresh, not replay: a held move of the very card being dragged would land after the optimistic
+   * drop, and the person's own move echo is then deduplicated as already applied, leaving the board
+   * wrong until the next reload. Global Work and My Priorities defer the same way.
+   */
+  private heldWhileDragging = false;
+  private releaseHeld: (() => void) | null = null;
+
+  constructor() {
+    effect(() => {
+      if (this.cardDrag.active() || !this.heldWhileDragging) return;
+      this.heldWhileDragging = false;
+      this.releaseHeld?.();
+    });
+  }
 
   attach(socket: AppSocket, boardId: string, options: AttachOptions = {}) {
     const state = this.state;
     const isCurrentWorkspace = (workspaceId: string) => state.board()?.workspaceId === workspaceId;
     const acceptsCard = (cardId: string) => options.partialCardId === undefined || options.partialCardId === cardId;
     const acceptsCollection = () => options.partialCardId === undefined;
-    const requestResync = () => options.onDesync?.();
+    // A detail-only state (Global Work's drawer) renders no lanes, so nothing there can shift under
+    // a drag; it keeps applying events live.
+    const holdsDuringDrag = () => options.partialCardId === undefined && this.cardDrag.active();
+    const requestResync = () => {
+      if (holdsDuringDrag()) {
+        this.heldWhileDragging = true;
+        return;
+      }
+      options.onDesync?.();
+    };
+    this.releaseHeld = () => {
+      // Held events may have included creations, moves and completions the Work done view lists.
+      options.onDesync?.();
+      options.onWorkDoneChanged?.();
+    };
     const joinBoard = () => {
       socket.emit(CLIENT_EVENTS.BOARD_JOIN, boardId, (ok) => {
         if (!ok) console.warn("board:join rejected", boardId);
@@ -550,9 +587,17 @@ export class BoardSocketBridge {
 
     // Capture the same reducers that normally reconcile realtime, avoiding a second implementation
     // of checklist/attachment tombstones. Only mutations of a card with a pending read are retained.
+    // Mirror events only refresh a status count outside the lanes, so they need no holding.
+    const passesDuringDrag = new Set<keyof ServerToClientEvents>([
+      SERVER_EVENTS.BOARD_MIRROR_CREATED, SERVER_EVENTS.BOARD_MIRROR_UPDATED, SERVER_EVENTS.BOARD_MIRROR_DELETED,
+    ]);
     for (const event of Object.keys(handlers) as Array<keyof ServerToClientEvents>) {
       const handler = handlers[event] as (payload: Parameters<ServerToClientEvents[typeof event]>[0]) => void;
       handlers[event] = ((payload: Parameters<ServerToClientEvents[typeof event]>[0]) => {
+        if (!passesDuringDrag.has(event) && holdsDuringDrag()) {
+          this.heldWhileDragging = true;
+          return;
+        }
         state.reconcileDetailEvent(() => handler(payload), (cardId) => {
           // A board rebalance also touches other cards. Replaying it must not revert their later
           // moves just because this one drawer was loading.
@@ -576,6 +621,8 @@ export class BoardSocketBridge {
         socket.off("connect", joinBoard);
       }
       unregisterHandlers();
+      this.releaseHeld = null;
+      this.heldWhileDragging = false;
     };
   }
 }

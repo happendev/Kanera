@@ -1,252 +1,25 @@
-import type { AttachmentSource, CardAttachmentRow } from "@kanera/shared/dto";
+import type { AttachmentSource } from "@kanera/shared/dto";
 import { ATTACHMENT_SOURCES } from "@kanera/shared/dto";
-import { ACTIVITY_ACTION, cardAttachments, cards, comments, users } from "@kanera/shared/schema";
-import { and, asc, desc, eq } from "drizzle-orm";
-import type { FastifyBaseLogger, FastifyInstance } from "fastify";
+import { cardAttachments, cards } from "@kanera/shared/schema";
+import { and, eq } from "drizzle-orm";
+import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertCardAccess } from "../../lib/access.js";
-import type { AuthClaims } from "../../auth/plugin.js";
-import {
-  emitActivityFeedItem,
-  emitActivityFeedItemDeleted,
-  emitActivityFeedItemUpdated,
-  recordActivity,
-  recordCoalescedActivity,
-  type CoalescedActivityResult,
-} from "../../lib/activity.js";
-import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
-import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { readAttachmentUpload } from "../../lib/read-attachment-upload.js";
-import { touchCardActivity } from "../../lib/card-activity.js";
-import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
-import { badRequest, forbidden, notFound } from "../../lib/errors.js";
-import { assertCanUploadAttachment, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
-import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
-import { dominantColorFromThumbnail, generateCoverImage, generateThumbnail, isProcessableImage } from "../../lib/image.js";
-import { parseMediaReference, signedAvatarUrl, signEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
-import { parseRangeHeader } from "../media/routes.js";
-import { getStorageForClient } from "../../lib/storage/index.js";
-import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
-import { emitToBoard } from "../../realtime/emit.js";
-import { putAttachmentFile } from "../../lib/attachment-upload.js";
+import { badRequest, notFound } from "../../lib/errors.js";
 import { assertCardActive } from "../../lib/card-guards.js";
-import { commentAuthorColumns } from "../../lib/comment-rows.js";
-import { attachmentRowColumns } from "../../lib/attachment-rows.js";
+import { attachmentResponse, listCardAttachments } from "./card-attachments.js";
+import { loadCardAttachmentContent, parseAttachmentContentVariant } from "./card-attachment-content.js";
+import { removeCardAttachment } from "./card-attachment-remove.js";
+import { prepareCardUpload, storeCardAttachment } from "./card-attachment-store.js";
+import { setCardCover } from "./card-cover.js";
 
-type AttachmentRowWithKeys = CardAttachmentRow & {
-  fileKey: string;
-  thumbnailFileKey: string | null;
-  coverImageFileKey: string | null;
-  coverImageUrl?: string | null;
-  uploadedByClientId: string;
-};
-
-const ATTACHMENT_MISTAKE_WINDOW_MS = 2 * 60 * 1000;
-
-async function emitCoalescedAttachmentActivity(boardId: string, cardId: string, result: CoalescedActivityResult) {
-  // A quick add/remove is an abandoned attachment operation, so remove the original realtime row
-  // (and its notification) instead of appending a contradictory removal row to the feed.
-  if (result.status === "created") await emitActivityFeedItem(boardId, cardId, result.activity);
-  else if (result.status === "updated") await emitActivityFeedItemUpdated(boardId, cardId, result.activity);
-  else await emitActivityFeedItemDeleted(boardId, cardId, result.activity.id);
-}
-
-async function selectAttachmentRow(attachmentId: string): Promise<AttachmentRowWithKeys> {
-  const [row] = await db
-    .select(attachmentRowColumns)
-    .from(cardAttachments)
-    .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
-    .where(eq(cardAttachments.id, attachmentId))
-    .limit(1);
-  if (!row) throw notFound();
-  return row as AttachmentRowWithKeys;
-}
+export { attachmentResponse } from "./card-attachments.js";
+export { removeCardAttachment } from "./card-attachment-remove.js";
+export { prepareCardUpload, storeCardAttachment, type CardUploadTarget } from "./card-attachment-store.js";
 
 function isAttachmentSource(value: unknown): value is AttachmentSource {
   return typeof value === "string" && (ATTACHMENT_SOURCES as readonly string[]).includes(value);
-}
-
-export type CardUploadTarget = Awaited<ReturnType<typeof prepareCardUpload>>;
-
-/**
- * Everything an upload must pass before its body is read: editor access to an active card, an
- * owned comment when attaching to one, and room in the host organisation's storage pool. Shared by
- * the multipart route and single-use upload links so both enforce identical rules.
- */
-export async function prepareCardUpload(auth: AuthClaims, cardId: string, source: AttachmentSource, commentId: string | null) {
-  const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
-  if (!card) throw notFound();
-  const ctx = await assertCardAccess(auth, card, "editor");
-  assertCardActive(card);
-
-  if (commentId) {
-    const [c] = await db.select().from(comments).where(eq(comments.id, commentId)).limit(1);
-    if (!c || c.cardId !== cardId) throw badRequest("invalid commentId");
-    if (c.authorId !== auth.sub) throw forbidden();
-  }
-
-  // Storage is host-pays: charge the org that owns the board (ctx.clientId), not the uploader's own
-  // org. A guest's upload to a paid board draws down the host's quota and uses the host's per-file
-  // limit. Physical storage stays under the uploader's tenant (auth.cid) by design — see the
-  // media auth note: relocating it risks authenticated-fetch breakage for no accounting benefit.
-  const uploadEntitlements = await getUploadEntitlements(db, ctx.clientId);
-  // If the host org's storage pool is already full, reject before reading the upload body so a full
-  // org never wastes bandwidth streaming a file that cannot be stored.
-  if (isStorageFull(uploadEntitlements)) throw storageQuotaExceededError(uploadEntitlements);
-  return { card, ctx, source, commentId, uploadEntitlements };
-}
-
-/** Store an already-read file as a card attachment: derivatives, row, cover, realtime, activity. */
-export async function storeCardAttachment(
-  auth: AuthClaims,
-  { card, ctx, source, commentId }: CardUploadTarget,
-  file: { fileName: string; mimeType: string; ext: string; buffer: Buffer },
-) {
-  const cardId = card.id;
-  const { buffer } = file;
-  await assertCanUploadAttachment(db, ctx.clientId, buffer.byteLength);
-
-  const fileKey = cardAttachmentStorageKey(cardId, file.ext);
-  const storage = await getStorageForClient(auth.cid);
-  await putAttachmentFile(storage, fileKey, buffer, file.mimeType);
-  const url = unsignedMediaUrl(auth.cid, fileKey)!;
-
-  let thumbnailUrl: string | null = null;
-  let thumbnailFileKey: string | null = null;
-  let coverImageUrl: string | null = null;
-  let coverImageFileKey: string | null = null;
-  let coverImageWidth: number | null = null;
-  let coverImageHeight: number | null = null;
-  let coverImageColor: string | null = null;
-
-  if (isProcessableImage(file.mimeType)) {
-    const thumb = await generateThumbnail(buffer, file.mimeType);
-    thumbnailFileKey = attachmentThumbnailStorageKey(fileKey, thumb.ext);
-    await putAttachmentFile(storage, thumbnailFileKey, thumb.buffer, thumb.mimeType);
-    thumbnailUrl = unsignedMediaUrl(auth.cid, thumbnailFileKey);
-    coverImageColor = thumb.dominantColor;
-
-    if (!card.coverAttachmentId && source !== "comment") {
-      const cover = await generateCoverImage(buffer, file.mimeType);
-      coverImageFileKey = attachmentCoverStorageKey(fileKey, cover.ext);
-      await putAttachmentFile(storage, coverImageFileKey, cover.buffer, cover.mimeType);
-      coverImageUrl = unsignedMediaUrl(auth.cid, coverImageFileKey);
-      coverImageWidth = cover.width;
-      coverImageHeight = cover.height;
-    }
-  }
-
-  let inserted: typeof cardAttachments.$inferSelect;
-  try {
-    const [row] = await db
-      .insert(cardAttachments)
-      .values({
-        cardId,
-        clientId: ctx.clientId,
-        uploadedById: auth.sub,
-        fileName: file.fileName,
-        mimeType: file.mimeType,
-        byteSize: buffer.byteLength,
-        fileKey,
-        url,
-        thumbnailUrl,
-        thumbnailFileKey,
-        coverImageUrl,
-        coverImageFileKey,
-        coverImageWidth,
-        coverImageHeight,
-        coverImageColor,
-        source,
-        commentId,
-      })
-      .returning();
-    inserted = row!;
-  } catch (err) {
-    // Rollback uploaded files so they don't become orphans
-    await Promise.allSettled([
-      storage.delete(fileKey),
-      thumbnailFileKey ? storage.delete(thumbnailFileKey) : Promise.resolve(),
-      coverImageFileKey ? storage.delete(coverImageFileKey) : Promise.resolve(),
-    ]);
-    throw err;
-  }
-
-  const attachmentRow = await selectAttachmentRow(inserted.id);
-  const { uploadedByClientId, uploadedByAvatarUrl, ...attachmentMedia } = attachmentRow;
-  const attachment = {
-    ...shapeAttachmentMedia(attachmentMedia),
-    uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
-  };
-
-  let coverChanged = false;
-  if (!card.coverAttachmentId && file.mimeType.startsWith("image/") && source !== "comment") {
-    await db
-      .update(cards)
-      .set({ coverAttachmentId: inserted.id, updatedAt: new Date() })
-      .where(eq(cards.id, cardId));
-    coverChanged = true;
-  }
-
-  // Uploads that do not become the cover are still activity on the card.
-  if (!coverChanged) await touchCardActivity(cardId, auth.cid);
-
-  await emitToBoard(card.boardId, "card:attachment:created", {
-    boardId: card.boardId,
-    cardId,
-    attachment,
-  });
-
-  if (coverChanged) {
-    const [updatedCard] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
-    if (updatedCard) {
-      await emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: updatedCard });
-    }
-  }
-
-  const activity = await recordCoalescedActivity(db, {
-    boardId: card.boardId,
-    workspaceId: ctx.workspaceId,
-    actorId: auth.sub,
-    entityType: "card",
-    entityId: cardId,
-    action: ACTIVITY_ACTION.ATTACHMENT_ADDED,
-    coalesceKey: `attachment:${inserted.id}`,
-    coalesceActions: [ACTIVITY_ACTION.ATTACHMENT_ADDED, ACTIVITY_ACTION.ATTACHMENT_REMOVED],
-    windowMs: ATTACHMENT_MISTAKE_WINDOW_MS,
-    fromValue: null,
-    toValue: { attachmentId: inserted.id },
-    payload: {
-      cardId,
-      attachmentId: inserted.id,
-      fileName: file.fileName,
-      mimeType: file.mimeType,
-      source,
-      commentId,
-    },
-  });
-  await emitCoalescedAttachmentActivity(card.boardId, cardId, activity);
-
-  await evaluateWorkspaceAnalyticsMilestones({
-    workspaceId: ctx.workspaceId,
-    actorId: auth.sub,
-    supportSession: auth.authKind === "support" || auth.authKind === "apiKey",
-  });
-  return attachment;
-}
-
-export function attachmentResponse<T extends object>(attachment: T, exposeCoverMetadata: boolean): T {
-  if (exposeCoverMetadata) return attachment;
-  // The app API needs derivative metadata for stable card rendering and cheap drag previews, but
-  // it is an internal implementation detail rather than part of the public attachment contract.
-  const response = { ...attachment } as T & {
-    coverImageWidth?: unknown;
-    coverImageHeight?: unknown;
-    coverImageColor?: unknown;
-  };
-  delete response.coverImageWidth;
-  delete response.coverImageHeight;
-  delete response.coverImageColor;
-  return response;
 }
 
 export async function cardAttachmentRoutes(app: FastifyInstance, options: { exposeCoverMetadata?: boolean } = {}) {
@@ -259,17 +32,8 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
     if (!card) throw notFound();
     await assertCardAccess(req.auth, card);
 
-    const rows = await db
-      .select(attachmentRowColumns)
-      .from(cardAttachments)
-      .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
-      .where(eq(cardAttachments.cardId, cardId))
-      .orderBy(desc(cardAttachments.createdAt));
-
-    return rows.map(({ uploadedByClientId, uploadedByAvatarUrl, ...row }) => attachmentResponse({
-      ...shapeAttachmentMedia(row),
-      uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
-    }, exposeCoverMetadata));
+    const rows = await listCardAttachments(cardId);
+    return rows.map((row) => attachmentResponse(row, exposeCoverMetadata));
   });
 
   /**
@@ -281,31 +45,18 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
    */
   app.get("/cards/:id/attachments/:attachmentId/content", async (req, reply) => {
     const { id: cardId, attachmentId } = req.params as { id: string; attachmentId: string };
-    const { variant = "original" } = req.query as { variant?: string };
-    if (variant !== "original" && variant !== "cover" && variant !== "thumbnail") throw badRequest("variant must be original, cover, or thumbnail");
-    const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
-    if (!card) throw notFound();
-    await assertCardAccess(req.auth, card);
-    const row = await selectAttachmentRow(attachmentId);
-    if (row.cardId !== cardId) throw notFound();
-
-    const fileKey = variant === "original" ? row.fileKey : variant === "cover" ? row.coverImageFileKey : row.thumbnailFileKey;
-    if (!fileKey) throw notFound(`this attachment has no ${variant} image`);
-    // The file lives in the uploader's tenant storage at upload time, which the stored media path
-    // records; the uploader may since have moved organisation, so their current client id is wrong.
-    const owner = parseMediaReference(row.url);
-    if (!owner) throw notFound();
-    const storage = await getStorageForClient(owner.clientId);
-    const range = parseRangeHeader(req.headers.range);
-    let object;
-    try {
-      object = await storage.getObject(fileKey, range ?? undefined);
-    } catch {
-      throw notFound();
-    }
+    const { variant: variantParam = "original" } = req.query as { variant?: string };
+    const variant = parseAttachmentContentVariant(variantParam);
+    const { contentType, range, object } = await loadCardAttachmentContent({
+      auth: req.auth,
+      cardId,
+      attachmentId,
+      variant,
+      rangeHeader: req.headers.range,
+    });
     reply
       .header("Cache-Control", "private, no-store")
-      .header("Content-Type", variant === "original" ? row.mimeType : "image/jpeg")
+      .header("Content-Type", contentType)
       // Same active-content neutralisation as the media route: uploads are attacker-controlled.
       .header("Content-Security-Policy", "default-src 'none'; sandbox; style-src 'unsafe-inline'")
       .header("X-Content-Type-Options", "nosniff")
@@ -335,98 +86,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
   app.patch("/cards/:id/cover", async (req) => {
     const { id: cardId } = req.params as { id: string };
     const { attachmentId } = req.body as { attachmentId: string | null };
-
-    const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
-    assertCardActive(card);
-
-    const storage = await getStorageForClient(req.auth.cid);
-
-    if (attachmentId !== null) {
-      const [attachment] = await db
-        .select()
-        .from(cardAttachments)
-        .where(and(eq(cardAttachments.id, attachmentId), eq(cardAttachments.cardId, cardId)))
-        .limit(1);
-      if (!attachment) throw notFound();
-
-      if (isProcessableImage(attachment.mimeType) && attachment.coverImageFileKey && attachment.thumbnailFileKey) {
-        // Re-selecting an existing cover refreshes older colours from the actual thumbnail too;
-        // this avoids keeping values previously calculated from the large derivative.
-        await db
-          .update(cardAttachments)
-          .set({ coverImageColor: await dominantColorFromThumbnail(await storage.get(attachment.thumbnailFileKey)) })
-          .where(eq(cardAttachments.id, attachmentId));
-      } else if (!attachment.coverImageFileKey && isProcessableImage(attachment.mimeType)) {
-        const originalBuffer = await storage.get(attachment.fileKey);
-        const cover = await generateCoverImage(originalBuffer, attachment.mimeType);
-        const coverFileKey = attachmentCoverStorageKey(attachment.fileKey, cover.ext);
-        await storage.put(coverFileKey, cover.buffer, cover.mimeType);
-        const coverUrl = unsignedMediaUrl(req.auth.cid, coverFileKey);
-        try {
-          await db
-            .update(cardAttachments)
-            .set({
-              coverImageUrl: coverUrl,
-              coverImageFileKey: coverFileKey,
-              coverImageWidth: cover.width,
-              coverImageHeight: cover.height,
-              coverImageColor: attachment.thumbnailFileKey
-                ? await dominantColorFromThumbnail(await storage.get(attachment.thumbnailFileKey))
-                : attachment.coverImageColor,
-            })
-            .where(eq(cardAttachments.id, attachmentId));
-        } catch (err) {
-          await storage.delete(coverFileKey).catch(() => { });
-          throw err;
-        }
-      }
-    }
-
-    // Remove cover image from the old cover attachment (if any) after the new
-    // one is ready, so we don't lose data if generation fails above.
-    if (card.coverAttachmentId && card.coverAttachmentId !== attachmentId) {
-      const [oldCover] = await db
-        .select()
-        .from(cardAttachments)
-        .where(eq(cardAttachments.id, card.coverAttachmentId))
-        .limit(1);
-      if (oldCover?.coverImageFileKey) {
-        // Clear DB metadata first so the key isn't lost if storage delete fails
-        await db
-          .update(cardAttachments)
-          .set({
-            coverImageUrl: null,
-            coverImageFileKey: null,
-            coverImageWidth: null,
-            coverImageHeight: null,
-            coverImageColor: null,
-          })
-          .where(eq(cardAttachments.id, oldCover.id));
-        await storage.delete(oldCover.coverImageFileKey).catch(() => { });
-      }
-    }
-
-    const [updated] = await db
-      .update(cards)
-      .set({ coverAttachmentId: attachmentId, updatedAt: new Date() })
-      .where(eq(cards.id, cardId))
-      .returning();
-
-    await emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: updated! });
-
-    await recordActivity(db, {
-      boardId: card.boardId,
-      workspaceId: ctx.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "card",
-      entityId: cardId,
-      action: attachmentId ? "cover_set" : "cover_removed",
-      payload: { cardId },
-    });
-
-    return updated!;
+    return setCardCover({ auth: req.auth, cardId, attachmentId });
   });
 
   app.delete("/cards/:id/attachments/:attachmentId", async (req, reply) => {
@@ -455,196 +115,4 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
 
     return reply.status(204).send();
   });
-}
-
-/**
- * Removes one card attachment with every side effect a manual delete has: cover reassignment, file
- * cleanup, stripping inline references from the description and comments, the coalesced activity
- * row, and the realtime echoes. Shared by the card route and the organisation storage cleanup so a
- * bulk purge leaves cards in exactly the state a one-by-one delete would.
- */
-export async function removeCardAttachment(params: {
-  card: typeof cards.$inferSelect;
-  attachment: typeof cardAttachments.$inferSelect;
-  workspaceId: string;
-  actorId: string;
-  mediaClientId: string;
-  log: FastifyBaseLogger;
-}): Promise<void> {
-  const { card, attachment, workspaceId, actorId, mediaClientId, log } = params;
-  const cardId = card.id;
-  const attachmentId = attachment.id;
-  // Reassign cover BEFORE deleting the attachment row so coverAttachmentId
-  // never points at a deleted row.
-  let coverChanged = false;
-  let nextCoverId: string | null = null;
-  if (card.coverAttachmentId === attachmentId) {
-    nextCoverId = await pickNextImageCover(cardId, attachmentId);
-    await db
-      .update(cards)
-      .set({ coverAttachmentId: nextCoverId, updatedAt: new Date() })
-      .where(eq(cards.id, cardId));
-    coverChanged = true;
-  }
-
-  // Delete DB row first, then clean up files (best-effort).
-  // This way the row is gone even if storage delete fails — no dangling data.
-  await db.delete(cardAttachments).where(eq(cardAttachments.id, attachmentId));
-
-  const storage = await getStorageForClient(mediaClientId);
-  await Promise.allSettled([
-    storage.delete(attachment.fileKey),
-    attachment.thumbnailFileKey ? storage.delete(attachment.thumbnailFileKey) : Promise.resolve(),
-    attachment.coverImageFileKey ? storage.delete(attachment.coverImageFileKey) : Promise.resolve(),
-  ]);
-
-  // Generate cover image for the newly assigned cover if it doesn't have one
-  if (coverChanged && nextCoverId) {
-    try {
-      const [nextCover] = await db
-        .select()
-        .from(cardAttachments)
-        .where(eq(cardAttachments.id, nextCoverId))
-        .limit(1);
-      if (nextCover && !nextCover.coverImageFileKey && isProcessableImage(nextCover.mimeType)) {
-        const buf = await storage.get(nextCover.fileKey);
-        const cover = await generateCoverImage(buf, nextCover.mimeType);
-        const coverFileKey = attachmentCoverStorageKey(nextCover.fileKey, cover.ext);
-        await storage.put(coverFileKey, cover.buffer, cover.mimeType);
-        const coverUrl = unsignedMediaUrl(mediaClientId, coverFileKey);
-        await db
-          .update(cardAttachments)
-          .set({
-            coverImageUrl: coverUrl,
-            coverImageFileKey: coverFileKey,
-            coverImageWidth: cover.width,
-            coverImageHeight: cover.height,
-            coverImageColor: nextCover.thumbnailFileKey
-              ? await dominantColorFromThumbnail(await storage.get(nextCover.thumbnailFileKey))
-              : nextCover.coverImageColor,
-          })
-          .where(eq(cardAttachments.id, nextCoverId));
-      }
-    } catch (err) {
-      log.warn({ err, nextCoverId }, "cover image generation for reassigned cover failed");
-    }
-  }
-
-  await emitToBoard(card.boardId, "card:attachment:deleted", {
-    boardId: card.boardId,
-    cardId,
-    attachmentId,
-  });
-
-  // Strip inline references to this attachment's URL from the card's
-  // description and from any comment bodies on this card.
-  const storedAttachmentUrl = unsignedMediaUrl(mediaClientId, attachment.fileKey)!;
-  const descStrip = stripAttachmentReferences(card.description, storedAttachmentUrl);
-  const descriptionChanged = descStrip.changed;
-  if (descStrip.changed) {
-    await db
-      .update(cards)
-      .set({ description: descStrip.body, updatedAt: new Date() })
-      .where(eq(cards.id, cardId));
-  }
-
-  const cardComments = await db
-    .select({ id: comments.id, body: comments.body })
-    .from(comments)
-    .where(eq(comments.cardId, cardId));
-  for (const c of cardComments) {
-    const stripped = stripAttachmentReferences(c.body, storedAttachmentUrl);
-    if (!stripped.changed) continue;
-    const newBody = stripped.body && stripped.body.trim().length > 0 ? stripped.body : "";
-    if (newBody.length === 0) {
-      // Leave a placeholder so we don't violate the NOT NULL / min(1) DTO
-      await db
-        .update(comments)
-        .set({ body: "(attachment removed)", editedAt: new Date() })
-        .where(eq(comments.id, c.id));
-    } else {
-      await db
-        .update(comments)
-        .set({ body: newBody, editedAt: new Date() })
-        .where(eq(comments.id, c.id));
-    }
-    const [updatedComment] = await db
-      .select({
-        id: comments.id,
-        cardId: comments.cardId,
-        authorId: comments.authorId,
-        authorKind: comments.authorKind,
-        apiKeyId: comments.apiKeyId,
-        apiKeyName: comments.apiKeyName,
-        agentName: comments.agentName,
-        ...commentAuthorColumns,
-        authorClientId: users.clientId,
-        body: comments.body,
-        editedAt: comments.editedAt,
-        createdAt: comments.createdAt,
-      })
-      .from(comments)
-      .innerJoin(users, eq(users.id, comments.authorId))
-      .where(eq(comments.id, c.id))
-      .limit(1);
-    if (updatedComment) {
-      const reactionsMap = await fetchReactionsByComment([updatedComment.id]);
-      const { authorClientId, authorAvatarUrl, ...comment } = updatedComment;
-      const enriched = {
-        ...comment,
-        authorAvatarUrl: signedAvatarUrl(authorClientId, authorAvatarUrl),
-        body: signEmbeddedMediaUrls(comment.body, mediaClientId) ?? comment.body,
-        reactions: reactionsMap.get(updatedComment.id) ?? [],
-      };
-      await emitToBoard(card.boardId, "comment:updated", {
-        boardId: card.boardId,
-        cardId,
-        comment: enriched,
-      });
-      await emitToBoard(card.boardId, "card:feedItem:updated", {
-        boardId: card.boardId,
-        cardId,
-        item: { type: "comment", data: enriched },
-      });
-    }
-  }
-
-  if (coverChanged || descriptionChanged) {
-    const [updatedCard] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
-    if (updatedCard) {
-      await emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: { ...updatedCard, description: signEmbeddedMediaUrls(updatedCard.description, mediaClientId) } });
-    }
-  } else {
-    // A plain attachment deletion does not otherwise mutate the card row.
-    await touchCardActivity(cardId, mediaClientId);
-  }
-
-  const activity = await recordCoalescedActivity(db, {
-    boardId: card.boardId,
-    workspaceId,
-    actorId,
-    entityType: "card",
-    entityId: cardId,
-    action: ACTIVITY_ACTION.ATTACHMENT_REMOVED,
-    coalesceKey: `attachment:${attachmentId}`,
-    coalesceActions: [ACTIVITY_ACTION.ATTACHMENT_ADDED, ACTIVITY_ACTION.ATTACHMENT_REMOVED],
-    windowMs: ATTACHMENT_MISTAKE_WINDOW_MS,
-    fromValue: { attachmentId },
-    toValue: null,
-    payload: { cardId, attachmentId, fileName: attachment.fileName },
-  });
-  await emitCoalescedAttachmentActivity(card.boardId, cardId, activity);
-}
-
-async function pickNextImageCover(cardId: string, excludeId?: string): Promise<string | null> {
-  const rows = await db
-    .select({ id: cardAttachments.id, mimeType: cardAttachments.mimeType })
-    .from(cardAttachments)
-    .where(eq(cardAttachments.cardId, cardId))
-    .orderBy(asc(cardAttachments.createdAt));
-  for (const row of rows) {
-    if (row.id === excludeId) continue;
-    if (row.mimeType.startsWith("image/")) return row.id;
-  }
-  return null;
 }

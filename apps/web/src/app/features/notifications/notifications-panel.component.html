@@ -248,6 +248,12 @@
         </div>
         <div class="notif-aside">
           <span class="notif-time">{{ relativeTime(n.createdAt) }}</span>
+          @if (canThumbsUp(n)) {
+          <button type="button" class="notif-thumbs" [class.is-active]="n.viewerThumbsUp" (click)="toggleThumbsUp($event, n)" [attr.aria-label]="thumbsUpLabel(n)" [attr.aria-pressed]="n.viewerThumbsUp" [disabled]="!online()"
+            [kTooltip]="online() ? thumbsUpLabel(n) : offlineTitle">
+            <i aria-hidden="true" class="ti ti-thumb-up"></i>
+          </button>
+          }
           <button type="button" class="read-dot" [class.is-read]="n.readAt" (click)="toggleRead($event, n)" [attr.aria-label]="n.readAt ? markUnreadLabel : markReadLabel" [disabled]="!online()"
             [kTooltip]="online() ? (n.readAt ? markUnreadLabel : markReadLabel) : offlineTitle"></button>
         </div>
@@ -366,7 +372,15 @@
             <!-- No per-entry read dot: the whole block is read or unread as one thing, so the
                  header's single dot is the only control. A dot per entry both implied the entries
                  could diverge and stacked four competing accent marks down the block. -->
-            <span class="notif-time">{{ relativeTime(item.notification.createdAt) }}</span>
+            <div class="notif-entry-aside">
+              <span class="notif-time">{{ relativeTime(item.notification.createdAt) }}</span>
+              @if (canThumbsUp(item.notification)) {
+              <button type="button" class="notif-thumbs" [class.is-active]="item.notification.viewerThumbsUp" (click)="toggleThumbsUp($event, item.notification)" [attr.aria-label]="thumbsUpLabel(item.notification)"
+                [attr.aria-pressed]="item.notification.viewerThumbsUp" [disabled]="!online()" [kTooltip]="online() ? thumbsUpLabel(item.notification) : offlineTitle">
+                <i aria-hidden="true" class="ti ti-thumb-up"></i>
+              </button>
+              }
+            </div>
           </li>
           }
         </ul>

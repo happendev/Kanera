@@ -162,3 +162,15 @@ for local verification or updating an unrelated card.
 3. UI changes were seen in a real browser (screenshot), and realtime changes have E2E coverage.
 4. Shared contracts, env plumbing and email previews are updated where touched.
 5. Anything skipped or failing is reported as such.
+
+## MCP release documentation
+
+Every MCP release must update Kanera-site in the same release process. In Kanera-site, run
+`npm run docs:mcp-sync` against the release checkout (`KANERA_PRODUCT_REPO` overrides `../Kanera`).
+This regenerates the tool inventory, server card, portable plugin version, and discovery catalog.
+Review the MCP guides for changed behavior, regenerate translations with `npm run i18n:generate`,
+and run `npm run docs:mcp-check`, `npm run i18n:check`, and `npm run test:agent-discovery`.
+Commit, merge, and deploy the site changes alongside the MCP service before publishing the
+`mcp-vX.Y.Z` registry release. Publishing checks the public deployed metadata and inventory against
+the release source (`node scripts/check-mcp-site.mjs` in Kanera; `KANERA_SITE_URL` supports local
+verification). Site CI also checks committed metadata against the product source.

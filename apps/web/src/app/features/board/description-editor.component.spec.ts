@@ -820,6 +820,31 @@ describe("DescriptionEditorComponent", () => {
     expect(fixture.componentInstance.markdown()).toContain("Ready \\| blocked");
   });
 
+  it("keeps list-like text typed after a hard break as plain text", () => {
+    fixture.componentInstance.editor?.commands.setContent({
+      type: "doc",
+      content: [{
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Notes" },
+          { type: "hardBreak" },
+          { type: "hardBreak" },
+          { type: "text", text: "1. First" },
+          { type: "hardBreak" },
+          { type: "text", text: "- Second" },
+          { type: "hardBreak" },
+          { type: "text", text: "# Third" },
+        ],
+      }],
+    });
+    const content = fixture.componentInstance.editor!.getJSON().content;
+
+    const saved = fixture.componentInstance.markdown();
+    expect(saved).toBe("Notes\\\n\\\n1\\. First\\\n\\- Second\\\n\\# Third");
+    fixture.componentInstance.setMarkdown(saved);
+    expect(fixture.componentInstance.editor!.getJSON().content).toEqual(content);
+  });
+
   it("keeps the Kanera Markdown compatibility corpus stable", () => {
     const corpus = [
       "@[Ada Lovelace](kanera-user:123e4567-e89b-12d3-a456-426614174000) and [release](https://example.com/release)",

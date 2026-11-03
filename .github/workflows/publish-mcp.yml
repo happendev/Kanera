@@ -56,6 +56,11 @@ jobs:
             exit 1
           fi
 
+      # The site repository is private. Check its public deployed artifacts instead of
+      # requiring a cross-repository credential, and gate publishing on actual deployment.
+      - name: Check published MCP documentation and discovery metadata
+        run: node scripts/check-mcp-site.mjs
+
       - name: Install MCP publisher
         run: |
           archive="mcp-publisher_linux_amd64.tar.gz"
