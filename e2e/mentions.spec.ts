@@ -85,11 +85,20 @@ test("a mention can be thumbed-up from the drawer without opening the card", asy
   const comment = detail.locator(".comment").filter({ hasText: "Ship it" });
   await expect(comment).toHaveCount(1);
 
+  // A second tab of the same account, parked on the All tab, must follow the reaction live.
+  const sibling = await pageAs("marcus");
+  const siblingNotification = sibling.locator(".notif-item").filter({ hasText: title });
+  await sibling.getByRole("button", { name: /^Notifications/ }).click();
+  await sibling.getByRole("group", { name: "Read state" }).getByRole("button", { name: "All" }).click();
+  await expect(siblingNotification.getByRole("button", { name: "React with thumbs up" })).toHaveAttribute("aria-pressed", "false");
+
   const notification = recipient.locator(".notif-item").filter({ hasText: title });
   const readState = recipient.getByRole("group", { name: "Read state" });
   await recipient.getByRole("button", { name: /^Notifications/ }).click();
   await expect(notification).toBeVisible();
   await notification.getByRole("button", { name: "React with thumbs up" }).click();
+  await expect(siblingNotification.getByRole("button", { name: "Remove thumbs up" })).toHaveAttribute("aria-pressed", "true");
+  await expect(siblingNotification).toHaveClass(/is-read/);
   // The thumbs-up is the acknowledgement, so the mention leaves the Unread tab without navigating
   // through the row's card link.
   await expect(notification).toHaveCount(0);
@@ -111,6 +120,8 @@ test("a mention can be thumbed-up from the drawer without opening the card", asy
   await remove.click();
   await expect(notification.getByRole("button", { name: "React with thumbs up" })).toHaveAttribute("aria-pressed", "false");
   await expect(comment.locator(".reaction-chip")).toHaveCount(0);
+  await expect(siblingNotification.getByRole("button", { name: "React with thumbs up" })).toHaveAttribute("aria-pressed", "false");
   // Taking the reaction back does not make the mention unread again.
   await expect(notification).toHaveClass(/is-read/);
+  await expect(siblingNotification).toHaveClass(/is-read/);
 });

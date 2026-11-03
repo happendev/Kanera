@@ -249,7 +249,7 @@
         <div class="notif-aside">
           <span class="notif-time">{{ relativeTime(n.createdAt) }}</span>
           @if (canThumbsUp(n)) {
-          <button type="button" class="notif-thumbs" [class.is-active]="n.viewerThumbsUp" (click)="toggleThumbsUp($event, n)" [attr.aria-label]="thumbsUpLabel(n)" [attr.aria-pressed]="n.viewerThumbsUp" [disabled]="!online()"
+          <button type="button" class="notif-thumbs" [class.reaction-chip]="n.viewerThumbsUp" [class.is-active]="n.viewerThumbsUp" [class.reaction-add]="!n.viewerThumbsUp" (click)="toggleThumbsUp($event, n)" [attr.aria-label]="thumbsUpLabel(n)" [attr.aria-pressed]="n.viewerThumbsUp" [disabled]="!online()"
             [kTooltip]="online() ? thumbsUpLabel(n) : offlineTitle">
             <i aria-hidden="true" class="ti ti-thumb-up"></i>
           </button>
@@ -375,7 +375,7 @@
             <div class="notif-entry-aside">
               <span class="notif-time">{{ relativeTime(item.notification.createdAt) }}</span>
               @if (canThumbsUp(item.notification)) {
-              <button type="button" class="notif-thumbs" [class.is-active]="item.notification.viewerThumbsUp" (click)="toggleThumbsUp($event, item.notification)" [attr.aria-label]="thumbsUpLabel(item.notification)"
+              <button type="button" class="notif-thumbs" [class.reaction-chip]="item.notification.viewerThumbsUp" [class.is-active]="item.notification.viewerThumbsUp" [class.reaction-add]="!item.notification.viewerThumbsUp" (click)="toggleThumbsUp($event, item.notification)" [attr.aria-label]="thumbsUpLabel(item.notification)"
                 [attr.aria-pressed]="item.notification.viewerThumbsUp" [disabled]="!online()" [kTooltip]="online() ? thumbsUpLabel(item.notification) : offlineTitle">
                 <i aria-hidden="true" class="ti ti-thumb-up"></i>
               </button>
