@@ -8,6 +8,7 @@ import { lockCardsForWrite } from "../../lib/card-write-lock.js";
 import { notFound } from "../../lib/errors.js";
 import type { Mailer } from "../../lib/mailer.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
+import { emitCommentNotificationsUpdated } from "../../lib/notifications.js";
 import { notifyReactionAdded, withdrawReactionNotification } from "../../lib/reaction-notifications.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import type { WarnLogger } from "./route-support.js";
@@ -75,6 +76,8 @@ export async function emitCommentReactionAdded({
       },
     });
   }
+  await emitCommentNotificationsUpdated(auth.sub, commentId)
+    .catch((err: unknown) => log.warn({ err, commentId }, "failed to refresh the reactor's comment notifications"));
   // Only people hear about a thumbs-up; agent, API-key and system comments have no reader to tell.
   if (current.authorKind === "user") {
     await notifyReactionAdded({
@@ -139,6 +142,8 @@ export async function emitCommentReactionRemoved({
     type,
     userId: auth.sub,
   });
+  await emitCommentNotificationsUpdated(auth.sub, commentId)
+    .catch((err: unknown) => log.warn({ err, commentId }, "failed to refresh the reactor's comment notifications"));
   await withdrawReactionNotification({
     actorId: auth.sub,
     cardId: card.id,

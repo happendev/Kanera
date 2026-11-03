@@ -1,5 +1,6 @@
 @use "../../shared/drawer-chrome";
 @use "../../shared/card-key" as key;
+@use "../../shared/reactions";
 
 // Colour policy for this file: --bell-accent (the active workspace's accent, bound
 // on the host) marks *unread* and nothing else — the bell, its badge, the drawer's
@@ -8,7 +9,8 @@
 // empty-state icons, buttons and mention chips in the same accent, which made a
 // workspace with a strong accent colour read as a themed panel rather than as
 // standard app chrome, and left the actual unread signal with nothing to stand out
-// against. --accent (the app teal) is still used for focus rings, as everywhere else.
+// against. --accent (the app teal) is still used for focus rings, as everywhere else, and for your
+// own thumbs-up, which wears the card activity feed's reaction chip so it reads the same in both.
 :host {
   --drawer-width: 500px;
   // Recessed band for the sticky group headers: they read as page-level dividers
@@ -1233,50 +1235,20 @@
   }
 }
 
-// Neutral, not --bell-accent: the accent marks unread and nothing else (see the colour policy at the
-// top). A neutral wash carries the "you reacted" state.
-.notif-thumbs {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  // Off the --h scale on purpose: it shares the 18px aside line with the time and the read dot.
-  width: 22px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--text-base);
-  cursor: pointer;
-  position: relative;
-  flex-shrink: 0;
-  transition: color var(--motion-fast) ease, transform var(--dur) ease;
+// The card activity feed's thumbs-up, unchanged: a bare icon until you react, revealed on hover
+// (always shown on touch), then your tinted chip. No count: the drawer only says whether *you*
+// reacted.
+.notif-thumbs.reaction-add {
+  @include reactions.reaction-add;
+}
 
-  // Same enlarged-but-short-of-44px target as the read dot, for the same reason: a bigger overlay
-  // would swallow taps meant to open the card.
-  &::before {
-    content: '';
-    position: absolute;
-    inset: -8px;
-  }
+.notif-thumbs.reaction-chip {
+  @include reactions.reaction-chip;
+}
 
-  &:hover:not(:disabled) {
-    background: transparent;
-    color: var(--text);
-    transform: scale(1.15);
-  }
-
-  &.is-active,
-  &.is-active:hover:not(:disabled) {
-    background: var(--surface-hover);
-    color: var(--text);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.5;
-  }
+.notif-item:hover .notif-thumbs.reaction-add,
+.notif-thumbs.reaction-add:focus-visible {
+  opacity: 1;
 }
 
 .drawer-scroll-sentinel {
@@ -1303,6 +1275,22 @@
 
   .mark-all-btn {
     height: var(--h-lg);
+  }
+
+  // Same invisible hit area as card activity's thumbs-up, short of 44px wide so it can't swallow
+  // taps on the read dot beside it.
+  .notif-thumbs {
+    position: relative;
+
+    &.reaction-add {
+      opacity: 1;
+    }
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: -12px -5px;
+    }
   }
 }
 
