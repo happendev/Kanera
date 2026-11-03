@@ -34,6 +34,8 @@ All notable changes to Kanera are documented here.
 ### Fixed
 - A teammate's change that arrives while you're dragging a card no longer shifts the lists or table rows under your pointer, on a board or on My Cards and Team Cards, so the card lands exactly where you dropped it. The view catches up as soon as you let go.
 - A card moved into progress outside working hours no longer looks stuck at "<1m": its time-in-progress chip shows a pause icon, card detail says **Paused until** the next working start, and the tooltip explains that only weekday 09:00–17:00 counts. Nothing tracked yet now reads "0m" on the tile and in card detail alike.
+- **Agent comments:** comments an AI agent wrote on your behalf now show **Edit** and **Delete** alongside **Reply**, as your own comments do.
+- **Comment actions on touch:** on phones and tablets, Reply, Edit, Delete and the thumbs-up under each comment are always visible with full-size tap targets, instead of appearing only on mouse hover.
 - **Mention avatars:** @-mention chips in notification comment previews, and mentions of people no longer on the board, now show the person's profile picture instead of a generated placeholder.
 - Offline, My Cards and Team Cards now say once that you're looking at a saved copy, in the page's banner, instead of repeating it inside Overview, Timeline, Dependencies and Work done.
 - Cards completed by an automation (for example, moving a card to Done) now count as done for their assignees on the My Cards and Team Cards overviews and their Work done timelines, instead of disappearing from **Recently done** and the **Done** count.

@@ -161,14 +161,14 @@
             </button>
             }
           </div>
-          @if (canEdit() && isOwnComment(item.data)) {
+          @if (canEdit()) {
           <div class="comment-actions">
-            <button class="ghost xs" [disabled]="!canMutate()" (click)="startEditComment(item.data)" i18n="Button: edit this comment">Edit</button>
-            <button class="ghost xs" [disabled]="!canMutate()" (click)="deleteComment(item.data.id)" i18n="Button: delete this comment">Delete</button>
-          </div>
-          } @else if (canEdit() && (item.data.authorKind !== 'user' || item.data.authorId !== currentUserId()?.id)) {
-          <div class="comment-actions">
+            @if (!isOwnComment(item.data)) {
             <button class="ghost xs" [disabled]="!canMutate()" (click)="startReplyComment(item.data)"><i aria-hidden="true" class="ti ti-arrow-back-up"></i>&ngsp;<ng-container i18n="Button: reply to this comment">Reply</ng-container></button>
+            }
+            @if (canModifyComment(item.data)) {
+            <button class="ghost xs" [disabled]="!canMutate()" (click)="startEditComment(item.data)" i18n="Button: edit this comment">Edit</button>
+            }
             @if (canDeleteCommentRole(item.data)) {
             <button class="ghost xs" [disabled]="!canMutate()" (click)="deleteComment(item.data.id)" i18n="Button: delete this comment">Delete</button>
             }

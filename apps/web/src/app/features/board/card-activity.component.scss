@@ -330,6 +330,29 @@ input.comment-search-input {
   gap: 8px;
   margin-top: 4px;
   min-height: var(--h-xs);
+
+  // Touch has no hover to reveal Reply/Edit/Delete and the thumbs-up, so they stay visible. Same
+  // invisible 44px hit areas as attachment actions, keeping the footer compact.
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    .comment-actions,
+    .reaction-add {
+      opacity: 1;
+    }
+
+    .comment-actions {
+      gap: 10px;
+    }
+
+    button {
+      position: relative;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: -12px -5px;
+      }
+    }
+  }
 }
 
 .comment-reactions {
