@@ -10078,7 +10078,8 @@
   "1668924809666206135": "React with thumbs up",
   "@1668924809666206135": {
     "x-files": [
-      "src/app/features/board/card-activity.component.html"
+      "src/app/features/board/card-activity.component.html",
+      "src/app/features/notifications/notifications-panel.component.ts"
     ]
   },
   "4502286564339177240": "Reply",
@@ -20870,6 +20871,13 @@
   "1616968388083998795": "Mark as read",
   "@1616968388083998795": {
     "description": "Button label - mark a notification as read",
+    "x-files": [
+      "src/app/features/notifications/notifications-panel.component.ts"
+    ]
+  },
+  "3500379431674273405": "Remove thumbs up",
+  "@3500379431674273405": {
+    "description": "Button on a mention notification - undo your thumbs-up on the comment",
     "x-files": [
       "src/app/features/notifications/notifications-panel.component.ts"
     ]
