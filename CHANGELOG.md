@@ -33,6 +33,7 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+- Workspace deletion now recovers from transient database deadlocks while realtime events are being dispatched.
 - Fixed cases where text in Scratchpad, Notes, card and checklist descriptions, or comments could disappear or revert after reconnecting or reopening an editor. Older save responses no longer discard newer drafts, and failed background refreshes keep the current scratchpad text intact.
 - **Comment saves:** failed saves now show an error and leave your draft available to retry.
 - Lines that start with "1.", "-" or "#" after a Shift+Enter line break in a description, comment or note no longer reopen as a list or heading with a stray `\` left behind.
