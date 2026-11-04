@@ -64,7 +64,6 @@ void test("the submission plugin declares the hosted Kanera MCP server", async (
   assert.deepEqual(mcp.mcpServers, {
     kanera: {
       url: "https://mcp.kanera.app/mcp",
-      oauth_resource: "https://mcp.kanera.app/mcp",
       extensions: {
         "com.openai": {
           auth: {

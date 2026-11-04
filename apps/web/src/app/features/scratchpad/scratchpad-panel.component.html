@@ -273,11 +273,12 @@
     [attr.role]="activeNote() ? 'region' : null"
     [attr.aria-label]="activeNote() ? tabLabel(activeNote()!) : null"
   >
+    <!-- A failed background read must not unmount a warm editor or discard its live document. -->
     @if (showInitialLoading()) {
     <div class="panel-state k-loading">
       <i class="ti ti-loader-2 kanera-spin" aria-label="Loading scratchpad" i18n-aria-label="Loading indicator label"></i>
     </div>
-    } @else if (loadError()) {
+    } @else if (loadError() && !activeNote()) {
     <div class="panel-state">
       <k-empty-state plain icon="alert-circle" title="Couldn’t load Scratchpad" i18n-title="Error state title" [text]="loadError()">
         <button type="button" class="ghost state-retry-btn" (click)="scratchpad.refresh()" i18n="Button: retry loading the scratchpad">Try again</button>

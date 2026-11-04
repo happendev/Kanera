@@ -763,7 +763,6 @@ export class CardDetailComponent {
   readonly draftTitle = signal("");
   readonly editingTitle = signal(false);
   readonly draftDescription = signal("");
-  readonly savingDescription = signal(false);
   readonly editingDescription = signal(false);
   readonly editorInitialValue = signal("");
   readonly recoveredDescriptionDraft = signal(false);
@@ -1492,22 +1491,27 @@ export class CardDetailComponent {
       this.exitDescriptionEdit();
       return;
     }
-    this.savingDescription.set(true);
+    const editor = this.descriptionEditor();
+    const cardId = this.card().id;
+    const userId = this.currentUserId();
+    // An offline transition or close/reopen can start another edit before this response arrives.
+    const current = () => !this.destroyRef.destroyed && this.card().id === cardId
+      && this.descriptionEditor() === editor;
     try {
-      const card = await this.api.patch<WireCard>(`/cards/${this.card().id}`, { description: event.markdown });
+      const card = await this.api.patch<WireCard>(`/cards/${cardId}`, { description: event.markdown });
+      this.editorDrafts.clearSaved(userId, "card-description", cardId, event.markdown);
+      if (!current()) return;
       this.state.updateCard(card);
       this.draftDescription.set(card.description ?? "");
-      this.editorDrafts.clear(this.currentUserId(), "card-description", card.id);
       this.recoveredDescriptionDraft.set(false);
       this.exitDescriptionEdit();
       // PATCH supplies the saved card; uploads have their own attachment events. Only links
       // need a follow-up snapshot, shared with the author's card:links:changed echo.
       this.scheduleLinkedItemsRefresh(card.id);
     } catch {
-      this.toasts.error($localize`Couldn't save the description. Your draft is still available; try again.`);
+      if (current()) this.toasts.error($localize`Couldn't save the description. Your draft is still available; try again.`);
     } finally {
-      this.savingDescription.set(false);
-      this.descriptionEditor()?.setSaving(false);
+      if (this.descriptionEditor() === editor) editor?.setSaving(false);
     }
   }
 
@@ -2141,18 +2145,26 @@ export class CardDetailComponent {
       this.editingChecklistItemDescription.set(false);
       return;
     }
+    const editor = this.checklistItemDescriptionEditor();
+    const cardId = this.card().id;
+    const userId = this.currentUserId();
+    const current = () => !this.destroyRef.destroyed && this.card().id === cardId
+      && this.openChecklistItem()?.id === item.id && this.checklistItemDescriptionEditor() === editor;
     try {
       const description = event.markdown || null;
       const updated = await this.api.patch<WireCardChecklistItem>(
-        `/cards/${this.card().id}/checklists/${checklistId}/items/${item.id}`,
+        `/cards/${cardId}/checklists/${checklistId}/items/${item.id}`,
         { description },
       );
-      this.state.updateChecklistItem(this.card().id, checklistId, updated);
-      this.editorDrafts.clear(this.currentUserId(), "checklist-item-description", item.id);
+      this.editorDrafts.clearSaved(userId, "checklist-item-description", item.id, event.markdown);
+      if (!current()) return;
+      this.state.updateChecklistItem(cardId, checklistId, updated);
       this.recoveredChecklistItemDescriptionDraft.set(false);
       this.editingChecklistItemDescription.set(false);
+    } catch {
+      if (current()) this.toasts.error($localize`Couldn't save the description. Your draft is still available; try again.`);
     } finally {
-      this.checklistItemDescriptionEditor()?.setSaving(false);
+      if (this.checklistItemDescriptionEditor() === editor) editor?.setSaving(false);
     }
   }
 
