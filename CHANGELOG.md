@@ -33,6 +33,9 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+- Updated application dependencies and monitoring images to resolve available high and critical security fixes.
+- Conditional card detail and activity reads now finish their 304 response once, avoiding duplicate-send errors.
+- API and worker shutdown now drain background work before closing realtime and shared connections, handle idle PostgreSQL connection errors, and finish connection cleanup when a dependency stops first.
 - Workspace deletion now recovers from transient database deadlocks while realtime events are being dispatched.
 - Fixed cases where text in Scratchpad, Notes, card and checklist descriptions, or comments could disappear or revert after reconnecting or reopening an editor. Older save responses no longer discard newer drafts, and failed background refreshes keep the current scratchpad text intact.
 - **Comment saves:** failed saves now show an error and leave your draft available to retry.

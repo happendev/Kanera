@@ -118,6 +118,8 @@ async function closeClient(client: RedisClient): Promise<void> {
 }
 
 function observeAdapterErrors(client: RedisClient): void {
+  // ioredis-mock implements pub/sub directly and has no low-level sendCommand to observe.
+  if (typeof client.sendCommand !== "function") return;
   const sendCommand = client.sendCommand.bind(client);
   client.sendCommand = (...args) => {
     const result = sendCommand(...args);
