@@ -102,6 +102,7 @@ Check their failure-mode comments before removing or replacing tests.
 | Lifecycle email | [Lifecycle integration](../apps/api/src/lib/lifecycle-emails.itest.ts): hosted eligibility, timing and deduplication requiring backdated history. |
 | Billing | [Reliability](../apps/api/src/modules/billing/reliability.itest.ts): Stripe response ordering, duplicate Checkout and transaction failures. |
 | Storage | [Storage integration](../apps/api/src/modules/clients/storage.itest.ts): usage, privacy/access, description cleanup and warning-email rearming. |
+| Workspace deletion | [Deletion integration](../apps/api/src/lib/workspace-delete.itest.ts): forced outbox deadlock recovery, atomic notification deletion, bounded retries, and unrelated-error propagation. |
 | Toasts | [Toast service](../apps/web/src/app/shared/toast.service.spec.ts): exact timer boundaries, concurrent settlement, dismissal/teardown and result propagation. |
 
 ## Additional checks
