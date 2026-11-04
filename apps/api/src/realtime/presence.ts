@@ -2,6 +2,7 @@ import type { FastifyBaseLogger } from "fastify";
 import { randomUUID } from "node:crypto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
 import { getRedis, type RedisClient } from "../redis.js";
+import { startSweepScheduler } from "../lib/sweep-scheduler.js";
 
 type PresenceEvent = Parameters<ServerToClientEvents["presence:changed"]>[0];
 
@@ -190,17 +191,14 @@ export class PresenceTracker {
 }
 
 export function startPresenceReaper(options: {
-  emit: (event: PresenceEvent) => void;
+  emit: (event: PresenceEvent) => void | Promise<void>;
   log?: FastifyBaseLogger;
   intervalMs?: number;
-}): () => void {
+}): () => Promise<void> {
   const redis = getRedis();
   const intervalMs = options.intervalMs ?? REAPER_INTERVAL_MS;
-  let running = false;
 
   const sweep = async () => {
-    if (running) return;
-    running = true;
     try {
       const serverIds = await redis.smembers("presence:servers");
       for (const serverId of serverIds) {
@@ -225,7 +223,7 @@ export function startPresenceReaper(options: {
             rawEntry,
           );
           if (Number(crossedOffline) === 1) {
-            options.emit({ workspaceId: entry.workspaceId, userId: entry.userId, online: false });
+            await options.emit({ workspaceId: entry.workspaceId, userId: entry.userId, online: false });
           }
         }
         await Promise.all([
@@ -235,13 +233,15 @@ export function startPresenceReaper(options: {
       }
     } catch (err) {
       options.log?.warn({ err }, "presence reaper failed");
-    } finally {
-      running = false;
     }
   };
 
-  const timer = setInterval(() => void sweep(), intervalMs);
-  timer.unref();
-  void sweep();
-  return () => clearInterval(timer);
+  // The stop promise also drains the offline-recording/broadcast callback before shared
+  // Postgres and Valkey connections are closed.
+  return startSweepScheduler({
+    name: "presence-reaper",
+    task: sweep,
+    nextDelayMs: intervalMs,
+    log: options.log,
+  }).stop;
 }

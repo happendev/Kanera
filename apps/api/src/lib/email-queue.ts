@@ -85,7 +85,9 @@ export async function runEmailQueueSweep({
             updatedAt: now,
           })
           .where(eq(emailQueue.id, row.id));
-        if (permanent) log.warn({ err, emailQueueId: row.id, retries }, "queued email recipient rejected permanently");
+        // Older queued demo mail still reaches this guard after enqueue-time suppression ships.
+        if (permanent === "suppressed") log.info({ emailQueueId: row.id, to: row.toEmail }, "queued email suppressed for reserved recipient");
+        else if (permanent) log.warn({ err, emailQueueId: row.id, retries }, "queued email recipient rejected permanently");
         else log.error({ err, emailQueueId: row.id, retries }, "queued email send failed");
         // "suppressed"/"rejected" are recipient problems; "error" means retries ran out on a
         // delivery fault. Alert on rejected and error only: suppression is the guard working.

@@ -583,7 +583,10 @@ services:
       - api
 
   grafana:
-    image: grafana/grafana:13.2.3
+    build:
+      context: .
+      dockerfile: docker/monitoring/grafana/Dockerfile
+      pull: true
     restart: unless-stopped
     profiles: ["monitoring"]
     entrypoint:
@@ -616,8 +619,6 @@ services:
       # Set when serving Grafana under a subpath; for a dedicated subdomain leave default.
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-}
     volumes:
-      - ./docker/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro,Z
-      - ./docker/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro,Z
       - kanera_grafana_data:/var/lib/grafana
     expose:
       - "3000"

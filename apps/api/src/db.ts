@@ -25,6 +25,12 @@ export const pool = new pg.Pool({
   ssl: env.DATABASE_SSL ? { rejectUnauthorized: true } : false,
 });
 
+// An idle connection can fail before this process receives SIGTERM during a host reboot.
+// pg removes that client itself, but an unhandled pool error would crash the whole process.
+pool.on("error", (error) => {
+  console.error(JSON.stringify({ level: "error", msg: "idle PostgreSQL client failed", error: error.message, stack: error.stack }));
+});
+
 // Expose live pool saturation to the metrics registry. node-postgres updates these counters
 // synchronously, so reading them at scrape time reflects the pool's current state.
 registerPoolStatsProvider(() => ({

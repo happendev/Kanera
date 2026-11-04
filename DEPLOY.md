@@ -509,6 +509,10 @@ tag:
 docker compose --profile monitoring up -d --build
 ```
 
+Grafana packages provisioning and bundled dashboards in its image. They stay outside the
+`/var/lib/grafana` data volume so deployments can replace the checkout without leaving stale
+directory mounts; rebuild Grafana when changing those files.
+
 What you get:
 
 - **Prometheus** scrapes all app replicas (via Docker DNS service discovery) and

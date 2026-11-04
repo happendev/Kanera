@@ -92,7 +92,41 @@ export async function closeRedis(): Promise<void> {
   if (!redis) return;
   const client = redis;
   redis = null;
-  await client.quit();
+  await closeClient(client);
+}
+
+async function closeClient(client: RedisClient): Promise<void> {
+  // QUIT cannot succeed while reconnecting. Never wait for a dependency to come back during exit.
+  if (client.status !== "ready") {
+    client.disconnect();
+    return;
+  }
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      client.quit(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("Valkey shutdown timed out")), COMMAND_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    logRedisError("shutdown", error);
+  } finally {
+    clearTimeout(timeout);
+    client.disconnect();
+  }
+}
+
+function observeAdapterErrors(client: RedisClient): void {
+  const sendCommand = client.sendCommand.bind(client);
+  client.sendCommand = (...args) => {
+    const result = sendCommand(...args);
+    // redis-adapter fires publish/(un)subscribe commands without awaiting their promises.
+    // A lost connection during teardown rejects those commands even with an error-event listener.
+    // Observe the rejection without changing the promise seen by callers that do await it.
+    void Promise.resolve(result).catch((error: unknown) => logRedisError("adapter command", error));
+    return result;
+  };
 }
 
 export async function createAdapterPair(): Promise<{ pubClient: RedisClient; subClient: RedisClient; close: () => Promise<void> }> {
@@ -100,6 +134,8 @@ export async function createAdapterPair(): Promise<{ pubClient: RedisClient; sub
   // does not apply here; clear it on the duplicates to avoid interfering with subscription delivery.
   const pubClient = getRedis().duplicate({ commandTimeout: undefined });
   const subClient = getRedis().duplicate({ commandTimeout: undefined });
+  observeAdapterErrors(pubClient);
+  observeAdapterErrors(subClient);
   pubClient.setMaxListeners(0);
   subClient.setMaxListeners(0);
   pubClient.on("error", (err) => logRedisError("adapter pub", err));
@@ -109,7 +145,7 @@ export async function createAdapterPair(): Promise<{ pubClient: RedisClient; sub
     pubClient,
     subClient,
     close: async () => {
-      await Promise.allSettled([pubClient.quit(), subClient.quit()]);
+      await Promise.all([closeClient(pubClient), closeClient(subClient)]);
     },
   };
 }

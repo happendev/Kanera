@@ -10,6 +10,7 @@ import { buildIntegrationServer } from "../test/integration.js";
 import { newOpaqueToken } from "./tokens.js";
 import { runEmailQueueCleanup, runEmailQueueSweep } from "./email-queue.js";
 import { SmtpReplyError } from "./smtp.js";
+import { createMailer } from "./mailer.js";
 
 const smtpConfig = {
   host: "smtp.example.com",
@@ -604,14 +605,50 @@ void test("production never hands reserved-domain recipients to SMTP", async () 
     ]).returning();
 
     const delivered: string[] = [];
-    await runEmailQueueSweep({ db, log, resolveSmtpConfig: async () => smtpConfig, sendEmail: async ({ to }) => { delivered.push(to); } });
+    const warnings: unknown[] = [];
+    await runEmailQueueSweep({ db, log: { info() {}, error() {}, warn: (...args: unknown[]) => { warnings.push(args); } } as never, resolveSmtpConfig: async () => smtpConfig, sendEmail: async ({ to }) => { delivered.push(to); } });
 
     assert.deepEqual(delivered, ["ada@kanera.app"]);
+    assert.deepEqual(warnings, [], "expected demo suppression is not a recipient-delivery incident");
     const after = new Map((await db.select().from(emailQueue).where(inArray(emailQueue.id, rows.map((row) => row.id)))).map((row) => [row.toEmail, row]));
     for (const reserved of ["priya@kanera.test", "demo@sub.example.com"]) {
       assert.equal(after.get(reserved)!.status, EMAIL_QUEUE_STATUS.error, `${reserved} is terminal without a send`);
       assert.match(after.get(reserved)!.lastError ?? "", /reserved domain/);
     }
+  } finally {
+    env.KANERA_ENVIRONMENT = previous;
+  }
+});
+
+// The E2E stack deliberately allows reserved recipients through to a mail catcher. Exercise the
+// production boundary here: both queued and immediate mail must skip storage, config and SMTP.
+void test("production skips queueing reserved recipients while development keeps mail-catcher delivery", async () => {
+  const previous = env.KANERA_ENVIRONMENT;
+  const warnings: unknown[] = [];
+  const delivered: string[] = [];
+  let configLookups = 0;
+  const mailer = createMailer({
+    db,
+    webOrigin: "https://kanera.example",
+    log: { info() {}, error() {}, warn: (...args: unknown[]) => { warnings.push(args); } } as never,
+    resolveSmtpConfig: async () => { configLookups++; return smtpConfig; },
+    sendEmail: async ({ to }) => { delivered.push(to); },
+  });
+  try {
+    env.KANERA_ENVIRONMENT = "production";
+    assert.equal(await mailer.sendWelcome("priya@kanera.test", "Priya", "en-GB"), null);
+    assert.equal(await mailer.sendPasswordReset("demo@sub.example.com", "Demo", "https://kanera.example/reset", "en-GB"), null);
+    assert.deepEqual(await db.select().from(emailQueue), []);
+    assert.equal(configLookups, 0);
+    assert.deepEqual(delivered, []);
+    assert.deepEqual(warnings, []);
+
+    const genuine = await mailer.sendWelcome("ada@kanera.app", "Ada", "en-GB");
+    assert.equal(genuine?.status, EMAIL_QUEUE_STATUS.queued);
+    env.KANERA_ENVIRONMENT = "development";
+    const reset = await mailer.sendPasswordReset("priya@kanera.test", "Priya", "https://kanera.example/reset", "en-GB");
+    assert.equal(reset?.status, EMAIL_QUEUE_STATUS.success);
+    assert.deepEqual(delivered, ["priya@kanera.test"]);
   } finally {
     env.KANERA_ENVIRONMENT = previous;
   }

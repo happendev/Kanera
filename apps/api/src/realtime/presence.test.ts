@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { closeRedis, getRedis, initRedis } from "../redis.js";
-import { PresenceTracker } from "./presence.js";
+import { PresenceTracker, startPresenceReaper } from "./presence.js";
 
 async function tracker() {
   await initRedis();
@@ -51,6 +51,36 @@ void test("snapshot contains currently online workspace users", async () => {
   await presence.markOnline("workspace-2", "user-3", "socket-3");
 
   assert.deepEqual((await presence.onlineUserIds("workspace-1")).sort(), ["user-1", "user-2"]);
+});
+
+void test("stopping the reaper drains an in-flight offline notification", async () => {
+  const presence = await tracker();
+  // No heartbeat: this entry belongs to a dead process and must be reaped.
+  await presence.markOnline("workspace-1", "user-1", "socket-1");
+  let notifyStarted!: () => void;
+  const started = new Promise<void>(resolve => { notifyStarted = resolve; });
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const stop = startPresenceReaper({
+    emit: async () => {
+      notifyStarted();
+      await pending;
+    },
+  });
+  try {
+    await started;
+    let stopped = false;
+    const draining = Promise.resolve(stop()).then(() => { stopped = true; });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(stopped, false, "shared resources must remain available to the offline notification");
+    release();
+    await draining;
+    assert.equal(stopped, true);
+    assert.deepEqual(await presence.onlineUserIds("workspace-1"), []);
+  } finally {
+    release();
+    await stop();
+  }
 });
 
 after(async () => {
