@@ -723,16 +723,20 @@ export class NoteEditorComponent implements OnDestroy {
       return;
     }
     const generation = this.lockGeneration;
-    const current = () => !this.destroyed && this.note()?.id === n.id && this.lockGeneration === generation;
+    // Reconnect can replace the body editor without changing the note or its lock generation.
+    // A response from the old editor must not close the new one or reset its draft.
+    const current = () => !this.destroyed && this.note()?.id === n.id
+      && this.lockGeneration === generation && this.descriptionEditor() === editor;
+    const userId = this.currentUserId();
     this.saveError.set(null);
     try {
       const updated = await this.notesState.updateNote(n.id, { content: event.markdown, baseUpdatedAt: this.bodyBaseUpdatedAt ?? this.editBaseUpdatedAt ?? this.dateString(n.updatedAt) });
+      this.editorDrafts.clearSaved(userId, "note-body", n.id, event.markdown);
       if (!current()) return;
       // Advance the base in case the title input is still open — a following
       // title save should build on the timestamp this write just produced.
       this.editBaseUpdatedAt = this.dateString(updated.updatedAt);
       this.editorInitialValue.set(event.markdown);
-      this.editorDrafts.clear(this.currentUserId(), "note-body", n.id);
       this.recoveredBodyDraft.set(false);
       this.preservedDraft.set(null);
       this.editing.set(false);

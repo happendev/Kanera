@@ -1964,7 +1964,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   reset() {
     this.uploader.reset();
     this.setSaving(false);
-    this.editor?.commands.setContent("");
+    // The host has already cleared its own submitted/discarded draft. An update here would
+    // masquerade as a keystroke and could clear a recovery draft written by another tab.
+    this.editor?.commands.setContent("", { emitUpdate: false });
     this.cleanMarkdown = "";
     this.unsavedWork.setDirty(this.unsavedWorkSource, false);
   }
@@ -1976,7 +1978,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   replaceWithCleanMarkdown(markdown: string) {
     this.cleanMarkdown = markdown;
-    this.editor?.commands.setContent(this.markdownShortcodesToUnicode(markdown || ""));
+    // Remote snapshots are already persisted. Emitting an update would queue an autosave of
+    // this older snapshot, which can arrive after the writer's next edit and overwrite it.
+    this.editor?.commands.setContent(this.markdownShortcodesToUnicode(markdown || ""), { emitUpdate: false });
     this.unsavedWork.setDirty(this.unsavedWorkSource, false);
   }
 
