@@ -5,6 +5,7 @@ import type { ElementRef } from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   HostListener,
   computed,
   effect,
@@ -32,6 +33,7 @@ import { SystemAvatarComponent } from "../../shared/system-avatar.component";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { hasMarkdownContent } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { ToastService } from "../../shared/toast.service";
 import { BoardState } from "./board-state";
 import { DescriptionEditorComponent, type EditorSaveEvent } from "./description-editor.component";
 import { descriptionDiff, hasDescriptionChanges, hasDescriptionDiffPayload, type DescriptionDiff } from "./description-diff";
@@ -131,6 +133,8 @@ export class CardActivityComponent {
   private readonly feedPageRequest = new CardDetailRequest(this.api);
   private readonly auth = inject(AuthService);
   private readonly editorDrafts = inject(EditorDrafts);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly toasts = inject(ToastService);
   private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly unsavedDraftSource = Symbol("comment-draft");
   private readonly persistence = inject(CardDetailPersistence);
@@ -278,7 +282,6 @@ export class CardActivityComponent {
   canDeleteCommentRole(comment: CommentRow): boolean {
     return this.canEdit() && (this.canModifyComment(comment) || this.canDeleteAnyCommentRole());
   }
-  readonly submittingComment = signal(false);
   readonly addingComment = signal(false);
   // Initial markdown for the new-comment editor. Empty for a fresh comment; a
   // quoted blockquote when starting a reply. The editor reads this only at
@@ -295,6 +298,7 @@ export class CardActivityComponent {
 
   private readonly newCommentEditor = viewChild<DescriptionEditorComponent>("newCommentEditor");
   private readonly editCommentEditor = viewChild<DescriptionEditorComponent>("editCommentEditor");
+  private readonly completedCommentEdits = new Set<string>();
   private feedLoadSeq = 0;
   // Bumped by the realtime handlers whenever a socket event mutates the current card's feed.
   // refreshFeedFromNetwork snapshots this before its request and union-merges (instead of blindly
@@ -328,6 +332,7 @@ export class CardActivityComponent {
       this.recoveredNewCommentDraft.set(false);
       this.recoveredEditCommentDraft.set(false);
       this.savedEditCommentDraftId.set(null);
+      this.completedCommentEdits.clear();
       this.feedItems.set([]);
       this.feedTombstones.clear();
       this.feedServerRevision = undefined;
@@ -664,28 +669,36 @@ export class CardActivityComponent {
       this.newCommentEditor()?.setSaving(false);
       return;
     }
-    this.submittingComment.set(true);
+    const editor = this.newCommentEditor();
+    const cardId = this.cardId();
+    const userId = this.currentUserId()?.id;
+    // Reopening after a disconnect creates a different composer in the same component.
+    const current = () => !this.destroyRef.destroyed && this.cardId() === cardId
+      && this.newCommentEditor() === editor;
     try {
-      const comment = await this.api.post<CommentRow>(`/cards/${this.cardId()}/comments`, {
+      const comment = await this.api.post<CommentRow>(`/cards/${cardId}/comments`, {
         body,
         attachmentIds: event.attachmentIds,
       });
+      this.editorDrafts.clearSaved(userId, "comment-new", cardId, event.markdown);
+      if (!current()) return;
       const next = this.upsertFeedItem(this.feedItems(), { type: "comment", data: comment });
       this.feedItems.set(next);
       this.persistFeedSnapshot(this.cardId(), next);
-      this.editorDrafts.clear(this.currentUserId()?.id, "comment-new", this.cardId());
       this.newCommentEditor()?.reset();
       this.newCommentInitialValue.set("");
       this.recoveredNewCommentDraft.set(false);
       this.addingComment.set(false);
+    } catch {
+      if (current()) this.toasts.error($localize`Couldn't save the comment. Your draft is still available; try again.`);
     } finally {
-      this.submittingComment.set(false);
-      this.newCommentEditor()?.setSaving(false);
+      if (this.newCommentEditor() === editor) editor?.setSaving(false);
     }
   }
 
   startEditComment(comment: CommentRow) {
     if (!this.canMutate()) return;
+    this.completedCommentEdits.delete(comment.id);
     const recovered = this.editorDrafts.load(this.currentUserId()?.id, "comment-edit", comment.id);
     this.editingCommentId.set(comment.id);
     this.savedEditCommentDraftId.set(null);
@@ -775,22 +788,33 @@ export class CardActivityComponent {
       this.editCommentEditor()?.setSaving(false);
       return;
     }
+    const editor = this.editCommentEditor();
+    const cardId = this.cardId();
+    const userId = this.currentUserId()?.id;
+    const current = () => !this.destroyRef.destroyed && this.cardId() === cardId
+      && this.editingCommentId() === id && this.editCommentEditor() === editor;
     try {
       const comment = await this.api.patch<CommentRow>(`/comments/${id}`, {
         body,
         attachmentIds: event.attachmentIds,
       });
+      this.editorDrafts.clearSaved(userId, "comment-edit", id, event.markdown);
+      if (!current()) return;
+      // A preserved draft from another tab must not immediately reopen this completed edit.
+      // Explicitly editing again or reopening the card enables recovery for this comment again.
+      this.completedCommentEdits.add(id);
       const next = this.upsertFeedItem(this.feedItems(), { type: "comment", data: comment });
       this.feedItems.set(next);
       this.persistFeedSnapshot(this.cardId(), next);
-      this.editorDrafts.clear(this.currentUserId()?.id, "comment-edit", id);
       this.editingCommentId.set(null);
       this.editCommentBody.set("");
       this.editCommentBaseBody.set("");
       this.savedEditCommentDraftId.set(null);
       this.recoveredEditCommentDraft.set(false);
+    } catch {
+      if (current()) this.toasts.error($localize`Couldn't save the comment. Your draft is still available; try again.`);
     } finally {
-      this.editCommentEditor()?.setSaving(false);
+      if (this.editCommentEditor() === editor) editor?.setSaving(false);
     }
   }
 
@@ -798,7 +822,7 @@ export class CardActivityComponent {
     const userId = this.currentUserId()?.id;
     if (!userId) return;
     for (const item of this.feedItems()) {
-      if (item.type !== "comment") continue;
+      if (item.type !== "comment" || this.completedCommentEdits.has(item.data.id)) continue;
       const draft = this.editorDrafts.load(userId, "comment-edit", item.data.id);
       if (!draft) continue;
       this.editingCommentId.set(item.data.id);

@@ -96,6 +96,16 @@ export class EditorDrafts {
     this.writeStore(store);
   }
 
+  /** Only retire text this request persisted; newer or different text may belong to another tab. */
+  clearSaved(userId: string | null | undefined, kind: EditorDraftKind, entityId: string, markdown: string): void {
+    const key = this.keyFor(userId, kind, entityId);
+    if (!key) return;
+    const store = this.readStore();
+    if (store[key]?.markdown.trim() !== markdown.trim()) return;
+    delete store[key];
+    this.writeStore(store);
+  }
+
   isActive(draft: Pick<EditorDraft, "markdown" | "baseMarkdown" | "updatedAt">): boolean {
     if (!this.hasChanges(draft.markdown, draft.baseMarkdown)) return false;
     return Date.now() - new Date(draft.updatedAt).getTime() <= DRAFT_MAX_AGE_MS;

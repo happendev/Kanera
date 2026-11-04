@@ -10176,6 +10176,12 @@
       "src/app/features/board/card-activity.component.ts"
     ]
   },
+  "5884008554481531972": "Couldn't save the comment. Your draft is still available; try again.",
+  "@5884008554481531972": {
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
   "4452209265971998699": "attachment",
   "@4452209265971998699": {
     "description": "Stand-in name for an unnamed file",

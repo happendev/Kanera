@@ -571,7 +571,13 @@ export class ScratchpadService {
     if (this.editor?.noteId === saved.id) this.editor.markClean(patch.content);
     // Re-saving the draft with the acked text as its base clears it (EditorDrafts drops a draft that
     // matches its baseline), so recovery only ever holds genuinely unsaved work.
-    this.syncDraft(saved.id, this.editor?.noteId === saved.id ? this.editor.currentMarkdown() : patch.content);
+    // Closing the dock removes the bridge, not the queued text. Rebase that newer text rather
+    // than the acknowledged patch, or the only recovery copy is erased before its save succeeds.
+    const current = this.editor?.noteId === saved.id
+      ? this.editor.currentMarkdown()
+      : this.pending.get(saved.id)?.content;
+    if (current !== undefined) this.syncDraft(saved.id, current);
+    else this.drafts.clearSaved(this.auth.user()?.id, "scratchpad-note", saved.id, patch.content);
   }
 
   /**

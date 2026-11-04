@@ -33,6 +33,8 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+- Fixed cases where text in Scratchpad, Notes, card and checklist descriptions, or comments could disappear or revert after reconnecting or reopening an editor. Older save responses no longer discard newer drafts, and failed background refreshes keep the current scratchpad text intact.
+- **Comment saves:** failed saves now show an error and leave your draft available to retry.
 - Lines that start with "1.", "-" or "#" after a Shift+Enter line break in a description, comment or note no longer reopen as a list or heading with a stray `\` left behind.
 - A teammate's change that arrives while you're dragging a card no longer shifts the lists or table rows under your pointer, on a board or on My Cards and Team Cards, so the card lands exactly where you dropped it. The view catches up as soon as you let go.
 - A card moved into progress outside working hours no longer looks stuck at "<1m": its time-in-progress chip shows a pause icon, card detail says **Paused until** the next working start, and the tooltip explains that only weekday 09:00–17:00 counts. Nothing tracked yet now reads "0m" on the tile and in card detail alike.

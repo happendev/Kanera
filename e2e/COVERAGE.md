@@ -39,6 +39,8 @@ concurrent request bursts do not replace deterministic database race tests.
 | [drag-and-drop](drag-and-drop.spec.ts) | Pointer-driven lane scrolling and precise same-list/cross-list ordering reaching another viewer and surviving reload. |
 | [editor-formatting-shortcuts](editor-formatting-shortcuts.spec.ts) | Selection, inline code, link shortcut/focus, clear formatting, and formatted content surviving save/reload. |
 | [editor-image-drag](editor-image-drag.spec.ts) | Image reordering without duplicate uploads, undo/redo, and saved order across descriptions, comments, notes, and scratchpad. |
+| [editor-recovery-audit](editor-recovery-audit.spec.ts) | Notes, descriptions, and new/edited comments retaining drafts across late saves, close/reopen, reconnect, failed reads, and rejected writes. |
+| [editor-draft-ownership](editor-draft-ownership.spec.ts) | Saving in another tab preserves description and comment drafts; delayed checklist-description saves preserve a reopened drawer's newer work. |
 | [email-unsubscribe](email-unsubscribe.spec.ts) | Signed unsubscribe links, scanner-safe confirmation, one-click form posts, forged tokens, and independent notification preferences. |
 | [getting-started](getting-started.spec.ts) | Onboarding checklist guidance, automatic completion, hiding, account-menu access, and removal. |
 | [global-work-foreground](global-work-foreground.spec.ts) | My Cards/Team Cards avoiding redundant brief-return reloads while recovering hidden updates, long absences, and socket outages. |
@@ -70,6 +72,8 @@ concurrent request bursts do not replace deterministic database race tests.
 | [public-api](public-api.spec.ts) | Public API writes reaching open boards through the worker/outbox and producing correctly signed webhook envelopes. |
 | [realtime-compression](realtime-compression.spec.ts) | Configured websocket negotiation and ordered, intact small/large updates through the real outbox/Valkey path. |
 | [reconnect](reconnect.spec.ts) | Proven socket outages recovering card and agent-run snapshots; brief foreground returns avoiding redundant requests. |
+| [scratchpad-save-recovery](scratchpad-save-recovery.spec.ts) | Scratchpad foreground/reconnect preservation, idle-session autosave isolation, and note draft ownership across browser tabs. |
+| [scratchpad-idle-recovery](scratchpad-idle-recovery.spec.ts) | Single-tab editor recovery after failed background reads, subsequent overwrite risk, and late acknowledgements preserving closed-dock drafts. |
 | [rich-card-create](rich-card-create.spec.ts) | SDK/MCP/CLI single/bulk creation preserving typed fields and external identities, idempotency, atomic validation, and live rendering. |
 | [shared-fields](shared-fields.spec.ts) | Shared field renames, transfer/filter persistence, no-op saves, and fractional values surviving creation/reload. |
 | [storage-cleanup](storage-cleanup.spec.ts) | Storage filtering, selection/deletion, live attachment removal for another viewer, and phone layout. |
