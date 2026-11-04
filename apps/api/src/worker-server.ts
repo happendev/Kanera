@@ -102,32 +102,46 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopLifecycleEmailScheduler: (() => Promise<void>) | null = null;
   let stopBoardMirrorScheduler: (() => Promise<void>) | null = null;
   let stopWeeklyAdminRecapScheduler: (() => Promise<void>) | null = null;
-  let stopPresenceReaper: (() => void) | null = null;
+  let stopPresenceReaper: (() => Promise<void>) | null = null;
   let stopAgentRunStallScheduler: (() => Promise<void>) | null = null;
 
-  app.addHook("onClose", async () => productAnalytics.shutdown());
-  app.addHook("onClose", async () => stopPresenceReaper?.());
-  app.addHook("onClose", async () => stopAgentRunStallScheduler?.());
-  app.addHook("onClose", async () => stopRealtimeOutboxDispatcher?.());
-  app.addHook("onClose", async () => stopDirectRealtimeOutboxDispatcher?.());
-  app.addHook("onClose", async () => webhookDeliveryScheduler?.stop());
-  app.addHook("onClose", async () => stopOverdueScheduler?.());
-  app.addHook("onClose", async () => stopInProgressAlertScheduler?.());
-  app.addHook("onClose", async () => stopCardReminderScheduler?.());
-  app.addHook("onClose", async () => stopDueDateAutomationScheduler?.());
-  app.addHook("onClose", async () => stopDailyDigestScheduler?.());
-  app.addHook("onClose", async () => stopEmailQueueScheduler?.());
-  app.addHook("onClose", async () => stopArchivedCardCleanupScheduler?.());
-  app.addHook("onClose", async () => stopImportCleanupScheduler?.());
-  app.addHook("onClose", async () => stopOrganisationDeletionScheduler?.());
-  app.addHook("onClose", async () => stopPushQueueScheduler?.());
-  app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
-  app.addHook("onClose", async () => stopTrialExpiryScheduler?.());
-  app.addHook("onClose", async () => stopStorageWarningScheduler?.());
-  app.addHook("onClose", async () => stopLifecycleEmailScheduler?.());
-  app.addHook("onClose", async () => stopBoardMirrorScheduler?.());
-  app.addHook("onClose", async () => stopWeeklyAdminRecapScheduler?.());
-  app.addHook("onClose", async () => closeRealtimeIo());
+  app.addHook("onClose", async () => {
+    // Stop every producer before closing the adapter they publish through. Separate onClose
+    // hooks run in reverse registration order, which used to close realtime before the jobs.
+    const stopped = await Promise.allSettled([
+      stopPresenceReaper?.(),
+      stopAgentRunStallScheduler?.(),
+      stopRealtimeOutboxDispatcher?.(),
+      stopDirectRealtimeOutboxDispatcher?.(),
+      webhookDeliveryScheduler?.stop(),
+      stopOverdueScheduler?.(),
+      stopInProgressAlertScheduler?.(),
+      stopCardReminderScheduler?.(),
+      stopDueDateAutomationScheduler?.(),
+      stopDailyDigestScheduler?.(),
+      stopEmailQueueScheduler?.(),
+      stopArchivedCardCleanupScheduler?.(),
+      stopImportCleanupScheduler?.(),
+      stopOrganisationDeletionScheduler?.(),
+      stopPushQueueScheduler?.(),
+      stopRetentionCleanupScheduler?.(),
+      stopTrialExpiryScheduler?.(),
+      stopStorageWarningScheduler?.(),
+      stopLifecycleEmailScheduler?.(),
+      stopBoardMirrorScheduler?.(),
+      stopWeeklyAdminRecapScheduler?.(),
+    ]);
+    try {
+      const errors = stopped.filter(result => result.status === "rejected").map(result => result.reason as unknown);
+      if (errors.length) throw new AggregateError(errors, "worker schedulers failed to stop");
+    } finally {
+      try {
+        await closeRealtimeIo();
+      } finally {
+        await productAnalytics.shutdown();
+      }
+    }
+  });
 
   app.addHook("onReady", async () => {
     await setupBroadcastIo();
@@ -135,8 +149,8 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopPresenceReaper = startPresenceReaper({
       log: app.log,
       emit: (event) => {
-        void recordPresenceOffline(event)
-          .then((payload) => broadcastPresenceToWorkspace(payload.workspaceId, payload))
+        return recordPresenceOffline(event)
+          .then((payload) => { broadcastPresenceToWorkspace(payload.workspaceId, payload); })
           .catch((err: unknown) => {
             app.log.warn({ err, userId: event.userId }, "failed to record last online time");
             broadcastPresenceToWorkspace(event.workspaceId, event);

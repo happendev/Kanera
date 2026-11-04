@@ -43,9 +43,9 @@
   },
   "devDependencies": {
     "@kanera/shared": "workspace:*",
-    "@types/node": "^24.13.3",
-    "tsx": "^4.23.12",
+    "@types/node": "^24.19.2",
+    "tsx": "^4.23.15",
     "typescript": "~5.9.3",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   }
 }

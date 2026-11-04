@@ -95,8 +95,9 @@ def newest_candidate(ref: str) -> str | None:
 
     listed = run(CRANE + ["ls", repo])
     if listed.returncode != 0:
-        print(f"  ! could not list tags for {repo}: {listed.stderr.strip()[:120]}", file=sys.stderr)
-        return None
+        # A registry failure is not evidence that this pin is current. Surface incomplete
+        # coverage so transient auth/rate-limit failures cannot make the weekly scan green.
+        raise RuntimeError(f"could not list tags for {repo}: {listed.stderr.strip()[:120]}")
 
     best = None
     for cand in listed.stdout.split():
@@ -145,7 +146,12 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
         for ref in refs:
-            candidate = newest_candidate(ref)
+            try:
+                candidate = newest_candidate(ref)
+            except RuntimeError as error:
+                print(f"  ! {error}", file=sys.stderr)
+                errors = True
+                continue
             if candidate is None:
                 print(f"  {ref}\n      already newest — nothing to change")
                 continue
@@ -177,8 +183,10 @@ def main() -> int:
                 fh.write("| Image | Bump to | CRITICAL | HIGH | CVEs |\n| --- | --- | --- | --- | --- |\n")
                 for ref, tag, crit, high, ids in rows:
                     fh.write(f"| `{ref}` | `{tag}` | {crit} | {high} | {', '.join(ids)} |\n")
-            else:
+            elif not errors:
                 fh.write("No pinned image has a newer tag that fixes a HIGH/CRITICAL vulnerability.\n")
+            if errors:
+                fh.write("\nImage scan incomplete: registry or vulnerability scan errors occurred (see logs).\n")
 
     if rows:
         print(f"\n{len(rows)} image(s) have an upgrade that fixes HIGH/CRITICAL vulnerabilities.")

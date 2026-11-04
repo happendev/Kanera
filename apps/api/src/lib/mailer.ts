@@ -84,41 +84,41 @@ import { sendEmail, SmtpReplyError, type SendEmailOptions } from "./smtp.js";
  * subject and the body the worker renders later are in the same language.
  */
 export interface Mailer {
-  sendAdminInvite(to: string, displayName: string, link: string, locale: Locale): Promise<EmailQueue>;
-  sendWelcome(to: string, displayName: string, locale: Locale): Promise<EmailQueue>;
-  sendPasswordReset(to: string, displayName: string, link: string, locale: Locale): Promise<EmailQueue>;
-  sendEmailVerificationCode(to: string, code: string, expiresInMinutes: number, locale: Locale): Promise<EmailQueue>;
+  sendAdminInvite(to: string, displayName: string, link: string, locale: Locale): Promise<EmailQueue | null>;
+  sendWelcome(to: string, displayName: string, locale: Locale): Promise<EmailQueue | null>;
+  sendPasswordReset(to: string, displayName: string, link: string, locale: Locale): Promise<EmailQueue | null>;
+  sendEmailVerificationCode(to: string, code: string, expiresInMinutes: number, locale: Locale): Promise<EmailQueue | null>;
   sendDailyDigest(to: string, memberRole: BoardRole, params: DailyDigestEmailParams): Promise<EmailQueue | null>;
-  sendCardAssigned(to: string, params: CardAssignedEmailParams): Promise<EmailQueue>;
-  sendCardCommentAdded(to: string, params: CardCommentAddedEmailParams): Promise<EmailQueue>;
-  sendCommentMentioned(to: string, params: CommentMentionedEmailParams): Promise<EmailQueue>;
-  sendReactionAdded(to: string, params: ReactionAddedEmailParams): Promise<EmailQueue>;
-  sendCardDependencyAdded(to: string, params: CardDependencyAddedEmailParams): Promise<EmailQueue>;
-  sendCardUnblocked(to: string, params: CardUnblockedEmailParams): Promise<EmailQueue>;
-  sendCardDueDateChanged(to: string, params: CardDueDateChangedEmailParams): Promise<EmailQueue>;
-  sendCardOverdue(to: string, params: CardOverdueEmailParams): Promise<EmailQueue>;
-  sendCardReminder(to: string, params: CardReminderEmailParams): Promise<EmailQueue>;
-  sendChecklistItemOverdue(to: string, params: ChecklistItemOverdueEmailParams): Promise<EmailQueue>;
-  sendInviteAccepted(to: string, params: InviteAcceptedEmailParams): Promise<EmailQueue>;
-  sendBoardInvite(to: string, params: BoardInviteEmailParams): Promise<EmailQueue>;
-  sendBoardAccessGranted(to: string, params: BoardAccessGrantedEmailParams): Promise<EmailQueue>;
-  sendProTrialStarted(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendProTrialWarning(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendDowngradedToFree(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendUpgradedToPro(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendWelcomeToPro(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendBillingChanged(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendBillingRenewed(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendBillingPaymentFailed(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendBillingPaymentRecovered(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendSeatBilled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendSeatCapacityReduced(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendProCancellationScheduled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendProCancellationReversed(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendProCancelled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
-  sendImportCompleted(to: string, params: ImportCompletedEmailParams): Promise<EmailQueue>;
-  sendStorageWarning(to: string, params: StorageWarningEmailParams): Promise<EmailQueue>;
-  sendLifecycle(to: string, type: LifecycleEmailQueueType, params: LifecycleEmailParams): Promise<EmailQueue>;
+  sendCardAssigned(to: string, params: CardAssignedEmailParams): Promise<EmailQueue | null>;
+  sendCardCommentAdded(to: string, params: CardCommentAddedEmailParams): Promise<EmailQueue | null>;
+  sendCommentMentioned(to: string, params: CommentMentionedEmailParams): Promise<EmailQueue | null>;
+  sendReactionAdded(to: string, params: ReactionAddedEmailParams): Promise<EmailQueue | null>;
+  sendCardDependencyAdded(to: string, params: CardDependencyAddedEmailParams): Promise<EmailQueue | null>;
+  sendCardUnblocked(to: string, params: CardUnblockedEmailParams): Promise<EmailQueue | null>;
+  sendCardDueDateChanged(to: string, params: CardDueDateChangedEmailParams): Promise<EmailQueue | null>;
+  sendCardOverdue(to: string, params: CardOverdueEmailParams): Promise<EmailQueue | null>;
+  sendCardReminder(to: string, params: CardReminderEmailParams): Promise<EmailQueue | null>;
+  sendChecklistItemOverdue(to: string, params: ChecklistItemOverdueEmailParams): Promise<EmailQueue | null>;
+  sendInviteAccepted(to: string, params: InviteAcceptedEmailParams): Promise<EmailQueue | null>;
+  sendBoardInvite(to: string, params: BoardInviteEmailParams): Promise<EmailQueue | null>;
+  sendBoardAccessGranted(to: string, params: BoardAccessGrantedEmailParams): Promise<EmailQueue | null>;
+  sendProTrialStarted(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendProTrialWarning(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendDowngradedToFree(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendUpgradedToPro(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendWelcomeToPro(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendBillingChanged(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendBillingRenewed(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendBillingPaymentFailed(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendBillingPaymentRecovered(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendSeatBilled(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendSeatCapacityReduced(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendProCancellationScheduled(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendProCancellationReversed(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendProCancelled(to: string, params: BillingEmailParams): Promise<EmailQueue | null>;
+  sendImportCompleted(to: string, params: ImportCompletedEmailParams): Promise<EmailQueue | null>;
+  sendStorageWarning(to: string, params: StorageWarningEmailParams): Promise<EmailQueue | null>;
+  sendLifecycle(to: string, type: LifecycleEmailQueueType, params: LifecycleEmailParams): Promise<EmailQueue | null>;
 }
 
 export interface MailerDeps {
@@ -165,7 +165,8 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
       })
       .where(eq(emailQueue.id, row.id))
       .returning();
-    if (permanentEmailFailure(err)) log.warn({ err, emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "email recipient rejected permanently");
+    if (permanentEmailFailure(err) === "suppressed") log.info({ emailQueueId: row.id, to: row.toEmail }, "email suppressed for reserved recipient");
+    else if (permanentEmailFailure(err)) log.warn({ err, emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "email recipient rejected permanently");
     else log.error({ err, emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "failed to send email");
     return updated ?? row;
   }
@@ -327,11 +328,21 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
   };
 
+  function suppressReservedRecipient(to: string): boolean {
+    // Demo/seed recipients cannot receive production mail. Skip before inserting so expected
+    // suppression neither creates failed queue rows nor consumes worker delivery attempts.
+    // Development and E2E still send these accounts to their local mail catcher.
+    if (env.KANERA_ENVIRONMENT !== "production" || !isReservedEmailDomain(to)) return false;
+    log.info({ to }, "email suppressed for reserved recipient");
+    return true;
+  }
+
   /**
    * Records an email for the background sweep to deliver. Rows are stored exactly as they will be
    * sent (including the development subject prefix) so the queue doubles as an audit trail.
    */
-  async function queueEmail(to: string, subject: string, type: EmailQueue["type"], data: EmailQueue["data"]): Promise<EmailQueue> {
+  async function queueEmail(to: string, subject: string, type: EmailQueue["type"], data: EmailQueue["data"]): Promise<EmailQueue | null> {
+    if (suppressReservedRecipient(to)) return null;
     const [row] = await db
       .insert(emailQueue)
       .values({
@@ -350,7 +361,8 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
    * on them, so the row is recorded first (with a lease so a concurrent sweep leaves it alone), then
    * delivered immediately and marked on this row.
    */
-  async function queueImmediateEmail(to: string, subject: string, type: EmailQueue["type"], data: EmailQueue["data"]): Promise<EmailQueue> {
+  async function queueImmediateEmail(to: string, subject: string, type: EmailQueue["type"], data: EmailQueue["data"]): Promise<EmailQueue | null> {
+    if (suppressReservedRecipient(to)) return null;
     const [row] = await db
       .insert(emailQueue)
       .values({

@@ -10,6 +10,7 @@ concurrent request bursts do not replace deterministic database race tests.
 
 | Spec | Coverage |
 |---|---|
+| [shutdown](shutdown.spec.ts) | All four services exiting after SIGTERM with real Valkey, Valkey connection loss, API presence cleanup, and worker recovery after an idle PostgreSQL session is terminated. |
 | [account-settings-pages](account-settings-pages.spec.ts) | Security and Preferences navigation, direct reloads, Profile section boundaries, and phone layout. |
 | [agent-files](agent-files.spec.ts) | Agent scratchpad capture and uploaded files reaching an open browser through realtime. |
 | [angular-editor-races](angular-editor-races.spec.ts) | Pending or rejected saves preserving newer drafts, selections, uploads, note locks, and editor usability across navigation and backgrounding. |

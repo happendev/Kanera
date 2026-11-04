@@ -35,6 +35,8 @@ jobs:
       # in the full local `pnpm test`, which would let drift land through CI unnoticed.
       - run: pnpm test:release
 
+      - run: python3 -m unittest discover -s scripts -p 'test_scan_image_updates.py'
+
       - run: pnpm test:integrations
 
       - run: pnpm --filter @kanera/api test

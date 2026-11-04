@@ -2,7 +2,7 @@ const { test, expect } = require("@playwright/test");
 const fs = require("node:fs");
 const path = require("node:path");
 const root = path.resolve(__dirname, "../../apps/web/dist/web");
-const stats = JSON.parse(fs.readFileSync(path.join(root, "stats.json"), "utf8"));
+const stats = JSON.parse(fs.readFileSync(path.join(root, "browser-stats.json"), "utf8"));
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "browser/ngsw.json"), "utf8"));
 const outputFor = (suffix) => Object.keys(stats.outputs).find((file) => Object.keys(stats.outputs[file].inputs).some((input) => input.endsWith(suffix)));
 

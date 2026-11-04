@@ -3,7 +3,7 @@
 // that one file plus .env.example, so it must not reference anything else in the repository:
 //   - every `build:` block becomes an `image:` pinned to the release's published GHCR image,
 //   - the Postgres init script is inlined as a Compose config instead of a ./docker bind mount,
-//   - the monitoring profile is dropped, since it bind-mounts a directory of config files and stays
+//   - the monitoring profile is dropped, since its images and configuration stay
 //     a build-from-source option.
 // The repository's docker-compose.yml stays the single source of truth; this is a text transform
 // rather than a YAML round trip so the comments and the shared `x-app-env` anchor survive verbatim.
@@ -28,7 +28,10 @@ const monitoringStart = /^  # -{20,}\n  # Monitoring stack\.[\s\S]*?(?=^volumes:
 export function buildReleaseCompose(source, initSql, version) {
   if (!semverPattern.test(version)) throw new Error(`version must be X.Y.Z, got "${version}"`);
 
-  let output = source.replace(buildBlockPattern, (_match, indent, dockerfile) => {
+  // Monitoring images/configuration are source-only and are not published with a release.
+  if (!monitoringStart.test(source)) throw new Error("monitoring section marker not found");
+  let output = source.replace(monitoringStart, "");
+  output = output.replace(buildBlockPattern, (_match, indent, dockerfile) => {
     const image = IMAGES[dockerfile];
     if (!image) throw new Error(`no published image for ${dockerfile}; add it to IMAGES and publish-images.yml`);
     return `${indent}image: ${IMAGE_REGISTRY}/${image}:${version}\n`;
@@ -43,8 +46,6 @@ export function buildReleaseCompose(source, initSql, version) {
       `${indent}configs:\n${indent}  - source: postgres_init\n${indent}    target: /docker-entrypoint-initdb.d/00-init.sql\n`,
   );
 
-  if (!monitoringStart.test(output)) throw new Error("monitoring section marker not found");
-  output = output.replace(monitoringStart, "");
   output = output.replace(/^  kanera_(prometheus|grafana|loki|alloy)_data:\n/gm, "");
   if (/\.\/docker\//.test(output)) throw new Error("output still references files in ./docker");
 

@@ -13,33 +13,19 @@ allowBuilds:
   ttf2woff2: true
 minimumReleaseAgeExclude:
   - esbuild@0.28.1
-  - vite@8.1.5
   - ws@8.21.0
-  - body-parser@2.3.0
   - linkify-it@5.0.2
-  - svgo@3.3.4
-  - zod@4.5.1
-  - '@posthog/browser-common@0.7.0'
-  - '@posthog/core@1.49.2'
-  - '@posthog/types@1.407.1'
-  - '@scalar/client-side-rendering@0.3.10'
-  - '@scalar/fastify-api-reference@1.67.0'
-  - '@scalar/helpers@0.11.2'
-  - '@scalar/json-magic@0.13.3'
-  - '@scalar/json-schema-validator@0.1.0'
-  - '@scalar/openapi-parser@0.29.0'
-  - '@scalar/openapi-validator@0.1.0'
-  - '@scalar/schemas@0.8.4'
-  - '@scalar/types@0.18.3'
-  - blobatar@2.6.0
-  - posthog-js@1.422.5
 minimumReleaseAgeExcludePrune: true
 overrides:
-  # Keep Vite aligned with @angular/build: its dev-server linker depends on the matching
-  # dependency-optimizer API, and an older forced Vite leaves Angular packages partially compiled.
-  '@hono/node-server': 2.1.0
+  # Vite follows @angular/build: its dev-server linker depends on the matching optimizer API.
+  # These security pins stay within each dependency's current major.
+  '@hono/node-server': 2.1.6
   esbuild: 0.28.1
-  piscina: 5.3.0
-  shell-quote: 1.10.0
-  undici: 7.29.0
+  piscina: 5.3.2
+  shell-quote: 1.12.0
+  undici: 7.30.1
   ws: 8.21.0
+  # Sass and css-tree still pin the vulnerable patch; preserve its API while fixing source-map parsing.
+  source-map-js: 1.2.2
+  # Angular's Oxc Wasm fallback pins emnapi alpha; newer runtimes require the beta ABI.
+  '@oxc-parser/binding-wasm32-wasi>@napi-rs/wasm-runtime': 1.2.2
