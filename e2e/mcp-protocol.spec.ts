@@ -80,6 +80,28 @@ async function exercise(client: Client, cell: string, target: { boardId: string;
     expect(validateCreate(invalid), `${cell}: schema rejects ${JSON.stringify(invalid)}`).toMatchObject({ valid: false });
   }
   record("input-schema", { dialect: cardsCreate.inputSchema.$schema, validArguments: true, invalidArgumentsRejected: true });
+  // These operations stay inside a newly-created or private user scope. Other writes can
+  // dispatch the workspace outbox, MCP event callbacks, or previously configured automations.
+  const privateWrites = ["workspaces.create", "boards.create_standalone", "cards.create_upload_link", "cards.set_watching", "scratchpad.capture", "scratchpad.update"];
+  const adminReads = ["automations.list", "automations.list_executions"];
+  const repeatableWrites = ["automations.delete", "cards.delete_attachment", "cards.set_watching", "checklists.delete_item", "checklists.update", "comments.delete", "comments.set_reaction", "priorities.move", "priorities.remove", "separators.delete", "separators.move"];
+  for (const tool of tools.tools) {
+    expect(tool.annotations?.idempotentHint, `${cell}: ${tool.name} safe repeat guarantee`).toBe(tool.annotations?.readOnlyHint === true || repeatableWrites.includes(tool.name));
+    expect(tool.annotations?.openWorldHint, `${cell}: ${tool.name} external delivery boundary`).toBe(
+      tool.name === "search.docs" || (tool.annotations?.readOnlyHint === false && !privateWrites.includes(tool.name)),
+    );
+    const requiresWrite = tool.annotations?.readOnlyHint === false || adminReads.includes(tool.name);
+    expect(tool._meta?.securitySchemes, `${cell}: ${tool.name} OAuth scopes`).toEqual([
+      { type: "oauth2", scopes: requiresWrite ? ["kanera:read", "kanera:write"] : ["kanera:read"] },
+    ]);
+    if (tool.annotations?.openWorldHint && tool.annotations.readOnlyHint === false) {
+      expect(tool.annotations.destructiveHint, `${cell}: ${tool.name} irreversible deliveries`).toBe(true);
+      if (tool.annotations.idempotentHint === false) expect(tool.description, `${cell}: ${tool.name} discloses deliveries`).toContain("webhook");
+    }
+  }
+  for (const name of ["runs.update", "cards.set_reminder", "comments.update", "notes.move", "checklists.move", "separators.update"]) {
+    expect(tools.tools.find((tool) => tool.name === name)?.annotations?.idempotentHint, `${cell}: ${name} changes on repeat`).toBe(false);
+  }
   // Hosts use these labels to gate irreversible publication and external workflow sends.
   // Check the advertised wire catalog in both eras and transports, not just the registry.
   for (const name of ["comments.add", "automations.create", "automations.update", "automations.set_enabled"]) {
@@ -87,11 +109,11 @@ async function exercise(client: Client, cell: string, target: { boardId: string;
     expect(tool.annotations, `${cell}: ${name}`).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,
-      openWorldHint: name.startsWith("automations."),
+      openWorldHint: true,
     });
     expect(tool.description, `${cell}: ${name} discloses fanout`).toContain("webhook");
   }
-  expect(cardsCreate.annotations, cell).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: false });
+  expect(cardsCreate.annotations, cell).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
   record("safety-annotations", tools.tools.filter((tool) => ["comments.add", "automations.create", "automations.update", "automations.set_enabled"].includes(tool.name)).map((tool) => ({ name: tool.name, annotations: tool.annotations })));
   record("tools/list", { count: toolNames.length });
 

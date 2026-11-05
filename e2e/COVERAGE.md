@@ -55,7 +55,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [live-card-edits](live-card-edits.spec.ts) | Another member’s edits converging across mounted detail, Kanban, table, Work done, My Cards, and Team Cards. |
 | [mcp-checklists](mcp-checklists.spec.ts) | Nested checklist plans and updates through MCP/CLI: realtime ordering, idempotency, atomic rejection, ambiguous targets, and audit activity. |
 | [mcp-events](mcp-events.spec.ts) | Event discovery/schema/filter validation, callback security, live tool writes, and revoked-credential rejection. |
-| [mcp-protocol](mcp-protocol.spec.ts) | HTTP/stdio protocol eras, usable Draft 7 schemas, safety labels, live writes, resources/prompts, cancellation recovery, and distinct error shapes. |
+| [mcp-protocol](mcp-protocol.spec.ts) | HTTP/stdio protocol eras, usable Draft 7 schemas, catalog-wide safety labels, replay guidance and OAuth scopes, live writes, resources/prompts, cancellation recovery, and distinct error shapes. |
 | [mentions](mentions.spec.ts) | Mention selection, live notifications, persisted read state, deep links, and coalesced badge updates across sessions. |
 | [mfa-invite](mfa-invite.spec.ts) | New/existing invitees enrolling before session access, signed-in invitation handling, and navigation after enrollment. |
 | [notes-save-recovery](notes-save-recovery.spec.ts) | Recovered drafts retaining their baseline and newer text across remote edits, delayed responses, locks, and navigation. |
