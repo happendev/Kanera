@@ -6,6 +6,7 @@ All notable changes to Kanera are documented here.
 
 ### Added
 
+- **Mermaid diagrams:** ```` ```mermaid ```` code blocks are drawn as diagrams in card descriptions, notes and Markdown attachment previews, matching the light or dark theme. Wide diagrams scroll sideways on phones; comments keep showing the source.
 - **Mentions tab in notifications:** once someone has @-mentioned you, the notifications drawer gets a **Mentions** tab (with its unread count) listing every comment that mentions you, read or unread. On phones the drawer's Group, Board and User menus now share one row.
 - **Thumbs-up from notifications:** a notification for a comment that @-mentions you has a thumbs-up button beside the read dot, so you can acknowledge it without opening the card. Reacting marks the notification read.
 - **Agents filter in card activity:** cards an AI agent has commented on get an **Agents** tab beside All and Comments, showing only the comments and changes connected agents made and how their runs ended.

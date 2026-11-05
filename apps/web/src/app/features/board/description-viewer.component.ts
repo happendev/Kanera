@@ -24,6 +24,7 @@ import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { avatarFallbackColorStyle, blobatarFallbackUri, documentThemeIsDark } from "../../shared/avatar.component";
 import { stripEmptyTaskItems } from "../../shared/markdown-content";
+import { mermaidCacheKey, mermaidSources, renderMermaid, type MermaidTheme } from "../../shared/mermaid-diagram";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UserProfileCardService } from "../../shared/user-profile/user-profile-card.service";
 import { githubStateLabel } from "./github-state-label";
@@ -587,6 +588,28 @@ function normalizePlainText(value: string): string {
       color: inherit;
     }
 
+    .dv-body .dv-mermaid {
+      margin: 0 0 10px;
+      overflow-x: auto;
+    }
+
+    .dv-body .dv-mermaid svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      /* Shrinks to fit down to 560px (or the natural width, if smaller), then the block scrolls:
+         below that, labels get too small to read. Off-scale on purpose, it is a diagram width. */
+      min-width: min(var(--dv-mermaid-width, 100%), 560px);
+      max-width: var(--dv-mermaid-width, 100%);
+      margin: 0 auto;
+    }
+
+    .dv-body .dv-mermaid-error {
+      margin: -4px 0 10px;
+      color: var(--text-muted);
+      font-size: var(--text-sm);
+    }
+
     .dv-body blockquote {
       /* accent-stripe-ok: the conventional neutral quote rule on a blockquote, not an accent */
       border-left: 3px solid var(--border-strong);
@@ -682,6 +705,11 @@ export class DescriptionViewerComponent {
   readonly handleAttachmentLinks = input<boolean>(false);
   readonly showCopy = input<boolean>(false);
   /**
+   * Draws ```mermaid fences as diagrams. Full-size reading surfaces only: compact rows (comments,
+   * activity, notifications) are too narrow for a diagram and keep the source as a code block.
+   */
+  readonly diagrams = input<boolean>(false);
+  /**
    * Bumped by the host when its card/note receives a links-changed invalidation (a linked item was
    * renamed, recoloured or deleted). Chip titles are resolved once per URL, so without this a chip
    * keeps the old title until the viewer is recreated.
@@ -703,6 +731,11 @@ export class DescriptionViewerComponent {
   private readonly resolvedGitHubLinks = signal<Record<string, ResolvedGitHubLink>>({});
   private readonly resolvedMentionUsers = signal<Record<string, MentionUser>>({});
   private copyResetTimer: number | null = null;
+  private readonly diagramSources = computed(() => (this.diagrams() ? mermaidSources(this.visibleValue()) : []));
+  private readonly diagramTheme = computed<MermaidTheme>(() => (documentThemeIsDark() ? "dark" : "neutral"));
+  /** Rendered SVG by cache key; `null` marks a source Mermaid could not parse. */
+  private readonly renderedDiagrams = signal<Record<string, string | null>>({});
+  private readonly diagramErrorLabel = $localize`:Shown under a diagram's source when it has a syntax error:This diagram couldn't be drawn.`;
 
   private readonly cleanHtml = computed(() => {
     const withBareLinks = this.linkBareGitHubUrls(this.linkBareInternalUrls(this.visibleValue()));
@@ -721,10 +754,24 @@ export class DescriptionViewerComponent {
     const decoratedGitHub = this.decorateGitHubLinks(decoratedInternal, this.resolvedGitHubLinks());
     const decorated = this.decorateAttachmentLinks(decoratedGitHub);
     const withVisibleMedia = this.suppressExpiredMediaImages(decorated);
-    return this.sanitizer.bypassSecurityTrustHtml(withVisibleMedia);
+    const withDiagrams = this.insertDiagrams(withVisibleMedia, this.diagramSources(), this.diagramTheme(), this.renderedDiagrams());
+    return this.sanitizer.bypassSecurityTrustHtml(withDiagrams);
   });
 
   constructor() {
+    effect(() => {
+      const theme = this.diagramTheme();
+      const rendered = untracked(() => this.renderedDiagrams());
+      for (const source of new Set(this.diagramSources())) {
+        const key = mermaidCacheKey(source, theme);
+        if (key in rendered) continue;
+        // A failed chunk load (offline) leaves the source showing; the next value change retries.
+        void renderMermaid(source, theme)
+          .then((svg) => this.renderedDiagrams.update((all) => ({ ...all, [key]: svg })))
+          .catch(() => undefined);
+      }
+    });
+
     effect(() => {
       const known = new Set(this.mentionMembers().map((member) => member.userId));
       const resolved = untracked(() => this.resolvedMentionUsers());
@@ -1039,6 +1086,42 @@ export class DescriptionViewerComponent {
         changed = true;
       }
     }
+    return changed ? doc.body.innerHTML : html;
+  }
+
+  /**
+   * Swaps each rendered ```mermaid block for its SVG. Fences are matched by order: marked emits one
+   * `pre > code.language-mermaid` per fence the lexer found. A block still rendering (or offline,
+   * before the Mermaid chunk loads) keeps its source; one that failed to parse keeps it with a note.
+   */
+  private insertDiagrams(html: string, sources: string[], theme: MermaidTheme, rendered: Record<string, string | null>): string {
+    if (!sources.length) return html;
+    const doc = this.parseHtml(html);
+    if (!doc) return html;
+    let changed = false;
+    doc.querySelectorAll("pre > code.language-mermaid").forEach((code, index) => {
+      const source = sources[index];
+      if (source === undefined) return;
+      const svg = rendered[mermaidCacheKey(source, theme)];
+      if (svg === undefined) return;
+      const pre = code.parentElement!;
+      changed = true;
+      if (svg === null) {
+        const note = doc.createElement("p");
+        note.className = "dv-mermaid-error";
+        note.textContent = this.diagramErrorLabel;
+        pre.after(note);
+        return;
+      }
+      const figure = doc.createElement("div");
+      figure.className = "dv-mermaid";
+      figure.innerHTML = svg;
+      // Mermaid caps the SVG at its natural width; carry that over so narrow screens scroll a wide
+      // diagram sideways instead of shrinking its labels past legibility.
+      const width = /max-width:\s*([\d.]+)px/.exec(figure.querySelector("svg")?.getAttribute("style") ?? "")?.[1];
+      if (width) figure.style.setProperty("--dv-mermaid-width", `${width}px`);
+      pre.replaceWith(figure);
+    });
     return changed ? doc.body.innerHTML : html;
   }
 

@@ -56,6 +56,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [mcp-checklists](mcp-checklists.spec.ts) | Nested checklist plans and updates through MCP/CLI: realtime ordering, idempotency, atomic rejection, ambiguous targets, and audit activity. |
 | [mcp-events](mcp-events.spec.ts) | Event discovery/schema/filter validation, callback security, live tool writes, and revoked-credential rejection. |
 | [mcp-protocol](mcp-protocol.spec.ts) | HTTP/stdio protocol eras, usable Draft 7 schemas, catalog-wide safety labels, replay guidance and OAuth scopes, live writes, resources/prompts, cancellation recovery, and distinct error shapes. |
+| [mermaid-diagrams](mermaid-diagrams.spec.ts) | Mermaid fences draw as SVG in descriptions and Markdown attachments, stay code in comments, and keep their source when they fail to parse. |
 | [mentions](mentions.spec.ts) | Mention selection, live notifications, persisted read state, deep links, and coalesced badge updates across sessions. |
 | [mfa-invite](mfa-invite.spec.ts) | New/existing invitees enrolling before session access, signed-in invitation handling, and navigation after enrollment. |
 | [notes-save-recovery](notes-save-recovery.spec.ts) | Recovered drafts retaining their baseline and newer text across remote edits, delayed responses, locks, and navigation. |

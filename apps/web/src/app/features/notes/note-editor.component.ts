@@ -211,6 +211,7 @@ const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1
                     [linkRevision]="linkRevision()"
                     [mentionMembers]="mentionMembers()"
                     [showCopy]="true"
+                    [diagrams]="true"
                     [emptyLabel]="lockedByOther() ? lockedEmptyLabel() : addDescriptionLabel"
                     [emptyIcon]="lockedByOther() ? 'lock' : 'pencil'"
                     [handleAttachmentLinks]="true"

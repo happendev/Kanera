@@ -32,6 +32,16 @@
                 "glob": "favicon.ico",
                 "input": "public/assets/favicon",
                 "output": "/"
+              },
+              {
+                "glob": "mermaid.esm.min.mjs",
+                "input": "node_modules/mermaid/dist",
+                "output": "/assets/vendor/mermaid"
+              },
+              {
+                "glob": "*.mjs",
+                "input": "node_modules/mermaid/dist/chunks/mermaid.esm.min",
+                "output": "/assets/vendor/mermaid/chunks/mermaid.esm.min"
               }
             ],
             "styles": [

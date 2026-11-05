@@ -12888,6 +12888,13 @@
       "src/app/features/board/image-lightbox.component.ts"
     ]
   },
+  "4990039574586271540": "This diagram couldn't be drawn.",
+  "@4990039574586271540": {
+    "description": "Shown under a diagram's source when it has a syntax error",
+    "x-files": [
+      "src/app/features/board/description-viewer.component.ts"
+    ]
+  },
   "2053968622636535269": "PR #{$number}: {$title}",
   "@2053968622636535269": {
     "description": "GitHub pull request link label",
