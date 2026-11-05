@@ -16,6 +16,9 @@ export const STORAGE_KEYS = {
   CARD_LABELS_COMPRESSED: "kanera:card-labels-compressed",
   COLLAPSED_CHECKLISTS: "kanera:collapsed-checklists",
   EDITOR_DRAFTS: "kanera:editor-drafts",
+  // "expanded" or "collapsed" once the viewer has chosen; absent, home picks by progress. Per device,
+  // like the other chrome preferences: a phone and a desktop want different amounts of home.
+  GETTING_STARTED_LAYOUT: "kanera:getting-started-layout",
   HIDE_COMPLETED_CHECKLIST_ITEMS: "kanera:hide-completed-checklist-items",
   // One explainer shown on in-progress list columns until dismissed; device-level like the chrome
   // preferences around it, since it teaches a concept rather than recording a choice.

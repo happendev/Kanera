@@ -16,7 +16,6 @@ export interface ActivityStripSeries {
   noun: string;
   /** Count with its noun ("3 moves"), pluralised for the viewer's language. Preferred over `noun`. */
   countLabel?: (count: number) => string;
-  tone: "accent" | "success";
   counts: ReadonlyMap<string, number>;
 }
 
@@ -76,6 +75,9 @@ export function buildActivityStripCells(
 /**
  * Day-per-column activity strips: one column per calendar day, one row per metric.
  *
+ * Every row shares one accent ramp, the one the legend shows: the row labels already say which
+ * metric is which, and a second hue per series made the single legend wrong for half the strip.
+ *
  * One column per day (rather than a GitHub week grid) is what lets a 60-day window span the panel's
  * width instead of huddling in a corner, and it stacks the metrics on the same day columns for a
  * direct read — a busy movement strip over an empty completion strip is the "lots of churn, nothing
@@ -89,10 +91,10 @@ export function buildActivityStripCells(
   imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="activity-panel">
+    <section class="activity-panel" [class.is-flat]="flat()" [class.has-range]="hasRange()">
       <header>
         <strong>{{ heading() }}</strong>
-        <span>{{ windowLabel() }}</span>
+        <span>{{ windowLabel() }}@if (flatTotal(); as total) { · {{ total }} }</span>
         <div class="activity-legend">
           <span i18n="Activity heatmap legend: low end of the scale">Less</span>
           @for (level of legendLevels; track level) {
@@ -102,6 +104,19 @@ export function buildActivityStripCells(
         </div>
       </header>
       <div class="activity-strips">
+        <!-- The period as a faint column wash behind every strip, so it reads across all the rows
+             rather than only above the bar under the last one. Out of flow (absolutely placed on the
+             strips' grid rows), so it takes no part in the layout. -->
+        @if (rangeBand(); as band) {
+          <i
+            class="activity-range-wash"
+            aria-hidden="true"
+            [style.grid-row]="'2 / span ' + rows().length"
+            [style.--band-start]="band.start"
+            [style.--band-span]="band.span"
+            [style.--band-columns]="band.columns"
+          ></i>
+        }
         <span class="activity-row-label"></span>
         <div class="activity-months" aria-hidden="true">
           @for (month of monthCells(); track $index) {
@@ -113,7 +128,7 @@ export function buildActivityStripCells(
             <strong>{{ row.label }}</strong>
             <span>{{ row.totalLabel }}</span>
           </div>
-          <div class="activity-strip" [attr.data-tone]="row.tone">
+          <div class="activity-strip">
             @for (cell of row.cells; track cell.date) {
               @if (selectable()) {
                 <button
@@ -121,6 +136,7 @@ export function buildActivityStripCells(
                   class="activity-cell"
                   [class.week-start]="cell.weekStart"
                   [class.is-selected]="cell.date === selectedDate()"
+                  [class.out-of-range]="isOutOfRange(cell.date)"
                   [attr.data-level]="cell.level"
                   [attr.aria-label]="cell.label"
                   [kTooltip]="cell.label"
@@ -130,11 +146,30 @@ export function buildActivityStripCells(
                 <i
                   class="activity-cell"
                   [class.week-start]="cell.weekStart"
+                  [class.out-of-range]="isOutOfRange(cell.date)"
                   [attr.data-level]="cell.level"
                   [kTooltip]="cell.label"
                 ></i>
               }
             }
+            <!-- Under the last strip only, so the one bar marks the period for every row above it. -->
+            @if ($last && rangeBand(); as band) {
+              <i
+                class="activity-range"
+                aria-hidden="true"
+                [style.--band-start]="band.start"
+                [style.--band-span]="band.span"
+                [style.--band-columns]="band.columns"
+              ></i>
+            }
+          </div>
+        }
+        <!-- Narrow layouts drop the month row and the legend; the window's first and last day keep
+             the strip anchored in time. Shown only there (see the stylesheet). -->
+        @if (windowEnds(); as ends) {
+          <div class="activity-ends" aria-hidden="true">
+            <span>{{ ends.start }}</span>
+            <span>{{ ends.end }}</span>
           </div>
         }
       </div>
@@ -151,6 +186,18 @@ export class ActivityStripComponent {
   /** When true, columns become buttons that emit `daySelected`. */
   readonly selectable = input(false);
   readonly selectedDate = input<string | null>(null);
+  /**
+   * The period the host is showing (local YYYY-MM-DD, inclusive). Days outside it are dimmed, so a
+   * strip that is wider than the period cannot read as contradicting an empty result below it.
+   */
+  readonly rangeStart = input<string | null>(null);
+  readonly rangeEnd = input<string | null>(null);
+  /**
+   * For a single-series strip inside a host panel that already frames it (home's Your progress):
+   * no frame of its own, and no row label repeating the heading. A non-zero window total moves into
+   * the header instead; a zero is left to the empty cells and the host's own figure.
+   */
+  readonly flat = input(false);
 
   readonly daySelected = output<string>();
 
@@ -165,15 +212,66 @@ export class ActivityStripComponent {
     return activityWindowLabel(days);
   });
 
+  /**
+   * Only marks a range that overlaps the window: one entirely before it would dim every column,
+   * which reads as a broken strip rather than as "your period is not here".
+   */
+  readonly hasRange = computed(() => {
+    const start = this.rangeStart();
+    const end = this.rangeEnd();
+    const cells = this.rows()[0]?.cells;
+    if (!start || !end || !cells?.length) return false;
+    const first = cells[0].date;
+    const last = cells[cells.length - 1].date;
+    const covers = start <= first && end >= last;
+    return start <= last && end >= first && !covers;
+  });
+
+  isOutOfRange(date: string): boolean {
+    // Date keys are zero-padded YYYY-MM-DD, so string order is calendar order.
+    return this.hasRange() && (date < this.rangeStart()! || date > this.rangeEnd()!);
+  }
+
+  /**
+   * The host's period as one bar under the strips, in column units of the window. One continuous
+   * marker rather than a ring per day: seven ringed cells read as seven inputs, and the bar also
+   * spans the gaps between columns, so the period reads as a single stretch of time.
+   */
+  readonly rangeBand = computed(() => {
+    if (!this.hasRange()) return null;
+    const cells = this.rows()[0].cells;
+    const start = cells.findIndex((cell) => !this.isOutOfRange(cell.date));
+    if (start < 0) return null;
+    let end = start;
+    while (end + 1 < cells.length && !this.isOutOfRange(cells[end + 1].date)) end += 1;
+    // A one-day period that is the selected day already wears the selected outline in every row; a
+    // bar under it as well only doubles the marker.
+    if (start === end && cells[start].date === this.selectedDate()) return null;
+    return { start, span: end - start + 1, columns: cells.length };
+  });
+
+  readonly windowEnds = computed(() => {
+    const cells = this.rows()[0]?.cells;
+    if (!cells?.length) return null;
+    return { start: formatDate(cells[0].date, "short"), end: formatDate(cells[cells.length - 1].date, "short") };
+  });
+
+  readonly flatTotal = computed(() => {
+    const row = this.rows()[0];
+    return this.flat() && row && row.total > 0 ? row.totalLabel : null;
+  });
+
   readonly rows = computed(() =>
     this.series().map((series) => {
       const cells = buildActivityStripCells(series, this.windowDays(), this.end());
+      // Totalled over the rendered window, not the whole counts map, so the number always
+      // describes what the strip beside it is showing.
+      const total = cells.reduce((sum, cell) => sum + cell.count, 0);
       return {
         ...series,
         cells,
-        // Totalled over the rendered window, not the whole counts map, so the number always
-        // describes what the strip beside it is showing.
-        totalLabel: activityCountLabel(series, cells.reduce((sum, cell) => sum + cell.count, 0)),
+        total,
+        totalLabel: activityCountLabel(series, total),
       };
     })
   );

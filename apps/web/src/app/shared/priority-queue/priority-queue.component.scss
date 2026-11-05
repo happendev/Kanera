@@ -1,5 +1,7 @@
 @use "../rank-pill" as rank;
 @use "../card-key" as key;
+@use "../list-chip";
+@use "../chip";
 
 // Chrome-free by design: the host owns the frame (drawer, docked panel, Home section) and this
 // component owns only the rows. It fills whatever box it is given and scrolls inside it.
@@ -26,6 +28,10 @@
   min-height: 96px;
   padding: 6px;
   overflow-y: auto;
+  // The rows reflow by the room this surface actually gets (a 320px dock, a 500px drawer, Home's
+  // ~840px panel), which the viewport says nothing about. Does not trap the fixed-position pickers
+  // and menus inside it (see shared/anchored-panel.ts).
+  container: priority-queue / inline-size;
 
   // Embedded in a page section rather than a scroller: no min-height reserving empty space, and no
   // inner padding fighting the section's own.
@@ -41,7 +47,9 @@
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: center;
+  // Rank, key and due date all hang from the row's first line. Centred, the rank floated to the
+  // middle of a three- or four-line row while the key and date beside it sat at the top.
+  align-items: start;
   // Never compresses. `min-height` below replaces a flex item's automatic minimum size, so in the
   // scrolling column these rows are shrinkable down to that 44px — which the two-line touch layout
   // exceeds, and its due chip and tools then spilled over the row beneath. The list scrolls; the
@@ -89,9 +97,31 @@
   }
 }
 
-// Accent-tinted: the number is the whole point of this surface, and it must match the pill the same
-// card wears on its tile (see k-card's .card-priority-rank), including the --rank-heat ramp that
-// deepens the tint toward rank #1 (shared/_rank-pill.scss).
+// Hairline rules between rows: flat multi-line rows (title, trail, chips) otherwise blurred into one
+// block. Drawn in the 2px gap above each row rather than as a border, because the row's own 1px
+// border is the selected/completed ring and would turn the rule into an accent edge. Hidden either
+// side of a filled row (hover, selected, completed), where the fill already marks the break.
+.panel-row + .panel-row::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: 10px;
+  left: 10px;
+  height: 1px;
+  background: var(--divider);
+  pointer-events: none;
+}
+
+.panel-row:is(:hover, .is-selected, .is-completed)::before,
+.panel-row:is(:hover, .is-selected, .is-completed) + .panel-row::before,
+.panel-row.cdk-drag-preview::before,
+.panel-row.cdk-drag-placeholder::before {
+  opacity: 0;
+}
+
+// Accent-tinted: the number is the whole point of this surface, and it must match the table row's
+// pill (.tv-priority-rank), including the --rank-heat ramp that deepens the tint toward rank #1
+// (shared/_rank-pill.scss). The board tile shows the same rank as a flat chip instead.
 .row-rank {
   display: inline-flex;
   align-items: center;
@@ -147,13 +177,20 @@
   }
 }
 
+// Two lines, then clip: in the 300-360px dock a single ellipsed line was often only the first few
+// words, and the title is the one thing on the row that says which card it is.
 .row-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   font-size: var(--text-base);
   font-weight: 550;
   line-height: 1.35;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  // Restated: the row is a <button>, and the global button reset's nowrap is inherited.
+  white-space: normal;
+  overflow-wrap: anywhere;
   transition: color var(--motion-fast) ease;
 }
 
@@ -194,7 +231,7 @@
 // margin trims `.row-main`'s 4px track gap down to the ~2px that reads as "label of the line below"
 // rather than a third stacked register; the title and the context line keep the full gap.
 .row-card-key {
-  @include key.card-key;
+  @include key.card-key-row;
 
   display: block;
   margin-bottom: -2px;
@@ -212,34 +249,21 @@
   font-weight: 500;
 }
 
-// A queued card's list *is* its state — "what is this thing I do next actually waiting on" — and it
-// carries its own icon and colour to say so, which is the notifications drawer's breadcrumb treatment
-// unchanged. As plain grey tail text it was both the hardest part of the row to read and the first
-// thing the old single-line trail ellipsised away.
+// A queued card's list *is* its state — "what is this thing I do next actually waiting on" — so it
+// wears the list-chip pill every surface names a list with (status cell, calendar tile, activity
+// row), cut down to the trail's size so the context line stays beneath the title.
 //
 // Presentational, never a button: `.row-main` is already a <button>, so an interactive chip here
 // would be nested interactive content (the same constraint the label chips are rendered under).
 .row-list {
-  display: inline-flex;
-  flex: 0 1 auto;
-  gap: 4px;
-  align-items: center;
-  min-width: 0;
-  max-width: 100%;
-  font-weight: 500;
+  @include list-chip.list-chip;
+  @include list-chip.list-chip-compact;
 }
 
 .row-context-part {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-// Hierarchy, not punctuation: board › list, the same separator the notifications breadcrumb uses.
-.row-sep-chevron {
-  flex: none;
-  font-size: 10px;
-  opacity: 0.6;
 }
 
 // Their own row under the board › list line, so the width they get is the row's full width and never
@@ -252,33 +276,61 @@
   --label-bar-wrap: wrap;
   --label-bar-row-gap: 4px;
   --label-bar-column-gap: 4px;
-  --label-chip-height: 17px;
+  // Breadcrumb size, the list-chip-compact pill's 18px, so the row's labels and list read as one size.
+  --label-chip-height: 18px;
   --label-chip-padding-x: 6px;
-  --label-chip-font-size: 10px;
-  --label-chip-max-width: 130px;
-  --label-chip-text-max-width: 118px;
+  // The chips already have a row of their own, so they may use all of it: a fixed 130px cap cut
+  // "Feature / Enhancement" short with half the row empty beside it.
+  --label-chip-max-width: 100%;
+  --label-chip-text-max-width: none;
 
   min-width: 0;
   max-width: 100%;
 }
 
+// With room to spare (the shell drawer, Home's panel), the labels join the board › list trail on one
+// line rather than taking a fourth line of their own beside a mostly empty row. They still never
+// share that line by shrinking: the chips keep their natural width (`flex: none`, capped at the row)
+// and the line wraps them onto their own row whenever they do not fit whole, which is what the
+// "own row" rule above protects. 440px clears the dock (at most ~360px), which keeps the stack.
+@container priority-queue (min-width: 440px) {
+  .row-main {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    align-items: center;
+  }
+
+  .row-card-key,
+  .row-title {
+    flex: 1 0 100%;
+  }
+
+  .row-context {
+    flex: 0 1 auto;
+  }
+
+  .row-labels {
+    flex: none;
+  }
+}
+
+// Pinned to the row's first line rather than centred on the whole block: on a three- or four-line
+// row a centred date floated loose at the far edge, belonging to no line in particular.
 .row-due {
   justify-self: end;
+  align-self: start;
+  line-height: 1.35;
   // Plain text, matching the agenda's due column: a boxed chip on every row out-weighed the title.
-  // Only the states that need attention keep a colour.
-  color: var(--text-muted);
+  // Only the states that need attention become a chip, the shared urgency chips (shared/_chip.scss)
+  // the tile, table and overview use, so "due soon" is one amber shape everywhere.
+  color: var(--text-3);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 
-  &.overdue {
-    color: var(--danger);
-  }
-
-  &.due-soon {
-    color: var(--color-amber);
-  }
+  @include chip.due-states;
 }
 
 // Revealed on hover or focus over the due chip, so the resting surface is a readable list rather
@@ -452,8 +504,10 @@ k-anchored-picker {
   --picker-row-background: color-mix(in srgb, var(--surface-2) 32%, transparent);
 }
 
-// Undoes the global button reset (36px, accent hover). Styled like a list's "add card" affordance:
-// quiet at rest, clearly a button on hover, full width so it cannot be missed on touch screens.
+// Undoes the global button reset (36px, accent hover). The app's secondary button, full width so it
+// cannot be missed on touch screens: --surface-2 inside a solid --border-strong rule, --text label.
+// The faint dashed outline with a muted label it used to wear is the convention for a disabled or
+// placeholder slot, so on a phone the queue's one way to add read as switched off.
 .panel-add {
   display: flex;
   gap: 6px;
@@ -463,26 +517,39 @@ k-anchored-picker {
   min-width: 0;
   height: var(--h-md);
   padding: 0 8px;
-  color: var(--text-muted);
+  color: var(--text);
   font-size: var(--text-base);
   font-weight: 550;
-  background: none;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
 
   i {
+    color: var(--text-muted);
     font-size: var(--text-md);
   }
 
   &:hover:not(:disabled) {
     color: var(--text);
-    background: var(--surface-2);
+    background: var(--surface-hover);
     border-color: var(--border-strong);
-    border-style: solid;
   }
 
+  // Every eligible card already queued. Muted text on a dashed rule rather than faded: at half
+  // opacity the row dropped to ~1.6:1 and read as a rendering glitch, not as an action with nothing
+  // left to add. Dashed and unfilled now that only this state looks like an empty slot. The tooltip
+  // says why.
   &:disabled {
-    opacity: 0.55;
+    color: var(--text-muted);
+    background: none;
+    border-color: var(--border-strong);
+    border-style: dashed;
+    opacity: 1;
+  }
+
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    height: auto;
+    min-height: 44px;
   }
 }
 
@@ -529,16 +596,18 @@ k-anchored-picker {
 }
 
 // Touch has no hover, so nothing here may be hover-revealed: every verb — complete, reorder,
-// remove — has to be a permanently visible 30px target, and four of those are 130px the title
-// cannot spare. So the row grows a second line: the title and its board·list trail keep the full
+// remove — has to be a permanently visible 44px target, and four of those are more than the title
+// can spare. So the row grows a second line: the title and its board·list trail keep the full
 // width above, and the due chip pairs off with the tools below. Dragging by the rank pill still
 // reorders, but the chevrons are what actually get used on touch, which is why they stay.
-@media (pointer: coarse) {
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
   .panel-row {
     grid-template-columns: 22px minmax(0, 1fr);
     align-items: start;
-    row-gap: 8px;
-    padding: 11px 10px;
+    // Tight enough that a phone drawer shows the whole of a five-card queue's first rows; the tools'
+    // grown hit areas reach into this gap and the padding, not past the row.
+    row-gap: 6px;
+    padding: 8px 10px;
   }
 
   .row-rank {
@@ -560,6 +629,9 @@ k-anchored-picker {
   .row-tools {
     position: static;
     justify-self: end;
+    // Ghost icon buttons 32px wide and 4px apart: at 12px the four spread across half the row and
+    // read as a toolbar of their own. Borderless and neutral at rest, because four bordered, tinted
+    // boxes on every row were the loudest thing in the drawer, louder than the cards they act on.
     gap: 4px;
     padding: 0;
     background: none;
@@ -570,24 +642,75 @@ k-anchored-picker {
     pointer-events: auto;
 
     button {
+      position: relative;
       width: 32px;
-      height: 32px;
-      font-size: 15px;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
+      height: 30px;
+      font-size: 16px;
+      background: none;
+      border: 0;
       border-radius: var(--radius-sm);
+
+      // Hit areas 44px tall; across, each reaches the middle of the gap beside it, so neighbours
+      // tile with no dead strip and no overlap (a tap is never claimed by the button next to the
+      // glyph it lands on). The outer two reach a full 6px past the cluster.
+      &::after {
+        content: "";
+        position: absolute;
+        inset: -7px -2px;
+      }
+
+      &:first-child::after {
+        left: -6px;
+      }
+
+      &:last-child::after {
+        right: -6px;
+      }
+
+      &:active:not(:disabled) {
+        color: var(--text);
+        background: var(--surface-hover);
+      }
     }
 
-    // Restated because the hover rules above can never fire here: on touch these two carry their
-    // meaning at rest, which is also what tells them apart from the neutral chevrons.
+    // Complete is the row's verb; reorder and remove only curate the queue. A hairline between them
+    // groups the tools into a verb and a cluster. That one gap is wider (4px + 6px) so the hairline
+    // has air either side, and the two hit areas still meet at it.
     .row-complete {
-      color: var(--success);
-      background: color-mix(in srgb, var(--success) 12%, var(--surface-2));
-      border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+      margin-right: 6px;
+
+      &::after {
+        right: -5px;
+      }
     }
 
-    .row-remove {
+    .row-complete + button {
+      &::before {
+        content: "";
+        position: absolute;
+        top: 7px;
+        bottom: 7px;
+        left: -6px;
+        width: 1px;
+        background: var(--divider);
+        pointer-events: none;
+      }
+
+      &::after {
+        left: -5px;
+      }
+    }
+
+    // Meaning shows on press (and on the sticky hover a tap leaves), never at rest: the glyphs alone
+    // already tell complete and remove apart from the chevrons.
+    .row-complete:is(:active, :hover):not(:disabled) {
+      color: var(--success);
+      background: var(--success-soft);
+    }
+
+    .row-remove:is(:active, :hover):not(:disabled) {
       color: var(--danger);
+      background: var(--danger-soft);
     }
   }
 

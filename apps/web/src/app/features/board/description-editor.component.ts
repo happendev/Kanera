@@ -589,6 +589,23 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
     .de-tool:hover:not(:disabled) { background: var(--surface); border-color: var(--border); }
     .de-tool.is-active { background: var(--surface); border-color: var(--border-strong); }
 
+    /* A finger gets a 44px target through an invisible halo, so the toolbar keeps its 28px rhythm
+       and layout. Neighbouring halos overlap; the later button takes the shared strip, which is
+       still nearer that button's glyph. */
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .de-tool { position: relative; }
+
+      .de-tool::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 44px;
+        height: 44px;
+        transform: translate(-50%, -50%);
+      }
+    }
+
     .de-host {
       padding: 10px 12px;
       min-height: 160px;

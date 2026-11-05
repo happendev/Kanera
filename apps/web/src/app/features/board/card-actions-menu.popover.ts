@@ -5,6 +5,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
   inject,
   input,
   output,
@@ -31,17 +32,17 @@ import type { DueDateSlotSelection } from "./due-date.util";
   hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div kMenu class="cam-panel">
+    <div kMenu class="cam-panel k-scroll-fade">
       <button type="button" class="k-menu-item cam-item" (click)="openInNewTab($event)">
         <i aria-hidden="true" class="ti ti-external-link"></i>
         <span i18n>Open in new tab</span>
       </button>
-      <div class="cam-sep" role="separator"></div>
+      <div class="k-menu-separator" role="separator"></div>
       <div class="cam-sub">
         <button type="button" class="k-menu-item cam-item" [class.is-active]="quickEditOpen()" (click)="toggleQuickEdit($event)">
           <i aria-hidden="true" class="ti ti-pencil"></i>
           <span i18n="Card menu item">Quick edit…</span>
-          <i aria-hidden="true" class="ti ti-chevron-right cam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right k-menu-chevron"></i>
         </button>
         @if (quickEditOpen()) {
           <k-card-quick-edit
@@ -67,7 +68,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
       </button>
       <!-- Groups: open, change, follow, copy/move, share, archive. -->
       @if (showCardWatchAction() || !archivedAt()) {
-        <div class="cam-sep" role="separator"></div>
+        <div class="k-menu-separator" role="separator"></div>
       }
       @if (showCardWatchAction()) {
       <button type="button" class="k-menu-item cam-item" (click)="toggleWatch($event)" [disabled]="savingWatch()">
@@ -89,7 +90,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
           } @else {
           <span i18n="Card menu item">Remind me…</span>
           }
-          <i aria-hidden="true" class="ti ti-chevron-right cam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right k-menu-chevron"></i>
         </button>
         @if (reminderOpen()) {
           <!-- Beside the row like Quick edit; closing it (or saving) closes the whole menu. -->
@@ -107,7 +108,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
         <button type="button" class="k-menu-item cam-item" [class.is-active]="relationsOpen()" (click)="toggleRelations($event)">
           <i aria-hidden="true" class="ti ti-git-merge"></i>
           <span i18n="Card menu item: set what blocks this card, what it blocks and related cards">Dependencies…</span>
-          <i aria-hidden="true" class="ti ti-chevron-right cam-chev"></i>
+          <i aria-hidden="true" class="ti ti-chevron-right k-menu-chevron"></i>
         </button>
         @if (relationsOpen()) {
           <k-card-relations-popover
@@ -121,7 +122,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
       </div>
       }
       @if (allowDuplicate() || (workspaceId() && (allowCopyToBoard() || canMoveToBoard()))) {
-        <div class="cam-sep" role="separator"></div>
+        <div class="k-menu-separator" role="separator"></div>
       }
       @if (allowDuplicate()) {
       <button type="button" class="k-menu-item cam-item" (click)="duplicate($event)" [disabled]="duplicating()">
@@ -135,7 +136,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
           <button type="button" class="k-menu-item cam-item" [class.is-active]="copyOpen()" (click)="toggleCopy($event)">
             <i aria-hidden="true" class="ti ti-copy-plus"></i>
             <span i18n="Card menu item">Copy to board…</span>
-            <i aria-hidden="true" class="ti ti-chevron-right cam-chev"></i>
+            <i aria-hidden="true" class="ti ti-chevron-right k-menu-chevron"></i>
           </button>
           @if (copyOpen()) {
             <k-board-picker
@@ -158,7 +159,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
           <button type="button" class="k-menu-item cam-item" [class.is-active]="moveOpen()" (click)="toggleMove($event)">
             <i aria-hidden="true" class="ti ti-arrow-right"></i>
             <span i18n="Card menu item">Move to board…</span>
-            <i aria-hidden="true" class="ti ti-chevron-right cam-chev"></i>
+            <i aria-hidden="true" class="ti ti-chevron-right k-menu-chevron"></i>
           </button>
           @if (moveOpen()) {
             <k-board-picker
@@ -173,7 +174,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
         </div>
         }
       }
-      <div class="cam-sep" role="separator"></div>
+      <div class="k-menu-separator" role="separator"></div>
       <button type="button" class="k-menu-item cam-item" (click)="copyCardLink($event)">
         <i aria-hidden="true" class="ti ti-link"></i>
         <span i18n="Card menu item">Copy card link</span>
@@ -188,7 +189,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
         <span i18n="Menu item - copy a git branch name that starts with the card's key, so GitHub pull requests from it link back to the card">Copy branch name</span>
       </button>
       }
-      <div class="cam-sep" role="separator"></div>
+      <div class="k-menu-separator" role="separator"></div>
       @if (archivedAt()) {
         <button type="button" class="k-menu-item cam-item" (click)="setArchived($event, false)" [disabled]="archiving()">
           <i aria-hidden="true" class="ti ti-archive-off"></i>
@@ -211,12 +212,9 @@ import type { DueDateSlotSelection } from "./due-date.util";
   styles: [
     ANCHORED_HOST_STYLES,
     `
+    /* Fill, edge, radius, padding and elevation come from the shared .k-menu (the kMenu host class),
+       so this menu cannot drift from the board's other menus. */
     .cam-panel {
-      background: var(--surface-overlay);
-      border: 1px solid var(--overlay-border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow-lg);
-      padding: 4px;
       width: 100%;
       max-height: var(--ap-max-height, 640px);
       overflow-y: auto;
@@ -228,15 +226,8 @@ import type { DueDateSlotSelection } from "./due-date.util";
 
     .cam-sub {
       position: relative;
-    }
-
-    
-
-    .cam-sep {
+      /* A row wrapper in a height-capped flex column: it must not shrink any more than the rows do. */
       flex: none;
-      height: 1px;
-      background: var(--border-strong);
-      margin: 5px -4px;
     }
 
     .cam-confirm {
@@ -356,6 +347,15 @@ export class CardActionsMenuPopover {
   readonly savingWatch = signal(false);
   readonly isWatchingCard = computed(() => this.notifications.isWatchingCard(this.cardId()));
   readonly showCardWatchAction = computed(() => !this.notifications.isWatchingBoard(this.boardId()));
+  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /** The panel's full content height, borders included; 480 before it has rendered. */
+  private naturalHeight(): number {
+    const panel = this.hostEl.nativeElement.querySelector<HTMLElement>(".cam-panel");
+    if (!panel || !panel.scrollHeight) return 480;
+    return panel.scrollHeight + (panel.offsetHeight - panel.clientHeight);
+  }
+
   readonly canMoveToBoard = computed(() => this.allowMoveToBoard() && this.state?.workspaceKind() !== "board");
   constructor() {
     this.panel.configure({
@@ -363,9 +363,20 @@ export class CardActionsMenuPopover {
       // A point anchor gets no gap (the menu should open under the cursor, not beside it), which the
       // primitive already handles.
       anchor: () => this.anchorPoint(),
-      // minHeight is about the full menu's height, so it flips up rather than scrolling when there
-      // is more room above; maxHeight is above it so the menu only scrolls when the viewport is short.
-      placement: () => ({ align: "end", width: 220, gap: 4, minHeight: 480, maxHeight: 640 }),
+      // Sized to the menu's real height, so it flips up when the room is above and, failing that,
+      // slides up over its trigger (preserveMinHeight) instead of clamping below it: on a phone the
+      // clamp hid "Archive card" below the fold although the whole menu fit on screen. It scrolls only
+      // when the viewport itself is shorter than the menu.
+      placement: () => {
+        const natural = this.naturalHeight();
+        // maxHeight keeps headroom so a row that grows (the archive confirmation) resizes the host and
+        // re-runs placement rather than scrolling inside a cap fixed at the old height.
+        // A right-click opens down and to the right of the pointer, like every other context menu;
+        // "end" there put the menu's right edge on the cursor and threw it left over the sidebar. The
+        // ⋯ button keeps end alignment so the menu hangs under the tile.
+        const align = this.anchorPoint() ? "start" as const : "end" as const;
+        return { align, width: 220, gap: 4, minHeight: natural, maxHeight: Math.max(natural, 640), preserveMinHeight: true };
+      },
       onDismiss: () => this.close.emit(),
     });
   }

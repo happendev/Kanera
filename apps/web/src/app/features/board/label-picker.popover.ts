@@ -104,9 +104,9 @@ const CREATE_KEY = "__create__";
     `
     .lp-panel {
       background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow-pop);
       padding: 10px;
       width: 100%;
       max-height: var(--ap-max-height, 340px);
@@ -128,8 +128,12 @@ const CREATE_KEY = "__create__";
     }
 
     .lp-search {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
+      /* The shared field fill: --surface-2 is the row-selected wash, so a search box painted with
+         it read as a selected row rather than a field in light mode. */
+      background: var(--input-bg);
+      /* The input border tier: on dark overlays --border is nearly the value of --surface-2 and
+         the field lost its edge. */
+      border: 1px solid var(--border-strong);
       border-radius: var(--radius-sm);
       color: var(--text);
       padding: 6px 8px;
@@ -160,6 +164,10 @@ const CREATE_KEY = "__create__";
       display: flex;
       align-items: center;
       gap: 8px;
+      /* Off the global 36px button height onto the menu-row size (.k-menu-item), so the list reads
+         as dense menu rows; coarse pointers get 44px below. */
+      height: auto;
+      min-height: 32px;
       padding: 6px 8px;
       background: transparent;
       border: none;
@@ -205,6 +213,18 @@ const CREATE_KEY = "__create__";
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    /* 44px rows for a finger; desktop keeps the dense list. */
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .lp-row {
+        height: auto;
+        min-height: 44px;
+      }
+
+      /* The search field matches the rows under it rather than the 36px global input; the element
+         selector is needed to outrank that global input rule. */
+      input.lp-search { flex: none; height: 44px; }
     }
 
     .lp-check {

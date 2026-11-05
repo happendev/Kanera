@@ -118,7 +118,7 @@
         <i aria-hidden="true" [class]="exportLoading() ? 'ti ti-loader-2 spin' : 'ti ti-dots'"></i>
       </button>
       @if (boardMenuOpen()) {
-      <div kMenu class="board-export-menu board-menu" role="menu" aria-label="Board menu" i18n-aria-label kAnchoredPanel [apAnchor]="boardMenuTrigger" [apPlacement]="boardMenuPlacement" (apDismissed)="boardMenuOpen.set(false)">
+      <div kMenu class="board-export-menu board-menu k-scroll-fade" role="menu" aria-label="Board menu" i18n-aria-label kAnchoredPanel [apAnchor]="boardMenuTrigger" [apPlacement]="boardMenuPlacement" (apDismissed)="boardMenuOpen.set(false)">
         @if (phoneHeader()) {
         <button type="button" class="k-menu-item board-export-item" role="menuitem" (click)="openOverviewFromMenu()">
           <i aria-hidden="true" class="ti ti-radar-2"></i>
@@ -128,12 +128,16 @@
           <i aria-hidden="true" [class]="isWatchingBoard() ? 'ti ti-eye-check' : 'ti ti-eye'"></i>
           <span>{{ isWatchingBoard() ? boardWatchersLabel : watchBoardLabel }}</span>
         </button>
+        <!-- The header actions folded in on phones are an unheaded group; a rule keeps them from
+             reading as part of the section below. -->
+        <div class="k-menu-separator" role="separator"></div>
         }
         @if (effectiveView() === 'board') {
         <div class="k-menu-heading board-menu-heading" i18n="Board menu heading">Display</div>
         <button type="button" class="k-menu-item board-export-item" role="menuitemcheckbox" [attr.aria-checked]="compactCards()" (click)="toggleCompactCards()">
-          <i aria-hidden="true" class="ti" [class.ti-checkbox]="compactCards()" [class.ti-square]="!compactCards()"></i>
+          <i aria-hidden="true" class="ti ti-baseline-density-small"></i>
           <span i18n="Board menu checkbox">Compact cards</span>
+          <i aria-hidden="true" class="ti ti-check k-menu-check"></i>
         </button>
         }
         @if (state.canEdit()) {
@@ -158,7 +162,11 @@
         @if (mirrorMenuAvailable()) {
         <div class="k-menu-heading board-menu-heading" i18n="Board menu heading: boards that sync cards with this one">Mirrors</div>
         <button type="button" class="k-menu-item board-export-item mirror-menu-trigger" role="menuitem" [disabled]="mirrorCreateBlocked()" (click)="openMirrorCreate()"><i aria-hidden="true" [class]="mirrorCreateBlocked() ? 'ti ti-ban' : 'ti ti-circles-relation'"></i><span>{{ mirrorCreateLabel() }}</span></button>
-        <button type="button" class="k-menu-item board-export-item" role="menuitem" [disabled]="mirrorCount() === 0" (click)="openMirrorsDialog()"><i aria-hidden="true" class="ti ti-circles-relation"></i><span>{{ manageMirrorsLabel() }}</span></button>
+        @if (mirrorCount() === 0) {
+        <p class="k-menu-note" role="none">{{ manageMirrorsLabel() }}</p>
+        } @else {
+        <button type="button" class="k-menu-item board-export-item" role="menuitem" (click)="openMirrorsDialog()"><i aria-hidden="true" class="ti ti-circles-relation"></i><span>{{ manageMirrorsLabel() }}</span></button>
+        }
         }
       </div>
       }
@@ -188,7 +196,8 @@
   cards, so the whole row stands down there rather than offering a card query over a note tree.
 -->
 @if (viewHasQueryBar()) {
-<k-page-toolbar [compactActive]="toolbarFilterActive()" [disabled]="state.board() === null">
+<!-- On a phone the Table's projected Group/Columns/Sort sit behind the ⚙ too, so they light it. -->
+<k-page-toolbar [compactActive]="toolbarFilterActive() || (effectiveView() === 'table' && !!tableView()?.hostControlsSet())" [disabled]="state.board() === null">
   <div ptSearch class="work-done-search">
     <k-search-field
       [value]="searchInputValue()"
@@ -199,6 +208,7 @@
     />
     @if (effectiveView() === 'history') {
     <k-segmented
+      class="pt-inline-switch"
       [options]="workDoneLayoutOptions()"
       [value]="workDoneLayout()"
       [autoLabels]="true"
@@ -227,18 +237,25 @@
     }
   </div>
 
-  <div ptControls class="k-toolbar-group">
+  <div ptControls class="k-toolbar-group" kFitLabels [class.is-table-controls]="effectiveView() === 'table'">
     <!-- Kanban-only: the Table owns its own grouping control, and Calendar/Work-done have no
          columns to group. Grouping by anything but List swaps the list columns for value columns,
          where a drop writes that value onto the card. -->
-    @if (effectiveView() === 'board') {
+    @if (effectiveView() === 'table') {
+    <!-- The Table's own controls render here rather than in a second row under this one: its Group
+         takes the slot the Kanban Group holds, so switching views never moves it, and its sheet
+         tools follow Completed. The templates still belong to the table, which owns their state. -->
+    @if (tableView()?.hostControls(); as controls) {
+    <ng-container [ngTemplateOutlet]="controls.group" />
+    }
+    } @else if (effectiveView() === 'board') {
     <span class="menu-anchor group-by-wrap">
       <!-- `is-set` is the app-wide "away from its default" treatment and `has-clear` its inline reset,
            the same pair the Table's own grouping trigger uses. List columns are the default, so only
            a real grouping engages them. -->
-      <button #groupByTrigger type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [class.is-open]="groupByMenuOpen()" [class.is-set]="kanbanGrouped()" [class.has-clear]="kanbanGroupingResettable()" [disabled]="state.board() === null" (click)="toggleGroupByMenu()" [attr.aria-expanded]="groupByMenuOpen()" [kTooltip]="columnsTooltip()">
+      <button #groupByTrigger type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [class.is-open]="groupByMenuOpen()" [class.is-set]="kanbanGrouped()" [class.has-clear]="kanbanGroupingResettable()" [disabled]="state.board() === null" (click)="toggleGroupByMenu()" [attr.aria-expanded]="groupByMenuOpen()" [attr.aria-label]="kanbanGroupTriggerLabel()" [kTooltip]="columnsTooltip()">
         <i aria-hidden="true" [class]="'ti ti-' + kanbanGroupByIcon()"></i>
-        <span>{{ kanbanGroupByLabel() }}</span>
+        <span>{{ kanbanGroupTriggerLabel() }}</span>
       </button>
       @if (kanbanGroupingResettable()) {
       <button type="button" class="k-toolbar-clear" kTooltip="Reset to list columns" i18n-kTooltip aria-label="Reset to list columns" i18n-aria-label (click)="setKanbanGroupBy('list')">
@@ -248,7 +265,7 @@
       @if (groupByMenuOpen()) {
       <div kMenu class="group-by-menu" kAnchoredPanel [apAnchor]="groupByTrigger" [apPlacement]="groupByMenuPlacement" (apDismissed)="groupByMenuOpen.set(false)">
         <div class="k-menu-heading group-by-menu-heading" i18n="Menu heading: what the kanban columns are grouped by">Columns</div>
-        <div class="group-by-menu-scroll">
+        <div class="group-by-menu-scroll k-scroll-fade">
           @for (option of kanbanGroupByOptions(); track option.value) {
           <button type="button" class="k-menu-item group-by-item" [class.is-selected]="option.value === effectiveKanbanGroupBy()" [attr.aria-pressed]="option.value === effectiveKanbanGroupBy()" (click)="setKanbanGroupBy(option.value)">
             <i aria-hidden="true" [class]="'ti ti-' + option.icon"></i>
@@ -302,6 +319,12 @@
       <span i18n="Toolbar button: open completed cards">Completed</span>
     </button>
     }
+
+    @if (effectiveView() === 'table') {
+    @if (tableView()?.hostControls(); as controls) {
+    <ng-container [ngTemplateOutlet]="controls.tools" />
+    }
+    }
   </div>
 
   @if (bulkSelectedCount() > 0) {
@@ -352,10 +375,11 @@
   }
 } @else if (effectiveView() === 'table') {
 <!-- showSearch/showFilterBar off: the page toolbar above owns both for every view, so the table
-     renders only what is genuinely table-specific (columns, collapse, breakdown, export). The
+     renders only what is genuinely table-specific (columns, collapse, breakdown, export), and
+     hands even those to the toolbar above through hostRendersControls. The
      filter inputs stay bound because a single selected list is also what "Add row" creates into. -->
 @defer (on immediate) {
-<k-board-table-view [boardId]="boardId()" [boardName]="state.board()?.name ?? boardFallbackTitle" [workspaceId]="state.board()?.workspaceId ?? null" [cards]="activeCards()" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()"
+<k-board-table-view #tableView [hostRendersControls]="true" [boardId]="boardId()" [boardName]="state.board()?.name ?? boardFallbackTitle" [workspaceId]="state.board()?.workspaceId ?? null" [cards]="activeCards()" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()"
   [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [filteredCardIds]="filteredCardIds()" [priorityRanksByCard]="viewerPriorityRanks()" [selectedCardId]="openCardId()" [bulkSelectedCardIds]="bulkSelectedCardIds()"
   [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()" [currentUserId]="currentUserId()" [loading]="state.board() === null"
   [showSearch]="false" [showFilterBar]="false" [hostOwnsComposer]="true" (composeRequested)="openComposer({ listId: $event.listId })"

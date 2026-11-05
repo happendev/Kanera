@@ -211,7 +211,7 @@
         }
         @if (item.attachmentPreview; as preview) {
         @if (preview.kind === 'image') {
-        <div class="activity-attachment-preview">
+        <div class="activity-attachment-preview" [class.is-svg]="preview.target.mimeType === 'image/svg+xml'">
           <k-description-viewer [value]="preview.markdown" [workspaceId]="workspaceId()" [compact]="true" (imageClick)="openActivityAttachmentImage(preview.attachmentId)" />
         </div>
         } @else {

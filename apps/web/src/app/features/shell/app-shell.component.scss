@@ -241,40 +241,44 @@ k-support-session-banner {
   padding-top: 16px;
 }
 
+// Opens search, so it wears the page's search field (k-search-field): --surface with a hairline
+// border, --radius and the same 36px height. It used to be a --bg fill, which against the sidebar's
+// --surface read as a grey well beside the white bordered "Search cards" on the page next to it,
+// two treatments for one kind of control. A field does not fill on hover; only its border firms up.
 .board-search {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 0 0 auto;
   width: calc(100% - 8px);
-  min-height: 34px;
+  min-height: var(--h-lg);
   margin: 4px 4px 8px;
-  padding: 0 9px;
+  padding: 0 10px;
   color: var(--text-muted);
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
   font: inherit;
   text-align: left;
-  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background var(--motion-fast);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), color var(--motion-fast);
 
   &:hover:not(:disabled) {
     color: var(--text);
-    background: var(--surface-2);
+    background: var(--surface);
     border-color: var(--border-strong);
   }
 
   &:focus-visible {
     outline: 0;
-    border-color: var(--border-strong);
-    box-shadow: 0 0 0 1px var(--border-strong);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--ring);
   }
 
   >i {
     color: var(--text-muted);
     flex-shrink: 0;
-    font-size: var(--text-base);
+    font-size: 15px;
   }
 
   >span {
@@ -293,6 +297,15 @@ k-support-session-banner {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 1px 5px;
+  }
+}
+
+// The label is chosen from the user agent (readSearchShortcutLabel), which a touch-only device with a
+// desktop agent (an iPad in desktop mode, a Chromebook tablet) gets wrong. The same query that hides
+// the shared .k-kbd hints (styles.scss), so a hybrid with a keyboard keeps it.
+@media (any-hover: none) and (pointer: coarse) {
+  .board-search .search-kbd {
+    display: none;
   }
 }
 
@@ -334,7 +347,9 @@ k-support-session-banner {
   padding: 6px 10px;
   border-radius: var(--radius);
   color: var(--nav-text-strong);
-  font-size: var(--text-md);
+  // --text-base, a step under the page title (--text-lg): at --text-md the sidebar's rows were the
+  // same size as the title of the page they lead to, so the navigation read louder than the content.
+  font-size: var(--text-base);
   font-weight: 500;
 
   &:hover {
@@ -406,6 +421,14 @@ k-support-session-banner {
 }
 
 
+// Every destination row sits at the same 4px inset as Home, My Cards and Team Cards (.nav-item-row),
+// so a selected board's pill spans exactly the selected Home pill's width; nesting is drawn inside the
+// row (--nav-indent, below), never by narrowing it.
+.ws-group,
+.standalone-nav-group {
+  margin-inline: 4px;
+}
+
 .ws-group {
   display: flex;
   flex-direction: column;
@@ -440,7 +463,7 @@ k-support-session-banner {
   color: var(--nav-text-strong);
   border: none;
   border-radius: var(--radius);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   font-weight: 500;
   justify-content: flex-start;
 
@@ -494,8 +517,8 @@ k-support-session-banner {
 }
 
 // A grouped standalone board keeps its settings action, but the board target itself should
-// hover exactly like a board inside a workspace. Indent the row as one unit and let each link
-// own its hover surface instead of highlighting the empty gap and settings action together.
+// hover exactly like a board inside a workspace: each link owns its hover surface (indented from
+// inside, see --nav-indent) instead of the row highlighting the link and settings action together.
 // Board rows keep the same 2px rhythm as the top-level nav and the Notes row above them; flush rows
 // let the selected pill's ring touch its neighbour.
 .nav-board-drop-list {
@@ -505,14 +528,8 @@ k-support-session-banner {
 }
 
 .standalone-nav-group>.nav-board-drop-list>.standalone-board-row {
-  margin-left: 15px;
-
   &:hover {
     background: transparent;
-  }
-
-  .board-link {
-    margin-left: 0;
   }
 }
 
@@ -534,7 +551,7 @@ k-support-session-banner {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 2px 0 4px 15px;
+  padding: 2px 0 4px;
 }
 
 .guest-container {
@@ -547,7 +564,6 @@ k-support-session-banner {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding-left: 15px;
 }
 
 .guest-org-direct-boards {
@@ -568,13 +584,48 @@ k-support-session-banner {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 2px 0 4px 15px;
+  padding: 2px 0 4px;
 }
 
 .ws-me {
   display: flex;
   flex-direction: column;
-  padding: 2px 0 0 15px;
+  padding: 2px 0 0;
+}
+
+// Tree nesting. A child row's leading mark lines up under its parent's *label*, the way a tree reads,
+// rather than under the parent's own icon (with a 15px container indent a board's icon sat directly
+// below the workspace icon and only the chevron said it was nested). Rows stay full width and take
+// the indent as extra leading padding (.board-link, .board-group-toggle, .board-empty read
+// --nav-indent), so every selected row keeps the same pill as Home.
+//
+// Offsets from the row's left edge, given the rows' 10px leading padding:
+// - a workspace label: 6px toggle padding + 14px chevron + 6px + 16px icon + 6px = 48px -> indent 38px
+// - a label with no icon (a guest organisation): 6px + 14px + 6px = 26px -> indent 16px
+// - a board group label: its 11px chevron + 4px gap = 15px past the group's own indent
+.ws-me,
+.ws-boards {
+  --nav-indent: 38px;
+}
+
+.ws-boards .board-nav-group .board-link {
+  --nav-indent: 53px;
+}
+
+.standalone-nav-group .board-link {
+  --nav-indent: 15px;
+}
+
+.guest-org-contents {
+  --nav-indent: 16px;
+}
+
+.guest-container-content {
+  --nav-indent: 31px;
+}
+
+.guest-container-content .nested-board-group > .board-link {
+  --nav-indent: 46px;
 }
 
 .ws-users {
@@ -588,10 +639,6 @@ k-support-session-banner {
   display: flex;
   flex-direction: column;
   gap: 1px;
-
-  .board-link {
-    margin-left: 15px;
-  }
 }
 
 .board-group-toggle {
@@ -600,7 +647,7 @@ k-support-session-banner {
   gap: 4px;
   width: 100%;
   min-width: 0;
-  padding: 4px 10px 2px;
+  padding: 4px 10px 2px calc(10px + var(--nav-indent, 0px));
   background: transparent;
   border: 0;
   border-radius: var(--radius);
@@ -679,10 +726,10 @@ k-support-session-banner {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 6px 10px 6px calc(10px + var(--nav-indent, 0px));
   border-radius: var(--radius);
   color: var(--text-3);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
 
   i {
     font-size: var(--text-lg);
@@ -712,21 +759,48 @@ k-support-session-banner {
   display: none;
 }
 
-.board-attention-count {
+// The sidebar's one count badge: board rows and the utility buttons wear the same neutral capsule,
+// so a number reads the same wherever it sits. Shape, size, fill and ring never vary. Two
+// distinctions remain, each because it means something different:
+// - Unread (a board's unread cards, the bell) against a plain total (Up next): the same capsule, the
+//   number in full ink rather than --text-3. Only the ink, not a dark fill: a filled unread capsule
+//   beside an outlined total read as two badge styles, and the unread state already has its loud
+//   channels in the ringing bell glyph and the board row's stronger, heavier name.
+// - Overdue on Up next: --danger, the one count that says "something is already late".
+// Each count's meaning is in its button's or row's accessible name ("Notifications (1 unread)"),
+// and a board row's count also explains itself in a tooltip.
+//
+// Not the accent: a board re-tints the page with its own accent (accent-scope.ts) but the shell sits
+// outside that scope, so accent badges put the app's teal beside a blue board — two accents in one
+// viewport. Board rows used to fill theirs with the board's own colour, which said nothing the
+// board's glyph had not already said.
+@mixin nav-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: none;
   min-width: 18px;
   height: 18px;
-  margin-left: auto;
-  padding: 0 6px;
+  padding: 0 5px;
   border-radius: 999px;
-  background: var(--board-attention-color, var(--accent));
-  color: var(--accent-fg);
+  box-sizing: border-box;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-3);
   font-size: var(--text-xs);
   font-weight: 700;
-  line-height: 18px;
-  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+@mixin nav-count-unread {
+  color: var(--text);
+}
+
+.board-attention-count {
+  @include nav-count;
+  @include nav-count-unread;
+  margin-left: auto;
 }
 
 .board-link.has-attention {
@@ -775,7 +849,7 @@ k-support-session-banner {
 .board-empty {
   font-size: var(--text-base);
   color: var(--text-muted);
-  padding: 4px 10px;
+  padding: 4px 10px 4px calc(10px + var(--nav-indent, 0px));
   font-style: italic;
 }
 
@@ -808,10 +882,11 @@ k-support-session-banner {
   flex-shrink: 0;
 }
 
-// Bordered squares rather than bare glyphs: as ghosts these read as leftovers under the logo, when
-// they are the personal surfaces the sidebar exists to reach. The outline alone is enough to mark them
-// as controls; a filled surface as well made this row the heaviest thing in the sidebar. Sized to the
-// toolbar control height so they line up with the collapse button beside the logo.
+// Ghost icon buttons at rest, a fill on hover and the accent tile when open. Three bordered 72px
+// tiles under the logo were the heaviest thing in the sidebar and read as a row of empty fields;
+// what marks these as controls now is the hover fill, the tooltip and the count on the glyph. Each
+// stretches to a third of the row so the hit area stays generous, and sits at the toolbar control
+// height so it lines up with the collapse button beside the logo (44px on touch, below).
 .utility-btn {
   position: relative;
   display: inline-flex;
@@ -821,7 +896,7 @@ k-support-session-banner {
   height: var(--h-lg);
   min-width: 0;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--radius);
   background: transparent;
   color: var(--text-muted);
@@ -832,25 +907,24 @@ k-support-session-banner {
     font-size: 18px;
   }
 
-  &:hover,
+  // Restated in full: the global button rule floods a hovered button with the accent.
+  &:hover:not(:disabled),
   &:focus-visible {
     background: var(--surface-hover);
-    border-color: var(--border-strong);
+    border-color: transparent;
     color: var(--nav-text-strong);
     text-decoration: none;
   }
 
-  // A button that has something for you stops being muted. The bell with unread activity takes the
-  // accent outright, which is the one place in the sidebar that colour is spent on state.
+  // A button that has something for you stops being muted.
   &.has-badge {
     color: var(--nav-text-strong);
   }
 
-  // Unread is carried by the accent glyph and badge; the wash is reserved for an open panel
-  // (.is-active), so "has news" and "is open" no longer look the same.
+  // Unread is carried by the ringing glyph and the badge, both neutral (see nav-count). An accent
+  // ring is how an open panel (.is-active) looks, so a bell with news must not wear one.
   &.is-alert {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-    color: var(--accent);
+    color: var(--nav-text-strong);
 
     // The directive enables one pulse every 30 seconds, only while visible and motion is allowed.
     .utility-badge.is-pulsing {
@@ -862,8 +936,12 @@ k-support-session-banner {
     }
   }
 
-  &.is-active {
-    border-color: var(--accent);
+  // Open: a tinted tile with the accent glyph, no outline. The badge straddles the glyph's top-right
+  // corner and its surface ring would cut a grey capsule out of an accent border (the rail's reason,
+  // below, which now applies at every width).
+  &.is-active,
+  &.is-active:hover:not(:disabled) {
+    border-color: transparent;
     background: var(--accent-soft);
     color: var(--accent);
   }
@@ -871,47 +949,67 @@ k-support-session-banner {
 
 // Up next carries due pressure on its badge: red says "something queued is already late", which is
 // the one fact worth surfacing before the drawer is opened. Deliberately not the accent, which in the
-// sidebar means unread.
-.utility-badge.is-danger {
-  background: var(--danger);
-  // Same ink rule as the accent badge: dark mode's danger red is light, so the readable ink on it is
-  // dark, and hard-coded white washed out.
-  color: var(--accent-fg);
-}
-
+// sidebar means unread. The ink follows the accent badge's rule: dark mode's danger red is light, so
+// the readable ink on it is dark, and hard-coded white washed out.
+//
+// On the glyph's top-right corner, the conventional place for a count on an icon button, so the three
+// buttons are three centred glyphs whether or not they hold a count (a count beside the glyph pushed
+// the glyph off-centre in two of three). Anchored to the button's centre rather than its edge, so it
+// tracks the glyph whatever the button's stretched width, and raised so it ends above most of the
+// glyph's ink: pinned lower, the capsule covered a third of an 18px icon. The ring is the sidebar's
+// surface, which cuts it out of the glyph's strokes and of a hover fill.
 .utility-badge {
+  @include nav-count;
   position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border: 2px solid var(--surface);
-  border-radius: 999px;
-  background: var(--surface-3);
-  color: var(--text);
-  font-size: 10px; // below --text-xs on purpose: a count inside an 18px capsule
-  font-weight: 700;
-  line-height: 14px;
-  text-align: center;
-  box-sizing: border-box;
+  top: -3px;
+  left: calc(50% + 3px);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--surface);
+  pointer-events: none;
 
-  &.is-accent {
-    background: var(--accent);
+  &.is-unread {
+    @include nav-count-unread;
+  }
+
+  &.is-danger {
+    background: var(--danger);
+    box-shadow: 0 0 0 2px var(--surface);
     color: var(--accent-fg);
+  }
+
+  // The 44px touch button puts the glyph 4px lower; the badge follows it.
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    top: 1px;
   }
 }
 
 .sidebar.collapsed {
   .utility-row {
     flex-direction: column;
-    gap: var(--space-1);
+    // Room for the corner badge below: it rises 5px (plus its 2px ring) above its button, and this
+    // leaves it a clear 5px under the button above instead of sitting on that button's outline.
+    gap: var(--space-3);
     padding-inline: 6px;
   }
 
+  // The same square as every other rail item (.nav-item, .board-link; 44px for touch, below),
+  // centred, rather than stretched to the rail's content width: at 100% these were 45px beside 37px nav rows and 44px board links, so the rail's glyphs did not share a column.
   .utility-btn {
     flex: none;
-    width: 100%;
+    width: 40px;
+    height: 40px;
+  }
+
+  // The corner badge (see .utility-badge) pinned to the rail button's right edge instead of the
+  // glyph's centre line: a two-digit count anchored at the centre would overhang the edge into the
+  // rail's padding, where the badge and its ring reached the sidebar's border and read as spilling
+  // out of the rail.
+  .utility-badge {
+    top: -5px;
+    left: auto;
+    right: 0;
   }
 }
 
@@ -1367,11 +1465,12 @@ k-support-session-banner {
   flex-direction: column;
   gap: 2px;
   width: var(--ap-width, 190px);
-  padding: 5px;
+  // Same chrome as every other menu (.k-menu): padding, radius and the popover shadow.
+  padding: var(--space-1);
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
 }
 
 .shell-main {
@@ -1390,6 +1489,12 @@ k-support-session-banner {
 // ─── Collapsed sidebar ───────────────────────────────────────────────────────
 
 .sidebar.collapsed {
+  // The expanded rows' inline margin, kept here, narrowed a 44px item to the rail's content width
+  // less 8px, so Home, My Cards and Team Cards were narrower than the board links under them.
+  .nav-item-row {
+    margin-inline: 0;
+  }
+
   .nav {
     padding: 8px 6px;
     align-items: center;
@@ -1428,6 +1533,7 @@ k-support-session-banner {
   .ws-group {
     align-items: center;
     width: 100%;
+    margin-inline: 0;
     gap: 1px;
     padding: 4px 0;
 
@@ -1494,6 +1600,23 @@ k-support-session-banner {
     display: none;
   }
 
+  // The rail has no label to carry the selection, so the expanded sidebar's quiet raised pill (a
+  // --surface-2 fill and hairline ring) all but disappeared behind a 36px icon. Here the selected
+  // destination takes the stronger --border-strong ring and the ink glyph — a ring, never a leading
+  // stripe. Neutral rather than the accent wash it used to wear: the shell is outside a board's accent
+  // scope, so on a tablet, where the rail is always beside the page, a teal tile sat next to a blue
+  // board. Board glyphs keep their own board colour.
+  .nav-item.active,
+  .board-link.active,
+  .ws-icon-link.active {
+    background: var(--surface-hover);
+    box-shadow: inset 0 0 0 1px var(--border-strong), var(--shadow-sm);
+  }
+
+  .nav-item.active > i {
+    color: var(--text);
+  }
+
   .plan-disabled-badge {
     position: absolute;
     right: 4px;
@@ -1520,7 +1643,9 @@ k-support-session-banner {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--board-attention-color, var(--accent));
+    // Neutral, like the expanded sidebar's count it stands in for (see nav-count); a dot has no
+    // number to darken, so it takes --text-muted to stay visible on the rail.
+    background: var(--text-muted);
     box-shadow: 0 0 0 2px var(--surface);
   }
 
@@ -1579,42 +1704,44 @@ k-support-session-banner {
 // ─── Responsive squish on small screens ──────────────────────────────────────
 
 @media (max-width: 640px) {
+  // Phones have no rail. Closed, the sidebar is off-canvas and the page takes the whole width; the
+  // drawer opens from the menu button at the start of every page header (ShellNavService), and its
+  // utility buttons (scratchpad, Up next, notifications) ride along inside it, with their unread
+  // state echoed as a dot on that button. A permanent 52px rail used to sit beside every page: an
+  // eighth of a 390px phone for six icons, which narrowed every header, toolbar and card column and
+  // left the drawers opening beside it rather than across the screen.
   :host {
-    --sidebar-width-collapsed: 52px;
-    --drawer-edge: var(--sidebar-width-collapsed);
-    // Always show only the collapsed column width on mobile — the sidebar
-    // overlays as a drawer instead of pushing the main content.
-    grid-template-columns: var(--sidebar-width-collapsed) 1fr !important;
+    --sidebar-width-collapsed: 0px;
+    // The drawers' triggers are inside the nav drawer here, which closes as a panel opens, so the
+    // panels take the full width instead of stopping at a rail.
+    --drawer-edge: 0px;
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  // The mobile drawer overlays the board while it follows the finger. The board column must not
-  // resize or slide underneath the fixed drawer during the gesture.
+  // The drawer overlays the page while it follows the finger; the page must not resize under it.
   :host(:has(.sidebar.swiping)) {
-    grid-template-columns: var(--sidebar-width-collapsed) minmax(0, 1fr) !important;
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  .sidebar.collapsed .nav-item,
-  .sidebar.collapsed .ws-icon-link {
-    width: 36px;
-    height: var(--h-lg);
-
-    i {
-      font-size: var(--text-lg);
-    }
+  .sidebar:not(.mobile-open) {
+    display: none;
   }
 
-  .sidebar.collapsed .board-link {
-    width: 36px;
-    height: var(--h-lg);
-
-    i {
-      font-size: var(--text-lg);
-    }
+  .shell-main {
+    grid-column: 1;
   }
 
-  .sidebar.collapsed .new-ws-icon {
-    width: 36px;
-    height: var(--h-lg);
+  // Overlays the top-left corner rather than taking a row, so it never shifts the page it stands in
+  // for; it only shows while no page header carries the button.
+  .mobile-nav-fallback {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 6px);
+    left: 6px;
+    z-index: 5;
+    width: 44px;
+    height: 44px;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
   }
 
   // ── Mobile overlay sidebar ──────────────────────────────────────────────────
@@ -1662,9 +1789,73 @@ k-support-session-banner {
   }
 }
 
+// ─── Coarse pointers ─────────────────────────────────────────────────────────
+// Every shell control gets the 44px touch floor (apps/web/AGENTS.md). After the 640px block on
+// purpose, so nothing it sets can undercut the floor.
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .collapse-btn,
+  .ws-settings,
+  .section-label .new-ws-btn,
+  .section-label .new-board-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  // Section headings keep their resting rhythm: the taller + button overlaps the label's own
+  // padding instead of pushing the heading down.
+  .section-label .new-ws-btn,
+  .section-label .new-board-btn {
+    margin-block: -8px;
+  }
+
+  .nav-item,
+  .board-link,
+  .ws-toggle,
+  .board-group-toggle {
+    min-height: 44px;
+  }
+
+  .ws-toggle,
+  .board-group-toggle {
+    height: 44px;
+  }
+
+  .utility-btn {
+    height: 44px;
+  }
+
+  .board-search {
+    min-height: 44px;
+  }
+
+  // 3px of inline padding keeps a 44px target inside the collapsed tablet rail whatever its
+  // fine-pointer padding. Phones have no rail (the 640px block above).
+  .sidebar.collapsed {
+    --rail-inline-pad: 3px;
+
+    .brand-row,
+    .nav,
+    .utility-row {
+      padding-inline: var(--rail-inline-pad);
+    }
+
+    .nav-item,
+    .ws-icon-link,
+    .board-link,
+    .new-ws-icon,
+    .utility-btn {
+      flex-basis: 44px;
+      width: 44px;
+      height: 44px;
+    }
+  }
+}
+
+// Halos in the unread fill (see nav-count): an accent halo was the teal the badge gave up. The badge
+// keeps its 1px outline and 2px surface ring throughout; the halo grows outside them.
 @keyframes utility-badge-breathe {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
-  45% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+  0%, 100% { box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--surface), 0 0 0 2px color-mix(in srgb, var(--text-muted) 0%, transparent); }
+  45% { box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--text-muted) 24%, transparent); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1705,7 +1896,7 @@ k-support-session-banner {
   :host-context([data-density="compact"]) {
     .nav-item,
     .board-link {
-      min-height: var(--h-lg);
+      min-height: 44px;
       padding-top: 6px;
       padding-bottom: 6px;
     }

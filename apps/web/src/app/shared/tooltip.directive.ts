@@ -3,6 +3,7 @@ import { Overlay } from "@angular/cdk/overlay";
 import { ComponentPortal } from "@angular/cdk/portal";
 import type { ComponentRef, OnDestroy } from "@angular/core";
 import { ChangeDetectionStrategy, Component, Directive, ElementRef, HostListener, effect, inject, input } from "@angular/core";
+import { TOUCH_ONLY_QUERY } from "../core/browser/input-modality";
 
 export type TooltipPosition = "top" | "right" | "bottom" | "left";
 
@@ -41,6 +42,18 @@ if (typeof document !== "undefined") {
 
 function recentlyTouched(): boolean {
   return Date.now() - lastTouchAt < TOUCH_FOCUS_WINDOW_MS;
+}
+
+/**
+ * A device with no hovering pointer at all never shows tooltips, whatever the timing: the window above
+ * only covers events that follow a tap closely, and a focus restored later (a panel closing) would
+ * otherwise still raise one. TOUCH_ONLY_QUERY, not hasCoarsePointer(): a touchscreen laptop also
+ * reports touch points, and its mouse still hovers. Asked on the event rather than held per directive,
+ * since a board renders thousands of hosts and only the one under the pointer needs the answer.
+ */
+function touchOnly(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    && window.matchMedia(TOUCH_ONLY_QUERY).matches;
 }
 
 const AUTO_HIDE_MS = 10_000;
@@ -105,7 +118,7 @@ export class TooltipDirective implements OnDestroy {
 
   @HostListener("mouseenter")
   onMouseEnter() {
-    if (recentlyTouched()) return;
+    if (recentlyTouched() || touchOnly()) return;
     this.scheduleShow();
   }
 
@@ -116,7 +129,7 @@ export class TooltipDirective implements OnDestroy {
 
   @HostListener("focusin")
   onFocusIn() {
-    if (recentlyTouched()) return;
+    if (recentlyTouched() || touchOnly()) return;
     this.show();
   }
 

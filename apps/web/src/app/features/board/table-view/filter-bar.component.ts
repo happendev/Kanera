@@ -162,12 +162,12 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       }
 
       @if (open()) {
-        <div class="fb-panel" [class.fb-panel-flush]="view() === 'completed'" kAnchoredPanel [apAnchor]="fbBtn" [apPlacement]="panelPlacement" (apDismissed)="closePanel()">
+        <div class="fb-panel k-scroll-fade" [class.fb-panel-flush]="view() === 'completed'" kAnchoredPanel [apAnchor]="fbBtn" [apPlacement]="panelPlacement" (apDismissed)="closePanel()">
           @switch (view()) {
             @case ('menu') {
               <div class="fb-menu">
                 @if (showActivity() || showPrioritySet() || showReminderSet() || showBlocked()) {
-                  <div class="fb-section-label" i18n="Filter panel section heading">Quick filters</div>
+                  <div class="k-menu-heading fb-section-label" i18n="Filter panel section heading">Quick filters</div>
                 }
                 @if (showActivity()) {
                   <button type="button" class="fb-row" [class.active]="value().showUnreadOnly" (click)="toggleUnread()">
@@ -234,9 +234,9 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                      card *is* (labels/people/place/fields) versus its lifecycle state. -->
                 @if (labels().length || (showMembers() && members().length) || (showBoards() && boards().length) || showWorkDoneType() || lists().length || customFields().length) {
                   @if (showWorkDoneType()) {
-                    <div class="fb-section-label" i18n="Filter panel section heading">Work done</div>
+                    <div class="k-menu-heading fb-section-label" i18n="Filter panel section heading">Work done</div>
                   } @else {
-                    <div class="fb-section-label" i18n="Filter panel section heading">Card details</div>
+                    <div class="k-menu-heading fb-section-label" i18n="Filter panel section heading">Card details</div>
                   }
                 }
                 @if (labels().length) {
@@ -282,7 +282,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                   </button>
                 }
                 @if (showCompleted() || showArchived() || showHideCompleted()) {
-                  <div class="fb-section-label" i18n="Filter panel section heading">Card status</div>
+                  <div class="k-menu-heading fb-section-label" i18n="Filter panel section heading">Card status</div>
                 }
                 @if (showHideCompleted()) {
                   <button type="button" class="fb-row" [class.active]="hideCompleted()" (click)="hideCompletedChange.emit(!hideCompleted())">
@@ -339,7 +339,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                   }
                 </div>
               }
-              <div class="fb-section-label" i18n="Filter panel section heading">Add a field filter</div>
+              <div class="k-menu-heading fb-section-label" i18n="Filter panel section heading">Add a field filter</div>
               <input class="fb-search" type="text" placeholder="Search fields…" i18n-placeholder [value]="query()" (input)="query.set($any($event.target).value)" />
               <div class="fb-list">
                 @for (section of filteredFieldSections(); track section.key) {
@@ -560,7 +560,8 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
     /* Wider than the pointer form: the clear is flush against the trigger that opens the panel, so a
        thumb-width miss does the opposite of what was intended. */
     @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
-      .fb-btn-clear { width: 36px; }
+      .fb-btn { height: 44px; }
+      .fb-btn-clear { width: 44px; }
     }
 
     .fb-badge {
@@ -593,20 +594,26 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       flex-direction: column;
       gap: 6px;
       padding: 8px;
+      /* The panel itself scrolls, so the fade band must reach through this padding and gap. */
+      --k-scroll-fade-pad: 8px;
+      --k-scroll-fade-gap: 6px;
       background: var(--surface-overlay);
       border: 1px solid var(--overlay-border);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-pop);
+      /* The scroll cue spans this padding and cancels this gap (see .k-scroll-fade). */
+      --k-scroll-fade-pad: 8px;
+      --k-scroll-fade-gap: 6px;
     }
 
     .fb-panel.is-positioned { visibility: visible; }
 
-    .fb-menu, .fb-list { display: flex; flex-direction: column; gap: 2px; }
+    .fb-menu, .fb-list { display: flex; flex-direction: column; gap: 1px; }
 
     .fb-menu-foot {
       margin-top: 4px;
       padding-top: 6px;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--overlay-separator);
       display: flex;
       justify-content: flex-end;
     }
@@ -616,7 +623,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       align-items: center;
       gap: 6px;
       padding-bottom: 4px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--overlay-separator);
     }
 
     .fb-head-title {
@@ -637,7 +644,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       background: transparent;
       color: var(--text-muted);
       cursor: pointer;
-      &:hover { background: var(--surface-2); color: var(--text); }
+      &:hover { background: var(--surface-hover); color: var(--text); }
     }
     .fb-remove:hover { color: var(--danger); }
 
@@ -650,16 +657,12 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       cursor: pointer;
       padding: 4px 6px;
       border-radius: var(--radius-sm);
-      &:hover { color: var(--text); background: var(--surface-2); }
+      &:hover { color: var(--text); background: var(--surface-hover); }
     }
     .fb-clear:hover { color: var(--danger); }
 
-    .fb-section-label {
-      font-size: var(--text-xs);
-      font-weight: 700;
-      color: var(--text-muted);
-      padding: 6px 4px 2px;
-    }
+    /* Type, tone and inset come from the global .k-menu-heading these labels also carry. */
+    .fb-section-label { flex: none; }
 
     /* Group heading inside an option list. Sticky so the workspace a row belongs to stays visible
        while scrolling — the whole reason these lists are grouped is that names repeat verbatim
@@ -668,12 +671,13 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       position: sticky;
       top: 0;
       z-index: 1;
+      flex: none;
       margin-top: 4px;
       padding: 5px 8px 3px;
       background: var(--surface-overlay);
       color: var(--text-muted);
-      font-size: 10px;
-      font-weight: 700;
+      font-size: var(--text-xs);
+      font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -689,6 +693,8 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       small {
         color: var(--text-muted);
         font-size: var(--text-xs);
+        /* The global button reset makes the row 500; a hint is regular weight. */
+        font-weight: 400;
         /* Explicit line-height: with overflow:hidden a tight line box clips the descenders of a
            workspace name ("Delivery"), which reads as a rendering fault rather than a hint. */
         line-height: 1.35;
@@ -698,25 +704,37 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       }
     }
 
-    .fb-search, .fb-select, .fb-value {
+    /* Prefixed with .fb-panel so these outrank the global input:not(...) and select rules, which
+       otherwise won the padding, border and focus ring. --border-strong keeps the resting edge
+       visible on the dark overlay; focus is the quiet picker recipe. */
+    .fb-panel .fb-search, .fb-panel .fb-select, .fb-panel .fb-value {
+      flex: none;
       background: var(--surface-2);
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-strong);
       border-radius: var(--radius-sm);
       color: var(--text);
       padding: 6px 8px;
       font-size: var(--text-base);
       outline: none;
       width: 100%;
-      &:focus { border-color: var(--accent, var(--text)); }
+      &:focus { border-color: var(--accent, var(--text)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent); }
     }
 
     .fb-date-range { display: flex; align-items: center; gap: 6px; }
     .fb-date-sep { color: var(--text-muted); }
 
+    /* The .k-menu-item metrics: 32px single-line rows (height: auto undoes the global 36px button
+       pin), growing for the two-line quick filters. Those top-align so the icon sits on the name's
+       line instead of floating between name and hint. Hover is --surface-hover, the one fill that
+       registers on the dark overlay. A toggled row shows only its trailing accent check: a resting
+       fill as well read as a stuck hover and doubled the signal. */
     .fb-row {
       display: flex;
+      flex: none;
       align-items: center;
       gap: 8px;
+      min-height: 32px;
+      height: auto;
       padding: 6px 8px;
       background: transparent;
       border: none;
@@ -726,9 +744,17 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       text-align: left;
       width: 100%;
       font-size: var(--text-base);
-      transition: background-color 0.12s;
-      &:hover { background: var(--surface-2); }
-      &.active { background: var(--surface-2); }
+      line-height: 1.35;
+      transition: background-color var(--motion-fast);
+      &:hover:not(:disabled), &:focus-visible { background: var(--surface-hover); color: var(--text); box-shadow: none; }
+      &:has(> .fb-row-text) { align-items: flex-start; padding-block: 7px; }
+      /* The selection recipe: a chosen row's label steps up to 600 beside its trailing check. */
+      &.active .fb-row-name { font-weight: 600; }
+    }
+
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .fb-row, .fb-row-main { min-height: 44px; }
+      .fb-row-x { width: 44px; }
     }
 
     /* Rows under a group heading are inset and joined by a hairline rail. Indentation is what makes
@@ -745,7 +771,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
         bottom: -1px;
         left: 11px;
         width: 1px;
-        background: var(--border);
+        background: var(--overlay-separator);
       }
     }
 
@@ -753,6 +779,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
        at --surface-2 (the active shade); each sub-button lightens to --surface-hover on hover to match
        the menu's other rows/icon buttons. overflow:hidden clips those hovers to the row's radius. */
     .fb-row-static { padding: 0; gap: 0; cursor: default; overflow: hidden; }
+    .fb-row.fb-row-static, .fb-row.fb-row-static:hover:not(:disabled) { background: var(--surface-2); }
     .fb-row-main {
       display: flex;
       align-items: center;
@@ -783,10 +810,12 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       &:hover { background: var(--surface-hover); color: var(--danger); }
     }
 
-    .fb-row-icon { font-size: 15px; color: var(--text-muted); width: 16px; text-align: center; flex: 0 0 16px; }
+    /* An 18px line box, the name line's height, so a top-aligned icon centres on the name. */
+    .fb-row-icon, .fb-row-check, .fb-row-caret { line-height: 18px; }
+    .fb-row-icon { font-size: var(--text-lg); color: var(--text-muted); width: 16px; text-align: center; flex: 0 0 16px; }
     .fb-row-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .fb-row-summary { color: var(--text-muted); font-size: var(--text-sm); max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .fb-row-check { color: var(--accent, var(--text)); font-size: var(--text-md); }
+    .fb-row-check { flex: none; color: var(--accent, var(--text)); font-size: var(--text-md); }
     .fb-row-caret { color: var(--text-muted); font-size: var(--text-md); }
 
     .fb-count {

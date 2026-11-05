@@ -14,6 +14,7 @@ import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { vibrateCardDragEnd, vibrateCardDragStart } from "../../core/browser/haptics";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
+import { MenuDirective } from "../../shared/menu.directive";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -129,7 +130,7 @@ class CloseCardChecklistsBeforeDragDirective {
 @Component({
   selector: "k-list",
   standalone: true,
-  imports: [CdkDropList, CdkDrag, CdkDragPreview, CloseCardChecklistsBeforeDragDirective, CardComponent, CardLabelsComponent, SeparatorComponent, AnchoredPanelDirective, TooltipDirective, ViewportDropTargetDirective],
+  imports: [CdkDropList, CdkDrag, CdkDragPreview, CloseCardChecklistsBeforeDragDirective, CardComponent, CardLabelsComponent, SeparatorComponent, AnchoredPanelDirective, MenuDirective, TooltipDirective, ViewportDropTargetDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./list.component.html",
   styleUrl: "./list.component.scss",

@@ -1,10 +1,15 @@
+@use "../../shared/list-chip";
+@use "../../shared/card-key" as key;
+@use "../../shared/chip";
+@use "../../shared/toolbar-styles" as toolbar;
+
 // The host is the panel chrome; where it docks, how wide it is and how tall it may grow are the
 // page's decisions (docked sidebar on desktop, bottom sheet on small screens). The rows themselves
 // belong to k-priority-queue, which is shared with the shell drawer and Home.
 //
-// The shadow and the tinted header are deliberate: the panel sits directly on the page background
+// The shadow and the header bar are deliberate: the panel sits directly on the page background
 // next to a board that is itself made of bordered surfaces, and with a bare border it read as one
-// more floating fragment. Elevation plus its own header bar is what makes it read as a docked tool.
+// more floating fragment. Elevation plus its own ruled header is what makes it read as a docked tool.
 :host {
   display: flex;
   flex-direction: column;
@@ -16,28 +21,51 @@
   box-shadow: var(--shadow, 0 2px 8px rgb(0 0 0 / 12%));
 }
 
+// The head's chrome matches the shell's Up next drawer (shared/_drawer-chrome): the panel's own
+// --surface with a --border rule beneath, the same glyph, title and count pill, at the same 16px
+// start. A tinted --surface-2 band here and a plain head there made one queue look like two
+// features. Only the height and the tools are the dock's: it keeps a compact head beside a dense
+// board rather than the drawer's 56px, and its "+" (see the template for why it has no inline add).
 .panel-head {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 7px;
-  padding: 10px 12px 9px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border-strong);
+  gap: 8px;
+  // Tighter vertically and at the end than the 16px start: the head's buttons are the toolbar's
+  // 36px icon buttons, which carry their own padding around the glyph.
+  padding: 4px 4px 4px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 
   > i {
-    color: var(--accent);
-    font-size: 15px;
+    color: var(--text-muted);
+    font-size: 18px;
   }
 
+  // 15px: off the type scale, as the drawer's own heading is.
   h3 {
     margin: 0;
-    font-size: var(--text-base);
+    color: var(--text);
+    font-size: 15px;
     font-weight: 600;
-    letter-spacing: 0.01em;
   }
 }
 
+// The drawer's .title-count, verbatim, so the two heads carry the same pill.
+.panel-count {
+  flex: none;
+  margin-left: 4px;
+  padding: 1px 8px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+// The teammate whose queue this is: a quieter chip than the count, set on the head's --surface.
 .panel-target {
   min-width: 0;
   overflow: hidden;
@@ -46,33 +74,9 @@
   font-size: var(--text-xs);
   white-space: nowrap;
   text-overflow: ellipsis;
-  // The head is --surface-2, so the chip steps back to --surface to stay visible on it.
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 999px;
-}
-
-// Undoes the global button reset (36px tall, accent hover), as every icon button here must.
-.panel-close,
-.panel-head-tool {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  min-width: 0;
-  height: 24px;
-  padding: 0;
-  color: var(--text-muted);
-  font-size: var(--text-base);
-  background: none;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-
-  &:hover:not(:disabled) {
-    color: var(--text);
-    background: var(--surface);
-    border-color: var(--border);
-  }
 }
 
 // The "+"/close pair sits at the head's far right; the anchor (not the button) takes the auto
@@ -140,7 +144,9 @@
   width: 100%;
   height: auto;
   min-height: var(--h-lg);
-  padding: 7px 12px;
+  // 16px, the panel head's start and the queue's rank column above (rows' 6px inset + 10px padding),
+  // so the chevron, the board headings and the rows' text all share the one left edge.
+  padding: 7px 16px;
   color: var(--text);
   background: none;
   border: 0;
@@ -180,7 +186,7 @@
   gap: 6px;
   align-items: center;
   margin: 0;
-  padding: 6px 12px;
+  padding: 6px 16px;
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
@@ -200,7 +206,7 @@
   flex: none;
   gap: 6px;
   align-items: center;
-  margin: 8px 6px 3px;
+  margin: 10px 10px 4px;
   color: var(--text-muted);
   font-size: var(--text-xs);
   font-weight: 600;
@@ -218,7 +224,9 @@
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
-  padding: 5px 6px 5px 8px;
+  // The queue rows' 10px start (see the toggle), and a little more height than the 5px it had, which
+  // with 1px between key, title and list read as one squashed block.
+  padding: 7px 6px 7px 10px;
   background: var(--surface);
   border: 1px solid transparent;
   border-radius: var(--radius);
@@ -254,7 +262,7 @@
   grid-template-columns: minmax(0, 1fr);
   justify-content: start;
   justify-self: stretch;
-  gap: 1px;
+  gap: 3px;
   justify-items: start;
   width: 100%;
   min-width: 0;
@@ -272,9 +280,7 @@
 }
 
 .not-queued-key {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
+  @include key.card-key-row;
 }
 
 .not-queued-title {
@@ -286,37 +292,28 @@
   text-overflow: ellipsis;
 }
 
+// The list-chip pill every surface names a list with, at the queue rows' breadcrumb size, so a card
+// reads the same above and below the Not queued heading.
 .not-queued-list {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  max-width: 100%;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
+  @include list-chip.list-chip;
+  @include list-chip.list-chip-compact;
 
-  span {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
+  justify-self: start;
 }
 
 // Fixed tracks, so an undated row keeps its + in the same column as the dated rows around it.
+// Plain while neutral; overdue and due-soon take the shared urgency chips (shared/_chip.scss), as
+// they do on the tile, the table and the queue rows above.
 .not-queued-due {
   grid-column: 2;
-  color: var(--text-muted);
+  justify-self: end;
+  color: var(--text-3);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 
-  &.overdue {
-    color: var(--danger);
-  }
-
-  &.due-soon {
-    color: var(--color-amber);
-  }
+  @include chip.due-states;
 }
 
 .not-queued-add {
@@ -342,7 +339,7 @@
 }
 
 .not-queued-empty {
-  margin: 6px;
+  margin: 6px 10px;
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
@@ -353,8 +350,8 @@
   }
 
   .not-queued-add {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
   }
 }
 

@@ -57,6 +57,53 @@
   flex: none;
 }
 
+// The phone drawer's trigger (ShellNavService). A 44px ghost square whatever the pointer: it is the
+// only way to the sidebar on a phone. Pulled into the gutter so its glyph, not its hit area, lines up
+// with the page's left edge below. Restates its hover fill: the global button rule floods with accent.
+.ph-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  margin-left: -10px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+
+  i {
+    font-size: 22px;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+}
+
+// What the drawer's utility buttons are holding, as a dot on the glyph's corner. The same fills as
+// their badges (app-shell.component.scss, nav-count): the neutral unread fill, or --danger for
+// overdue. The ring is the header's own surface, so the dot is cut out of the glyph's strokes.
+.ph-menu-dot {
+  position: absolute;
+  top: 9px;
+  right: 8px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 0 0 2px var(--ph-menu-ring, var(--surface));
+
+  &.is-danger {
+    background: var(--danger);
+  }
+}
+
 // Identity badge: a tinted rounded square instead of a bare glyph. `background` is set inline when
 // an iconColor is supplied, so this default only covers the accent case.
 .ph-icon.is-badge {
@@ -159,6 +206,20 @@
   }
 }
 
+// A hairline and a wider gap between the page's actions and the view switch, so the two read as two
+// groups. Without it the board's watch, overview and menu icons ran straight into the view icons as
+// one undifferentiated wall of ten glyphs. A divider between peers, not an indicator on either. The
+// compact layout gives the switch its own row, which separates them already (below).
+.ph-controls:not(:empty) + .ph-views:not(:empty)::before {
+  content: "";
+  flex: none;
+  align-self: center;
+  width: 1px;
+  height: 20px;
+  margin-inline: var(--space-1) var(--space-2);
+  background: var(--border);
+}
+
 // ─── variant="chrome" ─────────────────────────────────────────────────────────
 
 :host(.is-chrome) {
@@ -192,9 +253,12 @@
     gap: var(--space-2);
   }
 
+  // The page's name outranks the sidebar row that leads to it (--text-base there): at 15px the two
+  // were all but the same size and the navigation read louder than the content.
   .ph-title {
-    font-size: 15px;
+    font-size: var(--text-lg);
     font-weight: 600;
+    letter-spacing: var(--tracking-tight);
   }
 
   // Secondary context on a dense bar ("Across all boards", a workspace name). Drops at the stack
@@ -209,7 +273,50 @@
 
 // ─── variant="page" ───────────────────────────────────────────────────────────
 
+// The drawer button's own bar (`navBar`, drawer mode only, so always a phone with no sidebar): the
+// chrome header's phone row, 48px on --surface over a bottom border, with the menu at the same spot.
+// Bled to the viewport's edges with calc(50% - 50vw): with no sidebar the page column is centred in
+// the viewport, so half the difference is exactly the gutter on each side. The page drops its own
+// top padding over it (home.page.scss) and the page's overflow clip stops the bleed from scrolling.
+.ph-nav-bar {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  margin: 0 calc(50% - 50vw) var(--space-4);
+  padding-inline: 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+// Centred on the bar, not raised to a display title's first line as it is beside one (below).
+// The chrome header's phone title metrics, so the bar reads like every other page's first row.
+.ph-nav-bar-title {
+  min-width: 0;
+  margin-left: var(--space-2);
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:host(.is-page) .ph-nav-bar .ph-menu {
+  --ph-menu-ring: var(--surface);
+  align-self: center;
+  margin-top: 0;
+}
+
 :host(.is-page) {
+  // A page header sits on the page background, not a chrome bar.
+  --ph-menu-ring: var(--bg);
+
+  // Level with the display title's first line rather than the top of a two-line block.
+  .ph-menu {
+    align-self: flex-start;
+    margin-top: -6px;
+  }
+
   .ph-bar {
     align-items: flex-start;
     gap: var(--space-3);
@@ -267,9 +374,71 @@
     column-gap: 6px;
   }
 
-  // Bottom padding only: row 1 is already the band height (below), so it supplies the top spacing.
+  // Compact chrome no longer sizes row 1 to the fixed buttons' band: those buttons moved into the
+  // sidebar (the shell sets --bell-clearance to 0), and below this width the bar is two rows, so its
+  // edge cannot line up with the sidebar's brand row anyway. Row 1 is the title beside 44px touch
+  // controls and nothing more: the labelled buttons paint 36px inside their 44px target (below) and
+  // the rest are ghost glyphs, so the target's own inset is the row's breathing room. A phone spent
+  // ~160px on title, views and search before the first card; three stacked 44px rows are 132px of
+  // that whatever the spacing, so the spacing is what goes.
   :host(.is-chrome) .ph-bar {
-    padding-bottom: 8px;
+    padding-block: 0;
+    row-gap: 2px;
+  }
+
+  // The view row keeps 6px under it for a view with nothing below the header (the board's Notes).
+  // Where the page toolbar follows, it slides up over this padding and the bar's border
+  // (page-toolbar.component.scss, which mirrors the 6px), so title, views and search read as one
+  // block divided only by the toolbar's own bottom border.
+  :host(.is-chrome) .ph-bar:has(> .ph-tail > .ph-views:not(:empty)) {
+    padding-bottom: 6px;
+  }
+
+  // Labelled header buttons (.k-toolbar-btn, toolbar-styles.scss) keep their 44px touch target but
+  // paint a 36px button inside it, through a transparent 4px border the background stops at. A 44px
+  // filled "+" or outlined "Save view" in a 48px bar touched its edges and outweighed every ghost
+  // control beside it; at 36px each is the desktop button's size, centred on the row like the glyphs
+  // beside it. The corner grows by the border's width so the paint keeps the --radius corner, and an
+  // outlined button's 1px outline moves inside as an inset ring. Not when tight: a label-dropped
+  // button is ghost there (toolbar-styles.scss) and has no outline to draw. ::ng-deep because the
+  // buttons are projected and carry the page's scoping attribute; restated on hover and open, where
+  // the shared rules repaint the border.
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    :host(.is-chrome) ::ng-deep .ph-controls .k-toolbar-btn {
+      &,
+      &:hover:not(:disabled),
+      &.is-open {
+        border: 4px solid transparent;
+        border-radius: calc(var(--radius) + 4px);
+        background-clip: padding-box;
+      }
+    }
+
+    :host(.is-chrome:not(.is-tight)) ::ng-deep .ph-controls .k-toolbar-btn:not(.is-primary):not(.is-set) {
+      box-shadow: inset 0 0 0 1px var(--border);
+
+      &:hover:not(:disabled),
+      &.is-open {
+        box-shadow: inset 0 0 0 1px var(--border-strong);
+      }
+
+      // The global focus ring is a box-shadow too, so it is restated beside the inset outline.
+      &:focus-visible {
+        box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+      }
+    }
+
+    :host(.is-chrome) ::ng-deep .ph-controls .k-toolbar-btn.is-set {
+      box-shadow: inset 0 0 0 1px var(--accent);
+
+      &:focus-visible {
+        box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+      }
+    }
+  }
+
+  :host(.is-chrome) .ph-identity {
+    min-height: 44px;
   }
 
   // Sized from content instead of the single-row layout's zero basis, so the wrap decision is the
@@ -296,13 +465,20 @@
   }
 
   // Always its own row rather than only when it fails to fit, so the switch does not jump between
-  // rows as a title loads or a member count changes. Stretched through the custom properties
-  // k-segmented exposes, because the control is projected and carries the host page's scoping
-  // attribute, not this component's.
+  // rows as a title loads or a member count changes. Stretched across it, and scrolling sideways
+  // when its segments do not fit at full touch size, through the custom properties k-segmented
+  // exposes, because the control is projected and carries the host page's scoping attribute, not
+  // this component's. Scroll mode also names the active view, as the single-row header does, and
+  // scrolls inside the switch's own bordered track, so the row lines up with the title at the gutter.
   .ph-views {
     flex: 1 0 100%;
+    min-width: 0;
     --sg-fill-width: 100%;
-    --sg-fill-flex: 1 1 0;
+    --sg-fill-scroll: 1;
+  }
+
+  .ph-controls:not(:empty) + .ph-views:not(:empty)::before {
+    display: none;
   }
 
   // No room for both lines of text next to the controls on the chrome bar.

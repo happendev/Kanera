@@ -1,5 +1,7 @@
 @use "../../shared/toolbar-styles" as toolbar;
 @use "../../shared/card-key" as key;
+@use "../../shared/list-chip";
+@use "../../shared/chip";
 
 :host {
   display: block;
@@ -128,6 +130,16 @@
 
 .up-next-toggle {
   position: relative;
+
+  // The toolbar's own disabled look, on aria-disabled so the button still takes the hover that shows
+  // its tooltip (see the template). No hover fill: there is nothing to press yet.
+  &[aria-disabled="true"],
+  &[aria-disabled="true"]:hover {
+    cursor: not-allowed;
+    opacity: 0.5;
+    background: var(--surface);
+    border-color: var(--border);
+  }
 }
 
 // "The queue changed since you last had the panel open." Cleared by opening it; see upNextPulse.
@@ -225,9 +237,10 @@
 // and slid with the page before pinning.
 .up-next-dock {
   flex: none;
-  // Wide enough that typical titles and their board · list trail survive on one row each; the
-  // sequence is the point, and a column of half-ellipsed titles undersells it.
-  width: 360px;
+  // Wide enough that typical titles and their board · list trail survive (titles wrap to two lines),
+  // and a quarter of the window below that, so a laptop-width page keeps another lane of the board
+  // rather than spending it on the queue.
+  width: clamp(300px, 25vw, 360px);
   min-height: 0;
   margin-right: calc(var(--work-gutter) * -1);
   // No top border: the dock sits flush under the chrome block, and the toolbar's own full-width
@@ -270,6 +283,8 @@
       // full frame height.
       align-items: stretch;
       min-height: 0;
+      // No gap before the dock; see the column's right padding below.
+      gap: 0;
     }
 
     .work-main {
@@ -277,9 +292,33 @@
       // The page's bottom padding (and the chrome's clearance, above) move in here: the scroll
       // container owns the space its own content needs at either end.
       padding-top: 12px;
+      // The breathing room before the dock lives inside the column rather than as a flex gap: a gap
+      // left a strip of page between the two panes, and the lanes stopped in it mid-card, which read
+      // as a clipping bug instead of a pane boundary.
+      padding-right: 14px;
       padding-bottom: 28px;
       overflow-y: auto;
       overscroll-behavior: contain;
+    }
+
+    // The lanes alone run on through that padding to the dock's edge, so a list cut by the seam is cut
+    // by the pane itself and the scroller's fade sits right against it. The text above and below (totals,
+    // section headers, checklist) keeps its distance.
+    .workspace-lanes {
+      margin-right: -14px;
+    }
+
+    // The board runs on under the pane, so the seam is the dock's own edge: a soft shadow cast to the
+    // leading side only (negative spread keeps it off the top and bottom) says the queue sits above
+    // the board rather than the lanes being cut off. Off the token scale because --shadow-sm only
+    // casts downward. Wider and softer than a hairline so a tile cut mid-word reads as passing under
+    // the pane; light-dark() because one alpha is either a smudge on the light page or invisible on
+    // the dark themes' navy (the slate tint matches the light theme's own shadows).
+    // Raised one layer so the shadow paints over the cards it overlaps.
+    .up-next-dock {
+      position: relative;
+      z-index: 1;
+      box-shadow: -12px 0 16px -14px light-dark(rgb(15 23 42 / 0.32), rgb(0 0 0 / 0.7));
     }
   }
 }
@@ -325,8 +364,8 @@
     min-height: 0;
   }
 
-  // The sheet is full-bleed and carries its own toolbar, so it butts straight up against the query
-  // bar the way it does on a board route. The chrome's usual 12px clearance is for content that sits
+  // The sheet is full-bleed (its controls ride in the query bar), so it butts straight up against
+  // that bar the way it does on a board route. The chrome's usual 12px clearance is for content that sits
   // inside the gutter, and against a flush sheet it read as a stray gap under the toolbar's own
   // dividing border.
   .work-chrome {
@@ -514,19 +553,35 @@ k-work-done-view {
   --wd-gutter: 0;
 }
 
+// A quiet metadata line, not a row of chips: none of these are controls, and bordered pills read as
+// filter buttons someone would try to click. The counts are context for the lanes below, never a
+// dashboard of their own (cross-board surfaces answer "which board needs me"), so only a non-zero
+// overdue count takes a colour.
 .totals-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: baseline;
+  column-gap: var(--space-2);
+  row-gap: 2px;
   margin: 10px 0 8px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 
-  span {
-    padding: 4px 9px;
+  > span + span::before {
+    content: "·";
+    margin-right: var(--space-2);
     color: var(--text-muted);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    font-size: var(--text-xs);
+  }
+
+  strong {
+    color: var(--text-3);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .attention,
+  .attention strong {
+    color: var(--danger);
   }
 }
 
@@ -547,6 +602,36 @@ k-work-done-view {
   // Floored so a short shell still shows a usable number of rows rather than collapsing to nothing.
   min-height: 420px;
   margin-inline: calc(var(--work-gutter) * -1);
+}
+
+// On a phone the frame has no space left over: the pinned chrome, the totals strip and the checklist
+// section below already fill the screen, so the sheet sat at its 420px floor, a window onto about
+// one and a half stacked cards inside a page that scrolls around it. Floored instead at the screen
+// below the pinned chrome (the two-row header plus the query bar, ~170px at phone width), so once
+// the page scrolls the sheet into place it fills the screen and its own scroll reaches every row.
+@media (max-width: 640px) {
+  .work-table-view {
+    min-height: max(420px, calc(100dvh - 170px));
+  }
+}
+
+// The table's controls ride in the query bar on the table display (global-work.page.html), which
+// makes that row too wide for a laptop. Rather than let the whole group drop under search as a
+// second row, it takes the rest of search's line and wraps inside itself, which is what kFitLabels
+// watches for: labels drop from the end until the group fits on one line again. Table only, and
+// desktop only: on other displays the toolbar's `is-roomy` check measures this group at its natural
+// width, and below the collapse the group is a column in the ⚙ panel.
+@media (min-width: toolbar.$bp-collapse + 1) {
+  .k-toolbar-group.is-table-controls {
+    flex: 1 1 0;
+  }
+}
+
+// Team Cards carries two scope pickers beside the table's controls, more than one row holds at a
+// laptop width even with every label dropped, so search gives some of its fixed width back there.
+// Table display only: its search slot has no switch, so the toolbar's room check is not involved.
+k-page-toolbar.is-table-toolbar {
+  --pt-search-width: clamp(200px, 22vw, 340px);
 }
 
 // One level below `.section-toggle`: a due-date bucket inside the checklist section, not another
@@ -590,6 +675,12 @@ k-work-done-view {
       color: var(--text-muted);
       font-size: var(--text-sm);
       letter-spacing: normal;
+    }
+
+    // Explicit: <strong>'s `bolder` over this 700 resolved to 900, and at 11px Inter's black-weight
+    // word space all but vanished, so "Next 7 days" read as "Next7 days".
+    strong {
+      font-weight: 700;
     }
   }
 
@@ -710,13 +801,18 @@ k-work-done-view {
   min-width: 0;
   font-size: var(--text-md);
 
+  // The name is what the header is for, so the secondary text beside it gives way first: the heavy
+  // shrink weight ellipsises the organisation (or the checklist hint) before the name loses a letter.
   strong {
+    flex: 0 1 auto;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
   small {
+    flex: 0 1000 auto;
+    min-width: 0;
     overflow: hidden;
     color: var(--text-muted);
     font-size: var(--text-xs);
@@ -724,6 +820,7 @@ k-work-done-view {
     text-overflow: ellipsis;
   }
 }
+
 
 // The subtitle directly to its left is also muted 11px text, so without a separator the two run
 // together as one phrase.
@@ -749,20 +846,152 @@ k-work-done-view {
 // emission order. It also pinned the responsive refinements to the wrong breakpoints and dropped
 // the canvas's iOS mandatory-snap override.
 .workspace-lanes {
-  // Taller than it was, because the lane is the content: the page chrome around it now costs little
-  // enough that the lists can have the height instead. dvh rather than vh so a phone's collapsing
-  // URL bar cannot leave the lane taller than the visible viewport.
-  height: clamp(400px, 70dvh, 860px);
+  // The tallest a list may grow before it scrolls. dvh rather than vh so a phone's collapsing URL bar
+  // cannot leave a lane taller than the visible viewport.
+  --lane-max: clamp(400px, 70dvh, 860px);
+
+  // Sized to its lists, not to a fixed scrollport: a fixed height left short workspaces with a band
+  // of empty canvas below two cards, and pushed every following section down by the same amount.
+  // Each list carries the cap instead (less the canvas's 9px of vertical padding), because a
+  // percentage max-height on the lists has nothing definite to resolve against here.
+  height: auto;
   // No inner surface and no side inset: the lists align with the page gutter and with their own
   // section header instead of being indented inside a panel. The few px that remain are only there
   // so a drop-target list's 2px focus ring is not clipped by the canvas's own overflow.
-  padding: 3px 3px 6px;
+  // The right side is the exception: once scrolled to the end, the last list stops a gutter short of
+  // the edge (or the docked Up next seam) instead of touching it, so the end reads as the end. 16px,
+  // the width of the sideways fade below, so the fade never covers the last list once it is reached.
+  padding: 3px 16px 6px 3px;
   background: none;
+
+  > k-list {
+    max-height: calc(var(--lane-max) - 9px);
+  }
+
+  // In the frame the canvas height is the space left in the shell, so the list's own 100% applies.
+  &.fills-frame > k-list {
+    max-height: 100%;
+  }
+
+  // A list that holds more than its cap scrolls inside itself, and a tile cut at the scrollport's
+  // edge read as clipped rather than as "more below". The scrollbar stays visible but thin, and the
+  // last stretch of the scrollport fades out until it is scrolled to the end. The fade is a sticky
+  // overlay rather than a mask: a mask would also clip the popovers a card opens inside the list.
+  //
+  // Scroll-driven, so it exists only while the list actually overflows (an inactive timeline applies
+  // nothing) and goes away at the bottom; browsers without scroll timelines keep the scrollbar alone.
+  // ::ng-deep because the scroller is k-list's own template; scoped under this page's lanes.
+  ::ng-deep .cards {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    ::ng-deep .cards:not(.cards-empty)::after {
+      content: "";
+      position: sticky;
+      bottom: -2px;
+      flex: none;
+      // 24px with an eased ramp (clear for its first ~third, solid only at the very edge). At 12px a
+      // lane whose last visible card was cut just under its board line read as clipped, not as "more
+      // below"; the eased start keeps the top of the fade off the meta row it overlaps.
+      height: 24px;
+      // Pulled up over the last visible stretch, past the column's 6px gap, so it takes no room while
+      // the list fits. The keyframes below then let it take its own 24px at the end of an overflowing
+      // list: that reserves a strip under the last card for the fade to sit in, so once scrolled down
+      // the last card's meta is clear of it. Keyed to the same scroll timeline, so a list that fits
+      // gains no empty strip above its Add card.
+      margin-top: -30px;
+      pointer-events: none;
+      background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--list-bg) 55%, transparent) 55%, var(--list-bg));
+      opacity: 0;
+      animation: lane-more-below linear both;
+      animation-timeline: scroll(nearest y);
+    }
+
+    // The same cue sideways: more lists past the scrollport's right edge (with the Up next dock open,
+    // often most of them) had nothing saying so, and the seam just cut a list off mid-card. A sticky
+    // flex item after the last list, pulled back over it by its own width plus the lanes' 12px gap so
+    // it takes no room, and faded to the page behind the lanes. Solid for its last third: the tiles
+    // are near the page colour, so the cue is the cut text dissolving rather than the tile tint, and
+    // ending solid also hides the hard cut through a title at the seam.
+    //
+    // Not on a phone, matching the canvas's own fade (board-canvas.component.ts): there the snapped
+    // peek of the next lane is the cue, and a fade laid over that peek only washed it out behind a
+    // visible seam.
+    @media (min-width: 481px) {
+      &::after {
+        content: "";
+        position: sticky;
+        // Sticky offsets count from the scroller's content edge, so 0 parked the fade a padding short
+        // of the real edge with a sliver of unfaded list beyond it. Minus the lanes' right padding is
+        // the edge of the scrollport itself.
+        right: -16px;
+        flex: none;
+        align-self: stretch;
+        width: 16px;
+        margin-left: -28px;
+        pointer-events: none;
+        background: linear-gradient(to right, transparent, var(--bg) 66%);
+        opacity: 0;
+        animation: lane-more-ahead linear both;
+        animation-timeline: scroll(nearest x);
+      }
+    }
+  }
+
+  // A phone lane is the canvas's clean-peek width (board-canvas.component.ts), and the peek is only
+  // the same as the board's when the lane starts where the board's does: out through the page gutter
+  // to the canvas's own 10px inset. The 3px top and 6px bottom stay, for the drop-target ring.
+  @media (max-width: 480px) {
+    margin-inline: calc(var(--work-gutter) * -1);
+    padding: 3px 10px 6px;
+  }
+}
+
+// A background image has no single colour to fade into, so the edge darkens slightly instead.
+:host(.has-gradient) .workspace-lanes::after {
+  background: linear-gradient(to right, transparent, rgb(0 0 0 / 0.18) 66%);
+}
+
+@keyframes lane-more-ahead {
+  0%,
+  92% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+// The vertical fade's variant: the same fade-out at the end, plus the 24px of room it takes while the
+// list overflows (see the fade's margin above). The margin is constant across the frames, so the room
+// it adds cannot change the scroll range the timeline measures.
+@keyframes lane-more-below {
+  0%,
+  92% {
+    margin-top: -6px;
+    opacity: 1;
+  }
+
+  100% {
+    margin-top: -6px;
+    opacity: 0;
+  }
 }
 
 @media (max-width: 768px) {
   .workspace-lanes {
-    height: min(72dvh, 680px);
+    --lane-max: min(72dvh, 680px);
+  }
+
+  // With assigned checklist items below, a long lane in view would push the checklist heading off
+  // the first screen. A lower cap keeps it there; a long lane scrolls inside itself sooner, behind
+  // the same "more below" fade. (The empty band a short lane used to sit over, as tall as the longest
+  // lane off to the side, is the phone-lane-height directive's job, not this cap's.)
+  .global-board-sections:has(~ .checklist-section) .workspace-lanes {
+    --lane-max: min(52dvh, 680px);
   }
 }
 
@@ -785,22 +1014,19 @@ k-work-done-view {
 // One column per urgency bucket, not a tile grid: the section is a queue, so it should read top to
 // bottom with each row carrying its own context rather than as equal-weight cards side by side.
 //
-// Indented so the buckets sit under the section header rather than beside it. The inset lands the
-// bucket labels just past the section header's chevron, which is the cue that carries containment now
-// that no box draws it — and it is small enough that the rows keep their width on a phone.
+// One indent, on the buckets: it lands the bucket labels just past the section header's chevron,
+// which is the cue that carries containment now that no box draws it. The rows sit flush under their
+// bucket label (the bordered rows already read as its contents); a second 14px inset stepped them
+// 28px in and made the section look nested twice.
 .checklist-groups {
   display: grid;
   gap: 12px;
   padding-left: 14px;
 }
 
-// Indented under its own bucket header for the same reason the buckets are indented under the section
-// header: with no boxes drawing containment, the inset is what says these rows belong to the label
-// above them rather than to the section as a whole.
 .checklist-list {
   display: grid;
   gap: 6px;
-  padding-left: 14px;
 }
 
 .checklist-group-header.attention {
@@ -832,15 +1058,9 @@ k-work-done-view {
     background: var(--surface-2);
   }
 
-  // Overdue checklist items get the same wash as overdue cards, so "late" looks the same everywhere.
-  &.overdue {
-    background: color-mix(in srgb, var(--danger) 6%, var(--surface));
-    border-color: color-mix(in srgb, var(--danger) 32%, var(--border));
-
-    &:hover {
-      background: color-mix(in srgb, var(--danger) 11%, var(--surface));
-    }
-  }
+  // No row wash for overdue: a card tile carries "late" on its due chip alone, so the item does the
+  // same with its red due date (`time.overdue` below). A tinted, red-bordered row outweighed every
+  // card on the page, and the Overdue bucket header above already names the group.
 
   .checklist-check {
     flex: none;
@@ -891,20 +1111,29 @@ k-work-done-view {
     opacity: 0.55;
   }
 
-  .checklist-card-key {
-    @include key.card-key;
+  // The list as its status pill (the list-chip every surface names a list with), cut down to the
+  // trail's own 11px so the breadcrumb stays subordinate to the item text above it. The pill's own
+  // shape replaces the "·" that used to separate board from list.
+  .checklist-context > .checklist-list-chip {
+    @include list-chip.list-chip;
+    @include list-chip.list-chip-compact;
   }
 
+  .checklist-card-key {
+    @include key.card-key-row;
+  }
+
+  // Plain while neutral; overdue takes the shared urgency chip (shared/_chip.scss), the same red the
+  // card tile, table and queue rows give a late date.
   time {
     flex: none;
-    color: var(--text-muted);
+    color: var(--text-3);
     font-size: var(--text-xs);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
 
-    &.overdue {
-      color: var(--danger);
-      font-weight: 600;
-    }
+    @include chip.due-states;
   }
 }
 
@@ -925,21 +1154,21 @@ k-work-done-view {
 // ── Row reflows ───────────────────────────────────────────────────────────────
 
 @media (max-width: 600px) {
-  // Two nested indents cost 28px of a ~300px content column, and the rows below need the width more
-  // than the hierarchy does — at this size the buckets are already stacked one per screenful.
-  .checklist-groups,
-  .checklist-list {
+  // The indent costs width a ~300px content column needs more than the hierarchy does — at this size
+  // the buckets are already stacked one per screenful.
+  .checklist-groups {
     padding-left: 8px;
   }
 
   // `board · list · card` is the only thing that tells you where an item lives, and as a single
-  // nowrap line in a three-column grid it ellipsed away to nothing. Give the row its own rows.
+  // nowrap line in a three-column grid it ellipsed away to nothing. Give the row its own rows. The
+  // context line lives inside .checklist-main, so it wraps under the text there; naming a grid area
+  // for it (the row's areas are not .checklist-main's) opened an implicit column beside the text.
   .checklist-row {
     grid-template-columns: 32px minmax(0, 1fr);
     grid-template-areas:
       "check text"
-      "check due"
-      "check context";
+      "check due";
     align-items: start;
     row-gap: 6px;
     min-height: 104px;
@@ -969,7 +1198,6 @@ k-work-done-view {
     }
 
     .checklist-context {
-      grid-area: context;
       flex-wrap: wrap;
       white-space: normal;
     }
@@ -984,6 +1212,25 @@ k-work-done-view {
   // `.section-hint` is dropped, never the workspace header's organisation name — that one is
   // identifying information, and the count beside it is the more expendable half of the row.
   .section-hint {
+    display: none;
+  }
+
+  // On one line the three parts split ~300px three ways and the workspace name lost ("Developmen…"
+  // beside "Happen Softwar…" and "8 lists"). The name takes the first line whole and the
+  // organisation drops beneath it; the list count is the half that goes.
+  .workspace-board .section-toggle-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    max-width: 100%;
+
+    strong,
+    small {
+      max-width: 100%;
+    }
+  }
+
+  .workspace-board .section-toggle-meta {
     display: none;
   }
 }

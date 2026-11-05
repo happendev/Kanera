@@ -176,18 +176,22 @@ const SEARCH_DEBOUNCE_MS = 200;
       color: var(--text-muted);
     }
     .section-label i { font-size: var(--text-md); }
+    /* The drawer's .card-detail-count recipe: --surface with a --border ring, since --surface-2 vanishes on the light detail tint. */
     .count, .cr-group-count {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 18px;
-      height: 18px;
+      box-sizing: border-box;
+      min-width: 20px;
+      height: 20px;
       padding: 0 6px;
+      border: 1px solid var(--border);
       border-radius: 999px;
-      background: var(--surface-2);
+      background: var(--surface);
       color: var(--text-muted);
       font-size: var(--text-xs);
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }
     .cr-add-btn {
       margin-left: auto;
@@ -281,7 +285,8 @@ const SEARCH_DEBOUNCE_MS = 200;
     .cr-group-label i { font-size: var(--text-base); }
     /* Same hues as card detail's dependency chips; only the icon is tinted so the headings stay calm. */
     .cr-group-label i.is-danger { color: var(--danger); }
-    .cr-group-label i.is-warning { color: var(--color-amber); }
+    /* The --warning state tone: the --color-amber label hue is ~1.85:1 on the light surface. */
+    .cr-group-label i.is-warning { color: var(--warning); }
     .cr-list {
       list-style: none;
       margin: 0;
@@ -361,12 +366,26 @@ const SEARCH_DEBOUNCE_MS = 200;
     .is-popover .cr-add { order: 0; }
     @media (max-width: 767.98px) {
       .detail-section { --section-content-indent: 0; }
+      /* A phone row leaves the text ~220px beside the avatars and remove button: one ellipsised line
+         cut the title mid-word and hid the list (the card's status) at the end of the meta line. */
+      .cr-row .cr-title {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+      .cr-row .cr-meta { white-space: normal; }
     }
     @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
       .cr-remove { opacity: 1; }
       .cr-icon-btn { width: 44px; height: 44px; }
       .cr-link { min-height: 44px; }
-      .cr-add-btn { height: 36px; }
+      /* Kept at 36px so the heading row does not grow; an invisible halo makes the 44px target.
+         It is alone at the end of the heading, so nothing neighbours it. */
+      .cr-add-btn { height: 36px; position: relative; }
+      .cr-add-btn::after { content: ""; position: absolute; inset: calc(50% - 22px) 0; }
     }
   `],
 })

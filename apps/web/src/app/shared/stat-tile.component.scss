@@ -9,13 +9,15 @@
   height: auto;
   width: 100%;
   display: grid;
-  // Two fixed rows: the label reserves two lines so a wrapping label ("Due next 7 days") cannot
-  // push its number out of line with the shorter tiles beside it. The trailing arrow shares the
-  // value row, which keeps every number on the same baseline across the whole grid.
+  // Label, value (with the trailing arrow), then the caption or delta. The tile spans three rows of
+  // its parent grid and borrows them as a subgrid, so the label row is as tall as the tallest label
+  // among the tiles beside it: one-line labels sit directly over their number, and a translated label
+  // that wraps pushes every number in the row down together rather than out of line. The arrow shares
+  // the value row, which keeps every number on the same baseline. Outside a grid parent, subgrid falls
+  // back to ordinary auto rows (and the span is ignored).
   grid-template-columns: 1fr auto;
-  grid-template-rows: 30px auto;
-  // start, not end: a one-line label must stay at the top of its reserved two-line row, otherwise
-  // it drifts down towards the number and the tiles stop reading as a row.
+  grid-row: span 3;
+  grid-template-rows: subgrid;
   align-items: start;
   gap: 8px;
   padding: 12px 14px;
@@ -32,13 +34,13 @@
     grid-column: 1 / -1;
     align-items: flex-start;
     gap: 6px;
-    // The row is a fixed two lines; clip rather than let a third line collide with the number.
-    overflow: hidden;
-    color: var(--text-muted);
-    font-size: var(--text-xs);
-    font-weight: 600;
+    // --text-sm, not --text-xs: --text-xs is for uppercase micro-labels, and this is a sentence-case
+    // name. A tier above the caption (--text-3, medium weight) so the tile reads number, then what it
+    // counts, then the muted detail.
+    color: var(--text-3);
+    font-size: var(--text-sm);
+    font-weight: 500;
     line-height: 1.3;
-    letter-spacing: 0.02em;
 
     i {
       flex: none;
@@ -59,16 +61,12 @@
   .stat-tile-go {
     grid-column: 2;
     align-self: center;
+    // Always shown, at every width and pointer: a reveal-on-hover arrow never appeared on touch, and
+    // showing it there but not on desktop made the same tile read as two different controls. Hover
+    // darkens it instead (below).
     color: var(--text-muted);
     font-size: 15px;
-    opacity: 0;
-    transition: opacity var(--motion-fast);
-
-    // There is no hover on a touch device, so the reveal-on-hover affordance simply never appeared
-    // and the tiles did not read as tappable at all. Discoverability, not polish.
-    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
-      opacity: 1;
-    }
+    transition: color var(--motion-fast);
   }
 
   .stat-tile-delta {
@@ -82,8 +80,12 @@
     color: var(--text-muted);
     background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: 999px;
+    // Half a one-line pill's height rather than 999px: still a full pill on one line, but a pill that
+    // wraps in a phone's two-up tile ("0 vs previous 3 days") becomes a rounded tag instead of a
+    // lozenge with its text crammed against the curves.
+    border-radius: 10px;
     font-size: var(--text-xs);
+    line-height: 1.3;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
 
@@ -104,7 +106,7 @@
     overflow: hidden;
     margin-top: 2px;
     color: var(--text-muted);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -115,7 +117,7 @@
     border-color: var(--border-strong);
 
     .stat-tile-go {
-      opacity: 1;
+      color: var(--text);
     }
   }
 
@@ -134,10 +136,6 @@
   &.is-active {
     background: var(--accent-soft);
     border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-
-    .stat-tile-go {
-      opacity: 1;
-    }
   }
 
   &.danger {
@@ -169,5 +167,12 @@
     strong {
       color: var(--success);
     }
+  }
+
+  // Zero in the muted tier, after the tones so it wins over any of them: in the same bold ink as a
+  // real count, a row of "0"s read as four equally urgent numbers and the one that mattered did not
+  // stand out. Still the full numeral, not a dash: a zero is information on a triage page.
+  strong.is-zero {
+    color: var(--text-muted);
   }
 }

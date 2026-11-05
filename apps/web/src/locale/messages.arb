@@ -105,6 +105,7 @@
     "description": "Browser tab title — home page",
     "x-files": [
       "src/app/app.routes.ts",
+      "src/app/features/home/home.page.ts",
       "src/app/features/shell/app-shell.component.html",
       "src/app/features/shell/app-shell.component.ts"
     ]
@@ -3974,6 +3975,7 @@
       "src/app/features/account-settings/api-keys/api-keys.page.html",
       "src/app/features/board/table-view/table-view.types.ts",
       "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/notifications/notifications-panel.component.html",
       "src/app/features/shell/app-shell.component.html"
     ]
   },
@@ -5407,7 +5409,6 @@
     "x-files": [
       "src/app/features/account-settings/notifications/notifications.page.html",
       "src/app/features/board/card-activity.component.html",
-      "src/app/features/global-work/team-overview.component.html",
       "src/app/features/workspace-settings/integrations/integrations.page.html"
     ]
   },
@@ -7894,7 +7895,6 @@
       "src/app/features/completed-cards/completed-cards-panel.component.html",
       "src/app/features/global-work/global-card-detail-host.component.ts",
       "src/app/features/global-work/save-view.popover.ts",
-      "src/app/features/global-work/team-overview.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/features/home/getting-started.component.html",
       "src/app/features/notes/notes-view.component.ts",
@@ -8634,7 +8634,8 @@
   "@5778283864184615429": {
     "description": "Button on a grouped column; the group name (a person, label or value) follows",
     "x-files": [
-      "src/app/features/board/board-group-column.component.ts"
+      "src/app/features/board/board-group-column.component.ts",
+      "src/app/features/board/table-view/board-table-view.component.ts"
     ]
   },
   "3072824547872369648": "Back to boards",
@@ -9256,6 +9257,15 @@
     "description": "Tooltip on the Too long count in the board overview",
     "x-files": [
       "src/app/features/board/board.page.ts"
+    ]
+  },
+  "1896982481624866135": "Group: {$grouping}",
+  "@1896982481624866135": {
+    "description": "Toolbar button showing the current grouping",
+    "x-files": [
+      "src/app/features/board/board.page.ts",
+      "src/app/features/board/table-view/board-table-view.component.ts",
+      "src/app/features/global-work/global-work.page.ts"
     ]
   },
   "623690001845226450": "Board notes",
@@ -11517,7 +11527,8 @@
     "x-files": [
       "src/app/features/board/card-detail-header.component.html",
       "src/app/features/board/card.component.html",
-      "src/app/features/board/table-view/board-table-view.component.html"
+      "src/app/features/board/table-view/board-table-view.component.html",
+      "src/app/features/notifications/notifications-panel.component.html"
     ]
   },
   "6340661995484088456": "Move to a different list",
@@ -13199,6 +13210,7 @@
     "description": "List menu item",
     "x-files": [
       "src/app/features/board/list.component.html",
+      "src/app/features/board/table-view/board-table-view.component.html",
       "src/app/features/board/table-view/board-table-view.component.ts",
       "src/app/features/global-work/up-next-panel.component.ts",
       "src/app/shared/priority-queue/priority-queue.component.html"
@@ -13538,25 +13550,6 @@
       "src/app/features/board/table-view/board-table-view.component.html"
     ]
   },
-  "6023587986745227281": "Show or hide columns",
-  "@6023587986745227281": {
-    "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.html"
-    ]
-  },
-  "705135523343491809": "Restore default columns",
-  "@705135523343491809": {
-    "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.html"
-    ]
-  },
-  "5950419518234407131": "Show / hide",
-  "@5950419518234407131": {
-    "description": "Column picker heading",
-    "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.html"
-    ]
-  },
   "3653048554215358825": "Group by",
   "@3653048554215358825": {
     "description": "Menu heading for grouping options",
@@ -13578,8 +13571,35 @@
       "src/app/features/board/table-view/board-table-view.component.html"
     ]
   },
+  "6023587986745227281": "Show or hide columns",
+  "@6023587986745227281": {
+    "x-files": [
+      "src/app/features/board/table-view/board-table-view.component.html"
+    ]
+  },
+  "705135523343491809": "Restore default columns",
+  "@705135523343491809": {
+    "x-files": [
+      "src/app/features/board/table-view/board-table-view.component.html"
+    ]
+  },
+  "5950419518234407131": "Show / hide",
+  "@5950419518234407131": {
+    "description": "Column picker heading",
+    "x-files": [
+      "src/app/features/board/table-view/board-table-view.component.html"
+    ]
+  },
   "2087991907974006010": "Reset sort",
   "@2087991907974006010": {
+    "x-files": [
+      "src/app/features/board/table-view/board-table-view.component.html",
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "7699622144571229146": "Sort by",
+  "@7699622144571229146": {
+    "description": "Picker heading",
     "x-files": [
       "src/app/features/board/table-view/board-table-view.component.html",
       "src/app/features/global-work/global-work.page.html"
@@ -13691,13 +13711,6 @@
       "src/app/features/board/table-view/board-table-view.component.html"
     ]
   },
-  "1315476018548197144": "New task",
-  "@1315476018548197144": {
-    "description": "Button - add a task to this list",
-    "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.html"
-    ]
-  },
   "253720644207702428": "No tasks match this view.",
   "@253720644207702428": {
     "x-files": [
@@ -13760,14 +13773,6 @@
     "description": "Sort order label - cards in their hand-arranged order",
     "x-files": [
       "src/app/features/board/table-view/board-table-view.component.ts"
-    ]
-  },
-  "1896982481624866135": "Group: {$grouping}",
-  "@1896982481624866135": {
-    "description": "Toolbar button showing the current grouping",
-    "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.ts",
-      "src/app/features/global-work/global-work.page.ts"
     ]
   },
   "2375383294479402625": "Breakdown: {$dimension}",
@@ -13986,20 +13991,6 @@
   "2912139697705968274": "Open {$name}",
   "@2912139697705968274": {
     "description": "Tooltip - open the named board",
-    "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.ts"
-    ]
-  },
-  "3570721844185456381": "New task in {$list}",
-  "@3570721844185456381": {
-    "description": "Placeholder for a new task's title in a list",
-    "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.ts"
-    ]
-  },
-  "2506307643800012427": "Add task to {$list}",
-  "@2506307643800012427": {
-    "description": "Button label - add a task to a list",
     "x-files": [
       "src/app/features/board/table-view/board-table-view.component.ts"
     ]
@@ -16623,13 +16614,6 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "7699622144571229146": "Sort by",
-  "@7699622144571229146": {
-    "description": "Picker heading",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
   "1248180514363967049": "Leave saved view",
   "@1248180514363967049": {
     "x-files": [
@@ -17315,22 +17299,15 @@
       "src/app/features/global-work/team-overview.component.html"
     ]
   },
-  "241222113318658792": "Recently active",
-  "@241222113318658792": {
-    "description": "Team overview section",
+  "4223995742881444072": "Queued cards aren’t visible to you",
+  "@4223995742881444072": {
+    "description": "Team overview Up next empty state",
     "x-files": [
       "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "8704314850413710059": "Nothing queued",
   "@8704314850413710059": {
-    "description": "Team overview Up next empty state",
-    "x-files": [
-      "src/app/features/global-work/team-overview.component.html"
-    ]
-  },
-  "4223995742881444072": "Queued cards aren’t visible to you",
-  "@4223995742881444072": {
     "description": "Team overview Up next empty state",
     "x-files": [
       "src/app/features/global-work/team-overview.component.html"
@@ -17364,6 +17341,13 @@
   },
   "1147013106987408866": "Nothing else assigned",
   "@1147013106987408866": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "241222113318658792": "Recently active",
+  "@241222113318658792": {
+    "description": "Team overview section",
     "x-files": [
       "src/app/features/global-work/team-overview.component.html"
     ]
@@ -17583,23 +17567,9 @@
       "src/app/features/global-work/team-overview.component.ts"
     ]
   },
-  "6019146000102320580": "Close your Up next",
-  "@6019146000102320580": {
-    "description": "Button on My overview closing the Up next panel",
-    "x-files": [
-      "src/app/features/global-work/team-overview.component.ts"
-    ]
-  },
   "1720336700259890530": "Edit your Up next",
   "@1720336700259890530": {
     "description": "Button on My overview opening the Up next panel to change it",
-    "x-files": [
-      "src/app/features/global-work/team-overview.component.ts"
-    ]
-  },
-  "6336533552281101568": "Close Up next for {$person}",
-  "@6336533552281101568": {
-    "description": "Button closing the Up next panel for one teammate",
     "x-files": [
       "src/app/features/global-work/team-overview.component.ts"
     ]
@@ -17801,6 +17771,22 @@
     "x-files": [
       "src/app/features/home/getting-started.component.html",
       "src/app/features/shell/app-shell.component.html"
+    ]
+  },
+  "1359092845802014498": "Expand",
+  "@1359092845802014498": {
+    "description": "Button label - expand the getting started checklist",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html",
+      "src/app/features/notes/note-tree-node.component.ts"
+    ]
+  },
+  "4929778113156900100": "Collapse",
+  "@4929778113156900100": {
+    "description": "Button label - collapse the getting started checklist",
+    "x-files": [
+      "src/app/features/home/getting-started.component.html",
+      "src/app/features/notes/note-tree-node.component.ts"
     ]
   },
   "3372702640019176509": "Close getting started",
@@ -18607,6 +18593,13 @@
       "src/app/features/home/home.page.html"
     ]
   },
+  "6293534527929249487": "Nothing has been added to your Up next yet. {$START_LINK}Open My Cards{$CLOSE_LINK} to add and order cards.",
+  "@6293534527929249487": {
+    "description": "Hint when the priority queue is empty",
+    "x-files": [
+      "src/app/features/home/home.page.html"
+    ]
+  },
   "5387712302180050075": "Your progress",
   "@5387712302180050075": {
     "description": "Section heading",
@@ -18631,20 +18624,6 @@
   "219956922341566104": "{$DELTA} vs last week",
   "@219956922341566104": {
     "description": "Progress compared with last week; delta is a signed number like +2 or -5",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "6753902224067608847": "{VAR_PLURAL, plural, =1 {No cards completed in the last day.} other {No cards completed in the last {INTERPOLATION} days.}}",
-  "@6753902224067608847": {
-    "description": "Progress empty state",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "6293534527929249487": "Nothing has been added to your Up next yet. {$START_LINK}Open My Cards{$CLOSE_LINK} to add and order cards.",
-  "@6293534527929249487": {
-    "description": "Hint when the priority queue is empty",
     "x-files": [
       "src/app/features/home/home.page.html"
     ]
@@ -19350,6 +19329,7 @@
     "description": "Custom field type",
     "x-files": [
       "src/app/features/import/trello-import.page.html",
+      "src/app/features/notifications/notifications-panel.component.html",
       "src/app/features/workspace-settings/automations/automation-action-fields.component.ts",
       "src/app/features/workspace-settings/fields/fields.page.html"
     ]
@@ -20399,20 +20379,6 @@
       "src/app/features/notes/note-tree-node.component.ts"
     ]
   },
-  "4929778113156900100": "Collapse",
-  "@4929778113156900100": {
-    "description": "Button label - collapse a note's children in the tree",
-    "x-files": [
-      "src/app/features/notes/note-tree-node.component.ts"
-    ]
-  },
-  "1359092845802014498": "Expand",
-  "@1359092845802014498": {
-    "description": "Button label - expand a note's children in the tree",
-    "x-files": [
-      "src/app/features/notes/note-tree-node.component.ts"
-    ]
-  },
   "8801947059266638733": "No notes yet",
   "@8801947059266638733": {
     "description": "Empty state in the notes tree",
@@ -20583,13 +20549,6 @@
   "2328429285909673722": "Group notifications",
   "@2328429285909673722": {
     "description": "Tooltip on the notification grouping menu",
-    "x-files": [
-      "src/app/features/notifications/notifications-panel.component.html"
-    ]
-  },
-  "5470485117214617946": "Group",
-  "@5470485117214617946": {
-    "description": "Short name of the notification grouping menu on phones",
     "x-files": [
       "src/app/features/notifications/notifications-panel.component.html"
     ]

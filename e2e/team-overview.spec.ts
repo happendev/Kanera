@@ -151,10 +151,12 @@ test("Team overview shows each teammate's in-progress work, own activity, queue 
   await expect(row(inProgressSection, workedOn).locator(".row-due.overdue")).toBeVisible();
   await expect(row(assigned, workedOn)).toHaveCount(0);
 
-  // Chips sit on their own line under the board · list context, never beside the text.
-  const chipBox = await row(inProgressSection, workedOn).locator(".row-due").boundingBox();
-  const contextBox = await row(inProgressSection, workedOn).locator(".row-context").boundingBox();
-  expect(chipBox!.y).toBeGreaterThanOrEqual(contextBox!.y + contextBox!.height - 1);
+  // Chips share the wrapping meta line under the title (after board · list), never beside the title.
+  const chip = row(inProgressSection, workedOn).locator(".row-context .row-due");
+  await expect(chip).toBeVisible();
+  const chipBox = await chip.boundingBox();
+  const titleBox = await row(inProgressSection, workedOn).locator(".row-title").boundingBox();
+  expect(chipBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height - 1);
 
   await expect(row(section(panel, "Recently done"), shipped)).toBeVisible();
 
@@ -290,7 +292,8 @@ test("Team overview focuses one teammate with their Up next docked, curated from
   await notQueuedRow(sooner).getByRole("button", { name: "Add to Up next" }).click();
   await expect(queueRow(sooner).locator(".row-rank")).toHaveText(String(queueSize + 1));
   await expect(notQueuedRow(sooner)).toHaveCount(0);
-  await expect(section(panel, "Up next").locator(".section-count")).toHaveText(String(queueSize + 1));
+  // While docked, his panel's own Up next section steps aside: the dock is the one list of it.
+  await expect(section(panel, "Up next")).toHaveCount(0);
   await expect(marcusQueue.locator(".panel-row").filter({ hasText: sooner }).locator(".row-rank")).toHaveText(String(queueSize + 1));
 
   // Dragging a Not queued card onto the head of the queue ranks it first.
@@ -323,6 +326,8 @@ test("Team overview focuses one teammate with their Up next docked, curated from
   await dock.getByRole("button", { name: "Close Up next" }).click();
   await expect(dock).toHaveCount(0);
   await expect(panel).toBeVisible();
+  // Closed, the section is back, counting what the dock added (sooner went in and out; later stayed).
+  await expect(section(panel, "Up next").locator(".section-count")).toHaveText(String(queueSize + 1));
   await page.setViewportSize({ width: 1440, height: 900 });
 
   // Everyone brings every panel back; another teammate's name focuses them instead.
@@ -482,6 +487,15 @@ test("My overview shows only the viewer's panel, live, and docks their own Up ne
 
   const inProgressSection = section(panel, "In progress");
   await expect(row(inProgressSection, started).locator(".row-time.is-running")).toBeVisible();
+  // The dock is the lens's own, so it may already be open from the board display's remembered
+  // preference; while it is, the panel leaves its Up next section out rather than listing the queue
+  // twice, and the toolbar's Up next control (kept on My overview) puts the dock away.
+  const upNextToggle = page.locator("k-global-work .up-next-toggle");
+  await expect(upNextToggle).toBeVisible();
+  if (await page.locator("k-up-next-panel").count()) {
+    await expect(section(panel, "Up next")).toHaveCount(0);
+    await upNextToggle.click();
+  }
   await expect(row(section(panel, "Up next"), queued).locator(".row-rank")).toHaveText("1");
 
   // Realtime: someone else moves one of the viewer's cards in, and it arrives without a reload.
@@ -489,21 +503,19 @@ test("My overview shows only the viewer's panel, live, and docks their own Up ne
   await expect(row(inProgressSection, live).locator(".row-time.is-running")).toBeVisible();
   await expect(stat(panel, "In progress").locator(".stat-value")).toHaveText("2");
 
-  // Edit docks the viewer's own queue beside the panel, and Close puts it away again. The dock is
-  // the lens's own, so it may already be open from the board display's remembered preference.
-  const upNextAction = section(panel, "Up next").locator("button.section-action");
-  if (await upNextAction.getAttribute("aria-pressed") === "true") {
-    await section(panel, "Up next").getByRole("button", { name: "Close your Up next" }).click();
-  }
+  // Edit docks the viewer's own queue beside the panel, and the dock's Close puts it away again.
   await expect(page.locator("k-up-next-panel")).toHaveCount(0);
   await section(panel, "Up next").getByRole("button", { name: "Edit your Up next" }).click();
   const dock = page.locator("k-up-next-panel");
   await expect(dock.getByText(queued).first()).toBeVisible();
+  await expect(section(panel, "Up next")).toHaveCount(0);
+  await expect(upNextToggle).toHaveClass(/\bis-set\b/);
   // The only panel needs no ring tying it to the dock.
   await expect(panel).not.toHaveClass(/\bis-docked\b/);
   await page.screenshot({ path: test.info().outputPath("my-overview.png"), fullPage: true });
-  await section(panel, "Up next").getByRole("button", { name: "Close your Up next" }).click();
+  await dock.getByRole("button", { name: "Close Up next" }).click();
   await expect(dock).toHaveCount(0);
+  await expect(row(section(panel, "Up next"), queued)).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(panel).toBeVisible();

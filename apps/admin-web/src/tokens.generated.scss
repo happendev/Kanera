@@ -22,16 +22,30 @@
   // deeper fill is the look we want. It now sits a hair *below* --card-bg (--surface-2), so a menu
   // opened over a card separates by --overlay-border and the shadow rather than by fill — keep
   // both. Row hover inside floating chrome must use --surface-hover, not --surface-2, to register.
-  --surface-overlay: #1e283b;
+  // Lifted one step again (Nov 2026): once the lane went to #131b29, #1e283b sat between lane and tile
+  // and an open menu read as one more column. It now clears the tile (--surface-2) by a hair and keeps
+  // the navy hue, so it is the lightest resting fill on screen without turning grey, while
+  // --surface-hover stays a clear step above it for row hover.
+  --surface-overlay: #243049;
   // Edge of floating chrome. The page hairline (--border) is tuned to divide same-hue surfaces
   // gently, which is exactly what a menu must not do; on dark it needs a clearly brighter edge.
   --overlay-border: #3d5170;
   // Dividers drawn *inside* floating chrome. --border is nearly the same value as the raised overlay
   // fill on dark, so a separator painted with it disappeared.
   --overlay-separator: #364a66;
+  // Strength of the selected-row wash inside floating chrome; see --overlay-selected below. The page
+  // --accent-soft (8%) came out ~1.08:1 against the dark overlay fill and selected rows vanished.
+  --overlay-selected-strength: 15%;
 
   --border: #253449;
   --border-strong: #364a66;
+  // Edge of anything filled with --surface-2 that must read as its own object: board tiles (the
+  // tile's resting border) and the stacked section bands on Team overview. --border sits only
+  // 1.1:1 off --surface-2, so a tile's edge vanished into its own fill; this is 1.33:1 against the
+  // tile and 1.67:1 against the lane, still a step short of --border-strong so a column of tiles
+  // does not read as a grid of boxes. Light keeps --border, which already reads on its near-white
+  // tiles. Resting colour only: hover never changes a tile's border.
+  --border-raised: #304060;
 
   --text: #e8f0f8;
   --text-muted: #a3b5cc;
@@ -40,7 +54,9 @@
   // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
   // is placeholders only, the one tier allowed to fall below body contrast.
   --text-3: #c5d1df;
-  --text-4: #7d8ea4;
+  // Placeholders still have to be read: ~4.8:1 on --surface-2 and floating chrome, a clear step under
+  // --text-muted.
+  --text-4: #8d9db3;
   // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
   // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
   --divider: #1e2a3c;
@@ -67,18 +83,31 @@
   --input-bg: transparent;
   --select-bg: var(--surface-2);
 
-  // Resting accent is the calmer deep teal; hover darkens, matching light mode and
-  // the per-board override (board.page.ts derives hover as the board color mixed
-  // 15% toward black). The bright #14b8a6 was the previous resting value and read
-  // too stark.
+  // Segmented control (shared/segmented.component.ts): a recessed track with a raised pill for the
+  // selected segment. Light recesses the track (--surface-3) under a --surface pill. Dark elevates to
+  // separate, so the same two tokens inverted the reading there: the --surface pill was darker than
+  // its --surface-3 track and the selection looked like a hole. Dark sinks the track to the page
+  // (--bg, a well under the --surface header it sits in) and lifts the pill to --surface-3.
+  --sg-track-bg: var(--bg);
+  --sg-pill-bg: var(--surface-3);
+
+  // Resting accent is a softened teal in the same brightness band as the other dark accents (blue,
+  // violet, pink below; carbon's blue): 7.0:1 on --bg, 6.1:1 on --surface, 5.1:1 on --surface-2,
+  // and 7.0:1 for the --accent-ink it carries as a fill. The accent is text and engaged-state
+  // chrome as often as it is a fill, so it has to clear AA as text on a card, not only on the page.
+  // The deeper #0d9488 it replaced managed 3.7:1 on --surface-2 (toolbar toggles, rank numbers on
+  // tiles) and read muddy as a button beside a board's brighter accent; the full #14b8a6 before
+  // that read too stark. Chroma, not lightness, is what makes a fill glare — keep it this muted.
+  // Hover darkens, matching light mode and the per-board override (accent-scope.ts derives hover as
+  // the board color mixed 15% toward black); it still carries --accent-ink at 5.6:1.
   // Held as its own token so the accent picker's "Default" swatch can still preview the theme's
   // signature colour while a named accent has taken over --accent. Every theme block declares it.
-  --accent-default: #0d9488;
+  --accent-default: #26b0a2;
   --accent: var(--accent-default);
-  --accent-hover: #0f766e;
+  --accent-hover: #1f9c8f;
   // Text on an accent fill. No hue bright enough to read as *text* on this dark canvas can also
-  // carry white text at AA (the default teal manages 3.7:1, the workspace blue 2.4:1), whereas dark
-  // ink clears 5:1 on every palette tone — so dark mode paints its filled buttons with page-coloured
+  // carry white text at AA (the default teal manages 2.7:1, the workspace blue 2.4:1), whereas dark
+  // ink clears 4.5:1 on every palette tone — so dark mode paints its filled buttons with page-coloured
   // ink. board.page.ts / workspace-settings.page.ts rebind --accent-fg to this same token when a
   // board or workspace colour takes over the accent.
   --accent-ink: #0b111b;
@@ -96,7 +125,7 @@
   // Blue, Violet, Pink and Graphite were picked in the same brightness band as carbon's signature
   // blue (~7-8:1 against the page) rather than at full brightness: the accent is a large button
   // fill as often as it is link text, and a brighter hue turns a primary button into a glowing
-  // slab. Those four clear 4.5:1 both as a fill carrying --accent-ink and as text on --bg,
+  // slab. Those four, and Green, clear 4.5:1 both as a fill carrying --accent-ink and as text on --bg,
   // --surface and --surface-2 in both dark themes; Graphite sits well clear of --text-muted
   // (#a3b5cc) so a neutral accent still reads as an accent, and none lands on --danger,
   // --success or --warning.
@@ -111,14 +140,13 @@
   // today, as the counterpart to its blue default; a dark-family theme whose own default is this
   // teal would need its own value here, or Green and Default would be the same swatch.
   //
-  // This is the one option below AA, accepted as a deliberate product call: on carbon it reads
-  // 5.05:1 as a fill and as text on the page, but 4.17:1 as text on a card and 3.46:1 on the hover
-  // fill. It is exactly the shortfall the shipped dark default already carries — the two are the
-  // same colour — so fixing one means fixing both.
+  // Because the two are the same colour, retuning one means retuning both. The earlier #0d9488 was
+  // the one option below AA (4.17:1 as text on a carbon card); this value reads 7.0:1 as a fill and
+  // on the page, 5.8:1 on a carbon card and 4.9:1 on its hover fill.
   --accent-blue: #6f9df0;
   --accent-blue-hover: #5d89da;
-  --accent-green: #0d9488;
-  --accent-green-hover: #0f766e;
+  --accent-green: #26b0a2;
+  --accent-green-hover: #1f9c8f;
   --accent-violet: #a58af2;
   --accent-violet-hover: #9174e0;
   --accent-pink: #e87fb4;
@@ -147,6 +175,23 @@
   --success-soft: color-mix(in srgb, var(--success) 12%, transparent);
   --danger-soft: color-mix(in srgb, var(--danger) 10%, transparent);
   --warning-soft: color-mix(in srgb, var(--warning) 12%, transparent);
+
+  // The danger state chip (_chip.scss: Blocked, overdue dates). Its own pair rather than --danger
+  // plus --danger-soft, because on navy a red wash reads brown and any ink mixed toward --text or
+  // white reads pink: either way the chip sat in the register of a user's red, orange or pink label
+  // pill and stopped reading as a state. Dark therefore carries a clean red ink (--danger with only
+  // 15% white, the least that clears AA: bare --danger is 4.3:1 on even a 6% wash over a tile) on a
+  // faint 7% wash (doubled by alert-wash to ~13.5%): 4.8:1 over a tile, 5.7:1 over --surface, 4.7:1
+  // on carbon's tile. Derived from --danger here, so carbon's own red resolves through the same
+  // declaration.
+  --danger-chip-wash: color-mix(in srgb, var(--danger) 7%, transparent);
+  --danger-chip-ink: color-mix(in srgb, var(--danger) 85%, #ffffff);
+
+  // Shell drawers (Up next, notifications). A 36% scrim barely dimmed a #0b111b page: the board
+  // behind stayed fully legible and the drawer's only edge was a 1px border. Dark needs a heavier
+  // scrim and a real edge shadow; light keeps the lighter values (light-base-tokens).
+  --drawer-scrim: rgb(0 0 0 / 55%);
+  --shadow-drawer: 1px 0 0 rgba(0, 0, 0, 0.5), 12px 0 32px rgba(0, 0, 0, 0.55);
 
   // Derived, never a literal: --accent is repointed on this same element by the [data-accent]
   // blocks, and a var(--accent) inside a custom property resolves against the element's winning
@@ -199,12 +244,17 @@
   // --shadow-drag, the one tier allowed to be heavy because the element is literally in the air.
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-pop: var(--shadow-lg);
+  // Its own value on dark rather than --shadow-lg: on the #0b111b canvas a single soft drop is
+  // invisible, so a popover separated from the board by its border alone. The tight contact shadow
+  // carries the edge over lanes and tiles; the long, dense one gives the lift where the canvas shows.
+  --shadow-pop: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4), 0 12px 32px -8px rgba(0, 0, 0, 0.7);
   --shadow-drag: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.45);
 
   // ─── Kanban surfaces (semantic) ──────────────────────────────────────────────
-  // Dark mode keeps the existing visual: lists lighter than bg, cards lighter still.
-  --list-bg: var(--surface);
+  // Lists lighter than bg, cards lighter still. The lane is its own step between --bg and --surface:
+  // as --surface it had the same fill as the sidebar and sticky toolbars, so page → chrome → lane →
+  // card flattened into three layers. Cards (--surface-2) sit 1.25:1 off it.
+  --list-bg: #131b29;
   --list-bg-strong: var(--surface-2);
   --card-bg: var(--surface-2);
   --card-bg-hover: var(--surface-hover);
@@ -243,6 +293,23 @@
   --color-gray: #7c8ca2;
   --color-olive: #949730;
   --color-brown: #b48153;
+
+  // Dark counterparts of the light-accent-palette entries, for the identity colours that fall short
+  // of 4.5:1 as *text* on a dark card (--surface-2) when a board or workspace colour becomes the
+  // accent (accent-scope.ts) or a board glyph's ink. Each is its identity colour lifted 4-14% toward
+  // white, just far enough to clear 4.6:1 on --surface-2 (5.3:1 on carbon's); the rest already do
+  // and fall back to the identity colour. The lift also keeps the 15%-black hover accent-scope.ts
+  // derives above 4.5:1 against --accent-ink — indigo's hover was 3.9:1. The light blocks restate
+  // all of these through light-accent-palette, so this only ever applies to the dark family.
+  --color-rose-accent: #f8647c;
+  --color-pink-accent: #f163ab;
+  --color-red-accent: #f56a6a;
+  --color-indigo-accent: #868cf6;
+  --color-violet-accent: #a382f9;
+  --color-purple-accent: #b977fa;
+  --color-gray-accent: #8998ab;
+  --color-olive-accent: #989b38;
+  --color-brown-accent: #bc8e64;
 
   // A coloured label's text is softened toward white in dark mode. Light mode overrides both
   // tokens below to deepen the same colour enough for small-text contrast on its pale wash.

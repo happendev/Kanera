@@ -26,6 +26,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Interface refresh:** a cleaner, more consistent look across boards, tables, Home, My Cards and Team Cards, notifications, menus, the new card dialog and card detail, with clearer light and dark themes. Phones get the full screen width, with navigation behind a menu button, and larger touch targets.
 - **Faster card details:** sections render independently, large collections defer offscreen rendering, and realtime bursts share one offline-cache write. Detail/feed loads are cancellable and deduplicated, unchanged reconnects use conditional requests, and per-card revisions preserve live edits without retrying the initial detail load.
 
 - **Onboarding templates:** lists now start with colors suited to their workflow stages, carried through to workspace and standalone boards.
@@ -33,6 +34,8 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+- **Numbered lists:** a numbered list interrupted by bullet points keeps its numbering after saving instead of restarting at 1.
+- Demo seed card creations and recent list moves now record their human actors, so teammates' recent work appears in the activity overview.
 - Updated application dependencies and monitoring images to resolve available high and critical security fixes.
 - Conditional card detail and activity reads now finish their 304 response once, avoiding duplicate-send errors.
 - API and worker shutdown now drain background work before closing realtime and shared connections, handle idle PostgreSQL connection errors, and finish connection cleanup when a dependency stops first.

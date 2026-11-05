@@ -21,6 +21,7 @@ import { SocketService } from "../../core/realtime/socket.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { UpdatesService } from "../../core/updates/updates.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
+import { ShellNavService } from "../../shared/shell-nav.service";
 import { AppShellComponent } from "./app-shell.component";
 import { CreateOrganisationDialogComponent, JoinOrganisationDialogComponent } from "./organisation-action.dialog";
 
@@ -583,6 +584,48 @@ describe("AppShellComponent board search", () => {
     expect(root.querySelector(".bell-btn")).toBeNull();
     expect(root.querySelectorAll(".utility-row .utility-btn").length).toBe(2);
     expect(root.style.getPropertyValue("--bell-clearance")).toBe("0px");
+  });
+
+  it("gives phones no rail: the drawer opens from the page header and closes for the panel it opens", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 390, writable: true, configurable: true });
+    const { notifications } = await render();
+    const nav = TestBed.inject(ShellNavService);
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(nav.drawerMode()).toBe(true);
+    expect(nav.label()).toBe("Expand sidebar");
+    expect(root.querySelector("aside.sidebar.mobile-open")).toBeNull();
+    // No page header is rendered here, so the shell keeps its own way into the drawer.
+    expect(root.querySelector(".mobile-nav-fallback")).not.toBeNull();
+    const releaseTrigger = nav.registerTrigger();
+    fixture.detectChanges();
+    expect(root.querySelector(".mobile-nav-fallback")).toBeNull();
+    releaseTrigger();
+
+    nav.open();
+    fixture.detectChanges();
+    expect(root.querySelector("aside.sidebar.mobile-open")).not.toBeNull();
+    // The utility buttons live in the drawer, which stacks above the panels: opening one closes it.
+    component.togglePanel("notifications");
+    fixture.detectChanges();
+    expect(root.querySelector("aside.sidebar.mobile-open")).toBeNull();
+
+    expect(nav.attention()).toBeNull();
+    notifications.unreadCount.set(4);
+    expect(nav.attention()).toBe("unread");
+    const priorities = TestBed.inject(MyPrioritiesService);
+    Object.defineProperty(priorities, "overdueCount", { value: signal(1), configurable: true });
+    notifications.unreadCount.set(5);
+    expect(nav.attention()).toBe("danger");
+  });
+
+  it("keeps the rail and shows no drawer button above phone width", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 800, writable: true, configurable: true });
+    await render();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(TestBed.inject(ShellNavService).drawerMode()).toBe(false);
+    expect(root.querySelector(".mobile-nav-fallback")).toBeNull();
+    expect(root.querySelector("aside.sidebar.collapsed")).not.toBeNull();
   });
 
   beforeEach(() => {
@@ -1372,7 +1415,8 @@ describe("AppShellComponent board search", () => {
     expect(boardLink?.textContent).toContain("Roadmap");
     expect(boardLink?.textContent).toContain("3");
     expect(boardLink?.getAttribute("aria-label")).toBe("Roadmap, 3 unread cards needing attention");
-    expect(boardLink?.style.getPropertyValue("--board-attention-color")).toBe("var(--color-red-accent, var(--color-red))");
+    // Unread wears the accent on every row, like the bell's badge; the board's colour stays on its glyph.
+    expect(boardLink?.style.getPropertyValue("--board-attention-color")).toBe("");
   });
 
   it("shows a board attention dot in the collapsed sidebar", async () => {

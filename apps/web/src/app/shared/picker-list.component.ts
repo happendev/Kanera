@@ -1,7 +1,8 @@
 import { afterNextRender, ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, output, signal } from "@angular/core";
 import { PANEL_INPUT_STYLES } from "./anchored-panel";
-import { AutofocusDirective } from "./autofocus.directive";
+import { hasCoarsePointer } from "../core/browser/input-modality";
 import { AvatarComponent } from "./avatar.component";
+import { BoardIconComponent } from "./board-icon.component";
 import { ListboxNav } from "./listbox-nav";
 import { MatchHighlightComponent } from "./match-highlight.component";
 
@@ -22,6 +23,11 @@ export interface PickerOption {
   color?: string | null;
   /** Render a colour dot instead of an icon (labels, and lists that carry only a colour). */
   dot?: boolean;
+  /**
+   * Render the icon as a board identity tile (`k-board-icon`), the way a board is shown everywhere
+   * else. Workspaces and organisations keep the bare coloured glyph.
+   */
+  board?: boolean;
   avatarUrl?: string | null;
   avatarName?: string | null;
   avatarUserId?: string | null;
@@ -71,14 +77,13 @@ export interface PickerGroup {
 @Component({
   selector: "k-picker-list",
   standalone: true,
-  imports: [AutofocusDirective, AvatarComponent, MatchHighlightComponent],
+  imports: [AvatarComponent, BoardIconComponent, MatchHighlightComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (showSearch()) {
       <input
         class="ap-input pl-search"
         type="text"
-        autofocus
         role="combobox"
         aria-autocomplete="list"
         aria-expanded="true"
@@ -93,7 +98,9 @@ export interface PickerGroup {
     }
     <!-- Keydown here only fires for focused rows (the search sits outside the list): with no search
          box the rows keep their tab stops and the arrows move focus between them. -->
-    <div class="pl-list" role="listbox" [id]="nav.listId" (keydown)="onKeydown($event)">
+    <!-- k-scroll-fade (styles.scss): a long list (every teammate, every board) used to end on a row
+         cut through its avatar with nothing to say more was below. -->
+    <div class="pl-list k-scroll-fade" role="listbox" [id]="nav.listId" (keydown)="onKeydown($event)">
       @for (group of renderedGroups(); track group.id) {
         @if (group.showParent && group.parent; as parent) {
           <div class="pl-parent" role="presentation">
@@ -111,7 +118,7 @@ export interface PickerGroup {
             <span>{{ group.label }}</span>
           </div>
         }
-        @for (option of group.options; track option.id) {
+        @for (option of group.options; track option.id; let last = $last) {
           <button
             type="button"
             class="pl-row"
@@ -124,7 +131,9 @@ export interface PickerGroup {
             [class.is-selected]="isSelected(option.id)"
             [class.is-grouped]="!!group.label"
             [class.is-nested]="!!group.parent"
+            [class.is-last]="last"
             [class.has-overline]="!!option.overline"
+            [class.has-hint]="!!option.hint"
             [style.padding-left.px]="indentFor(group, option)"
             [disabled]="option.disabled"
             (click)="pick.emit(option.id)"
@@ -138,6 +147,8 @@ export interface PickerGroup {
                 [size]="22"
                 [userId]="option.avatarUserId ?? null"
               />
+            } @else if (option.board) {
+              <k-board-icon class="pl-board" [icon]="option.icon ?? null" [color]="option.color ?? null" [size]="18" />
             } @else if (option.dot) {
               <span class="pl-dot" [style.background]="colorToken(option.color) ?? 'var(--border-strong)'"></span>
             } @else if (option.icon) {
@@ -176,12 +187,20 @@ export interface PickerGroup {
 
     .pl-search { flex: none; }
 
+    /* Hosts that pull their panel padding in (k-anchored-picker) step the field back in with this. */
+    :host .ap-input.pl-search {
+      width: calc(100% - 2 * var(--pl-search-inset, 0px));
+      margin-inline: var(--pl-search-inset, 0px);
+    }
+
     .pl-list {
       display: flex;
       flex-direction: column;
       gap: 1px;
       min-height: 0;
       overflow-y: auto;
+      /* Keyboard scrolling stops a row short of the edge, clear of the sticky heading and the fade. */
+      scroll-padding-block: 28px 16px;
     }
 
     .pl-group {
@@ -196,10 +215,11 @@ export interface PickerGroup {
       gap: 6px;
       margin-top: 4px;
       padding: 5px 8px 3px;
-      color: var(--text-muted);
+      /* The .k-menu-heading tier: a section label one step above the muted row hints. */
+      color: var(--text-3);
       background: var(--surface-overlay);
-      font-size: 10px;
-      font-weight: 700;
+      font-size: var(--text-xs);
+      font-weight: 600;
 
       &:first-child { margin-top: 0; }
 
@@ -226,7 +246,6 @@ export interface PickerGroup {
       background: var(--picker-nested-group-background, none);
       font-size: var(--text-xs);
       font-weight: 600;
-      letter-spacing: 0.02em;
       text-transform: none;
     }
 
@@ -252,8 +271,8 @@ export interface PickerGroup {
       background: var(--picker-parent-background, var(--surface-overlay));
       border-bottom: 1px solid var(--picker-parent-border, var(--overlay-separator));
       font-size: var(--text-xs);
+      /* A step heavier than the group heading recipe, and in --text: this is the outer level. */
       font-weight: 700;
-      letter-spacing: 0.02em;
 
       &:first-child { margin-top: 0; }
 
@@ -308,7 +327,15 @@ export interface PickerGroup {
          technically a hover state, practically invisible. These rows are the panel's whole content,
          so the row under the pointer has to be obvious. */
       &:hover:not(:disabled) { background: var(--surface-hover); }
-      &.is-selected { background: var(--surface-3); font-weight: 600; }
+      /* No hover look on touch, which keeps :hover on the last tapped point (see .k-menu-item); the
+         resting fill is restated so the global button:hover accent cannot take over. */
+      @media (hover: none) {
+        &:hover:not(:disabled) { background: var(--picker-row-background, transparent); }
+        &.is-selected:hover:not(:disabled) { background: var(--overlay-selected, var(--accent-soft)); }
+      }
+      /* The shared menu selection recipe (.k-menu-item in styles.scss): soft accent wash plus the
+         trailing accent check, so a picker and a menu agree on what "chosen" looks like. */
+      &.is-selected { background: var(--overlay-selected, var(--accent-soft)); font-weight: 600; }
       /* The keyboard's row (and the pointer's, which moves it too) wears the hover wash plus a quiet
          inset ring, so it stays findable on a selected row whose fill is already tinted. A ring, not
          an edge stripe, per the app's design language. */
@@ -332,7 +359,8 @@ export interface PickerGroup {
         position: absolute;
         top: -1px;
         bottom: 0;
-        left: 13px;
+        /* Under the centre of the group heading's 13px glyph, which starts at the 8px inset. */
+        left: 14px;
         width: 1px;
         /* This rail lives inside floating chrome. The page border nearly matches the raised panel
            in dark mode, so use the overlay separator that is tuned to remain visible in both themes. */
@@ -342,7 +370,10 @@ export interface PickerGroup {
 
     /* One step further in than a single-level group, so the inner heading visibly owns its rows
        instead of sharing their left edge — the rail moves with them. */
-    .pl-row.is-nested::before { left: 21px; }
+    .pl-row.is-nested::before { left: 22px; }
+
+    /* The rail joins a group's rows; past its last row it would only point at the next heading. */
+    .pl-row.is-grouped.is-last::before { bottom: 50%; }
 
     .pl-icon {
       flex: 0 0 16px;
@@ -359,7 +390,20 @@ export interface PickerGroup {
       border-radius: 50%;
     }
 
-    .pl-avatar { flex: none; }
+    .pl-avatar,
+    .pl-board { flex: none; }
+
+    /* A row with a subtitle ("All boards" over "5 boards you can access") lines its icon and check up
+       with the label, not with the middle of the two lines, the way the filter's two-line rows do.
+       The nudges centre each mark on the 13px label's ~17.5px first line. */
+    .pl-row.has-hint {
+      align-items: flex-start;
+
+      > .pl-icon { margin-top: 1px; }
+      > .pl-dot { margin-top: 3px; }
+      > .pl-avatar { margin-top: -2px; }
+      > .pl-check { margin-top: 1px; }
+    }
 
     .pl-text {
       display: grid;
@@ -425,7 +469,7 @@ export interface PickerGroup {
       font-size: 10px;
       font-weight: 600;
       background: var(--surface-2);
-      border: 1px solid var(--border);
+      border: 1px solid var(--overlay-separator);
       border-radius: var(--radius-sm);
 
       &.is-danger {
@@ -441,7 +485,8 @@ export interface PickerGroup {
 
     .pl-check {
       flex: none;
-      color: var(--text);
+      margin-left: auto;
+      color: var(--accent);
       font-size: var(--text-md);
     }
 
@@ -482,6 +527,12 @@ export class PickerListComponent {
     // Open on the current choice. A long list (every time zone, every board) would otherwise open at
     // its top with the selected row hundreds of rows away. Scrolls the list only, never the page.
     afterNextRender(() => {
+      // Type-to-filter on open with a keyboard. Not on touch: focusing raises the soft keyboard over
+      // most of the list the user opened the picker to see, and rings the search above the selected
+      // row. A macrotask, as the autofocus directive did, so the anchored host is visible first.
+      const search = this.host.nativeElement.querySelector<HTMLInputElement>(".pl-search");
+      if (search && !hasCoarsePointer()) setTimeout(() => search.focus());
+
       const list = this.host.nativeElement.querySelector<HTMLElement>(".pl-list");
       const row = list?.querySelector<HTMLElement>(".pl-row.is-selected");
       if (!list || !row || list.scrollHeight <= list.clientHeight) return;
@@ -556,7 +607,8 @@ export class PickerListComponent {
    * one step per nesting level (organisation → workspace → board).
    */
   indentFor(group: PickerGroup, option: PickerOption): number {
-    return 8 + (group.label ? 12 : 0) + (group.parent ? 8 : 0) + (option.depth ?? 0) * 14;
+    // 18, not 12: at 12 the group rail sat 6px from a 22px avatar and read as part of it.
+    return 8 + (group.label ? 18 : 0) + (group.parent ? 8 : 0) + (option.depth ?? 0) * 14;
   }
 
   colorToken(color: string | null | undefined): string | null {

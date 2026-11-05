@@ -1,6 +1,6 @@
-// The queue-rank pill's one colour vocabulary, included by every surface that wears it (board
-// tile, table row, Home priorities, the Up next panel) so the same rank reads as the same shade
-// everywhere.
+// The queue-rank pill's one colour vocabulary, included by every surface that wears it (table row,
+// overview rows, Home priorities, the Up next panel) so the same rank reads as the same shade
+// everywhere. The board tile's flat "Up next N" chip tints only its number with the same --rank-heat.
 //
 // --rank-heat (0..1, from priorityRankHeat in shared/priority-rank.ts) deepens the accent tint as
 // the rank climbs toward #1: the top of the queue must read from across a column, while deep ranks
@@ -10,8 +10,11 @@
 //
 // $base is the surface the pill sits on (--card-bg on a tile, --surface elsewhere), so the tint
 // keys off the same ground the pill's neighbours use.
+//
+// The resting floor is 22%/50%: at 16%/38% a deep rank was a grey circle that did not read as the
+// accent at all, so the Up next panel's numbers looked disabled. The ceiling is unchanged.
 @mixin rank-heat($base) {
   color: var(--text);
-  background: color-mix(in srgb, var(--accent) calc(16% + var(--rank-heat, 0) * 36%), #{$base});
-  border: 1px solid color-mix(in srgb, var(--accent) calc(38% + var(--rank-heat, 0) * 34%), var(--border));
+  background: color-mix(in srgb, var(--accent) calc(22% + var(--rank-heat, 0) * 30%), #{$base});
+  border: 1px solid color-mix(in srgb, var(--accent) calc(50% + var(--rank-heat, 0) * 22%), var(--border));
 }

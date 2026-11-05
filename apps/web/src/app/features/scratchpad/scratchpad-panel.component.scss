@@ -138,12 +138,15 @@
 // Matches `.drawer-header` in my-priorities-panel / notifications-panel exactly — 56px and 16px
 // gutters. The right gutter is 8px rather than 16 because the two icon buttons carry their own 8px of
 // internal padding, which is the same treatment the drawers' close button gets.
+// 55px, not 56: the 1px border lives on `.panel-header` around this row, whereas the drawers, the
+// sidebar brand row and the page header count their border inside their 56px. Docked beside a board,
+// a 56px row put this header's rule 1px below theirs.
 .header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  min-height: 56px;
+  min-height: 55px;
   padding: 0 8px 0 var(--scratch-gutter);
 }
 
@@ -566,7 +569,6 @@
 .panel-blank-hint {
   color: var(--text-muted);
   font-size: var(--text-sm);
-  opacity: 0.8;
 }
 
 .panel-state {

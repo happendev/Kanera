@@ -2,7 +2,9 @@ import { GettingStartedService } from "../../core/getting-started/getting-starte
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
+import { NgTemplateOutlet } from "@angular/common";
+import { FitLabelsDirective } from "../../shared/fit-labels.directive";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
@@ -37,6 +39,7 @@ import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { BoardIconComponent } from "../../shared/board-icon.component";
 import { BoardBackgroundPopover } from "../board/board-background.popover";
 import { BoardCanvasComponent } from "../board/board-canvas.component";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
@@ -75,6 +78,7 @@ import { BulkCustomFieldsDialogComponent } from "../board/bulk-custom-fields.dia
 import { BULK_CARD_STORE } from "../board/bulk-card-store";
 import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
 import { SaveViewPopover } from "./save-view.popover";
+import { PhoneLaneHeightDirective } from "./phone-lane-height.directive";
 import { TeamOverviewComponent } from "./team-overview.component";
 import { DependencyMapComponent } from "../dependencies/dependency-map.component";
 import { BoardTimelineViewComponent, type TimelineScheduleScope } from "../board/timeline-view/board-timeline-view.component";
@@ -122,14 +126,16 @@ const MAX_UP_NEXT_ENTRIES = 50;
 @Component({
   selector: "k-global-work",
   standalone: true,
-  imports: [BoardTimelineViewComponent, EmptyStateComponent, 
+  imports: [BoardTimelineViewComponent, EmptyStateComponent, FitLabelsDirective, NgTemplateOutlet,
     AnchoredPanelDirective,
     AnchoredPickerPopover,
     BoardBackgroundPopover,
     MenuDirective,
     AvatarComponent,
+    BoardIconComponent,
     BoardCalendarViewComponent,
     BoardCanvasComponent,
+    PhoneLaneHeightDirective,
     BoardTableViewComponent,
     BulkCardActionsMenuPopover,
     BulkCustomFieldsDialogComponent,
@@ -249,6 +255,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * element's scroll position, so a display that lands here without the frame would leave the sheet at
    * auto height and strand every row past the first page.
    */
+  /** By template ref, not class, so the deferred Table stays out of this page's eager bundle. */
+  protected readonly tableView = viewChild<BoardTableViewComponent>("tableView");
   readonly usesTableFrame = computed(() => this.effectiveDisplay() === "table" || this.effectiveDisplay() === "timeline");
   readonly collapsedWorkspaceIds = computed(() =>
     new Set(this.state.definition().collapsedWorkspaceIds)
@@ -704,9 +712,14 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   // result only lands in one workspace: the header stays (it names the workspace), but the lanes
   // fill the remaining shell height so the horizontal scrollbar sits at the bottom of the frame
   // instead of floating at a fixed 70dvh above an empty strip.
+  //
+  // Not while assigned checklist items follow the lanes: the frame then had to share one screen
+  // between the two, so a list with two cards was cut mid-tile while the page itself could not
+  // scroll. With a section below, the lanes size to their content (capped) and the page scrolls.
   readonly fillsBoardFrame = computed(() => {
     const workspaces = this.boardWorkspaces();
     return workspaces.length === 1
+      && this.state.response().checklistItems.length === 0
       && (this.singleWorkspaceBoard() || !this.isWorkspaceCollapsed(workspaces[0].id));
   });
   // ── Table view bridge ──────────────────────────────────────────────────────────────────
@@ -1500,16 +1513,14 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     // Team overview has no person in focus; its dock follows `overviewDockQueue` instead.
     && !(this.lens() === "team" && this.effectiveDisplay() === "overview")
   );
-  /** The dock is a board curation tool; every other display keeps its own full-width reading mode. */
-  readonly showUpNextControl = computed(() =>
-    this.effectiveDisplay() === "board"
-  );
   /**
-   * Where the lens's own dock can open. My overview opens it from its Up next section's Edit
-   * button rather than the toolbar, the same way Team overview docks a teammate's queue.
+   * The dock is a board curation tool; every other display keeps its own full-width reading mode.
+   * My overview keeps the toolbar control too: its panel's Up next section steps aside while the
+   * viewer's own queue is docked, so the toolbar is where the open dock is named and toggled.
+   * (Team overview docks a teammate's queue per panel instead; see `overviewDock`.)
    */
-  private readonly upNextDockable = computed(() =>
-    this.showUpNextControl() || (this.lens() === "my" && this.effectiveDisplay() === "overview")
+  readonly showUpNextControl = computed(() =>
+    this.effectiveDisplay() === "board" || (this.lens() === "my" && this.effectiveDisplay() === "overview")
   );
   readonly upNextUnavailableTooltip = computed(() => {
     if (this.effectiveDisplay() === "history") {
@@ -1536,7 +1547,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.overviewDock()
       ? this.overviewDockQueue() !== null && this.overviewDockOpen()
       : this.upNextAvailable()
-        && this.upNextDockable()
+        && this.showUpNextControl()
         && (this.sheetMode() ? this.sheetOpen() : this.state.upNextPanelOpen())
   );
   /** Names the queue's owner in the panel header when curating somebody else. */
@@ -1794,7 +1805,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   toggleUpNextPanel(): void {
-    if (!this.upNextDockable() || !this.upNextAvailable()) return;
+    if (!this.showUpNextControl() || !this.upNextAvailable()) return;
     this.priorityError.set(null);
     if (this.sheetMode()) {
       this.sheetOpen.update((open) => !open);

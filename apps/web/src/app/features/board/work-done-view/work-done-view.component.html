@@ -2,15 +2,32 @@
   @if (offlineCopyLabel()) { <div class="offline-banner" role="status"><i aria-hidden="true" class="ti ti-cloud-off"></i>{{ offlineCopyLabel() }}</div> }
   <div class="wd-toolbar" (click)="$event.stopPropagation()">
     <div class="wd-toolbar-left">
-      <!-- Presets cover the common reads; the range picker handles anything else. -->
-      <k-segmented
-        [options]="presetOptions"
-        [value]="$any(preset())"
-        [showLabels]="true"
-        ariaLabel="Period"
-        i18n-ariaLabel="Label for the work done period presets"
-        (valueChange)="applyPreset($any($event))"
-      />
+      <!-- Presets cover the common reads; the range picker handles anything else. Calendar periods
+           are jump buttons and the rolling ranges one segmented track (see CALENDAR_PRESET_OPTIONS). -->
+      <!-- No group role here: the track below is already the "Period" group, and a second one
+           around it would announce the same name twice. -->
+      <div class="wd-presets">
+        @for (option of calendarPresetOptions; track option.id) {
+        <button
+          type="button"
+          class="k-toolbar-btn wd-jump"
+          [class.is-set]="preset() === option.id"
+          [attr.aria-pressed]="preset() === option.id"
+          [kTooltip]="option.tooltip ?? option.label"
+          (click)="applyPreset(option.id)"
+        >
+          {{ option.label }}
+        </button>
+        }
+        <k-segmented
+          [options]="rollingPresetOptions"
+          [value]="$any(preset())"
+          [showLabels]="true"
+          ariaLabel="Period"
+          i18n-ariaLabel="Label for the work done period presets"
+          (valueChange)="applyPreset($any($event))"
+        />
+      </div>
 
       <div class="wd-nav">
         <button
@@ -37,7 +54,14 @@
             (click)="$event.stopPropagation(); rangePickerOpen.set(!rangePickerOpen())"
           >
             <i aria-hidden="true" class="ti ti-calendar-event"></i>
-            <span class="wd-range-label">{{ rangeLabel() }}</span>
+            <span class="wd-range-text">
+              <span class="wd-range-label">{{ rangeLabel() }}</span>
+              <!-- Phones only (see the stylesheet): the summary's second home, under the dates it
+                   counts, so the navigator keeps a full row to itself without costing another. -->
+              @if (!loading() && eventCount() > 0) {
+              <span class="wd-range-summary" aria-hidden="true">{{ summaryParts() }}</span>
+              }
+            </span>
             <i aria-hidden="true" class="ti ti-selector"></i>
           </button>
           @if (rangePickerOpen()) {
@@ -63,12 +87,16 @@
           <i aria-hidden="true" class="ti ti-chevron-right"></i>
         </button>
       </div>
+      <!-- Beside the period it counts, not across the toolbar at the far edge, so the count reads as
+           a fact about 29 Oct – 4 Nov rather than as a stray number. Left out at zero: beside the
+           strip's weeks of moves, "0 events" read as a contradiction, and the empty state below
+           already says the period is empty in words that name it. -->
+      @if (!loading() && eventCount() > 0) {
+      <span class="wd-summary">{{ summaryParts() }}</span>
+      }
     </div>
 
     <div class="wd-toolbar-right">
-      @if (!loading()) {
-      <span class="wd-summary">{{ summaryParts() }}</span>
-      }
       @if (cardCount() || report()) {
       <button
         type="button"
@@ -79,7 +107,7 @@
         i18n-kTooltip
         (click)="copyRange()"
       >
-        <i aria-hidden="true" class="ti ti-clipboard-text"></i>
+        <i aria-hidden="true" class="ti ti-copy"></i>
       </button>
       }
     </div>
@@ -93,6 +121,8 @@
       [windowDays]="stripWindowDays()"
       [selectable]="true"
       [selectedDate]="from().getTime() === to().getTime() ? fromInputValue() : null"
+      [rangeStart]="fromInputValue()"
+      [rangeEnd]="toInputValue()"
       [heading]="stripHeading()"
       (daySelected)="onStripDaySelected($event)"
     />
@@ -101,7 +131,7 @@
 
   @if (error()) {
   <div class="wd-empty">
-    <k-empty-state raised icon="alert-circle" [title]="error()!" text="Try changing the period or refreshing the page." i18n-text />
+    <k-empty-state raised size="sm" icon="alert-circle" [title]="error()!" text="Try changing the period or refreshing the page." i18n-text />
   </div>
   } @else if (layout() === 'report' && reportAvailable()) {
   <!-- Rendered as soon as the first events arrive, then kept up (dimmed) across refreshes. -->
@@ -140,7 +170,7 @@
   </div>
   } @else if (cardCount() === 0) {
   <div class="wd-empty">
-    <k-empty-state raised icon="history" [title]="emptyTitle()" [text]="emptyDescription()" />
+    <k-empty-state raised size="sm" icon="history" [title]="emptyTitle()" [text]="emptyDescription()" />
   </div>
   } @else {
   <!-- Days with no activity are simply absent; the strip above shows where the gaps are. -->

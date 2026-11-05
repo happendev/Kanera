@@ -268,9 +268,12 @@ export const ANCHORED_PANEL_STYLES = `
     max-height: var(--ap-max-height, 420px);
     padding: 10px;
     background: var(--surface-overlay);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg, 0 8px 32px rgb(0 0 0 / 25%));
+    /* The same edge and elevation as .k-menu, so a picker and a menu opened side by side read as one
+       family. --border-strong was a different edge in dark mode. */
+    border: 1px solid var(--overlay-border);
+    /* One radius for every floating shell, menus and pickers alike. */
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-pop);
   }
 
   .ap-head {
@@ -278,7 +281,13 @@ export const ANCHORED_PANEL_STYLES = `
     align-items: center;
     gap: 6px;
     padding-bottom: 6px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--overlay-separator);
+  }
+
+  /* A search field directly below already draws a line under the title; a rule on top of it doubled up. */
+  .ap-head.is-plain {
+    padding-bottom: 0;
+    border-bottom: 0;
   }
 
   .ap-title {
@@ -303,7 +312,16 @@ export const ANCHORED_PANEL_STYLES = `
     border-radius: var(--radius-sm);
     cursor: pointer;
 
-    &:hover { color: var(--text); background: var(--surface-2); }
+    /* --surface-2 sits at or below the overlay fill in dark mode, so it never read as a hover. */
+    &:hover { color: var(--text); background: var(--surface-hover); }
+
+    /* A thumb-sized target without a 44px header: the box grows and the negative margin hands the
+       extra back, so the glyph and the header height stay where they were on desktop. */
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      width: 44px;
+      height: 44px;
+      margin: -9px;
+    }
   }
 
 `;
@@ -316,7 +334,7 @@ export const ANCHORED_PANEL_STYLES = `
  * plain `.xx-input` rule loses its height/padding to the 36px app input and — the visible bug —
  * keeps the global accent focus ring while its own rule recolours the border to a neutral tone,
  * which reads as a mismatched double highlight. Scoping through the host outranks the reset and
- * lets focus look like every other input in the app: accent border plus the shared ring.
+ * lets this rule own focus: an accent border plus a quieter ring than the app input's (see below).
  */
 export const PANEL_INPUT_STYLES = `
   :host .ap-input {
@@ -326,7 +344,8 @@ export const PANEL_INPUT_STYLES = `
     padding: 6px 9px;
     color: var(--text);
     background: var(--surface-2);
-    border: 1px solid var(--border);
+    /* --border is one step off the dark overlay fill and the field's edge disappeared into it. */
+    border: 1px solid var(--overlay-border);
     border-radius: var(--radius-sm);
     font: inherit;
     font-size: var(--text-base);
@@ -334,8 +353,14 @@ export const PANEL_INPUT_STYLES = `
     transition: border-color 0.15s, box-shadow 0.15s;
   }
 
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    :host .ap-input { min-height: 44px; }
+  }
+
+  /* The quiet focus every picker search shares: the field autofocuses when its panel opens, so the
+     app's heavy 3px ring would be the loudest thing in a panel the user has only just opened. */
   :host .ap-input:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--ring);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
   }
 `;

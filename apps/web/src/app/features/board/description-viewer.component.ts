@@ -47,7 +47,9 @@ const ALLOWED_TAGS = [
   "a", "img", "hr", "span",
 ];
 
-const ALLOWED_ATTR = ["href", "title", "src", "alt", "target", "rel", "class", "style", "data-user-id", "type", "checked", "disabled"];
+// `start` keeps an ordered list's numbering when a nested-looking bullet list splits it in two: the
+// editor saves the continuation as `2. …`, which marked renders as `<ol start="2">`.
+const ALLOWED_ATTR = ["href", "title", "src", "alt", "target", "rel", "class", "style", "data-user-id", "type", "checked", "disabled", "start"];
 const MENTION_RE = /@\[([^\]]+)\]\(kanera-user:([0-9a-fA-F-]{36})\)/g;
 
 type MentionUser = Pick<WireBoardMemberUser, "userId" | "displayName" | "avatarUrl">;

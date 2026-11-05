@@ -1,6 +1,5 @@
 <div class="list-header">
   <h3 [class.has-color]="!!list().color" [style.--list-color]="list().color ? 'var(--color-' + list().color + ')' : null">
-    <span class="card-count">{{ cardCount() }}</span>
     <i aria-hidden="true" [class]="'ti ti-' + (list().icon || 'list')"></i>
     {{ list().name }}
     @if (state.inProgressEnabled() && list().inProgress) {
@@ -8,6 +7,9 @@
       <i aria-hidden="true" class="ti ti-progress"></i>
     </span>
     }
+    <!-- Last: the name is what a lane is scanned for, the count a secondary fact. After the
+         in-progress marker, which belongs right beside the name. -->
+    <span class="card-count">{{ cardCount() }}</span>
   </h3>
   @if (canEditRole() && anyBulkAction()) {
   <div class="list-menu-wrap">
@@ -15,32 +17,35 @@
       <i aria-hidden="true" class="ti ti-dots"></i>
     </button>
     @if (menuOpen()) {
-    <div class="list-menu-dropdown" kAnchoredPanel [apAnchor]="listMenuBtn" [apPlacement]="menuPlacement" (apDismissed)="closeMenu()">
+    <div class="list-menu-dropdown" kMenu kAnchoredPanel [apAnchor]="listMenuBtn" [apPlacement]="menuPlacement" (apDismissed)="closeMenu()">
       @if (canCreateCards()) {
-      <button class="menu-item ghost" (click)="onAddCardFromMenu()" [disabled]="cardDragging()">
+      <button class="k-menu-item" (click)="onAddCardFromMenu()" [disabled]="cardDragging()">
         <i aria-hidden="true" class="ti ti-plus"></i>
-        <ng-container i18n="List menu item">Add card</ng-container>
+        <span i18n="List menu item">Add card</span>
       </button>
       }
       @if (canManageSeparators()) {
-      <button class="menu-item ghost" (click)="addSeparator(true)" [disabled]="cardDragging()">
-        <i aria-hidden="true" class="ti ti-separator"></i>
-        <ng-container i18n="List menu item">Add separator</ng-container>
+      <button class="k-menu-item" (click)="addSeparator(true)" [disabled]="cardDragging()">
+        <i aria-hidden="true" class="ti ti-separator-horizontal"></i>
+        <span i18n="List menu item">Add separator</span>
       </button>
+      }
+      @if ((canCreateCards() || canManageSeparators()) && (showSelectAllCards() || showBulkListActions())) {
+      <div class="k-menu-separator"></div>
       }
       @if (showBulkListActions() && otherLists().length) {
       <div class="menu-sub">
-        <button #moveListBtn class="menu-item ghost" [class.is-active]="showMoveListPicker()" (click)="toggleMoveListPicker()">
+        <button #moveListBtn class="k-menu-item" [class.is-active]="showMoveListPicker()" (click)="toggleMoveListPicker()">
           <i aria-hidden="true" class="ti ti-arrows-transfer-down"></i>
-          <ng-container i18n="List menu item">Move all cards to…</ng-container>
-          <i aria-hidden="true" class="ti ti-chevron-right menu-chev"></i>
+          <span i18n="List menu item">Move all cards to…</span>
+          <i aria-hidden="true" class="ti ti-chevron-right k-menu-chevron"></i>
         </button>
         @if (showMoveListPicker()) {
         <div class="menu-sub-panel" kAnchoredPanel [apAnchor]="moveListBtn" [apPlacement]="moveListPlacement" (apDismissed)="showMoveListPicker.set(false)">
           @for (l of otherLists(); track l.id) {
-          <button class="menu-item ghost" (click)="moveAllCards(l.id)" [disabled]="movingCards()">
+          <button class="k-menu-item" (click)="moveAllCards(l.id)" [disabled]="movingCards()">
             <i aria-hidden="true" [class]="'ti ti-' + (l.icon || 'list')" [style.color]="l.color ? 'var(--color-' + l.color + ')' : null"></i>
-            {{ l.name }}
+            <span>{{ l.name }}</span>
           </button>
           }
         </div>
@@ -48,27 +53,27 @@
       </div>
       }
       @if (showSelectAllCards()) {
-      <button class="menu-item ghost" (click)="selectAllCards($event)" [disabled]="!displayedCards().length">
+      <button class="k-menu-item" (click)="selectAllCards($event)" [disabled]="!displayedCards().length">
         <i aria-hidden="true" class="ti ti-select-all"></i>
-        <ng-container i18n="List menu item">Select all cards</ng-container>
+        <span i18n="List menu item">Select all cards</span>
       </button>
       }
       @if (showBulkListActions()) {
-      <button class="menu-item ghost" (click)="setAllCompleted(true)" [disabled]="savingCompletion()">
+      <button class="k-menu-item" (click)="setAllCompleted(true)" [disabled]="savingCompletion()">
         <i aria-hidden="true" class="ti ti-circle-check"></i>
-        <ng-container i18n="List menu item">Mark all complete</ng-container>
+        <span i18n="List menu item">Mark all complete</span>
       </button>
-      <button class="menu-item ghost" (click)="setAllCompleted(false)" [disabled]="savingCompletion()">
+      <button class="k-menu-item" (click)="setAllCompleted(false)" [disabled]="savingCompletion()">
         <i aria-hidden="true" class="ti ti-circle"></i>
-        <ng-container i18n="List menu item">Mark all incomplete</ng-container>
+        <span i18n="List menu item">Mark all incomplete</span>
       </button>
       }
       @if (showBulkListActions()) {
-      <div class="menu-sep"></div>
+      <div class="k-menu-separator"></div>
       <!-- No inline confirm: the action fires at once and the toast offers Undo. -->
-      <button class="menu-item ghost menu-item-danger" (click)="archiveCards()" [disabled]="clearing()">
+      <button class="k-menu-item danger" (click)="archiveCards()" [disabled]="clearing()">
         <i aria-hidden="true" class="ti ti-archive"></i>
-        <ng-container i18n="List menu item">Archive all cards</ng-container>
+        <span i18n="List menu item">Archive all cards</span>
       </button>
       }
     </div>
@@ -123,17 +128,17 @@
           }
         </div>
         }
-        @if (showCardKeys()) { <span class="card-drag-preview-key">{{ item.card.key }}</span> }
-        @if (!dragCoverUrl && dragBoard) {
-        <span class="card-drag-preview-board-badge">
-          <i aria-hidden="true" [class]="'ti ti-' + (dragBoard.icon || 'layout-kanban')" [style.color]="dragBoard.iconColor ? 'var(--color-' + dragBoard.iconColor + ')' : null"></i>
-          <span class="card-drag-preview-board-name">{{ dragBoard.name }}</span>
+        <!-- Same order as the tile: key and board on one row, the title, then its labels. -->
+        @if (showCardKeys() || (!dragCoverUrl && dragBoard)) {
+        <span class="card-drag-preview-key-row">
+          @if (showCardKeys()) { <span class="card-drag-preview-key">{{ item.card.key }}</span> }
+          @if (!dragCoverUrl && dragBoard) {
+          <span class="card-drag-preview-board-badge">
+            <i aria-hidden="true" [class]="'ti ti-' + (dragBoard.icon || 'layout-kanban')" [style.color]="dragBoard.iconColor ? 'var(--color-' + dragBoard.iconColor + ')' : null"></i>
+            <span class="card-drag-preview-board-name">{{ dragBoard.name }}</span>
+          </span>
+          }
         </span>
-        }
-        @if (labelsForCard(item.card.id); as dragLabels) {
-        @if (dragLabels.length) {
-        <k-card-labels class="card-drag-preview-labels" [labels]="dragLabels" [interactive]="false" />
-        }
         }
         <span class="card-drag-preview-body">
           @if (item.card.completedAt) {
@@ -141,6 +146,11 @@
           }
           <span class="card-drag-preview-title">{{ item.card.title }}</span>
         </span>
+        @if (labelsForCard(item.card.id); as dragLabels) {
+        @if (dragLabels.length) {
+        <k-card-labels class="card-drag-preview-labels" [labels]="dragLabels" [interactive]="false" />
+        }
+        }
       </div>
     </ng-template>
   </k-card>
@@ -185,7 +195,7 @@
   }
   @if (canManageSeparators()) {
   <button class="add-card-btn add-separator-btn ghost icon" [disabled]="cardDragging() || !canEdit()" (click)="addSeparator(false)" aria-label="Add separator" i18n-aria-label kTooltip="Add separator" i18n-kTooltip>
-    <i aria-hidden="true" class="ti ti-separator"></i>
+    <i aria-hidden="true" class="ti ti-separator-horizontal"></i>
   </button>
   }
 </div>

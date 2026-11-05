@@ -44,6 +44,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
 import { DisconnectPromptComponent } from "../../shared/disconnect-prompt.component";
 import { LogoComponent } from "../../shared/logo.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
+import { ShellNavService, type ShellNavAttention } from "../../shared/shell-nav.service";
 import { SupportSessionBannerComponent } from "../../shared/support-session-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpdatePromptComponent } from "../../shared/update-prompt.component";
@@ -151,6 +152,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly offlineCache = inject(OfflineCacheService);
   protected readonly offlineCacheError = computed(() => this.offlineCache.persistenceError?.() ?? null);
   private readonly panelStack = inject(PanelStackService);
+  private readonly shellNav = inject(ShellNavService);
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
   readonly online = this.sockets.online;
@@ -232,6 +234,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly notificationsPanel = viewChild<NotificationsPanelComponent>("notificationsPanel");
   readonly prioritiesPanel = viewChild<MyPrioritiesPanelComponent>("prioritiesPanel");
   readonly pendingPanel = signal<"notifications" | "priorities" | null>(null);
+  /** Open, or requested while its lazy component downloads: drives the trigger's pressed look and aria-expanded. */
+  readonly prioritiesOpen = computed(() => this.pendingPanel() === "priorities" || (this.prioritiesPanel()?.open() ?? false));
+  readonly notificationsOpen = computed(() => this.pendingPanel() === "notifications" || (this.notificationsPanel()?.open() ?? false));
 
   private readonly openDeferredPanel = effect(() => {
     const pending = this.pendingPanel();
@@ -250,6 +255,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
    * owns both triggers, is the one place that knows there are two.
    */
   togglePanel(which: "notifications" | "priorities"): void {
+    // On a phone the trigger sits in the open nav drawer, which stacks above the panels: close it so
+    // the panel it opened is what the user sees.
+    this.closeMobileSidebar();
     const wasPending = this.pendingPanel() === which;
     this.pendingPanel.set(null);
     const other = which === "notifications" ? this.prioritiesPanel() : this.notificationsPanel();
@@ -388,7 +396,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private static readonly MOBILE_BREAKPOINT = 640;
   private static readonly SIDEBAR_WIDTH = 260;
   private static readonly SIDEBAR_WIDTH_COLLAPSED = 60;
-  private static readonly SIDEBAR_WIDTH_COLLAPSED_MOBILE = 52;
+  /**
+   * Phones have no rail: closed, the drawer is entirely off-canvas and the page takes the full
+   * width, with the drawer's button at the start of every page header (ShellNavService). A 52px rail
+   * used to stay beside every page, which cost a phone an eighth of its width for six icons.
+   */
+  private static readonly SIDEBAR_WIDTH_COLLAPSED_MOBILE = 0;
   private static readonly SIDEBAR_SWIPE_INTENT_PX = 10;
   readonly sidebarCollapsed = signal<boolean>(this.readInitialCollapsed());
   readonly isMobile = signal<boolean>(window.innerWidth <= AppShellComponent.MOBILE_BREAKPOINT);
@@ -752,6 +765,37 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (this.isMobile() && !this.sidebarCollapsed()) {
       this.sidebarCollapsed.set(true);
     }
+  }
+
+  /** Phones: the drawer is the only way to the sidebar, opened from the page header's menu button. */
+  openMobileSidebar() {
+    if (!this.isMobile()) return;
+    this.clearSidebarSettle();
+    this.sidebarCollapsed.set(false);
+  }
+
+  /**
+   * What the header's menu button shows while the drawer is closed, by the utility buttons' own
+   * rules: overdue Up next is danger and outranks unread notifications, which are neutral. A plain
+   * Up next count is not news, so it shows nothing, as its badge is a quiet count.
+   */
+  protected readonly navAttention = computed<ShellNavAttention>(() => {
+    if (this.myPriorities.overdueCount() > 0) return "danger";
+    if (this.notifications.unreadCount() > 0) return "unread";
+    return null;
+  });
+
+  private readonly disconnectShellNav = this.shellNav.connect({
+    drawerMode: this.isMobile,
+    attention: this.navAttention,
+    label: this.text.expandSidebar,
+    open: () => this.openMobileSidebar(),
+  });
+  protected readonly showNavFallback = computed(() => this.isMobile() && !this.shellNav.hasHeaderTrigger());
+
+  toggleScratchpad(): void {
+    this.closeMobileSidebar();
+    this.scratchpad.toggle();
   }
 
   onEscape() {
@@ -1306,6 +1350,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.disconnectShellNav();
     this.shellLoadVersion += 1;
     this.teardownSessionState();
     this.detach?.();
@@ -1556,9 +1601,17 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return count > 99 ? "99+" : String(count);
   }
 
+  /** A board glyph's colour: its own, else its workspace's; see navGlyphColor. */
   boardAttentionColor(board: Pick<Board, "iconColor">, workspaceId: string): string | null {
-    const color = board.iconColor ?? this.accentColorForWorkspace(workspaceId);
-    // Fill behind --accent-fg text, so use the contrast-checked action tone where the theme has one.
+    return this.navGlyphColor(board.iconColor ?? this.accentColorForWorkspace(workspaceId));
+  }
+
+  /**
+   * A sidebar identity glyph's colour: the contrast-checked action tone where the theme has one
+   * (every hue in light, the dimmer hues in dark), else the identity colour. The raw identity
+   * colours are swatch tones; amber and green sat near 2:1 on the light sidebar.
+   */
+  navGlyphColor(color: string | null | undefined): string | null {
     return color ? `var(--color-${color}-accent, var(--color-${color}))` : null;
   }
 
@@ -1662,8 +1715,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
    * theme-aware emphasis tone (near-white on dark, a softened slate on light).
    */
   workspaceIconColor(workspaceId: string): string {
-    const color = this.accentColorForWorkspace(workspaceId);
-    return color ? `var(--color-${color})` : "var(--nav-text-strong)";
+    return this.navGlyphColor(this.accentColorForWorkspace(workspaceId)) ?? "var(--nav-text-strong)";
   }
 
   async logout() {

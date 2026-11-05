@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   boards, workspaces, lists, cards, cardAssignees, cardCustomFieldValues, customFields,
   cardChecklistItems, cardChecklists, cardLabels, cardLabelAssignments, cardRelations,
-  boardSeparators, cardPriorities, notes,
+  boardSeparators, cardPriorities, notes, activityEvents,
 } from "@kanera/shared/schema";
 import type { ColorToken } from "@kanera/shared/colors";
 import { addWorkingDays, dateKeyOf, dayNumber } from "@kanera/shared/schedule";
@@ -69,8 +69,23 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
     return found;
   };
   const update = async (number: number, values: Partial<typeof cards.$inferInsert>) => {
-    await tx.update(cards).set(values).where(eq(cards.id, card(number).id));
-    Object.assign(card(number), values);
+    const row = card(number);
+    if (values.listId && values.listId !== row.listId) {
+      const [owner] = await tx.select().from(cardAssignees).where(eq(cardAssignees.cardId, row.id))
+        .orderBy(cardAssignees.assignedAt, cardAssignees.userId).limit(1);
+      // These authored moves represent the owner's recent work. Without an audit row the
+      // overview sees only the older replayed history and incorrectly presents an idle team.
+      await tx.insert(activityEvents).values({
+        boardId: row.boardId, workspaceId: row.workspaceId,
+        actorId: owner?.userId ?? row.createdById, actorKind: "user",
+        entityType: "card", entityId: row.id, action: "moved",
+        payload: { fromListId: row.listId, toListId: values.listId, prevPosition: row.position, position: row.position },
+        createdAt: at, updatedAt: at,
+      });
+      values = { ...values, listEnteredAt: at, updatedAt: at };
+    }
+    await tx.update(cards).set(values).where(eq(cards.id, row.id));
+    Object.assign(row, values);
   };
   const fieldRows = await tx.select().from(customFields).where(eq(customFields.workspaceId, marketing.id));
   const field = async (row: typeof cards.$inferSelect, name: string, value: string | number | boolean) => {
@@ -99,6 +114,12 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
         dueDateLocalDate: offset === null ? null : calendar.business(offset), dueDateSlot: null,
         dueDateTimezone: offset === null ? null : "Europe/London", createdById: userIds.get(owner)!, createdAt: at, updatedAt: at,
       }).returning();
+      await tx.insert(activityEvents).values({
+        boardId: row!.boardId, workspaceId: row!.workspaceId,
+        actorId: userIds.get(owner)!, actorKind: "user",
+        entityType: "card", entityId: row!.id, action: "created",
+        payload: { title, listId: row!.listId }, createdAt: at, updatedAt: at,
+      });
       marketingCards.push(row!);
       byNumber.set(row!.number, row!);
       created.push({ alias, id: row!.id, key: row!.key });

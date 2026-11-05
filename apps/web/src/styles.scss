@@ -327,16 +327,30 @@ k-list.is-drop-target {
   // deeper fill is the look we want. It now sits a hair *below* --card-bg (--surface-2), so a menu
   // opened over a card separates by --overlay-border and the shadow rather than by fill — keep
   // both. Row hover inside floating chrome must use --surface-hover, not --surface-2, to register.
-  --surface-overlay: #1e283b;
+  // Lifted one step again (Nov 2026): once the lane went to #131b29, #1e283b sat between lane and tile
+  // and an open menu read as one more column. It now clears the tile (--surface-2) by a hair and keeps
+  // the navy hue, so it is the lightest resting fill on screen without turning grey, while
+  // --surface-hover stays a clear step above it for row hover.
+  --surface-overlay: #243049;
   // Edge of floating chrome. The page hairline (--border) is tuned to divide same-hue surfaces
   // gently, which is exactly what a menu must not do; on dark it needs a clearly brighter edge.
   --overlay-border: #3d5170;
   // Dividers drawn *inside* floating chrome. --border is nearly the same value as the raised overlay
   // fill on dark, so a separator painted with it disappeared.
   --overlay-separator: #364a66;
+  // Strength of the selected-row wash inside floating chrome; see --overlay-selected below. The page
+  // --accent-soft (8%) came out ~1.08:1 against the dark overlay fill and selected rows vanished.
+  --overlay-selected-strength: 15%;
 
   --border: #253449;
   --border-strong: #364a66;
+  // Edge of anything filled with --surface-2 that must read as its own object: board tiles (the
+  // tile's resting border) and the stacked section bands on Team overview. --border sits only
+  // 1.1:1 off --surface-2, so a tile's edge vanished into its own fill; this is 1.33:1 against the
+  // tile and 1.67:1 against the lane, still a step short of --border-strong so a column of tiles
+  // does not read as a grid of boxes. Light keeps --border, which already reads on its near-white
+  // tiles. Resting colour only: hover never changes a tile's border.
+  --border-raised: #304060;
 
   --text: #e8f0f8;
   --text-muted: #a3b5cc;
@@ -345,7 +359,9 @@ k-list.is-drop-target {
   // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
   // is placeholders only, the one tier allowed to fall below body contrast.
   --text-3: #c5d1df;
-  --text-4: #7d8ea4;
+  // Placeholders still have to be read: ~4.8:1 on --surface-2 and floating chrome, a clear step under
+  // --text-muted.
+  --text-4: #8d9db3;
   // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
   // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
   --divider: #1e2a3c;
@@ -372,18 +388,31 @@ k-list.is-drop-target {
   --input-bg: transparent;
   --select-bg: var(--surface-2);
 
-  // Resting accent is the calmer deep teal; hover darkens, matching light mode and
-  // the per-board override (board.page.ts derives hover as the board color mixed
-  // 15% toward black). The bright #14b8a6 was the previous resting value and read
-  // too stark.
+  // Segmented control (shared/segmented.component.ts): a recessed track with a raised pill for the
+  // selected segment. Light recesses the track (--surface-3) under a --surface pill. Dark elevates to
+  // separate, so the same two tokens inverted the reading there: the --surface pill was darker than
+  // its --surface-3 track and the selection looked like a hole. Dark sinks the track to the page
+  // (--bg, a well under the --surface header it sits in) and lifts the pill to --surface-3.
+  --sg-track-bg: var(--bg);
+  --sg-pill-bg: var(--surface-3);
+
+  // Resting accent is a softened teal in the same brightness band as the other dark accents (blue,
+  // violet, pink below; carbon's blue): 7.0:1 on --bg, 6.1:1 on --surface, 5.1:1 on --surface-2,
+  // and 7.0:1 for the --accent-ink it carries as a fill. The accent is text and engaged-state
+  // chrome as often as it is a fill, so it has to clear AA as text on a card, not only on the page.
+  // The deeper #0d9488 it replaced managed 3.7:1 on --surface-2 (toolbar toggles, rank numbers on
+  // tiles) and read muddy as a button beside a board's brighter accent; the full #14b8a6 before
+  // that read too stark. Chroma, not lightness, is what makes a fill glare — keep it this muted.
+  // Hover darkens, matching light mode and the per-board override (accent-scope.ts derives hover as
+  // the board color mixed 15% toward black); it still carries --accent-ink at 5.6:1.
   // Held as its own token so the accent picker's "Default" swatch can still preview the theme's
   // signature colour while a named accent has taken over --accent. Every theme block declares it.
-  --accent-default: #0d9488;
+  --accent-default: #26b0a2;
   --accent: var(--accent-default);
-  --accent-hover: #0f766e;
+  --accent-hover: #1f9c8f;
   // Text on an accent fill. No hue bright enough to read as *text* on this dark canvas can also
-  // carry white text at AA (the default teal manages 3.7:1, the workspace blue 2.4:1), whereas dark
-  // ink clears 5:1 on every palette tone — so dark mode paints its filled buttons with page-coloured
+  // carry white text at AA (the default teal manages 2.7:1, the workspace blue 2.4:1), whereas dark
+  // ink clears 4.5:1 on every palette tone — so dark mode paints its filled buttons with page-coloured
   // ink. board.page.ts / workspace-settings.page.ts rebind --accent-fg to this same token when a
   // board or workspace colour takes over the accent.
   --accent-ink: #0b111b;
@@ -401,7 +430,7 @@ k-list.is-drop-target {
   // Blue, Violet, Pink and Graphite were picked in the same brightness band as carbon's signature
   // blue (~7-8:1 against the page) rather than at full brightness: the accent is a large button
   // fill as often as it is link text, and a brighter hue turns a primary button into a glowing
-  // slab. Those four clear 4.5:1 both as a fill carrying --accent-ink and as text on --bg,
+  // slab. Those four, and Green, clear 4.5:1 both as a fill carrying --accent-ink and as text on --bg,
   // --surface and --surface-2 in both dark themes; Graphite sits well clear of --text-muted
   // (#a3b5cc) so a neutral accent still reads as an accent, and none lands on --danger,
   // --success or --warning.
@@ -416,14 +445,13 @@ k-list.is-drop-target {
   // today, as the counterpart to its blue default; a dark-family theme whose own default is this
   // teal would need its own value here, or Green and Default would be the same swatch.
   //
-  // This is the one option below AA, accepted as a deliberate product call: on carbon it reads
-  // 5.05:1 as a fill and as text on the page, but 4.17:1 as text on a card and 3.46:1 on the hover
-  // fill. It is exactly the shortfall the shipped dark default already carries — the two are the
-  // same colour — so fixing one means fixing both.
+  // Because the two are the same colour, retuning one means retuning both. The earlier #0d9488 was
+  // the one option below AA (4.17:1 as text on a carbon card); this value reads 7.0:1 as a fill and
+  // on the page, 5.8:1 on a carbon card and 4.9:1 on its hover fill.
   --accent-blue: #6f9df0;
   --accent-blue-hover: #5d89da;
-  --accent-green: #0d9488;
-  --accent-green-hover: #0f766e;
+  --accent-green: #26b0a2;
+  --accent-green-hover: #1f9c8f;
   --accent-violet: #a58af2;
   --accent-violet-hover: #9174e0;
   --accent-pink: #e87fb4;
@@ -452,6 +480,23 @@ k-list.is-drop-target {
   --success-soft: color-mix(in srgb, var(--success) 12%, transparent);
   --danger-soft: color-mix(in srgb, var(--danger) 10%, transparent);
   --warning-soft: color-mix(in srgb, var(--warning) 12%, transparent);
+
+  // The danger state chip (_chip.scss: Blocked, overdue dates). Its own pair rather than --danger
+  // plus --danger-soft, because on navy a red wash reads brown and any ink mixed toward --text or
+  // white reads pink: either way the chip sat in the register of a user's red, orange or pink label
+  // pill and stopped reading as a state. Dark therefore carries a clean red ink (--danger with only
+  // 15% white, the least that clears AA: bare --danger is 4.3:1 on even a 6% wash over a tile) on a
+  // faint 7% wash (doubled by alert-wash to ~13.5%): 4.8:1 over a tile, 5.7:1 over --surface, 4.7:1
+  // on carbon's tile. Derived from --danger here, so carbon's own red resolves through the same
+  // declaration.
+  --danger-chip-wash: color-mix(in srgb, var(--danger) 7%, transparent);
+  --danger-chip-ink: color-mix(in srgb, var(--danger) 85%, #ffffff);
+
+  // Shell drawers (Up next, notifications). A 36% scrim barely dimmed a #0b111b page: the board
+  // behind stayed fully legible and the drawer's only edge was a 1px border. Dark needs a heavier
+  // scrim and a real edge shadow; light keeps the lighter values (light-base-tokens).
+  --drawer-scrim: rgb(0 0 0 / 55%);
+  --shadow-drawer: 1px 0 0 rgba(0, 0, 0, 0.5), 12px 0 32px rgba(0, 0, 0, 0.55);
 
   // Derived, never a literal: --accent is repointed on this same element by the [data-accent]
   // blocks, and a var(--accent) inside a custom property resolves against the element's winning
@@ -504,12 +549,17 @@ k-list.is-drop-target {
   // --shadow-drag, the one tier allowed to be heavy because the element is literally in the air.
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-pop: var(--shadow-lg);
+  // Its own value on dark rather than --shadow-lg: on the #0b111b canvas a single soft drop is
+  // invisible, so a popover separated from the board by its border alone. The tight contact shadow
+  // carries the edge over lanes and tiles; the long, dense one gives the lift where the canvas shows.
+  --shadow-pop: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4), 0 12px 32px -8px rgba(0, 0, 0, 0.7);
   --shadow-drag: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.45);
 
   // ─── Kanban surfaces (semantic) ──────────────────────────────────────────────
-  // Dark mode keeps the existing visual: lists lighter than bg, cards lighter still.
-  --list-bg: var(--surface);
+  // Lists lighter than bg, cards lighter still. The lane is its own step between --bg and --surface:
+  // as --surface it had the same fill as the sidebar and sticky toolbars, so page → chrome → lane →
+  // card flattened into three layers. Cards (--surface-2) sit 1.25:1 off it.
+  --list-bg: #131b29;
   --list-bg-strong: var(--surface-2);
   --card-bg: var(--surface-2);
   --card-bg-hover: var(--surface-hover);
@@ -548,6 +598,23 @@ k-list.is-drop-target {
   --color-gray: #7c8ca2;
   --color-olive: #949730;
   --color-brown: #b48153;
+
+  // Dark counterparts of the light-accent-palette entries, for the identity colours that fall short
+  // of 4.5:1 as *text* on a dark card (--surface-2) when a board or workspace colour becomes the
+  // accent (accent-scope.ts) or a board glyph's ink. Each is its identity colour lifted 4-14% toward
+  // white, just far enough to clear 4.6:1 on --surface-2 (5.3:1 on carbon's); the rest already do
+  // and fall back to the identity colour. The lift also keeps the 15%-black hover accent-scope.ts
+  // derives above 4.5:1 against --accent-ink — indigo's hover was 3.9:1. The light blocks restate
+  // all of these through light-accent-palette, so this only ever applies to the dark family.
+  --color-rose-accent: #f8647c;
+  --color-pink-accent: #f163ab;
+  --color-red-accent: #f56a6a;
+  --color-indigo-accent: #868cf6;
+  --color-violet-accent: #a382f9;
+  --color-purple-accent: #b977fa;
+  --color-gray-accent: #8998ab;
+  --color-olive-accent: #989b38;
+  --color-brown-accent: #bc8e64;
 
   // A coloured label's text is softened toward white in dark mode. Light mode overrides both
   // tokens below to deepen the same colour enough for small-text contrast on its pale wash.
@@ -640,8 +707,9 @@ k-list.is-drop-target {
 // The --color-* tokens are identity colours: swatches, icons, label washes. They are far too light to
 // be *action* colours on a near-white page (white on --color-blue is 2.4:1), so when a workspace or
 // board colour becomes the page accent, light mode substitutes these deeper tones. Each clears 4.5:1
-// both as white-text fill and as text on --surface. Dark mode has no counterpart: there the bright
-// token is the readable one and the fix is dark ink (--accent-ink) instead. Consumers read
+// both as white-text fill and as text on --surface. Dark mode needs no deeper tone: there the bright
+// token is the readable one and the fix is dark ink (--accent-ink) instead; it only lifts the few
+// identity colours too dim to read as text on a dark card (see the dark block). Consumers read
 // var(--color-<x>-accent, var(--color-<x>)) so the fallback is the identity colour.
 @mixin light-accent-palette {
   --accent-ink: #ffffff;
@@ -687,10 +755,15 @@ k-list.is-drop-target {
   // Deliberately off pure white: #ffffff is the one value with no headroom left, so a highlight,
   // a white image edge or a nested panel has nothing to separate against. Keep every light
   // surface a shade below it. The ramp recesses (each step darker) — the reverse of dark mode.
+  // Steps are ~6-7% apart in luminance (paper's spacing), so a band or tray reads as a layer by its
+  // fill, not only by its border: the previous 2-3% steps left table group bands, quotes, panel
+  // headers and read/unread rows separated by hairlines alone. --surface-3 now sits level with
+  // --bg; that is fine because --bg is only ever the page canvas, never a fill inside a surface.
+  // --text-muted keeps 5.0:1 and the teal accent 4.5:1 on the deepest step (--surface-hover).
   --surface: #fcfdff;
-  --surface-2: #f5f7fb;
-  --surface-3: #eef1f6;
-  --surface-hover: #eaeff6;
+  --surface-2: #f3f5f9;
+  --surface-3: #eaeef4;
+  --surface-hover: #e5eaf2;
   --surface-subtle: rgba(0, 0, 0, 0.03);
   // Floating chrome — see the dark block. Light mode recesses instead of lifting (no surface may
   // reach pure white, and #fcfdff has no usable headroom below it anyway), so the step is small
@@ -698,11 +771,17 @@ k-list.is-drop-target {
   // above --surface-hover, which row hover uses in every theme. Light separation therefore still
   // leans on the border and shadow; this only stops a menu from matching what it covers exactly.
   --surface-overlay: #f9fbfd;
-  --overlay-border: var(--border);
+  // Halfway to --border-strong: the page hairline alone let a menu merge into the near-white card or
+  // tray it opened over. Separators inside stay on the softer hairline.
+  --overlay-border: color-mix(in srgb, var(--border) 50%, var(--border-strong));
   --overlay-separator: var(--border);
+  // Light keeps the page wash, which already reads on the near-white overlay.
+  --overlay-selected-strength: 8%;
 
   --border: #dde2ea;
   --border-strong: #c8d0dc;
+  // See the dark block; the light tiles' --border edge already reads.
+  --border-raised: var(--border);
 
   --text: #0f172a;
   --text-muted: #52647a;
@@ -711,7 +790,8 @@ k-list.is-drop-target {
   // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
   // is placeholders only, the one tier allowed to fall below body contrast.
   --text-3: #334155;
-  --text-4: #8494a8;
+  // ~4:1 on every light surface, still well under --text-muted.
+  --text-4: #6b7c92;
   // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
   // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
   --divider: #e8ecf1;
@@ -722,6 +802,9 @@ k-list.is-drop-target {
   --inset-border: transparent;
   --input-bg: var(--surface);
   --select-bg: var(--surface);
+  // See the dark block.
+  --sg-track-bg: var(--surface-3);
+  --sg-pill-bg: var(--surface);
 
   // teal-700 rather than the dark theme's teal-600: white text on #0d9488 was 3.7:1, and on a
   // light page the accent is also link/label text, where the deeper tone reads better anyway.
@@ -761,11 +844,20 @@ k-list.is-drop-target {
   --danger-border: rgba(220, 38, 38, 0.2);
 
   --success: #16a34a;
-  --warning: #a16207;
+  // Deeper than the yellow-700 it replaced: that was 4.8:1 on a bare surface but 4.2:1 on its own
+  // --warning-soft wash, which is exactly where due-soon and alert chips put it. This clears 5:1 on
+  // the wash over every light surface, and the wash (derived below) stays a pale amber.
+  --warning: #8f5307;
   // See the dark block. Lighter alphas: the same 12% that reads as a tint on navy is a slab on white.
   --success-soft: color-mix(in srgb, var(--success) 10%, transparent);
   --danger-soft: color-mix(in srgb, var(--danger) 8%, transparent);
   --warning-soft: color-mix(in srgb, var(--warning) 10%, transparent);
+  // See the dark block. Light keeps the chip's original recipe: the soft wash (doubled by alert-wash)
+  // and --danger mixed 72% toward --text, which clears 4.5:1 there.
+  --danger-chip-wash: var(--danger-soft);
+  --danger-chip-ink: color-mix(in srgb, var(--danger) 72%, var(--text));
+  --drawer-scrim: rgb(0 0 0 / 36%);
+  --shadow-drawer: 8px 0 24px rgba(0, 0, 0, 0.18);
 
   --ring-strength: 30%;
   --ring: color-mix(in srgb, var(--accent) var(--ring-strength), transparent);
@@ -777,16 +869,20 @@ k-list.is-drop-target {
   // for; paper restates these in its warm cast below.
   --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-card-hover: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
-  --shadow-pop: var(--shadow-lg);
+  // A tight contact shadow plus a smaller ambient than --shadow-lg: the broad 30px drop read heavy,
+  // and without a contact edge a popover over a light card or tray had nothing defining its rim.
+  --shadow-pop: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px -6px rgba(15, 23, 42, 0.16);
   --shadow-drag: 0 12px 28px -6px rgba(15, 23, 42, 0.22), 0 2px 6px rgba(15, 23, 42, 0.08);
 
   // Flip the kanban hierarchy: gray "tray" lists, near-white "elevated" cards.
-  // --list-bg is pinned rather than tracking --surface-2: that token is also the inset/chrome
-  // fill and sits close under --surface, which is not enough separation for a tray holding cards.
-  --list-bg: #eff3f9;
+  // The lane is --surface-2, the step halfway between the canvas and the tiles: 1.09:1 off --bg and
+  // 1.07:1 under --surface. The pinned #eff3f9 it replaced sat almost on --bg and lanes merged into
+  // the page. Tiles must stay the lightest layer, hover included, so --card-bg-hover is pinned well
+  // above the lane rather than near it.
+  --list-bg: var(--surface-2);
   --list-bg-strong: #dde4ed;
   --card-bg: var(--surface);
-  --card-bg-hover: #f4f7fc;
+  --card-bg-hover: #f8fafd;
 
   // Soft off-white tint for chrome (toolbars, notes doc, card-detail body)
   // instead of the heavier page gray.
@@ -852,9 +948,9 @@ k-list.is-drop-target {
 // builds on light-base-tokens and restates only what the warm palette changes, so anything added
 // to the light base (a new surface, a new status colour) reaches this theme for free.
 //
-// The three pinned hexes in the light base (--list-bg, --card-bg-hover, --app-tint, --nav-*) are
-// deliberately not var()-derived there, so they must each be restated here or the kanban tray and
-// chrome stay blue on a warm page.
+// The pinned hexes in the light base (--card-bg-hover, --app-tint, --nav-*) are deliberately not
+// var()-derived there, so they must each be restated here or the tiles and chrome stay blue on a
+// warm page. --list-bg is var(--surface-2) there and follows this ramp by itself.
 [data-theme="paper"] {
   @include light-base-tokens;
 
@@ -877,7 +973,7 @@ k-list.is-drop-target {
   --text-muted: #6b6459;
   --muted: #6b6459;
   --text-3: #48423a;
-  --text-4: #9a9287;
+  --text-4: #81796d;
 
   --nav-text-strong: #3d382f;
   --nav-active-bg: #e4dfd6;
@@ -895,11 +991,10 @@ k-list.is-drop-target {
   // Only the alpha differs from the light base; --ring itself is derived there.
   --ring-strength: 32%;
 
-  // Kanban: warm tray, near-white cards. Pinned rather than tracking --surface-2 for the reason
-  // given in the light base — that token sits too close under --surface to hold cards apart.
-  --list-bg: #f2efe9;
+  // Kanban: warm tray (--surface-2, inherited from the light base), near-white cards. Hover stays
+  // well above the tray so a tile remains the lightest layer.
   --list-bg-strong: #e5e0d7;
-  --card-bg-hover: #faf8f4;
+  --card-bg-hover: #fbfaf8;
 
   --app-tint: #f6f4f0;
 
@@ -911,6 +1006,7 @@ k-list.is-drop-target {
   --shadow-card: 0 1px 2px rgba(60, 50, 38, 0.06);
   --shadow-card-hover: 0 2px 8px rgba(60, 50, 38, 0.10), 0 1px 3px rgba(60, 50, 38, 0.06);
   --shadow-drag: 0 12px 28px -6px rgba(60, 50, 38, 0.24), 0 2px 6px rgba(60, 50, 38, 0.08);
+  --shadow-pop: 0 1px 2px rgba(60, 50, 38, 0.07), 0 8px 24px -6px rgba(60, 50, 38, 0.18);
 
   // Label chip ink follows the page's warm near-black, as the light base's follows its slate.
   --label-chip-ink-base: #26221d;
@@ -941,6 +1037,8 @@ k-list.is-drop-target {
   --surface-2: #1e242c;
   --surface-3: #262c36;
   --surface-hover: #2a313c;
+  // The lane's own step between --bg and --surface; see the dark block.
+  --list-bg: #11161d;
 
   // Midpoint between --surface and --surface-2, matching the dark block's deeper floating chrome;
   // separation over cards comes from --overlay-border and the shadow. See the dark block.
@@ -952,15 +1050,19 @@ k-list.is-drop-target {
 
   --border: #2f3742;
   --border-strong: #3d444d;
+  // See the dark block: 1.42:1 against a carbon tile, 1.66:1 against the lane.
+  --border-raised: #353d49;
 
   --text: #f0f6fc;
-  --text-muted: #9198a1;
-  --muted: #9198a1;
+  // Matched to the dark block's ~6.5:1 on a tile. Muted text is often faded further (icons at 80%,
+  // disabled controls), so a lower base drops those under 3:1 here first.
+  --text-muted: #a1a8b1;
+  --muted: #a1a8b1;
   // Four text tiers, not two. --text-3 sits between --text and --text-muted for secondary content that
   // still has to be read (table cells, card meta); --text-muted stays for hints and labels; --text-4
   // is placeholders only, the one tier allowed to fall below body contrast.
   --text-3: #c9d1d9;
-  --text-4: #6e7681;
+  --text-4: #868e98;
   // One step lighter than --border, for rows inside a list or sheet. Rows divided by --border read as
   // a grid of boxes; this keeps the sheet reading as one surface with faint rules.
   --divider: #262d37;
@@ -1179,7 +1281,23 @@ a.sm {
     opacity: 0.5;
     cursor: not-allowed;
     pointer-events: none;
+    // A disabled primary takes a neutral fill instead of a half-faded accent, which read as a pale
+    // tinted button rather than an unavailable one. Done by re-pointing the tokens the default fill
+    // reads, so a button with its own background keeps it and only the default recipe changes.
+    --accent: var(--surface-3);
+    --accent-hover: var(--surface-3);
+    --accent-fg: var(--text-muted);
   }
+}
+
+// Full opacity for the primary slot itself, so the neutral fill and muted label are crisp rather than
+// half-transparent. Limited to buttons wearing the default recipe (no class, exactly one shared size
+// class, or a known primary slot; "sm my-thing" may paint its own background): a component button with its own background still
+// relies on the 0.5 above, and lifting it would make it look enabled. :where() keeps the specificity
+// of this rule at the bare button:disabled level.
+button:disabled:where(:not([class]), [class="sm"], [class="xs"], [class="lg"], .primary, .btn-primary, .submit-btn, .cmp-submit):where(:not(.secondary, .outline, .ghost, .destructive, .icon)) {
+  opacity: 1;
+  box-shadow: none;
 }
 
 button.secondary {
@@ -1311,6 +1429,84 @@ input:not([type="checkbox"]):not([type="radio"]) {
   height: var(--h-lg);
   padding: 0 10px;
   background: var(--input-bg);
+}
+
+// Checkboxes are drawn from the theme rather than left to the browser: native boxes ignored every
+// token, so a dark theme got a muddy grey-brown square beside otherwise deliberate controls, and the
+// same box differed between browsers. Element-level, so a component's own size (15-18px across the
+// app) still wins; width and height are restated because the shared rule above stretches inputs to
+// width: 100%, which a box without native appearance would honour. The tick is a rotated border on
+// ::before, a fixed 4x8px that sits right in every box size in use, drawn in --accent-fg, the ink
+// every theme guarantees on an --accent fill.
+input[type="checkbox"] {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  vertical-align: middle;
+  background: var(--input-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast);
+
+  &::before {
+    content: "";
+    width: 4px;
+    height: 8px;
+    margin-top: -2px;
+    border: solid var(--accent-fg);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) scale(0);
+    transition: transform var(--motion-fast);
+  }
+
+  &:hover:not(:disabled):not(:checked) {
+    border-color: var(--text-muted);
+  }
+
+  &:checked,
+  &:indeterminate {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  &:checked::before {
+    transform: rotate(45deg) scale(1);
+  }
+
+  // A bar rather than a tick for a part-selected group (the table's group and select-all boxes).
+  &:indeterminate::before {
+    width: 8px;
+    height: 0;
+    margin-top: 0;
+    border-width: 0 0 2px;
+    transform: none;
+  }
+
+  // The shared field rule rings every focused input; a box that rang on each click read as stuck.
+  // Keyboard focus keeps the ring.
+  &:focus {
+    border-color: var(--border-strong);
+    box-shadow: none;
+  }
+
+  &:checked:focus,
+  &:indeterminate:focus {
+    border-color: var(--accent);
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
 }
 
 select {
@@ -1500,7 +1696,7 @@ k-app-shell {
   background: color-mix(in srgb, var(--accent) 7%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
   border-radius: 999px;
-  font-size: 9px;
+  font-size: var(--text-xs);
   font-weight: 750;
   line-height: 14px;
   white-space: nowrap;
@@ -1567,16 +1763,29 @@ k-app-shell {
 // menus). Global, not component-scoped, because menus are rendered from a dozen components and used
 // to carry a dozen slightly different row heights and hover fills. Pair with the kMenu directive for
 // keyboard behaviour. Containers keep their own placement and width; this owns only the inside.
+// The selected-row wash inside floating chrome (menus, pickers, the period picker's range). Declared
+// on the overlay hosts rather than :root so var(--accent) resolves on the element: a board scopes its
+// own accent onto a descendant, and a :root-resolved mix would tint selection with the global accent
+// beside a board-coloured check. Use with a fallback, var(--overlay-selected, var(--accent-soft)),
+// for lists that can also render outside an overlay.
+.k-menu,
+.k-anchored-panel {
+  --overlay-selected: color-mix(in srgb, var(--accent) var(--overlay-selected-strength, 8%), transparent);
+}
+
 .k-menu {
   padding: var(--space-1);
   border: 1px solid var(--overlay-border);
   border-radius: var(--radius-md);
   background: var(--surface-overlay);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-pop);
 }
 
 .k-menu-item {
   display: flex;
+  // Rows never shrink: in a height-capped flex column they would compress below min-height and let
+  // their text spill out of the hover highlight.
+  flex: none;
   align-items: center;
   gap: var(--space-2);
   width: 100%;
@@ -1627,8 +1836,52 @@ k-app-shell {
     box-shadow: none;
   }
 
+  // No hover look on touch. A touch device keeps :hover on the last tapped point, and a menu that
+  // opens over its own trigger (the card menu on a phone) showed its first row as if already chosen.
+  // The row goes back to its resting fill; it must be restated rather than the hover rule gated away,
+  // or the global button:hover accent fill would take over instead.
+  @media (hover: none) {
+    &:hover:not(:disabled):not([aria-disabled="true"]):not(:focus-visible) { background: transparent; }
+    &.is-selected:hover:not(:disabled):not([aria-disabled="true"]):not(:focus-visible) {
+      background: var(--overlay-selected, var(--accent-soft));
+    }
+  }
+
+  // The one selection recipe for every menu and picker (k-picker-list's .pl-row matches it): the
+  // single-select choice wears the soft accent wash, and every chosen or checked row — single-select or
+  // a toggle such as Compact cards — carries a trailing accent check. The label and its leading icon
+  // stay neutral, so a row never shows its state in two competing colours.
   &.is-selected {
+    background: var(--overlay-selected, var(--accent-soft));
+    font-weight: 600;
+  }
+
+  // A checked toggle (Columns, Compact cards) carries the same weight as a selected row.
+  &[aria-checked="true"] { font-weight: 600; }
+
+  > .ti-check:last-child,
+  > .k-menu-check {
+    margin-left: auto;
     color: var(--accent);
+    font-size: var(--text-md);
+  }
+
+  // Submenu rows end in one chevron size and tone everywhere (card actions, filter, list options).
+  > .k-menu-chevron {
+    flex: none;
+    width: auto;
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: var(--text-md);
+  }
+
+  // A toggle reserves the check's slot whether or not it is on, so its label never shifts.
+  > .k-menu-check { visibility: hidden; }
+  &[aria-checked="true"] > .k-menu-check { visibility: visible; }
+
+  // 32px is a comfortable mouse row and an uncomfortable thumb target. The desktop metrics stay.
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    min-height: 44px;
   }
 
   &.danger {
@@ -1647,10 +1900,92 @@ k-app-shell {
 }
 
 .k-menu-heading {
-  padding: 8px var(--space-2) 4px;
-  color: var(--text-muted);
+  // A section label, not a hint: one tier up from the muted row subtitles (--text-muted, weight 400)
+  // and a little more air above it, so a menu's sections read without adding separators. Filter and
+  // picker section labels use this class too.
+  padding: 10px var(--space-2) 4px;
+  color: var(--text-3);
   font-size: var(--text-xs);
   font-weight: 600;
+
+  // The menu's own padding already sits above the first heading; the full gap on top of it left a
+  // visibly larger space at the top of the menu than between its sections. A rule directly above
+  // brings its own margin, so the heading drops its extra air there too.
+  &:first-child,
+  .k-menu-separator + & { padding-top: 4px; }
+}
+
+// Focused on open on touch devices (MenuDirective) so no row looks pre-selected; the container itself
+// never shows a ring.
+.k-menu:focus { outline: none; }
+
+// A quiet line in place of an action that has nothing to act on yet ("No board mirrors yet"). A
+// disabled row with a half-opacity icon read as a broken button; this reads as information. Inset to
+// line up with the row labels (row padding + 16px icon slot + gap).
+.k-menu-note {
+  margin: 0;
+  padding: 4px var(--space-2) 6px calc(var(--space-2) + 16px + var(--space-2));
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+// ─── Scroll cue ──────────────────────────────────────────────────────────────
+// Put on the element that scrolls inside a menu or picker. A long menu that stops on a row (or worse,
+// on a separator) looks complete; this paints a band at the bottom edge while there is more to scroll
+// and fades it out over the last stretch, so at the very end the last row is untouched.
+//
+// An overlay, not a mask: a mask on the scroller would also clip everything it contains, including
+// the fixed-position submenus the card actions menu opens from its rows, and would cut the panel's own
+// shadow off where the scroller is the panel. The band runs right down to the scroller's edge,
+// through its padding, and is fully opaque there: stopping at the padding edge, or short of the full
+// fill, let the lower half of the clipped line show through beneath it, which read as a glitch.
+// Set --k-scroll-fade-bg when the scroller is not on --surface-overlay, --k-scroll-fade-gap to a flex
+// scroller's gap, and --k-scroll-fade-pad to the scroller's own padding when it has any (a .k-menu
+// that scrolls sets it below). Browsers without scroll-driven animation keep a plain edge.
+.k-scroll-fade {
+  scroll-padding-block: var(--space-2) var(--space-6);
+}
+
+.k-menu.k-scroll-fade { --k-scroll-fade-pad: var(--space-1); }
+
+@supports (animation-timeline: scroll()) {
+  .k-scroll-fade::after {
+    content: "";
+    position: sticky;
+    z-index: 3;
+    display: block;
+    flex: none;
+    height: 24px;
+    // Takes no space: a menu that does not scroll must not grow an empty strip at its foot. Sticky
+    // offsets resolve against the scroller's content box, so the negative bottom and inline margins
+    // carry the band out through the padding to the real clipping edge. A flex scroller's own gap
+    // still lands before the band, so --k-scroll-fade-gap cancels it too.
+    margin: calc(-24px - var(--k-scroll-fade-gap, 0px)) calc(-1 * var(--k-scroll-fade-pad, 0px)) 0;
+    bottom: calc(-1 * var(--k-scroll-fade-pad, 0px));
+    background: linear-gradient(to bottom, transparent, var(--k-scroll-fade-bg, var(--surface-overlay)) 85%);
+    pointer-events: none;
+    // A list that fits has an inactive scroll timeline, so it keeps this base value: no band.
+    opacity: 0;
+    animation: k-scroll-fade linear both;
+    animation-timeline: scroll(nearest block);
+  }
+}
+
+// On touch the band stops at 70% fill so the next row peeks through: at full fill the heading or row
+// below the fold was blanked out and the list looked complete. The band still reaches the clipping
+// edge, so there is no unfaded half-line beneath it.
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  @supports (animation-timeline: scroll()) {
+    .k-scroll-fade::after {
+      background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--k-scroll-fade-bg, var(--surface-overlay)) 70%, transparent) 85%);
+    }
+  }
+}
+
+@keyframes k-scroll-fade {
+  0%, 90% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 // ─── Legacy token aliases ────────────────────────────────────────────────────
@@ -1703,6 +2038,7 @@ k-app-shell {
 }
 
 .k-menu-separator {
+  flex: none;
   height: 1px;
   margin: var(--space-1) 0;
   background: var(--overlay-separator);

@@ -57,6 +57,59 @@ const MOBILE_KANBAN_QUERY = "(max-width: 768px)";
         gap: 8px;
         padding: 10px;
       }
+
+      /* A phone lane leaves a clean peek of the next one rather than a third of it: at a fixed 270px
+         a 390px screen showed ~100px of the neighbour, too wide to read as a peek and too narrow to
+         read, sliced through its title. 56px is the canvas's 10px inset, the 8px gap and a ~38px
+         peek at rest; centred by the snap below, ~20px of each neighbour shows. Set here, for every
+         column the canvas projects (lists, value columns, the board's skeletons), so Board, My
+         Cards and Team Cards cannot disagree. ::ng-deep for the reason given on the snap rule. */
+      :host ::ng-deep :is(k-list, k-board-group-column, .skeleton-list) {
+        width: min(360px, calc(100vw - 56px));
+        max-width: min(360px, calc(100vw - 56px));
+      }
+    }
+
+    /* More lists past the right edge: the last visible column was cut through mid-card with nothing
+       saying the board goes on. A sticky flex item after the last column, pulled back over it by its
+       own width plus the 12px gap so it takes no room, fading to the page behind the lanes.
+       Scroll-driven, so it exists only while the canvas overflows (an inactive timeline applies
+       nothing) and only until the last 2px of the scroll range; browsers without scroll timelines
+       keep the cut. An overlay rather than a mask, which would clip the popovers cards open, and
+       pointer-events: none, so drag auto-scroll and drop targets under it are untouched. Phones are
+       left out: the snapped peek is the cue there. Global Work's lanes restyle this same element
+       (global-work.page.scss) for their own padding. */
+    @supports (animation-timeline: scroll()) {
+      @media (min-width: 481px) {
+        :host::after {
+          content: "";
+          position: sticky;
+          /* Sticky offsets count from the content edge: minus the 16px padding is the real edge. */
+          right: -16px;
+          flex: none;
+          align-self: stretch;
+          width: 20px;
+          margin-left: -32px;
+          pointer-events: none;
+          background: linear-gradient(to right, transparent, var(--bg) 70%);
+          opacity: 0;
+          animation: canvas-more-right linear;
+          animation-timeline: scroll(nearest x);
+          animation-range: 0% calc(100% - 2px);
+        }
+
+        /* A board background has no single colour to fade into, so the edge darkens a little. */
+        :host-context(:has(> .board-bg.has-gradient))::after {
+          background: linear-gradient(to right, transparent, rgb(0 0 0 / 0.18));
+        }
+      }
+    }
+
+    @keyframes canvas-more-right {
+      from,
+      to {
+        opacity: 1;
+      }
     }
 
     @media (max-width: 768px) {

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from "@angular/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PageHeaderComponent, type PageHeaderVariant } from "./page-header.component";
+import { ShellNavService, type ShellNavAttention } from "./shell-nav.service";
 
 @Component({
   standalone: true,
@@ -20,7 +21,7 @@ import { PageHeaderComponent, type PageHeaderVariant } from "./page-header.compo
       <span phMeta class="slot-meta">avatars</span>
       <button phActions type="button" class="slot-action">Create</button>
       <span phIcons class="slot-icons">icons</span>
-      <span phViews class="slot-views"><span class="sg-auto-label">Board</span></span>
+      <span phViews class="slot-views"><span class="sg-btn is-active"><span class="sg-auto-label">Board</span></span></span>
     </k-page-header>
   `,
 })
@@ -44,6 +45,41 @@ async function mount() {
 }
 
 describe("PageHeaderComponent", () => {
+  it("carries the phone drawer's button, with the utilities' attention as a dot, only in drawer mode", async () => {
+    const drawerMode = signal(false);
+    const attention = signal<ShellNavAttention>(null);
+    const open = vi.fn();
+    const { fixture, host } = await mount();
+    const nav = TestBed.inject(ShellNavService);
+    const disconnect = nav.connect({ drawerMode, attention, label: "Expand sidebar", open });
+    fixture.detectChanges();
+    expect(host.querySelector(".ph-menu")).toBeNull();
+    // A header on screen tells the shell it need not show its own fallback button.
+    expect(nav.hasHeaderTrigger()).toBe(true);
+
+    drawerMode.set(true);
+    fixture.detectChanges();
+    const button = host.querySelector<HTMLButtonElement>(".ph-menu");
+    expect(button?.getAttribute("aria-label")).toBe("Expand sidebar");
+    expect(button?.querySelector("i")?.getAttribute("aria-hidden")).toBe("true");
+    // First in the identity group, ahead of the lead icon and title.
+    expect(host.querySelector(".ph-identity")?.firstElementChild).toBe(button);
+    expect(host.querySelector(".ph-menu-dot")).toBeNull();
+    button?.click();
+    expect(open).toHaveBeenCalledOnce();
+
+    attention.set("unread");
+    fixture.detectChanges();
+    expect(host.querySelector(".ph-menu-dot")?.classList.contains("is-danger")).toBe(false);
+    attention.set("danger");
+    fixture.detectChanges();
+    expect(host.querySelector(".ph-menu-dot")?.classList.contains("is-danger")).toBe(true);
+
+    fixture.destroy();
+    expect(nav.hasHeaderTrigger()).toBe(false);
+    disconnect();
+  });
+
   it("defaults to the chrome variant and reflects it as a host class", async () => {
     const { fixture, host } = await mount();
     const header = host.querySelector("k-page-header");
@@ -147,7 +183,7 @@ describe("PageHeaderComponent", () => {
       // A title wider than the protected floor, so the floor (not the text) is what is reserved.
       const title = host.querySelector(".ph-title") as HTMLElement;
       Object.defineProperty(title, "scrollWidth", { get: () => 400 });
-      // The view switch's one auto label: 100px of text, and 114px once revealed with its chrome.
+      // The active view's auto label: 100px of text, and 114px once revealed with its chrome.
       const autoLabel = host.querySelector(".sg-auto-label") as HTMLElement;
       Object.defineProperty(autoLabel, "scrollWidth", { get: () => 100 });
       const metaSlot = host.querySelector(".slot-meta") as HTMLElement;
@@ -157,7 +193,7 @@ describe("PageHeaderComponent", () => {
       Object.defineProperty(tail, "offsetWidth", {
         get: () => header.classList.contains("is-tight")
           ? collapsed
-          : labelled + (header.classList.contains("is-roomy") ? 114 : 0),
+          : labelled + (header.classList.contains("is-named") ? 114 : 0),
       });
 
       return {
@@ -193,27 +229,27 @@ describe("PageHeaderComponent", () => {
       expect(header.classList.contains("is-tight")).toBe(false);
     });
 
-    it("reveals the view switch's labels only once the whole row fits them with room to spare", async () => {
-      // The full 400px title + 8px gap + 500px tail + 8px bar gap, then 114px of labels and 24px of
+    it("names the active view only once the whole row fits its label with room to spare", async () => {
+      // The full 400px title + 8px gap + 500px tail + 8px bar gap, then the 114px label and 24px of
       // slack: 1054px. The subtitle measures zero here.
       const { header, resize, settle } = await mountMeasured(500, 300);
 
       resize(1100);
-      expect(header.classList.contains("is-roomy")).toBe(true);
+      expect(header.classList.contains("is-named")).toBe(true);
 
-      // Revealing the labels widened the tail by exactly what they cost. Re-measuring must not read
+      // Revealing the label widened the tail by exactly what it costs. Re-measuring must not read
       // that as the row having run out of room.
       settle();
       settle();
-      expect(header.classList.contains("is-roomy")).toBe(true);
+      expect(header.classList.contains("is-named")).toBe(true);
 
       resize(1000);
-      expect(header.classList.contains("is-roomy")).toBe(false);
+      expect(header.classList.contains("is-named")).toBe(false);
       expect(header.classList.contains("is-tight")).toBe(false);
 
       resize(640);
       settle();
-      expect(header.classList.contains("is-roomy")).toBe(false);
+      expect(header.classList.contains("is-named")).toBe(false);
       expect(header.classList.contains("is-tight")).toBe(true);
     });
 

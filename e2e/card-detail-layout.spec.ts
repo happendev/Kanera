@@ -65,11 +65,11 @@ test("card detail sections and nested controls retain their layout across themes
     await detail.locator(".col-main").evaluate((element) => { element.scrollTop = 0; });
     await insideViewport(detail);
     await expect(detail.locator(".description-viewer-wrap").locator("..")).toHaveCSS("flex", "0 0 auto");
-    // The activity component owns these styles. Drawer section indentation/badge borders must
-    // not cross its rendering boundary when the shared section stylesheet is loaded.
+    // The activity component owns these styles. Drawer section indentation must not cross its
+    // rendering boundary when the shared section stylesheet is loaded. (Its count badge draws the
+    // drawer's bordered recipe itself, so a border there is no longer a leak signal.)
     await expect(detail.locator("k-card-activity .comment-form")).toHaveCSS("margin-left", "0px");
     await expect(detail.locator("k-card-activity .feed")).toHaveCSS("margin-left", "0px");
-    await expect(detail.locator("k-card-activity .section-label .count")).toHaveCSS("border-top-width", "0px");
     expect(await detail.locator(".col-main").evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
     await capture(`${name}-top`);
     await detail.locator(".attach-row").scrollIntoViewIfNeeded();

@@ -4084,6 +4084,7 @@ async function insertSeedActivity(
     boardId: input.boardId,
     workspaceId: input.workspaceId,
     actorId: input.actorId,
+    actorKind: "user",
     entityType: input.entityType,
     entityId: input.entityId,
     action: input.action,

@@ -1,5 +1,8 @@
 import type { AfterViewInit, ElementRef, OnDestroy } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, input, signal, viewChild } from "@angular/core";
+import { NgTemplateOutlet } from "@angular/common";
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal, viewChild } from "@angular/core";
+import { ShellNavService } from "./shell-nav.service";
+import { TooltipDirective } from "./tooltip.directive";
 
 /**
  * The identity group's CSS floor, and the bar's flex gap, mirrored from page-header.component.scss.
@@ -17,11 +20,11 @@ const BAR_GAP = 8;
 const TITLE_FLOOR = 160;
 
 /**
- * Spare width `is-roomy` keeps in hand beyond the exact fit, so a row that only just holds the
+ * Spare width `is-named` keeps in hand beyond the exact fit, so a row that only just holds the
  * labelled view switch does not end with its last control pressed against the band.
  */
-const ROOMY_SLACK = 24;
-/** What revealing one auto label adds beyond its text: its margin and the wider segment padding. */
+const NAMED_SLACK = 24;
+/** What revealing an auto label adds beyond its text: its margin and the wider segment padding. */
 const AUTO_LABEL_CHROME = 6 + 2 * 4;
 
 /** A computed length in pixels. Unresolved properties read as an empty string, which is zero here. */
@@ -68,17 +71,42 @@ export type PageHeaderVariant = "chrome" | "page";
 @Component({
   selector: "k-page-header",
   standalone: true,
+  imports: [NgTemplateOutlet, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     "[class.is-chrome]": "variant() === 'chrome'",
     "[class.is-page]": "variant() === 'page'",
     "[class.is-crowded]": "crowded()",
     "[class.is-tight]": "tight()",
-    "[class.is-roomy]": "roomy()",
+    "[class.is-named]": "named()",
   },
   template: `
+    <!--
+      Phones have no sidebar rail, so the navigation drawer opens from here, the first thing on
+      every page (ShellNavService). Its dot carries what the drawer's utility buttons would show:
+      neutral for unread notifications, danger for overdue Up next.
+    -->
+    <ng-template #menuButton>
+      <button type="button" class="ph-menu" (click)="nav.open()" [attr.aria-label]="nav.label()" [kTooltip]="nav.label()">
+        <i class="ti ti-menu-2" aria-hidden="true"></i>
+        @if (nav.attention(); as attention) {
+          <span class="ph-menu-dot" [class.is-danger]="attention === 'danger'" aria-hidden="true"></span>
+        }
+      </button>
+    </ng-template>
+    @if (nav.drawerMode() && navBar()) {
+      <div class="ph-nav-bar">
+        <ng-container [ngTemplateOutlet]="menuButton" />
+        @if (navBarTitle(); as barTitle) {
+          <span class="ph-nav-bar-title">{{ barTitle }}</span>
+        }
+      </div>
+    }
     <div class="ph-bar" #bar>
       <div class="ph-identity" #identity>
+        @if (nav.drawerMode() && !navBar()) {
+          <ng-container [ngTemplateOutlet]="menuButton" />
+        }
         @if (icon(); as iconName) {
           <i
             class="ph-icon ti ti-{{ iconName }}"
@@ -130,6 +158,9 @@ export type PageHeaderVariant = "chrome" | "page";
   styleUrl: "./page-header.component.scss",
 })
 export class PageHeaderComponent implements AfterViewInit, OnDestroy {
+  protected readonly nav = inject(ShellNavService);
+  /** Tells the shell a header is carrying the drawer button, so it does not show its fallback. */
+  private readonly releaseNavTrigger = this.nav.registerTrigger();
   private readonly barRef = viewChild.required<ElementRef<HTMLElement>>("bar");
   private readonly tailRef = viewChild.required<ElementRef<HTMLElement>>("tail");
   private readonly identityRef = viewChild.required<ElementRef<HTMLElement>>("identity");
@@ -151,10 +182,15 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
   protected readonly tight = signal(false);
 
   /**
-   * The row has room to spare: the whole title, every control and the view switch's labels fit
-   * with slack. A switch rendered with `autoLabels` then names its views (segmented.component.ts).
+   * The row can afford the *active* view's label: the switch names where you are and keeps the rest
+   * as icons with tooltips and accessible names (segmented.component.ts).
+   *
+   * Only ever the active one, on every page. Seven labels need ~500px, which a board header with its
+   * avatars and New card, or My Cards with its subtitle, does not have at 1440px, while Team Cards, a
+   * few controls lighter, did: one page named every view and the next only one, so the same switch
+   * read as two different controls. The compact view row follows the same rule.
    */
-  protected readonly roomy = signal(false);
+  protected readonly named = signal(false);
 
   /**
    * Everything on the row except the title — lead icon, avatars, gaps and the tail — measured with
@@ -197,6 +233,7 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.releaseNavTrigger();
     this.observer?.disconnect();
     this.observer = null;
   }
@@ -220,14 +257,17 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
     // scrollWidth is the title's full text width even while it is ellipsised.
     const titleNeed = Math.min(title?.scrollWidth ?? 0, TITLE_FLOOR);
 
-    // The view switch's auto labels, collapsed or revealed. scrollWidth is their natural width in
-    // either state, so what revealing them costs is known without revealing them; subtracting it
-    // back out while they show keeps every other measurement independent of `is-roomy`, which is
-    // what stops the two states feeding back into each other.
-    let autoLabelsWidth = 0;
-    for (const label of tail.querySelectorAll<HTMLElement>(".sg-auto-label")) {
-      autoLabelsWidth += label.scrollWidth + AUTO_LABEL_CHROME;
-    }
+    // The active view's auto label, collapsed or revealed. scrollWidth is its natural width in either
+    // state, so what revealing it costs is known without revealing it; subtracting it back out while
+    // it shows keeps every other measurement independent of `is-named`, which is what stops the two
+    // states feeding back into each other.
+    // The named segment reserves the switch's longest label whichever view is active
+    // (segmented.component.ts, --sg-named-width), so that is what naming costs, on every view alike.
+    const activeLabel = tail.querySelector<HTMLElement>(".sg-btn.is-active .sg-auto-label");
+    const switchLabels = activeLabel?.closest(".sg-track")?.querySelectorAll<HTMLElement>(".sg-auto-label") ?? [];
+    const activeLabelWidth = activeLabel
+      ? Math.max(activeLabel.scrollWidth, ...[...switchLabels].map((label) => label.scrollWidth)) + AUTO_LABEL_CHROME
+      : 0;
     // Compact, the tail is display: contents and the view switch has a row of its own, so what shares
     // the title's row is the controls group alone. Its labels are still this row's to decide: a
     // viewport breakpoint used to drop them below 720px, so a phone showed a bare "+" for New card
@@ -247,7 +287,8 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
     }
     this.lastCompact = compact;
     const rowTail = compact ? tail.querySelector<HTMLElement>(".ph-controls") : tail;
-    const tailWidth = Math.max(0, (rowTail?.offsetWidth ?? 0) - (this.roomy() ? autoLabelsWidth : 0));
+    const revealed = this.named() ? activeLabelWidth : 0;
+    const tailWidth = Math.max(0, (rowTail?.offsetWidth ?? 0) - revealed);
 
     if (!this.tight()) {
       const children = [...identity.children] as HTMLElement[];
@@ -276,18 +317,13 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
     // state has rendered measures it for real; it schedules nothing further once the state holds.
     if (crowded !== wasCrowded || tight !== wasTight) requestAnimationFrame(() => this.measureFit());
 
-    // Roomy needs the *whole* title and subtitle, not the protected floor: labels are a nicety, and
+    // Naming needs the *whole* title and subtitle, not the protected floor: the label is a nicety, and
     // must never be the reason a title ellipsises. Never in the compact layout, where the switch has
-    // a full-width row of its own and decides its labels from that row (segmented.component.ts).
+    // a row of its own and names its active view there itself (segmented.component.ts).
     const subtitle = identity.querySelector<HTMLElement>(".ph-subtitle");
     const fullTitle = (title?.scrollWidth ?? 0) + (subtitle ? BAR_GAP + subtitle.scrollWidth : 0);
-    this.roomy.set(
-      !crowded
-      && !compact
-      && tailWidth > 0
-      && autoLabelsWidth > 0
-      && available >= fullTitle + this.fullChromeWidth + autoLabelsWidth + ROOMY_SLACK,
-    );
+    const spare = available - fullTitle - this.fullChromeWidth - NAMED_SLACK;
+    this.named.set(!crowded && !compact && tailWidth > 0 && activeLabelWidth > 0 && spare >= activeLabelWidth);
   }
 
   /** Tabler icon name without the `ti-` prefix. */
@@ -305,6 +341,20 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
   /** Uppercase micro-label above the title. */
   readonly eyebrow = input<string | null>(null);
   readonly variant = input<PageHeaderVariant>("chrome");
+  /**
+   * `page` variant only: in drawer mode the menu button gets a header bar of its own, full-bleed on
+   * the page surface like a chrome header's row, with the display title below it (Home). Without
+   * it the menu sits beside a display-size title, which on a phone read as a stray glyph floating
+   * by the heading while every other top-level page opened with a bar. Off for headers inside a
+   * card (the settings pages), where a bleeding bar would cut across the card.
+   */
+  readonly navBar = input(false);
+  /**
+   * The page's name in that bar. A bar holding only the menu button read as a header whose title
+   * had failed to render, beside every other phone page that names itself there. Plain text, not a
+   * heading: the display title below stays the page's h1.
+   */
+  readonly navBarTitle = input<string | null>(null);
   /**
    * Renders the title as a shimmer bar while the page's own data loads. Owned here so a page cannot
    * grow a second, separately-maintained skeleton header that drifts from the live one — which is

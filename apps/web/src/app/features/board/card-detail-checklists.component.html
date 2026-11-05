@@ -102,11 +102,11 @@
                   (keydown.escape)="vm.cancelChecklistItem()" autofocus />
                 } @else if (showItemMeta) {
                 <!-- Mini-card model: clicking the item opens its detail drawer (description + sub-checklists). Renaming lives in the item actions menu — a double-click can't coexist here because the first click already opens the drawer. Observers can open (read-only) too, so this is not gated on vm.canEdit. -->
-                <!-- Rows keep a single-line ellipsis, so the tooltip carries the full text for titles too long to fit; the drawer is the only other place it can be read. -->
-                <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" (click)="vm.openChecklistItemDetail(item)" [kTooltip]="item.text">{{ item.text }}</button>
+                <!-- Rows keep a single-line ellipsis (two clamped lines on phones and touch), so the tooltip carries the full text for titles too long to fit; the drawer is the only other place it can be read. The inner span carries the clamp so the button itself can stay a flex box that centres it in a 44px touch row. -->
+                <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" (click)="vm.openChecklistItemDetail(item)" [kTooltip]="item.text"><span class="checklist-item-label">{{ item.text }}</span></button>
                 } @else {
                 <!-- Sub-checklist items are terminal rows: they support text and completion only. -->
-                <span class="checklist-item-text is-static" [class.is-done]="item.completedAt" [kTooltip]="item.text">{{ item.text }}</span>
+                <span class="checklist-item-text is-static" [class.is-done]="item.completedAt" [kTooltip]="item.text"><span class="checklist-item-label">{{ item.text }}</span></span>
                 }
                 @if (showItemMeta || vm.canEditRole()) {
                 <div class="checklist-item-actions">

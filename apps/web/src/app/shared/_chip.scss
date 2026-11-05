@@ -1,0 +1,124 @@
+// The one chip shape for a card's state facts (Blocked, an overdue or due-soon date, time in
+// progress, its Up next rank) wherever a card is shown: board tile, table cell, queue rows (the Up
+// next panel and dock, Home's priorities) and Team overview rows. Same height, type, radius and
+// icon gap everywhere, so a fact is recognised by its shape and only its colour says how urgent it
+// is. Lists (_list-chip.scss) share these metrics and this --radius-sm corner. Labels
+// (card-labels.component) share the height and type but keep their capsule: a label is the same
+// pill on every surface, card detail included, and the shape is what tells a tag from a state fact.
+//
+// Surfaces include `chip` for the shape, then `chip-tone(...)` for the colour, and add only layout
+// (margin, alignment, grid placement) on top.
+
+// 20px tall (18px in compact density): the label chips' height, so a tile's label row and its state
+// chips line up as one system.
+@mixin chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  box-sizing: border-box;
+  height: 20px;
+  padding: 0 6px 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+
+  > i {
+    flex: none;
+    font-size: var(--text-sm);
+    line-height: 1;
+  }
+
+  :host-context([data-density="compact"]) & {
+    height: 18px;
+  }
+}
+
+// Colour only. Three treatments across a card's facts, each saying one thing: a soft-filled
+// rectangle is a state (these tones, and the list chip, which shares the fill recipe), a pill is a
+// label, and plain icon + text is a neutral fact. State chips carry no border: a ring around some
+// facts and not others was a fourth treatment to decode, and the fill plus the corner already tell a
+// state from a label. Urgency is the colour, plus a doubled wash on danger alone so Blocked and
+// overdue still stand out without a frame. Warning (due soon, an aging timer) is a prompt, not a
+// missed commitment, and its brown-amber doubled turned into a muddy slab on light themes.
+//
+// Ink is the tone mixed toward --text: --text is the theme's own foreground, so one declaration
+// lightens the hue on dark (the bare --accent and --danger sat near 4:1 on a dark tile's wash and
+// receded) and deepens it on light (the bare --danger was 4.2:1 and --success under 3:1 on their
+// washes). 72% keeps the hue recognisable while clearing 4.5:1 on the tile and table backgrounds
+// in every theme.
+//
+// `plain` is a neutral date or a stopped timer: no fill, so the row stays quiet until a fact needs
+// action, with the icon a tier below the text as on every other metadata fact.
+@mixin chip-tone($tone) {
+  border-color: transparent;
+
+  @if $tone == plain {
+    padding-inline: 0;
+    color: var(--text-3);
+    background: transparent;
+
+    > i {
+      color: var(--text-muted);
+    }
+  } @else if $tone == neutral {
+    // The list chip's uncoloured wash, not --surface-2: on dark that is the tile's own fill, so a
+    // borderless neutral chip vanished into the card.
+    color: var(--text-3);
+    background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  } @else if $tone == accent {
+    color: color-mix(in srgb, var(--accent) 72%, var(--text));
+    background: var(--accent-soft);
+  } @else if $tone == success {
+    color: color-mix(in srgb, var(--success) 72%, var(--text));
+    background: var(--success-soft);
+  } @else if $tone == warning {
+    // Semantic --warning, not the --color-amber palette hue: that is a label colour at ~2:1 on white.
+    color: color-mix(in srgb, var(--warning) 72%, var(--text));
+    background: var(--warning-soft);
+  } @else if $tone == danger {
+    // Its own token pair (styles.scss) rather than the recipe above: on dark the 72% ink and soft
+    // wash read as pink on brown, the same register as a red label pill, so dark carries a clean red
+    // ink on a fainter wash. Light resolves to exactly the shared recipe.
+    color: var(--danger-chip-ink);
+    @include alert-wash(var(--danger-chip-wash));
+  } @else {
+    @error "Unknown chip tone #{$tone}";
+  }
+
+  @if $tone != plain {
+    > i {
+      color: inherit;
+    }
+  }
+}
+
+// The status wash laid twice (colour plus an image layer of the same colour): a stronger alert fill
+// that still derives from the theme's own --*-soft token, so it keeps that token's lighter alpha on
+// light themes instead of hard-coding one strength for both.
+@mixin alert-wash($wash) {
+  background-color: $wash;
+  background-image: linear-gradient($wash, $wash);
+}
+
+// A due date's urgency, the same on every surface: `.overdue` (isOverdue) and `.due-soon` (isDueSoon,
+// both in features/board/due-date.util.ts) become a danger / warning chip; anything else stays plain
+// metadata. Include on the element that carries those classes.
+@mixin due-states {
+  &.overdue,
+  &.due-soon {
+    @include chip;
+  }
+
+  &.overdue {
+    @include chip-tone(danger);
+  }
+
+  &.due-soon {
+    @include chip-tone(warning);
+  }
+}

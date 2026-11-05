@@ -7,6 +7,7 @@ import type { CdkDragDrop, CdkDragStart } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDropList, CdkDropListGroup, moveItemInArray } from "@angular/cdk/drag-drop";
 import type { OnDestroy } from "@angular/core";
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -16,6 +17,7 @@ import {
   input,
   output,
   signal,
+  type TemplateRef,
   untracked,
   viewChild,
 } from "@angular/core";
@@ -43,7 +45,7 @@ import { CardLabelsComponent } from "../card-labels.component";
 import { CARD_DRAG_START_DELAY } from "../card-drag-scroll";
 import { openCardDetailInNewTab } from "../card-navigation.util";
 import { DatePickerPopover } from "../date-picker.popover";
-import { formatDueDate, isOverdue, type DueDateSlotSelection } from "../due-date.util";
+import { formatDueDate, isDueSoon, isOverdue, type DueDateSlotSelection } from "../due-date.util";
 import { LabelPickerPopover } from "../label-picker.popover";
 import type { BulkCardMenuPayload, BulkCardSelectionPayload, BulkListSelectionPayload, CardDropPayload } from "../list.component";
 import { MemberPickerPopover } from "../member-picker.popover";
@@ -89,6 +91,7 @@ import {
   columnWidthsEqual,
   distributeColumnSlack,
   gridTemplateFrom,
+  lendSpareWidthToFirst,
   measuredColumnContentWidth,
   measuredColumnContentWidths,
 } from "./table-columns.util";
@@ -120,10 +123,18 @@ const ACTIONS_COLUMN_WIDTH = 38;
 const TABLE_RUN_INSET = 10;
 /** Most of a narrow sheet the frozen Title column takes by default; see `titleWidthCap`. */
 const TITLE_MAX_SHEET_SHARE = 0.42;
+/** Room a wide sheet always keeps for the columns scrolling beside Title; see `titleWidthCap`. */
+const TITLE_SHEET_RESERVE = 560;
 /** Title track width below which the grid drops the card-key prefix; see `compactTitle`. */
 const COMPACT_TITLE_WIDTH = 300;
 /** Breathing room after an auto-fit, so the widest value does not sit flush against the divider. */
 const AUTO_FIT_SLACK = 4;
+/**
+ * Mirrors the hover step in `.tv-title-trigger`'s trailing padding (38px over 14px at rest): the title
+ * steps clear of the overlaid Open button on hover, so a title sized to fit at rest must also have
+ * room for that step or it would ellipse the moment the row is hovered.
+ */
+const TITLE_OPEN_RESERVE = 24;
 /** Regions where a background pan would steal a gesture that already means something else. */
 const TABLE_PAN_STOP_SELECTOR = ".tv-row, .tv-header, .tv-footer, .tv-sum-row, .tv-new-task";
 /** Shared empty slice, so a collapsed group does not allocate a fresh array on every recompute. */
@@ -198,6 +209,14 @@ interface GroupByOption {
   label: string;
   icon: string;
 }
+
+/** Built-in columns short enough to pair two to a line on the stacked phone card (see `pairedColumns`). */
+const SHORT_BUILT_IN_COLUMNS: ReadonlySet<string> = new Set(["priority", "status", "assignees", "start", "due", "checklist", "created", "updated", "inProgress"]);
+/**
+ * The longest text value that still fits half the stacked phone card (about 155px at the cell size), so
+ * a text field whose every value is this short ("2026-12", a client code) pairs like a number does.
+ */
+const SHORT_TEXT_MAX_CHARS = 16;
 
 @Component({
   selector: "k-board-table-view",
@@ -353,6 +372,34 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly hostOwnsComposer = input(false);
   /** Off when the embedding host has no useful grouping or summary-breakdown controls. */
   readonly showGroupingControl = input(true);
+  /**
+   * On where the host places the table's controls in its own page toolbar (`groupControlTemplate`
+   * and `tableToolsTemplate`), so the sheet opens directly under that toolbar instead of under a
+   * second control row of its own. The templates are declared here, so their bindings and menus
+   * still belong to this component wherever they render.
+   */
+  readonly hostRendersControls = input(false);
+  private readonly groupControlTemplate = viewChild.required<TemplateRef<unknown>>("groupControlTemplate");
+  private readonly tableToolsTemplate = viewChild.required<TemplateRef<unknown>>("tableToolsTemplate");
+  private readonly rendered = signal(false);
+  /**
+   * The two templates a `hostRendersControls` host places: `group` (Group, or the summary breakdown
+   * under a host-owned grouping) and `tools` (Columns, Sort, collapse-all, overflow menu).
+   *
+   * Null until this component has rendered once. A host toolbar sits before the table in the DOM, so
+   * it is checked first; handing the templates over as soon as the query resolves would render them
+   * before this component's required inputs are bound.
+   */
+  readonly hostControls = computed(() =>
+    this.rendered() ? { group: this.groupControlTemplate(), tools: this.tableToolsTemplate() } : null,
+  );
+  /**
+   * Any of those controls away from its default, for the host's collapsed-toolbar indicator. Only the
+   * ones the templates actually render: a host-owned sort is the host's own control to report.
+   */
+  readonly hostControlsSet = computed(() =>
+    (this.showGroupingControl() && this.groupIsSet()) || (!this.hostSortBy() && this.sortIsSet()) || this.columnsIsSet(),
+  );
   /** Labels are part of every table's default scan; a host may still opt out explicitly. */
   readonly labelsVisibleByDefault = input(true);
   /** Lets a priority-focused host show the viewer/group-specific queue position by default. */
@@ -554,17 +601,35 @@ export class BoardTableViewComponent implements OnDestroy {
   private readonly columnTrackWidths = computed(() => {
     const ids = [TITLE_COLUMN_ID, ...this.visibleColumns()];
     const available = this.scrollportWidth() - TABLE_RUN_INSET * 2 - ACTIONS_COLUMN_WIDTH;
-    const widths = distributeColumnSlack({
+    const measured = this.measuredContentWidths();
+    // A width the viewer dragged (or auto-fitted) is theirs; growing or trimming it would undo the gesture.
+    const isPinned = (id: string) => this.columnWidths()[id] !== undefined;
+    // A missing first-render measurement means "stay at the natural width", never "grow blindly".
+    const targetFor = (id: string) => Math.max(
+      this.widthForColumn(id),
+      measured[id] === undefined
+        ? 0
+        : Math.ceil(measured[id]) + AUTO_FIT_SLACK + (id === TITLE_COLUMN_ID ? TITLE_OPEN_RESERVE : 0),
+    );
+    const slackWidths = distributeColumnSlack({
       ids,
       available,
       baseFor: (id) => this.widthForColumn(id),
-      // A width the viewer dragged (or auto-fitted) is theirs; growing it back would undo the gesture.
-      isPinned: (id) => this.columnWidths()[id] !== undefined,
-      // A missing first-render measurement means "stay at the natural width", never "grow blindly".
-      targetFor: (id) => Math.max(
-        this.widthForColumn(id),
-        Math.ceil(this.measuredContentWidths()[id] ?? 0) + AUTO_FIT_SLACK,
-      ),
+      isPinned,
+      targetFor,
+    });
+    // Title is the flexible column: once the sheet has no free width left, a still-truncated title
+    // takes the room the visible secondary columns are not using, down to their own content. Capped at
+    // the Title column's resize maximum so it never outgrows what a drag could make it.
+    const widths = lendSpareWidthToFirst({
+      ids,
+      widths: slackWidths,
+      available,
+      targetFor: (id) => this.clampColumn(id, targetFor(id)),
+      floorFor: (id) => measured[id] === undefined
+        ? Number.POSITIVE_INFINITY
+        : this.clampColumn(id, Math.ceil(measured[id]) + AUTO_FIT_SLACK),
+      isPinned,
     });
     return { ids, widthFor: (id: string) => widths[id] ?? this.widthForColumn(id) };
   });
@@ -887,6 +952,7 @@ export class BoardTableViewComponent implements OnDestroy {
   });
 
   constructor() {
+    afterNextRender(() => this.rendered.set(true));
     effect(() => {
       const scope = this.prefScope();
       const hosted = this.hostPresentation();
@@ -1021,13 +1087,62 @@ export class BoardTableViewComponent implements OnDestroy {
     return builtinColumnIcon(id);
   }
 
+  /**
+   * Fields that share a line on the stacked phone card, two at a time. Only fields whose value fits
+   * half the card (a date, a count, a chip, a face or two, one select option) pair, and only with a
+   * neighbour in column order, so the card reads in the same order as the grid. Labels, the board
+   * name, free text and multi-select fields (any of which can run to several values), and a short
+   * field with no short neighbour, keep a full line. A text field counts as short only while every
+   * value in it is (see `shortTextFieldIds`). The grid ignores this.
+   */
+  readonly pairedColumns = computed(() => {
+    const isShort = (col: string | undefined) => {
+      if (col === undefined) return false;
+      const field = this.customFieldForColumn(col);
+      if (field?.type === "select") return !field.allowMultiple;
+      if (field?.type === "text") return shortText.has(field.id);
+      return SHORT_BUILT_IN_COLUMNS.has(col) || field?.type === "number" || field?.type === "date" || field?.type === "checkbox" || field?.type === "user";
+    };
+    const shortText = this.shortTextFieldIds();
+    const paired = new Set<string>();
+    const columns = this.visibleColumns();
+    for (let i = 0; i < columns.length; i++) {
+      if (isShort(columns[i]) && isShort(columns[i + 1])) {
+        paired.add(columns[i]);
+        paired.add(columns[++i]);
+      }
+    }
+    return paired;
+  });
+
+  /**
+   * Visible text fields whose values all fit half a stacked card. Decided per column, not per card, so
+   * every card on the sheet lays its fields out the same way; one long value puts the whole column
+   * back on full lines rather than ellipsing it at half width.
+   */
+  private readonly shortTextFieldIds = computed(() => {
+    const candidates = new Set<string>();
+    for (const col of this.visibleColumns()) {
+      const field = this.customFieldForColumn(col);
+      if (field?.type === "text") candidates.add(field.id);
+    }
+    if (!candidates.size) return candidates;
+    for (const values of this.customFieldValuesByCardAndField().values()) {
+      for (const id of candidates) {
+        if ((values.get(id)?.valueText?.length ?? 0) > SHORT_TEXT_MAX_CHARS) candidates.delete(id);
+      }
+    }
+    return candidates;
+  });
+
   customFieldForColumn(id: string): AnyCustomField | null {
     return id.startsWith("cf:") ? this.customFieldById().get(id.slice(3)) ?? null : null;
   }
 
   /**
    * Status, assignees, due date and labels are on by default: who / what state / by when / how it is
-   * categorised is what a table is normally opened to scan. Up next order stays off unless an
+   * categorised is what a table is normally opened to scan. Status yields when the sheet is grouped
+   * by list, where the run headers already answer "what state". Up next order stays off unless an
    * embedding host explicitly promotes it for its workflow. Board is on where it exists, since it is
    * the first question a cross-board row raises.
    *
@@ -1045,8 +1160,12 @@ export class BoardTableViewComponent implements OnDestroy {
     if (id.startsWith("cf:")) return !this.crossWorkspace();
     if (id === "labels") return this.labelsVisibleByDefault();
     if (id === "priority") return this.priorityVisibleByDefault();
+    // Grouped by list, every run header already names the list, so a Status cell would repeat its
+    // group's chip on every row (and lead every stacked phone card). Default only: an explicit tick in
+    // the Columns menu is stored as an override and still shows it.
+    if (id === "status") return this.effectiveGroupBy() !== "list";
     // Time in progress is on by default: it is the product's "what is actively moving" signal.
-    return id === "status" || id === "assignees" || id === "due" || id === "board" || id === "inProgress";
+    return id === "assignees" || id === "due" || id === "board" || id === "inProgress";
   }
 
   /**
@@ -1761,12 +1880,15 @@ export class BoardTableViewComponent implements OnDestroy {
    * refreshes when the card set changes, not as the clock passes a due time.
    */
   private readonly dueDatePresentationByCard = computed(() => {
-    const presentation = new Map<string, { text: string; overdue: boolean }>();
+    const presentation = new Map<string, { text: string; overdue: boolean; dueSoon: boolean }>();
     const now = new Date();
     for (const card of this.cards()) {
+      const open = !card.completedAt && !card.archivedAt;
       presentation.set(card.id, {
         text: formatDueDate(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone),
         overdue: !card.completedAt && isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone, now),
+        // The tile's rule (k-card's dueDateDueSoon), so the same date is amber in both views.
+        dueSoon: open && isDueSoon(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone, now),
       });
     }
     return presentation;
@@ -1788,6 +1910,12 @@ export class BoardTableViewComponent implements OnDestroy {
     const memoized = this.dueDatePresentationByCard().get(card.id);
     if (memoized) return memoized.overdue;
     return !card.completedAt && isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
+  }
+
+  isCardDueSoon(card: AnyCard): boolean {
+    const memoized = this.dueDatePresentationByCard().get(card.id);
+    if (memoized) return memoized.dueSoon;
+    return !card.completedAt && !card.archivedAt && isDueSoon(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
   }
 
   onTitleClick(card: AnyCard, event: MouseEvent) {
@@ -2581,19 +2709,26 @@ export class BoardTableViewComponent implements OnDestroy {
   private widthForColumn(id: string): number {
     const defaults: Record<string, number> = {
       // The title cell also carries the card key as an inline prefix, so it needs more room than the
-      // title text alone would suggest before it starts ellipsing. 400 leaves a ~10-character key and
-      // still around 40 characters of title at the default type size.
-      title: 400,
+      // title text alone would suggest before it starts ellipsing. 480 leaves a ~13-character key and
+      // still around 45 characters of title (most titles, whole) at the default type size, while a
+      // 1440px desktop keeps the default Labels column in view beside it; at 560 the title kept a
+      // few more characters but Labels was cut at the viewport edge. `titleWidthCap` shrinks it on
+      // narrower sheets.
+      title: 480,
       // Wide enough for the icon plus a two-word list name ("Awaiting Feedback", "Planning /
       // Review"): status is a scanning column and an ellipsed status is worth little.
       status: 176,
-      // Fits an avatar plus a full name, which is what a single-assignee cell now renders.
-      assignees: 170,
-      start: 130,
-      due: 150,
-      inProgress: 140,
+      // Fits two faces plus two first names ("Omar, Priya"), or one face and a full name.
+      assignees: 150,
+      // Dates render as a short day-month ("17 Nov"); these fit that plus the icon with room to spare.
+      start: 120,
+      due: 120,
+      // Sized by its header rather than its values ("45h"): the header label, icon and drag grip
+      // must fit without ellipsing, since a truncated header leaves the column unnamed.
+      inProgress: 160,
       priority: 112,
-      labels: 200,
+      // Two typical chips side by side ("Reporting", "Feature / Enhancement") without clipping either.
+      labels: 250,
       checklist: 110,
       created: 120,
       updated: 120,
@@ -2606,13 +2741,17 @@ export class BoardTableViewComponent implements OnDestroy {
 
   /**
    * Title is the frozen column, so on a narrow sheet (a tablet, or a pane beside the sidebar) its
-   * 400px default would cover most of the scrollport and leave only a sliver for the columns
-   * scrolling beside it. The default gives way to a share of the sheet instead; a width the viewer set
-   * by hand is left alone, so a drag always takes. No cap before the first measurement.
+   * default would cover most of the scrollport and leave only a sliver for the columns scrolling
+   * beside it. The default gives way to whichever is larger: a share of the sheet, which governs
+   * tablets, or the sheet less a fixed reserve for the other columns, which lets a desktop sheet
+   * reach the full default. The two meet smoothly, so the title never jumps as a pane is resized.
+   * A width the viewer set by hand is left alone, so a drag always takes. No cap before the first
+   * measurement.
    */
   private titleWidthCap(): number {
     const sheet = this.scrollportWidth() - TABLE_RUN_INSET * 2 - ACTIONS_COLUMN_WIDTH;
-    return sheet > 0 ? Math.round(sheet * TITLE_MAX_SHEET_SHARE) : Number.POSITIVE_INFINITY;
+    if (sheet <= 0) return Number.POSITIVE_INFINITY;
+    return Math.round(Math.max(sheet * TITLE_MAX_SHEET_SHARE, sheet - TITLE_SHEET_RESERVE));
   }
 
   private exportCell(card: AnyCard, column: string): string {
@@ -2809,8 +2948,10 @@ const TABLE_TEXT = {
   noAddableCards: $localize`:Tooltip - no cards can be added to this Up next group:No assigned cards can be added`,
   upNextRank: (rank: number) => $localize`:The card's position in the Up next queue:Up next #${rank}:rank:`,
   openNamed: (name: string) => $localize`:Tooltip - open the named board:Open ${name}:name:`,
-  newTaskIn: (list: string) => $localize`:Placeholder for a new task's title in a list:New task in ${list}:list:`,
-  addTaskTo: (list: string) => $localize`:Button label - add a task to a list:Add task to ${list}:list:`,
+  // Kanera has cards, not tasks: the same wording (and message) as the board's grouped columns. The
+  // placeholder repeats the button's accessible name so the control reads the same before and after
+  // it opens.
+  addCardTo: (list: string) => $localize`:Button on a grouped column; the group name (a person, label or value) follows:Add card to ${list}:group:`,
   summarise: (field: string) => $localize`:Tooltip - choose a total or average for a number column:Summarise ${field}:field:`,
   metric: {
     sum: $localize`:Footer label - the column shows a sum:SUM`,

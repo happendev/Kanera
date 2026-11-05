@@ -18,15 +18,9 @@
     }
 
     <header class="cmp-head">
-      <div class="cmp-head-text">
-        <h3 class="cmp-title" i18n="Dialog title">New card</h3>
-        @if (selectedList(); as list) {
-        <p class="cmp-sub">
-          <i aria-hidden="true" [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
-          <span>{{ list.name }}</span>
-        </p>
-        }
-      </div>
+      <!-- No list subtitle: the list chip below already names it and is the control that changes it,
+           and on Global Work the board chip carries the cross-board context. -->
+      <h3 class="cmp-title" i18n="Dialog title">New card</h3>
       <button type="button" class="cmp-icon-btn" (click)="requestDismiss()" aria-label="Close" i18n-aria-label [disabled]="busy()">
         <i aria-hidden="true" class="ti ti-x"></i>
       </button>
@@ -232,7 +226,7 @@
           @case ('checkbox') {
           <button type="button" class="cmp-chip" [class.is-set]="valueFor(field.id).valueCheckbox" [disabled]="busy()" (click)="setCheckboxField(field, !valueFor(field.id).valueCheckbox)">
             <i aria-hidden="true" class="ti" [class.ti-checkbox]="valueFor(field.id).valueCheckbox" [class.ti-square]="!valueFor(field.id).valueCheckbox"></i>
-            <span>{{ field.name }}</span>
+            <span [class.cmp-chip-empty]="!valueFor(field.id).valueCheckbox">{{ field.name }}</span>
           </button>
           }
           @case ('select') {
@@ -278,7 +272,7 @@
           <label class="cmp-inline-field">
             <i aria-hidden="true" [class]="'ti ti-' + (field.icon || 'forms')"></i>
             <span class="cmp-inline-name">{{ field.name }}</span>
-            <input type="number" step="any" [value]="valueFor(field.id).valueNumber ?? ''" [disabled]="busy()" (input)="setNumberField(field, $any($event.target).value)" />
+            <input type="number" step="any" placeholder="—" [value]="valueFor(field.id).valueNumber ?? ''" [disabled]="busy()" (input)="setNumberField(field, $any($event.target).value)" />
           </label>
           }
           @case ('url') {
@@ -292,7 +286,7 @@
           <label class="cmp-inline-field">
             <i aria-hidden="true" [class]="'ti ti-' + (field.icon || 'forms')"></i>
             <span class="cmp-inline-name">{{ field.name }}</span>
-            <input type="text" [value]="valueFor(field.id).valueText ?? ''" [disabled]="busy()" (input)="setTextField(field, $any($event.target).value)" />
+            <input type="text" placeholder="—" [value]="valueFor(field.id).valueText ?? ''" [disabled]="busy()" (input)="setTextField(field, $any($event.target).value)" />
           </label>
           }
           }

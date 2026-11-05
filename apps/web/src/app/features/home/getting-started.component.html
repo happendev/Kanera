@@ -1,5 +1,5 @@
 @if (visible()) {
-<section class="getting-started" [class.is-complete]="allDone()" aria-labelledby="getting-started-heading">
+<section class="getting-started" [class.is-complete]="allDone()" [class.is-compact]="compact()" aria-labelledby="getting-started-heading">
   <div class="gs-head">
     <h2 id="getting-started-heading" class="gs-title">
       @if (allDone()) {
@@ -8,8 +8,28 @@
       <ng-container i18n="Getting started checklist heading">Getting started</ng-container>
       }
     </h2>
+    <!-- The compact card's one row: the step the full card would spotlight, with its button, so
+         collapsing never costs the next move. The hollow ring reads as a checklist step, as in the list. -->
+    @if (compact() && openStep(); as step) {
+    <div class="gs-next">
+      <span class="gs-ring" aria-hidden="true"></span>
+      <span class="gs-next-title">{{ step.title }}</span>
+      <ng-container [ngTemplateOutlet]="stepAction" [ngTemplateOutletContext]="{ $implicit: step }" />
+    </div>
+    }
     <span class="gs-ring-progress" [style.--gs-progress]="percent()" aria-hidden="true"></span>
     <span class="gs-count" aria-hidden="true"><strong>{{ doneCount() }}</strong>/{{ steps().length }}</span>
+    @if (!allDone()) {
+    @if (compact()) {
+    <button type="button" class="ghost icon sm gs-toggle" aria-expanded="false" aria-controls="gs-body" aria-label="Expand" i18n-aria-label="Button label - expand the getting started checklist" kTooltip="Expand" i18n-kTooltip="Button label - expand the getting started checklist" (click)="toggleCompact()">
+      <i class="ti ti-chevron-down" aria-hidden="true"></i>
+    </button>
+    } @else {
+    <button type="button" class="ghost icon sm gs-toggle" aria-expanded="true" aria-controls="gs-body" aria-label="Collapse" i18n-aria-label="Button label - collapse the getting started checklist" kTooltip="Collapse" i18n-kTooltip="Button label - collapse the getting started checklist" (click)="toggleCompact()">
+      <i class="ti ti-chevron-up" aria-hidden="true"></i>
+    </button>
+    }
+    }
     @if (allDone()) {
     <button type="button" class="ghost icon sm gs-close" aria-label="Close getting started" i18n-aria-label="Button: close the getting started checklist for good" kTooltip="Close" i18n-kTooltip="Tooltip: close the getting started checklist"
       (click)="close()">
@@ -25,18 +45,20 @@
 
   <!-- The count is announced when a step ticks itself off, which usually happens while the user is
        somewhere else on the page (the command palette opens over it). -->
+  @if (!compact()) {
   <div class="gs-bar" role="progressbar" aria-valuemin="0" [attr.aria-valuemax]="steps().length" [attr.aria-valuenow]="doneCount()" [attr.aria-valuetext]="progressLabel()" aria-labelledby="getting-started-heading">
     <span class="gs-bar-fill" [style.width.%]="percent()"></span>
   </div>
+  }
   <span class="gs-sr" aria-live="polite">{{ progressLabel() }}</span>
 
-  <div class="gs-body" [class.has-spotlight]="!!openStep()">
-    <!-- Wide cards show the open step here; narrow ones show it under its row instead (see the
-         stylesheet), so a pick never opens somewhere off screen. -->
+  @if (!compact()) {
+  <div class="gs-body" id="gs-body">
+    <!-- Wide cards show the open step here, as one compact row over the checklist; narrow ones show
+         it under its row instead (see the stylesheet), so a pick never opens somewhere off screen. -->
     @if (openStep(); as step) {
     <div class="gs-spotlight" id="gs-spotlight">
       <span class="gs-spotlight-icon" aria-hidden="true"><i aria-hidden="true" [class]="'ti ti-' + step.icon"></i></span>
-      <p class="gs-eyebrow">{{ step.section }}</p>
       <h3 class="gs-spotlight-title">{{ step.title }}</h3>
       <ng-container [ngTemplateOutlet]="detail" [ngTemplateOutletContext]="{ $implicit: step }" />
     </div>
@@ -44,12 +66,12 @@
 
     <div class="gs-sections">
       @for (section of sections(); track section.key) {
-      <div class="gs-section" [class.is-done]="section.done === section.steps.length">
+      <div class="gs-section" [class.is-done]="section.done === section.steps.length" [class.is-current]="section.key === currentSection()">
         <h3 class="gs-section-label" [id]="'gs-section-' + section.key">
           <span>{{ section.label }}</span>
           <span class="gs-section-count" aria-hidden="true">{{ section.done }}/{{ section.steps.length }}</span>
         </h3>
-        <ul class="gs-list" [attr.aria-labelledby]="'gs-section-' + section.key">
+        <ul class="gs-list" [id]="'gs-list-' + section.key" [attr.aria-labelledby]="'gs-section-' + section.key">
           @for (step of section.steps; track step.key) {
           <li class="gs-step" [class.is-done]="step.done" [class.is-open]="openKey() === step.key" [class.just-done]="step.done && openSteps().has(step.key)">
             @if (step.done) {
@@ -76,7 +98,23 @@
       </div>
       }
     </div>
+
+    <!-- Narrow cards fold every section but the current one to a chip (wide cards hide the strip), so
+         a phone opens on the step to do rather than on the whole list. One sideways-scrolling row
+         rather than wrapped rows: three rows of chips were what pushed the focus tiles off a
+         phone's first screen. -->
+    <div class="gs-chips" #chips [class.has-more]="chipsOverflow()" (scroll)="measureChips()">
+      @for (section of sections(); track section.key) {
+      @if (section.key !== currentSection()) {
+      <button type="button" class="gs-section-chip" [class.is-done]="section.done === section.steps.length" aria-expanded="false" [attr.aria-controls]="'gs-list-' + section.key" (click)="openSection(section.key)">
+        <span>{{ section.label }}</span>
+        <span class="gs-section-count">{{ section.done }}/{{ section.steps.length }}</span>
+      </button>
+      }
+      }
+    </div>
   </div>
+  }
 </section>
 }
 
@@ -85,6 +123,10 @@
   @if (step.key === 'enablePush' && push.error(); as error) {
   <p class="gs-error" role="alert"><i class="ti ti-alert-circle" aria-hidden="true"></i><span>{{ error }}</span></p>
   }
+  <ng-container [ngTemplateOutlet]="stepAction" [ngTemplateOutletContext]="{ $implicit: step }" />
+</ng-template>
+
+<ng-template #stepAction let-step>
   @if (step.action; as action) {
   @if (action.kind === 'link') {
   <a class="button gs-action" [routerLink]="action.commands" [queryParams]="action.queryParams ?? null">{{ step.actionLabel }}<i class="ti ti-arrow-right" aria-hidden="true"></i></a>

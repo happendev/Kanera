@@ -162,6 +162,11 @@
   }
 }
 
+@keyframes card-detail-strip-rule {
+  from { box-shadow: 0 1px 0 transparent; }
+  to { box-shadow: 0 1px 0 var(--border); } // --divider all but vanishes on the dark surface.
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -286,8 +291,23 @@
     }
   }
 
-  &:hover .cover-remove-btn {
+  &:hover .cover-remove-btn,
+  &:focus-within .cover-remove-btn {
     opacity: 1;
+  }
+
+  // Touch has no hover to reveal it, so it stays visible; an invisible halo grows the 28px button
+  // to a 44px target (it sits 8px in from the cover's corner, so the halo stays inside the cover).
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    .cover-remove-btn {
+      opacity: 1;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: calc(50% - 22px) 0;
+      }
+    }
   }
 }
 
@@ -323,9 +343,17 @@
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 
-  // Popover anchors need to escape the row's own stacking without clipping.
+  // Popover anchors need to escape the row's own stacking without clipping. The list chip takes
+  // the width its name needs; the row already wraps, so a long name pushes the board chip onto the
+  // next line rather than being cut, and only a name wider than the whole row ends in an ellipsis.
   .move-list-wrap {
     position: relative;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .move-list-btn {
+    max-width: 100%;
   }
 
   // The header shares the --surface-2 background, so lift the controls to
@@ -459,11 +487,6 @@
     background: var(--list-bg);
     border-color: var(--accent, var(--text));
     color: var(--text);
-  }
-
-  i {
-    font-size: var(--text-md);
-    flex-shrink: 0;
   }
 
   .card-board-name {
@@ -675,6 +698,14 @@
     margin: -10px -20px -20px;
     padding: 10px 20px 20px;
   }
+
+  // As in the two-column layout: scroll through .panel-body's bottom padding rather than clipping
+  // 20px above the drawer edge.
+  .col-main {
+    margin-bottom: -20px;
+    padding-bottom: 20px;
+    scroll-padding-bottom: 20px;
+  }
 }
 
 // ─── 2-column layout (when panel is wide enough) ───────────────────────────
@@ -721,10 +752,22 @@
     }
   }
 
+  // Same row-gap trade as .col-comments below: the box starts on the header band's rule and the
+  // padding puts the gap back, so scrolled content clips flush against the rule (not 20px under
+  // it) while the resting layout is unchanged. scroll-padding keeps scrollIntoView landing below it.
+  // The bottom mirrors the top: the box runs through .panel-body's 20px bottom padding to the drawer
+  // edge and the padding puts the space back at the end of the scroll, so content scrolls to the
+  // edge instead of being sliced off by an empty 20px band above it.
   .col-main {
     grid-area: main;
     overflow-y: auto;
     min-height: 0;
+    margin-top: -20px;
+    margin-bottom: -20px;
+    padding-top: 20px;
+    padding-bottom: 20px;
+    scroll-padding-top: 20px;
+    scroll-padding-bottom: 20px;
     padding-right: 8px;
   }
 
@@ -788,21 +831,28 @@
   }
 
   .panel.mode-modal {
-    .panel-header {
-      padding-right: max(54px, calc(env(safe-area-inset-right) + 54px));
-    }
-
     // Fixed, not absolute: the panel itself scrolls at this width (see below) and the close button
     // must stay reachable. The panel is full-screen here, so viewport coordinates line up with it.
+    // It sits centred in the sticky top strip (.panel::before, below), so nothing interactive can
+    // ever scroll under it, and the header no longer reserves room beside it. Above the strip's
+    // z-index 31.
     .close-btn {
       position: fixed;
-      top: max(8px, calc(env(safe-area-inset-top) + 8px));
+      top: calc(env(safe-area-inset-top) + 10px);
       right: max(8px, calc(env(safe-area-inset-right) + 8px));
-      z-index: 30;
-      background: color-mix(in srgb, var(--surface) 84%, transparent);
+      z-index: 32;
+      background: var(--surface);
       color: var(--text);
-      border-color: color-mix(in srgb, var(--border) 70%, transparent);
-      backdrop-filter: blur(8px);
+      border-color: var(--border);
+
+      &:hover:not(:disabled) {
+        background: var(--surface-2);
+      }
+
+      // Alone in its corner here, so the coarse-pointer halo (below) can take the full 44px square.
+      &::after {
+        inset-inline: calc(50% - 22px);
+      }
     }
   }
 
@@ -826,12 +876,34 @@
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
+    // Focus and programmatic scrolling (Tab, scrollIntoView on Dependencies) land below the strip.
+    scroll-padding-top: calc(env(safe-area-inset-top) + 52px);
 
     &::before {
       position: sticky;
       top: 0;
       z-index: 31;
     }
+  }
+
+  // The full-screen modal grows that backing into a 52px strip that holds the close button. A
+  // floating button covered whatever scrolled beneath it (a checklist row's menu) and, at rest, the
+  // cover image or the header's right edge; content now scrolls under the strip instead. The hairline
+  // only appears once the panel has scrolled, where the strip starts covering content.
+  .panel.mode-modal::before {
+    height: calc(env(safe-area-inset-top) + 52px);
+    background: var(--surface);
+  }
+
+  @supports (animation-timeline: scroll()) {
+    .panel.mode-modal::before {
+      animation: card-detail-strip-rule linear both;
+      animation-timeline: scroll(nearest block);
+      animation-range: 0 8px;
+    }
+  }
+
+  .panel {
 
     >* {
       flex-shrink: 0;
@@ -847,6 +919,12 @@
   .col-comments {
     flex: 1 0 auto;
     overflow-y: visible;
+  }
+
+  // The 8px right padding is clearance for .col-main's own scrollbar in the tab layout. Here the
+  // panel scrolls instead, so it only made the right gutter 8px wider than the left.
+  .col-main {
+    padding-right: 0;
   }
 
   .panel.mode-modal {
@@ -871,9 +949,6 @@
     padding: 12px 14px 10px;
   }
 
-  .panel.mode-modal .panel-header {
-    padding-right: max(54px, calc(env(safe-area-inset-right) + 54px));
-  }
 }
 
 // ─── Description fade + show more ───────────────────────────────────────────
@@ -1196,6 +1271,10 @@
 
 .checklist-title,
 .checklist-item-text {
+  // Block, not the global button's inline-flex: a flex container wraps its text in an anonymous
+  // item, so text-overflow never applies and long titles clip mid-glyph. Buttons still centre
+  // their content vertically as blocks.
+  display: block;
   flex: 1;
   min-width: 0;
   border: 0;
@@ -1270,9 +1349,12 @@
 .checklist-progress-bar {
   height: 4px;
   border-radius: 2px;
-  background: var(--surface-2);
+  // --surface-2 all but vanishes against the light detail tint; --border reads as a track in both themes.
+  background: var(--border);
   overflow: hidden;
-  margin-left: 46px;
+  // Starts under the checklist title's text: collapse 24 + gap 6 + grip 16 + gap 6 + the title's
+  // 4px inset. It used to stop at the grip's edge, 10px short, lined up with nothing.
+  margin-left: 56px;
 
   &.is-complete .checklist-progress-fill {
     background: var(--success);
@@ -1304,6 +1386,11 @@
 
 .checklist-delete {
   flex: 0 0 auto;
+  // Same compact square as the bulk buttons beside it; "xs" has no global size, so without this it
+  // fell back to the 36px default button.
+  width: 26px;
+  height: var(--h-sm);
+  padding: 0;
 }
 
 .checklist-item-assign,
@@ -1739,16 +1826,40 @@
 }
 
 @media (max-width: 767.98px), (hover: none) {
-  // Mobile rows use one fixed touch-friendly track. Metadata stays inline and the title yields
-  // space with an ellipsis; the item drawer provides the larger editing controls.
+  // Mobile rows keep a 44px touch track with metadata inline. On a 390px phone the date chip and
+  // menu leave the title ~140px, so a one-line ellipsis cut most items to a dozen characters: the
+  // title wraps to at most two lines instead and only those rows grow. The item drawer still holds
+  // the larger editing controls.
   .checklist-item {
-    height: 44px;
+    height: auto;
     min-height: 44px;
-    max-height: 44px;
-    padding-block: 6px;
+    max-height: none;
+    padding-block: 0;
   }
 
-  .checklist-item-text,
+  // The button is the full row height (the 44px target) and centres the clamped label inside it.
+  // The block padding gives a two-line title ~6px of air top and bottom; one line still centres
+  // inside the 44px minimum, so single-line rows keep their height.
+  .checklist-item-text {
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    height: auto;
+    min-height: 44px;
+    padding-block: 6px;
+    box-sizing: border-box;
+    white-space: normal;
+  }
+
+  .checklist-item-label {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+
   .checklist-item-input {
     height: 32px;
   }
@@ -1944,14 +2055,24 @@
   font-size: 15px;
 }
 
+// One count recipe for every section heading in the drawer; card-relations and card-activity
+// restate it in their own encapsulated styles. --surface-2 is indistinguishable from the light
+// detail tint, so the badge sits on --surface with a --border ring to read in both themes.
 .card-detail-count {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  font-size: var(--text-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
   padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--text-muted);
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 button.checklist-hide-toggle {
@@ -2078,9 +2199,9 @@ button.checklist-hide-toggle {
   }
 
   &.due-soon {
-    color: var(--color-amber);
-    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
-    border-color: color-mix(in srgb, var(--color-amber) 30%, transparent);
+    color: var(--warning);
+    background: var(--warning-soft);
+    border-color: color-mix(in srgb, var(--warning) 30%, transparent);
   }
 }
 
@@ -2096,9 +2217,9 @@ button.checklist-hide-toggle {
 
   &.due-soon:hover,
   &.due-soon.is-active {
-    color: var(--color-amber);
-    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
-    border-color: color-mix(in srgb, var(--color-amber) 30%, transparent);
+    color: var(--warning);
+    background: var(--warning-soft);
+    border-color: color-mix(in srgb, var(--warning) 30%, transparent);
   }
 }
 
@@ -2198,7 +2319,8 @@ button.checklist-hide-toggle {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-sm);
+  // A circle like the assignees' add button, matching the label pills it follows.
+  border-radius: 999px;
   background: var(--surface-2);
   border: 1px dashed var(--border-strong);
   color: var(--text-muted);
@@ -2371,9 +2493,9 @@ button.checklist-hide-toggle {
   // Open work past its workspace's in-progress alert: the amber of a due-soon date, not the red of
   // overdue. It is a prompt to ask about the card, not a missed commitment.
   &.is-alert {
-    color: var(--color-amber);
-    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
-    border-color: color-mix(in srgb, var(--color-amber) 32%, transparent);
+    color: var(--warning);
+    background: var(--warning-soft);
+    border-color: color-mix(in srgb, var(--warning) 30%, transparent);
   }
 
   &.is-done {
@@ -2439,8 +2561,10 @@ button.checklist-hide-toggle {
     --chip-hue: var(--success, var(--color-green));
   }
 
+  // The --warning state tone, not the --color-amber label hue: amber's icon and border measured
+  // 1.85:1 on the light surface.
   &.is-blocking {
-    --chip-hue: var(--color-amber);
+    --chip-hue: var(--warning);
   }
 }
 
@@ -2524,6 +2648,103 @@ button.checklist-hide-toggle {
       inset: -10px -5px;
     }
   }
+
+  // Compact controls keep their visual size; an invisible halo grows each to a 44px-tall target
+  // (calc(50% - 22px) is negative by however much the control falls short). Horizontally each halo
+  // stops at half the gap to its neighbour so adjacent targets never overlap and steal taps.
+  .panel-header button.icon,
+  .panel-subheader .move-list-btn,
+  .panel-subheader .card-board-badge,
+  .attach-actions button,
+  .checklist-bulk-btn,
+  .checklist-delete,
+  .checklist-check,
+  .checklist-item-more,
+  .due-clear {
+    position: relative;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: calc(50% - 22px) 0;
+    }
+  }
+
+  .panel-header button.icon::after { inset-inline: -2px; }
+  .panel-subheader .move-list-btn::after,
+  .panel-subheader .card-board-badge::after { inset-inline: -4px; }
+  // Insets are measured from the padding box, so each includes the button's 1px border: half the
+  // 2px gap between buttons; the outer two also take half the 10px gap to the file name and the
+  // row's 8px padding.
+  .attach-actions button::after { inset-inline: -2px; }
+  .attach-actions button:first-child::after { inset-inline-start: -6px; }
+  .attach-actions button:last-child::after { inset-inline-end: -9px; }
+  .checklist-bulk-btn::after,
+  .checklist-delete::after { inset-inline: -3px; }
+  // Between the grip and the title (6px gaps, both targets), so half of each.
+  .checklist-check::after { inset-inline: -3px; }
+  // Half the 4px actions gap on the left, the row's own 4px padding on the right, each plus the
+  // button's 1px border (insets start at the padding box).
+  .checklist-item-more::after { inset-inline: -3px -5px; }
+  // The clear x shares its chip with the date button, so it widens only into the chip's own padding.
+  .due-clear::after { inset-inline: -6px; }
+
+  // Metadata band, attachment upload: the same invisible 44px-tall halos. Insets start at the padding
+  // box, so -4px reaches 3px past a 1px border: half of these rows' 6px gaps. The avatar's click
+  // lives on k-avatar itself (its profile card), so its halo hangs off that host, not the wrapper.
+  .row-top .member-avatar > k-avatar,
+  .row-top .member-add-btn,
+  .row-top .label-chips > .label-chip,
+  .row-top .label-add-btn,
+  .attach-upload {
+    position: relative;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: calc(50% - 22px) -4px;
+    }
+  }
+
+  .row-top .member-avatar > k-avatar::after { inset-inline: -3px; } // No border of its own.
+  .attach-upload::after { inset-inline: 0; } // Alone on its line.
+
+  // Wrapped rows would stack these halos into each other (6px row gap, 12-18px of halo). A wider
+  // row gap only applies once a row wraps, so the single-line layout is unchanged.
+  .row-top .members-row { row-gap: 12px; }
+  .row-top .label-chips { row-gap: 18px; }
+
+  // ::before rather than ::after: the clear x inside the badge is a later positioned descendant, so
+  // it keeps painting, and hitting, above the badge's own halo.
+  .row-top .due-badge-btn {
+    position: relative;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: calc(50% - 22px) 0;
+    }
+  }
+
+  // Only 4px of room above (the last item) and 10px below, too little for a halo, so these grow to
+  // the 44px floor like the hide-completed toggle.
+  .checklist-add-btn {
+    height: 44px;
+  }
+
+  // The checklist date chip clips its label horizontally only, so its halo can escape vertically.
+  // ::before, so the clear x (a later positioned descendant) still paints, and hits, above it.
+  .checklist-item-due {
+    position: relative;
+    overflow-x: clip;
+    overflow-y: visible;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: calc(50% - 22px) 0;
+    }
+  }
 }
 
 .detail-time-error {
@@ -2546,10 +2767,16 @@ button.checklist-hide-toggle {
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 
   .move-list-name {
-    max-width: 140px;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+
+    // Phones size the name to the subheader instead (see .panel-subheader); wider panels cap it so a
+    // very long list name can't push the board chip off its line.
+    @media (min-width: 768px) {
+      max-width: 260px;
+    }
   }
 
   i {
@@ -2637,7 +2864,8 @@ button.checklist-hide-toggle {
   width: 100%;
   height: var(--h-lg);
   padding: 0 10px;
-  border: 1px solid var(--border);
+  // --border-strong, the edge the text inputs and select triggers beside it use.
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
@@ -2652,12 +2880,12 @@ button.checklist-hide-toggle {
   }
 
   &:hover:not(:disabled) {
-    border-color: var(--border-strong);
+    border-color: var(--text-4);
     background: transparent;
   }
 
   &.checked {
-    border-color: var(--border);
+    border-color: var(--border-strong);
     background: transparent;
     color: var(--text);
 
@@ -2677,7 +2905,7 @@ button.checklist-hide-toggle {
 [data-theme="light"] &,
 [data-theme="paper"] & {
   .cf-input,
-  .cf-trigger,
+  .cf-row .cf-trigger,
   .cf-checkbox-btn,
   .cf-checkbox-btn:hover:not(:disabled) {
     background: var(--surface);
@@ -2687,7 +2915,7 @@ button.checklist-hide-toggle {
 @media (prefers-color-scheme: light) {
   :not([data-theme]) & {
     .cf-input,
-    .cf-trigger,
+    .cf-row .cf-trigger,
     .cf-checkbox-btn,
     .cf-checkbox-btn:hover:not(:disabled) {
       background: var(--surface);
@@ -2704,7 +2932,8 @@ button.checklist-hide-toggle {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-size: var(--text-xs);
+    // --text-sm: --text-xs is reserved for uppercase micro-labels and counts.
+    font-size: var(--text-sm);
     font-weight: 600;
     color: var(--text-muted);
 
@@ -2716,6 +2945,8 @@ button.checklist-hide-toggle {
 
   .cf-input {
     width: 100%;
+    // Long values (branch names) end in an ellipsis while unfocused; focusing scrolls the full text.
+    text-overflow: ellipsis;
   }
 
   .cf-url {
@@ -2744,24 +2975,29 @@ button.checklist-hide-toggle {
     position: relative;
   }
 
+  // Reads as a field beside the text inputs: start-aligned (the global button reset centres), with
+  // the inputs' 10px inset and --border-strong edge.
   .cf-trigger {
     width: 100%;
     min-height: 34px;
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 6px;
-    padding: 4px 8px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+    padding: 4px 10px;
+    // The text inputs' surface (transparent; --surface in light, below), not a --surface-2 fill.
+    background: transparent;
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius);
     color: var(--text);
     font-size: var(--text-base);
+    font-weight: 400;
     cursor: pointer;
     text-align: left;
     transition: background-color 0.12s, border-color 0.12s;
 
     &:hover:not(:disabled) {
-      border-color: var(--border-strong);
+      border-color: var(--text-4);
     }
 
     &:disabled {
@@ -2791,12 +3027,28 @@ button.checklist-hide-toggle {
     font-size: var(--text-sm);
     font-weight: 500;
     white-space: nowrap;
+
+    // Text starts where an input's value does, at the trigger's own 10px inset.
+    &.is-plain {
+      padding-inline: 0;
+      font-size: var(--text-base);
+      font-weight: 400;
+    }
   }
 
   .cf-users {
     display: inline-flex;
     align-items: center;
     gap: 3px;
+  }
+
+  // Full-width fields, so they grow to the 44px touch floor rather than borrowing a halo.
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    .cf-input,
+    .cf-trigger,
+    .cf-checkbox-btn {
+      min-height: 44px;
+    }
   }
 }
 
@@ -2867,6 +3119,14 @@ button.checklist-hide-toggle {
   z-index: 2;
 }
 
+// An idle upload list (and a card with no linked pull requests) still leaves its host element in
+// the flex column, and each empty host claimed a gap slot: 10px between "Add attachment" and the
+// list, and a doubled 40px between Dependencies and Attachments. Comment anchors don't defeat :empty.
+.card-detail-section > k-attachment-upload-list:empty,
+.col-main > k-card-github-pulls:empty {
+  display: none;
+}
+
 .attach-error {
   display: flex;
   align-items: center;
@@ -2876,10 +3136,12 @@ button.checklist-hide-toggle {
   color: var(--danger);
 }
 
+// Sibling of the dropzone, so the section's 10px gap already spaces it; a top margin on top of that
+// (plus the gap slot of the empty upload list) put a section-sized break inside the section.
 .attach-list {
   display: flex;
   flex-direction: column;
-  margin: 12px 0 0;
+  margin-block: 0;
   padding: 0;
   list-style: none;
   border: 1px solid var(--border);
@@ -2932,7 +3194,8 @@ button.checklist-hide-toggle {
   height: 56px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: var(--surface-muted, #f5f5f5);
+  // --surface-muted is not a token; its #f5f5f5 fallback painted bright squares in dark mode.
+  background: var(--surface-2);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -2944,6 +3207,14 @@ button.checklist-hide-toggle {
 
   img {
     object-fit: cover;
+  }
+
+  // Logos and diagrams are drawn to their own edges, so cropping them to a square cuts the artwork
+  // (a wordmark loses its last letters). SVGs fit inside a small inset; photos keep cover.
+  &.is-svg img {
+    box-sizing: border-box;
+    padding: 4px;
+    object-fit: contain;
   }
 
   &.is-doc {
@@ -2997,11 +3268,13 @@ button.checklist-hide-toggle {
   flex: 1;
 }
 
+// The name is a link, but no other row in the drawer underlines at rest; the underline confirms it
+// on hover and keyboard focus instead.
 .attach-name {
   font-size: var(--text-base);
   font-weight: 600;
   color: var(--text);
-  text-decoration: underline;
+  text-decoration: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3012,12 +3285,40 @@ button.checklist-hide-toggle {
   text-align: left;
 }
 
+.attach-name:hover,
+.attach-name:focus-visible {
+  text-decoration: underline;
+}
+
 .attach-sub {
   font-size: var(--text-xs);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+// Each part stays whole and carries its leading bullet, so a wrapped line never ends on "•".
+.attach-sub-part {
+  white-space: nowrap;
+}
+
+// A phone leaves the name and subtitle ~160px beside the thumbnail and actions, which cut the
+// extension off the name and the size off the subtitle. Both wrap instead (the name to two lines);
+// the 56px thumbnail still sets the row height for most files.
+@media (max-width: 767.98px) {
+  .attach-name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .attach-sub {
+    white-space: normal;
+  }
 }
 
 // ─── Light mode surface corrections ──────────────────────────────────────────

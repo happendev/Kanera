@@ -3,6 +3,8 @@ import { MenuDirective } from "../../shared/menu.directive";
 import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
+import { NgTemplateOutlet } from "@angular/common";
+import { FitLabelsDirective } from "../../shared/fit-labels.directive";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireAgentRun, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
@@ -130,7 +132,7 @@ function sameIdSet(a: string[], b: string[]): boolean {
 @Component({
   selector: "k-board-page",
   standalone: true,
-  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardTimelineViewComponent, BoardCanvasComponent, DependencyMapComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusBarComponent, ToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
+  imports: [EmptyStateComponent, FitLabelsDirective, NgTemplateOutlet, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardTimelineViewComponent, BoardCanvasComponent, DependencyMapComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusBarComponent, ToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -162,6 +164,8 @@ export class BoardPage implements OnDestroy {
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly listsEl = viewChild<BoardCanvasComponent>('listsEl');
+  /** By template ref, not class, so the deferred Table stays out of the page's eager bundle. */
+  protected readonly tableView = viewChild<BoardTableViewComponent>('tableView');
 
   readonly boardId = input.required<string>();
   readonly cardId = input<string | undefined>();
@@ -352,7 +356,7 @@ export class BoardPage implements OnDestroy {
    * a CSS-only override would leave the panel wider than the position it was aligned for. 240px fits
    * the longest mirror label without wrapping.
    */
-  readonly boardMenuPlacement: AnchoredPanelPlacement = { align: "end", width: 240, gap: 4, minHeight: 90, maxHeight: 420 };
+  readonly boardMenuPlacement: AnchoredPanelPlacement = { align: "end", width: 240, gap: 4, minHeight: 90, maxHeight: 520 };
   readonly exportLoading = signal<"json" | "xlsx" | null>(null);
   /**
    * Per-board, per-device tile density. Compact hides the metadata rows (custom-field badges and the
@@ -711,6 +715,14 @@ export class BoardPage implements OnDestroy {
     this.kanbanGroupByOptions().find((option) => option.value === this.effectiveKanbanGroupBy())?.label ?? $localize`:Kanban column grouping with one column per list:List`
   );
 
+  /**
+   * The trigger's visible text and accessible name. The Table's own grouping message, reused rather
+   * than a new one, so the two views' grouping triggers read the same ("Group: Status") and the label
+   * names the control as a picker, not only its current value. The accessible name matters once the
+   * header drops the label (is-tight), when the span is gone.
+   */
+  readonly kanbanGroupTriggerLabel = computed(() => $localize`:Toolbar button showing the current grouping:Group: ${this.kanbanGroupByLabel()}:grouping:`);
+
   readonly kanbanGroupByIcon = computed(() =>
     this.kanbanGroupByOptions().find((option) => option.value === this.effectiveKanbanGroupBy())?.icon ?? "layout-list"
   );
@@ -756,7 +768,8 @@ export class BoardPage implements OnDestroy {
   });
 
   readonly groupByMenuOpen = signal(false);
-  readonly groupByMenuPlacement: AnchoredPanelPlacement = { align: "end", gap: 4, width: "measure", maxHeight: 320 };
+  // 560: at 320 the list stopped at "Branch" with half the screen free; the viewport still clamps it.
+  readonly groupByMenuPlacement: AnchoredPanelPlacement = { align: "end", gap: 4, width: "measure", maxHeight: 560 };
 
   toggleGroupByMenu() {
     this.groupByMenuOpen.update((open) => !open);

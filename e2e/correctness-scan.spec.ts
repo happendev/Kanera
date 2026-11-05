@@ -149,7 +149,9 @@ test("bulk and cross-board moves return the final card after list automations", 
   // exposes the final status without depending on which lanes happen to be mounted.
   await page.getByRole("button", { name: "Table view" }).click();
   const row = page.locator(`k-board-table-view .tv-row[data-card-id="${bulkCard.id}"]`);
-  await expect(row.locator('[data-col="status"]')).toContainText("Automation destination");
+  // Grouped by list, the table hides its Status column by default: the group header names the list.
+  const group = page.locator("k-board-table-view .tv-run").filter({ has: page.locator(`.tv-row[data-card-id="${bulkCard.id}"]`) });
+  await expect(group.locator(".tv-run-head")).toContainText(destination.name);
   await expect(row).toHaveClass(/is-completed/);
 });
 

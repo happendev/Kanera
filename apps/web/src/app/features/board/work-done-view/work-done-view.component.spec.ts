@@ -257,9 +257,12 @@ describe("WorkDoneViewComponent", () => {
     const native = await render({ events: [checklistEvent, completedEvent, movedEvent, createdEvent] });
 
     expect(native.querySelector(".wd-day-cards")?.textContent?.trim()).toBe("3 cards");
-    const counts = Array.from(native.querySelectorAll(".wd-count")).map((el) => el.textContent?.trim());
+    const counts = Array.from(native.querySelectorAll(".wd-count-num")).map((el) => el.textContent?.trim());
     // One of each type, rendered in reading order: completed, checklist, moved, created.
     expect(counts).toEqual(["1", "1", "1", "1"]);
+    // Each count also carries its phrase, the label on wide panels and the screen-reader text elsewhere.
+    const phrases = Array.from(native.querySelectorAll(".wd-count-text")).map((el) => el.textContent?.trim());
+    expect(phrases).toEqual(["1 card completed", "1 checklist item ticked", "1 move", "1 card created"]);
     // Ada (3 events) and Bob (1) both appear in the day's contributor stack.
     expect(native.querySelectorAll(".wd-day-actors k-avatar")).toHaveLength(2);
   });
@@ -305,7 +308,7 @@ describe("WorkDoneViewComponent", () => {
       lists: [list("list-a", "A"), list("list-b", "B"), list("list-c", "C"), list("list-d", "D"), list("list-e", "E")],
     });
 
-    const segments = Array.from(native.querySelectorAll(".wd-chip--moved span")).map((el) => el.textContent?.trim());
+    const segments = Array.from(native.querySelectorAll(".wd-chip--moved > span")).map((el) => el.textContent?.trim());
     // First 3 lists, an ellipsis, then the final destination.
     expect(segments).toEqual(["A", "B", "C", "…", "E"]);
   });

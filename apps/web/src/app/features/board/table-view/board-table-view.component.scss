@@ -3,6 +3,7 @@
 @use "../../../shared/rank-pill" as rank;
 @use "../../../shared/card-key" as key;
 @use "../../../shared/list-chip" as chip;
+@use "../../../shared/chip" as state-chip;
 
 :host {
   --tv-row-h: 36px;
@@ -11,11 +12,26 @@
   // Left inset of the title cell. It reserves room for the always-present row checkbox and nothing
   // else: every extra pixel here is stolen from the title, which is the column people actually read.
   --tv-gutter-w: 28px;
-  // Run header height, tall enough for the status pill it carries.
-  --tv-run-h: 34px;
+  // Run header height: the status pill (--h-xs) plus 3px either side. The band's tint, not extra
+  // height, separates one group from the next; at 34px a one-card group cost 88px of chrome and row.
+  --tv-run-h: 28px;
+  // A run's trailing "Add card" row. Hidden at rest on a fine pointer (see .tv-run-foot), so at rest
+  // this is the group's bottom padding: kept to a sliver, because a full-height hidden row read as a
+  // conspicuous blank band under every short group. 16px is the revealed label's own line (see
+  // .tv-run-foot > .tv-run-add), so the reserve still holds it without shifting. Touch restores 44px.
+  --tv-add-h: 16px;
   // Left/right inset of the grid inside its scroller. The run sheets and the header share it, so the
   // columns stay aligned while the sheets read as indented blocks rather than full-bleed bands.
   --tv-run-inset: 10px;
+  // Space between the card key and the title. Every key takes the widest key's slot, so this is the
+  // gap the widest key gets and every shorter key gets more; at 6px "DEVELOPMEN-10" all but touched
+  // its title. The header's "Title" label uses the same gap so it stays on the titles' edge.
+  --tv-key-gap: 8px;
+  // The title trigger's trailing padding: room between the title (and its trailing unread dot) and the
+  // column rule at rest, and room for the overlaid Open button on hover (see .tv-title-open).
+  // TITLE_OPEN_RESERVE in the component mirrors the difference between the two.
+  --tv-title-end: 14px;
+  --tv-title-end-open: 38px;
 
   // 13px was a shade too small to scan a full sheet of. The whole grid reads off this one token so
   // cell text, editors and the chips cannot drift apart.
@@ -95,7 +111,11 @@
   align-items: center;
   gap: var(--space-2);
   min-height: 42px;
-  padding: 5px 12px;
+  // The same block padding and inline gutter as k-page-toolbar's query bar (8px / --pt-gutter), so
+  // on a board the two rows stack at one rhythm and their first controls share a left edge. Global
+  // Work widens that gutter with --work-gutter, which reaches this embedded table by inheritance; a
+  // board leaves it unset and takes the page toolbar's 16px default.
+  padding: 8px var(--work-gutter, 16px);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex: none;
@@ -145,6 +165,12 @@
   display: inline-flex;
 }
 
+.tv-icon-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .tv-small-menu,
 .tv-columns-menu,
 .tv-group-menu,
@@ -167,8 +193,15 @@
   color: var(--text);
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+
+  // Rows are flex items in a scrolling column; without this a long menu squeezes them below their
+  // min-height and the label renders outside the hover fill.
+  > .k-menu-item,
+  > .tv-columns-list > .k-menu-item {
+    flex: none;
+  }
 
   &.is-positioned {
     visibility: visible;
@@ -180,17 +213,25 @@
   }
 }
 
+// Option rows stack at the shared menu rhythm (32px rows, 1px apart), not the 8px gap the panel
+// rule above gives to sectioned panels: at that gap a fifteen-option sort list read double-spaced.
 .tv-small-menu {
-  padding: 6px;
+  gap: 1px;
+  padding: var(--space-1);
+  --k-scroll-fade-gap: 1px;
 }
 
 .tv-export-scope {
+  margin-top: var(--space-1);
   padding-block: 4px 6px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--overlay-separator);
 }
 
+// The heading stays put and the list beneath it scrolls (see .tv-columns-list).
 .tv-columns-menu {
-  gap: 10px;
+  gap: 0;
+  padding: var(--space-1);
+  overflow: hidden;
 }
 
 // Two stacked sections of option rows, so the gap between them is the section break rather than a
@@ -200,10 +241,9 @@
   padding: 6px;
 }
 
+// Type and inset come from the global .k-menu-heading; this only keeps the heading from shrinking.
 .tv-panel-title {
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 700;
+  flex: none;
 }
 
 .tv-group-menu .tv-panel-title {
@@ -215,7 +255,7 @@
 .tv-panel-title-split {
   margin-top: 6px;
   padding-top: 10px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--overlay-separator);
 }
 
 .tv-panel-hint {
@@ -226,12 +266,17 @@
   line-height: 1.4;
 }
 
-// No inner cap: the show/hide list is the panel's only content now, so it scrolls against the
-// panel's own max-height instead of being squeezed into a 220px window inside a 520px panel.
+// No inner cap: the list takes whatever the panel's max-height leaves under the heading, instead of
+// being squeezed into a fixed 220px window. It is the scroller, so it carries the scroll cue.
 .tv-columns-list {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  --k-scroll-fade-gap: 1px;
 }
 
 .tv-scroll {
@@ -317,6 +362,36 @@
   pointer-events: none;
 }
 
+// The right-hand counterpart of the edge guard: a soft fade pinned to the scrollport's right edge
+// while more columns sit beyond it, so a chip cut by the viewport ("Feature / Enhan") reads as "more
+// to the right" rather than as a rendering fault. Same single grid cell as the table, so it spans the
+// table's height; sticky `right: 0` holds it on the visible edge however far the sheet is scrolled.
+//
+// Shown by a scroll-driven animation on the sheet's own horizontal scroll: opaque at the start, gone
+// once the last column is in view. With no sideways overflow the timeline is inactive and the base
+// opacity of 0 applies, so a table that fits shows nothing; a browser without scroll timelines runs
+// the zero-length animation to its end state, which is also hidden. z 8 with the header, painted
+// after it, so the header labels fade on the same line as the cells under them.
+.tv-scroll::after {
+  content: "";
+  grid-area: 1 / 1;
+  justify-self: end;
+  position: sticky;
+  right: 0;
+  z-index: 8;
+  width: 32px;
+  background: linear-gradient(to right, transparent, var(--surface));
+  pointer-events: none;
+  opacity: 0;
+  animation: tv-more-columns linear both;
+  animation-timeline: scroll(nearest inline);
+}
+
+@keyframes tv-more-columns {
+  0%, 94% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 // Pinned to the top of the scrollport so a long sheet never loses the column labels: the containing
 // block is .tv-table, which spans the whole scroll height, so the band follows the vertical scroll
 // while the title cell inside it keeps its own horizontal pin. z 8 puts it over the edge guard (6),
@@ -365,9 +440,9 @@
   letter-spacing: .01em;
   user-select: none;
 
+  // Full --text-muted: a further fade put the glyphs under 3:1 in carbon and light.
   >i {
     font-size: var(--text-base);
-    opacity: .8;
   }
 
   >span {
@@ -403,8 +478,20 @@
 
 .tv-header .tv-title-cell {
   z-index: 9;
+  gap: var(--tv-key-gap);
   background: var(--surface);
   border-right-color: var(--border);
+}
+
+// Sized by the same hidden widest-key sizer as the rows' keys, so "Title" starts on the titles' edge.
+// The icon shares the slot's one grid cell, pinned to its trailing edge beside the label.
+.tv-head-key-slot {
+  justify-items: end;
+
+  > i {
+    grid-area: 1 / 1;
+    font-size: var(--text-base);
+  }
 }
 
 // Column reordering. Handle-scoped and hover-only: a permanently visible grip on every header would
@@ -572,8 +659,8 @@
   font-size: 15px;
 }
 
-// The Up next queue position — deliberately identical to k-card's .card-priority-rank so the number
-// means the same thing on a tile and in a row.
+// The Up next queue position — the same rank pill as the Up next panel, so the number means the
+// same thing in a row and in the queue (the board tile carries it as a flat "Up next N" chip).
 .tv-priority-rank {
   display: inline-flex;
   flex: none;
@@ -605,8 +692,17 @@
   font-weight: 700;
 }
 
+// A trailing mark after the (ellipsed) title, the way the board tile puts its dot at the end of the
+// key row. It sat in the row number's gutter slot once, which kept the titles aligned but blanked the
+// ordinal, so the numbering read 1, •, 3. Ordered last rather than moved in the DOM: the stacked
+// phone card places the same element on the key's line instead (see the stacked layout).
+//
+// Centred rather than baseline-aligned like its .tv-title siblings: an empty box's baseline is its
+// bottom edge, which would sit the dot on the text baseline instead of level with the x-height.
 .tv-unread {
+  order: 1;
   display: inline-block;
+  align-self: center;
   flex: 0 0 7px;
   width: 7px;
   height: 7px;
@@ -614,16 +710,18 @@
   background: var(--accent);
 }
 
-// Each run is a bound sheet on the recessed table background, the way a grouped table reads: the gap
-// between blocks does the separating, so no divider rule is needed between groups.
+// The runs stack edge to edge into one sheet on the recessed table background, the way a grouped
+// table reads: one table with section headers, not a column of separate cards. Spaced apart, the grey
+// gutters between groups and their pill headers made every list look like its own panel.
 //
-// The ring is an inset box-shadow rather than a border because a border would inset every row by 1px
-// and pull the whole grid out of alignment with the header, which sits outside the blocks.
+// Each run still draws its own ring; touching, two rings fall on the same pixel row, so the seam
+// between groups is a single 1px rule. The ring is an outset box-shadow rather than a border because a
+// border would inset every row by 1px and pull the whole grid out of alignment with the header, which
+// sits outside the runs.
 .tv-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  // The sheets' left/right indent. The full-width bands above and below take the same value as
+  // The sheet's left/right indent. The full-width bands above and below take the same value as
   // padding, so every column lines up across the inset boundary.
   padding: 10px var(--tv-run-inset);
 }
@@ -631,26 +729,41 @@
 .tv-run {
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius);
   background: var(--surface);
   box-shadow: 0 0 0 1px var(--border);
 
+  // Only the sheet's outer corners round: the first run's top and the last run's bottom.
+  //
   // The sheet cannot be clipped with overflow:hidden — that would sever the sticky title column from
   // its scroll container — so whichever element sits on a corner rounds itself. The head takes the
   // top corners; a row only needs them when the run is ungrouped and has no head. The title cell
   // needs its own radius too, because it paints an opaque background over the row's.
-  .tv-run-head { border-radius: var(--radius) var(--radius) 0 0; }
-
-  .tv-run-rows:first-child > .tv-row:first-child {
+  &:first-child {
     border-top-left-radius: var(--radius);
     border-top-right-radius: var(--radius);
 
-    .tv-title-cell { border-top-left-radius: var(--radius); }
+    .tv-run-head { border-radius: var(--radius) var(--radius) 0 0; }
+
+    .tv-run-rows:first-child > .tv-row:first-child {
+      border-top-left-radius: var(--radius);
+      border-top-right-radius: var(--radius);
+
+      .tv-title-cell { border-top-left-radius: var(--radius); }
+    }
+  }
+
+  &:last-child {
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+  }
+
+  // The run's last row carries no rule of its own: the next run's ring (or the sheet's edge) does.
+  .tv-run-rows > .tv-row:last-child {
+    border-bottom: 0;
   }
 
   // Also carries the sheet's bottom edge when there is no add row to do it (read-only board).
-  .tv-run-rows > .tv-row:last-child {
-    border-bottom: 0;
+  &:last-child .tv-run-rows > .tv-row:last-child {
     border-bottom-left-radius: var(--radius);
     border-bottom-right-radius: var(--radius);
 
@@ -658,20 +771,17 @@
   }
 }
 
-// The sheet's own top row, not a floating label: it is bound by the same ring as the rows it names.
+// A section header inside the sheet, not a floating label: the faint band (the subtotal rows' tone)
+// marks where one group starts without boxing it off. The chip is only a step above the cells' list
+// pill (see .tv-run-head .tv-chip), so the band, not a large badge, does the separating.
 .tv-run-head {
   display: flex;
   align-items: center;
   gap: 7px;
   height: var(--tv-run-h);
   padding: 0 var(--tv-cell-pad-x) 0 var(--tv-gutter-w);
-  border-bottom: 1px solid var(--border);
-
-  .tv-chip {
-    padding: 3px 11px;
-    font-size: var(--text-base);
-    font-weight: 700;
-  }
+  background: var(--tv-sum-bg);
+  border-bottom: 1px solid var(--tv-line-row);
 
   // The run's card count. Quieter than the name — it is context, not the label.
   em {
@@ -767,7 +877,8 @@
   margin-left: -3px;
   color: var(--text-muted);
   font-size: var(--text-md);
-  opacity: .55;
+  // Visible at rest, so it keeps 3:1 as a graphic; .55 fell to ~2.3:1 on the light themes.
+  opacity: .8;
   transition: opacity var(--motion-fast) ease;
 }
 
@@ -781,7 +892,41 @@
 .tv-run-foot {
   display: flex;
   align-items: center;
-  min-height: var(--tv-row-h);
+  min-height: var(--tv-add-h);
+}
+
+// Hidden until the group is in play: invisible at rest, shown on group hover or when focus is
+// anywhere in the group (so tabbing onto it reveals it). At rest even a faded row read as a second
+// band of chrome under every group header. The row keeps its height so revealing it never shifts the
+// sheet under the pointer. An empty group shows it outright, because there it is the group's only
+// content and its only way in. Touch keeps it fully visible (see the coarse-pointer block), since
+// there is no hover to reveal it.
+//
+// The fine-pointer row is only 16px, so the label steps down to --text-sm on a 16px line to sit
+// inside it; the button is still the sheet's widest-reaching target on that line. An empty group
+// takes a full 28px row, since there the button is the content rather than a reveal.
+.tv-run-foot > .tv-run-add {
+  min-height: var(--tv-add-h);
+  font-size: var(--text-sm);
+  line-height: 16px;
+  opacity: 0;
+  transition: opacity var(--motion-fast) ease, color var(--motion-fast) ease;
+
+  > i { font-size: var(--text-base); }
+}
+
+.tv-run:hover > .tv-run-foot > .tv-run-add,
+.tv-run:focus-within > .tv-run-foot > .tv-run-add,
+.tv-run-rows:empty ~ .tv-run-foot > .tv-run-add {
+  opacity: 1;
+}
+
+.tv-run-rows:empty ~ .tv-run-foot,
+.tv-run-rows:empty ~ .tv-run-foot > .tv-run-add {
+  min-height: max(var(--tv-add-h), 28px);
+}
+
+.tv-run:last-child > .tv-run-foot {
   border-radius: 0 0 var(--radius) var(--radius);
 }
 
@@ -805,7 +950,7 @@
   }
 
   // Only when there is no add row beneath it (a read-only board), where it carries the sheet's edge.
-  &:last-child {
+  .tv-run:last-child > &:last-child {
     border-radius: 0 0 var(--radius) var(--radius);
   }
 }
@@ -976,9 +1121,10 @@
 .tv-row-number {
   justify-content: center;
   width: 15px;
+  // Full --text-muted, no fade: the ordinal is read (it is how you say "row 3 in Backlog"), and at
+  // 65% it fell to a decoration tier that was close to invisible in both themes.
   color: var(--text-muted);
   font-size: var(--text-xs);
-  opacity: .65;
   transition: opacity var(--motion-fast);
   pointer-events: none;
 }
@@ -1052,6 +1198,13 @@
 .tv-row:hover .tv-title-open,
 .tv-row:focus-within .tv-title-open {
   opacity: 1;
+}
+
+// While the Open button shows, the title steps clear of it, so the ellipsis and the trailing unread
+// dot land beside the button instead of under it. The column's growth target reserves this step
+// (TITLE_OPEN_RESERVE), so a title that fits at rest still fits on hover.
+.tv-row:is(:hover, :focus-within) .tv-title-cell {
+  --tv-title-end: var(--tv-title-end-open);
 }
 
 // The global button reset centres its content (styles.scss `button { justify-content: center }`).
@@ -1134,6 +1287,7 @@
 .tv-title-trigger {
   margin-left: 0;
   padding-left: 0;
+  padding-right: var(--tv-title-end);
 
   // The title is the only trigger with no hover background of its own, which let the global
   // `button:hover:not(:disabled) { background: var(--accent-hover) }` in styles.scss out-specify the
@@ -1149,7 +1303,7 @@
 .tv-title {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--tv-key-gap);
   min-width: 0;
   max-width: 100%;
   font-weight: 500;
@@ -1163,14 +1317,13 @@
 }
 
 .tv-card-key {
-  @include key.card-key;
-  // Regular weight: the key sits inline before the title in a dense row, so a medium weight reads
-  // as part of the title instead of a prefix. The key is never clipped (a cut key identifies
+  // The row variant every card list shares (shared/_card-key.scss): on --text-muted the key reads as
+  // a prefix rather than part of the title. The key is never clipped (a cut key identifies
   // nothing); the title text gives way instead, and the grid drops the key altogether below
   // COMPACT_TITLE_WIDTH. The key and the hidden sizer (the table's widest key) share one grid
   // cell, so every key takes the widest key's width and the titles line up down the column.
+  @include key.card-key-row;
   display: inline-grid;
-  font-weight: 400;
 
   > span {
     grid-area: 1 / 1;
@@ -1185,6 +1338,13 @@
 @media (min-width: 641px) {
   .tv-view.is-compact-title .tv-card-key {
     display: none;
+  }
+
+  // The header's key slot keeps its icon when the keys give way, so the label still has one.
+  .tv-view.is-compact-title .tv-head-key-slot {
+    display: inline-grid;
+
+    > .tv-key-sizer { display: none; }
   }
 }
 
@@ -1259,6 +1419,17 @@
   --list-color: var(--tv-status-color, var(--text-muted));
 }
 
+// The run header's pill names a whole group, so it steps up from the shared 20px chip to the control
+// scale's --h-xs at --text-sm: at the cell's size the group's name read smaller than its own count.
+.tv-run-head .tv-chip {
+  font-size: var(--text-sm);
+  line-height: var(--h-xs);
+
+  > i {
+    font-size: var(--text-base);
+  }
+}
+
 .tv-muted {
   color: var(--text-muted);
 }
@@ -1299,22 +1470,18 @@
 
 .tv-muted-soft { color: var(--text-muted); }
 
-// Accent like the tile's chip: this column is the "actively moving" signal, not another timestamp.
+// The tile's chip (shared/_chip.scss), accent while running: this column is the "actively moving"
+// signal, not another timestamp. flex: none keeps .tv-static-value's ellipsis from squeezing the chip.
 .tv-time-in-progress {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  color: var(--accent);
-  font-weight: 550;
-  font-variant-numeric: tabular-nums;
+  @include state-chip.chip;
+  @include state-chip.chip-tone(accent);
 
-  i { font-size: var(--text-md); }
-
-  &.is-done { color: var(--text-muted); font-weight: 500; }
   // Running outside working hours, so not counting (see the card tile's matching chip).
-  &.is-paused { color: var(--text-muted); }
+  &.is-paused { @include state-chip.chip-tone(neutral); }
   // Past the workspace's in-progress alert (see the card tile's matching chip).
-  &.is-alert { color: var(--color-amber); }
+  &.is-alert { @include state-chip.chip-tone(warning); }
+  // Stopped: a record, plain metadata.
+  &.is-done { @include state-chip.chip-tone(plain); }
 }
 
 .tv-checklist {
@@ -1329,11 +1496,12 @@
   }
 }
 
+// The cell's own size, like every other value in the row; --text-3 and the weight keep it a step
+// quieter than the title without dropping it to a smaller type size the row would read as a second line.
 .tv-checklist-count {
   flex: none;
   color: var(--text-3);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 // The bar carries the scan; the ratio alone makes you read two numbers on every row.
@@ -1381,9 +1549,20 @@
   }
 }
 
-.tv-cell-trigger.is-overdue {
-  color: var(--danger);
-  font-weight: 500;
+// The due cell: plain while neutral, the shared urgency chips (shared/_chip.scss) once overdue or due
+// soon, so a date reads the same here as on the tile and in the queue.
+.tv-due {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+  min-width: 0;
+
+  > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @include state-chip.due-states;
 }
 
 .tv-assignee {
@@ -1425,15 +1604,19 @@ k-card-labels.tv-labels {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  // One clipped row: the chips keep their full width and the row runs out at the cell edge, rather
+  // than every chip shrinking in step until short names read "Repo…" and "Sup…". The fade marks that
+  // clipped edge as "more to the right" instead of a hard cut through a chip; a viewer who wants them
+  // all widens the column (or opens the card).
+  --label-chip-flex: none;
+  --label-bar-column-gap: 4px;
+  mask-image: linear-gradient(to right, #000 calc(100% - 10px), transparent);
   --label-bar-wrap: nowrap;
   --label-bar-gap: 0;
-  --label-chip-height: 20px;
   // A table column already supplies the real width constraint. The former 110px/94px caps cut a
   // label like "Feature / Enhancement" even when the column had ample room for the full chip.
   --label-chip-max-width: 100%;
   --label-chip-text-max-width: none;
-  --label-chip-font-size: var(--text-xs);
-  --label-chip-padding-x: 7px;
   --label-bar-row-gap: 0;
 }
 
@@ -1590,12 +1773,19 @@ k-card-labels.tv-labels {
 @media (max-width: 768px) {
   .tv-toolbar {
     flex-wrap: wrap;
-    padding-inline: 8px;
   }
 
   .tv-search {
     flex: 1;
     width: auto;
+  }
+}
+
+// A phone trades 4px of edge alignment with the query bar for the Columns label: at 44px touch
+// targets the five controls fit one row with a 12px gutter and drop that label at 16px.
+@media (max-width: 640px) {
+  .tv-toolbar {
+    padding-inline: 12px;
   }
 }
 
@@ -1610,7 +1800,7 @@ k-card-labels.tv-labels {
   //
   // The gutter widens to a full 44px column: in the stacked layout it is the row's leading tap
   // target (the checkbox) rather than a sliver beside a dense grid, and every left edge below — the
-  // group checkbox, the title, the label/value rows and "New task" — keys off this one token.
+  // group checkbox, the title, the label/value rows and "Add card" — keys off this one token.
   //
   // `!important` because the template binds --tv-gutter-w inline on .tv-view (28px, or 44px while
   // row dragging is possible), and an inline declaration outranks any normal rule. Dragging is off in
@@ -1627,6 +1817,11 @@ k-card-labels.tv-labels {
     overflow-x: hidden;
   }
 
+  // Stacked rows never scroll sideways, so there is no hidden column for the fade to mark.
+  .tv-scroll::after {
+    display: none;
+  }
+
   .tv-table {
     min-width: 0;
     width: 100%;
@@ -1636,54 +1831,137 @@ k-card-labels.tv-labels {
     display: none;
   }
 
-  // One header line — [checkbox][title][open][actions], each control a 44px square on the same
-  // top edge — then the label/value rows spanning the full width under the title. The actions cell is
-  // a grid item on that first line, not an absolute overlay, so it can never sit on the title text.
   .tv-row-grid {
     min-width: 0;
     grid-template-columns: minmax(0, 1fr) 44px;
   }
 
+  // The card's own edge is the stronger --border; the field rules inside it are --divider, so the
+  // boundary between two cards still reads above the lines between one card's fields.
+  //
+  // One header line, [checkbox][key •] ... [open][actions], each control a 44px square on the same top
+  // edge; then the title across the whole content width; then the fields. The two trailing controls
+  // are pinned to the card's top-right corner, level with the key, so the title no longer shares its
+  // lines with them and wraps (or clamps) a third later.
+  //
+  // A wrapping flex row rather than a grid: the title fills the first line, every field takes a full
+  // line after it, and a pair of short fields (.tv-paired-field) shares one. A field that is left out
+  // (an empty read-only one, below) simply lets its partner take the line, where a grid would leave a
+  // hole beside it.
   .tv-row {
     position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 44px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
     min-height: 56px;
-    padding: 0 0 6px var(--tv-gutter-w);
+    padding: 0 0 4px var(--tv-gutter-w);
+    border-bottom-color: var(--border);
   }
 
   .tv-cell {
-    grid-column: 1;
     display: flex;
-    min-height: 34px;
-    padding: 4px 0;
+    flex: 1 1 100%;
+    min-width: 0;
+    padding: 0;
     border-right: 0;
     background: transparent;
   }
 
+  // A read-only field with nothing in it (Time in progress, Checklist, Up next order showing "—")
+  // costs a whole line and says nothing, so the stacked card leaves it out. Only read-only cells:
+  // an empty editable field keeps its row, because that row is how you fill it in from here.
+  .tv-cell:not(.tv-title-cell):has(> .tv-muted, > .tv-priority-order > .tv-muted) {
+    display: none;
+  }
+
+  // The grid right-aligns numbers so digits line up down a column; a stacked card has no column to
+  // line up with, and a lone value pushed to the far edge read as detached from its label.
+  .tv-number-value {
+    justify-content: flex-start;
+  }
+
+  // Ordered ahead of the fields and a full line wide, so no field can wrap up beside it. The trailing
+  // inset matches the fields' own, so title and values end on one edge.
   .tv-title-cell {
     position: static;
-    grid-row: 1;
+    order: -2;
+    flex: 1 1 100%;
     align-items: flex-start;
     min-height: 44px;
-    padding: 0;
+    padding: 0 12px 0 0;
     font-size: var(--text-md);
     border-right: 0;
   }
 
+  // One field grammar for every field: a small label above its value. A pair of short fields
+  // (.tv-paired-field) shares a line, half each; any other field spans it. The two used to differ (a
+  // pair stacked, a full field sat label-left in an 88px column), so one card read as two forms.
+  //
+  // 46px a field: a 16px label line, a 2px gap and a 20px value line inside 6px/2px padding. The
+  // space goes above the label, where it was missing: at 3px/1px with no gap a label sat almost on the
+  // value above it, while the value's own 20px line already leaves room below it. A stacked card
+  // repeats this per field, so every pixel here is paid per field; pairing more short fields
+  // (single-selects and short text, see `pairedColumns`) is what pays for it. The edit trigger is the
+  // value line, but its hit area (the coarse-pointer ::after below) is the whole cell, so tapping the
+  // label edits its field too.
+  //
+  // The divider is the cell's top border running across its trailing 12px padding (padding, not a
+  // margin), so the two halves of a pair meet and their rules join into one line across the card.
+  // Values keep their own width (a chip stretched to the card's width reads as a bar); the label and
+  // the edit trigger stretch, the trigger because the whole line is its target.
   .tv-cell:not(.tv-title-cell, .tv-actions-cell) {
-    grid-column: 1 / -1;
-    gap: 8px;
-    margin-right: 12px;
-    border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-height: 46px;
+    padding: 6px 12px 2px 0;
+    border-top: 1px solid var(--divider);
   }
 
+  // Touch: every live field lends its trigger an invisible hit area the size of the whole cell, so the
+  // 46px field (not the 20px value line) is the target and the 44px floor holds. The hit area is the
+  // trigger's ::after, anchored to the cell rather than the button so the button's overflow clip does
+  // not cut it, and it spans the label too. It stays inside the cell, so a tap near an edge never
+  // edits the neighbouring field.
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    .tv-cell:not(.tv-title-cell, .tv-actions-cell):has(> .tv-cell-trigger:not(:disabled)) {
+      position: relative;
+
+      > .tv-cell-trigger::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+      }
+    }
+  }
+
+  // Outranks the coarse-pointer trigger floor below: the hit area is the cell (see above), so the
+  // trigger itself is only the value's line.
+  .tv-cell > .tv-cell-trigger {
+    flex: none;
+    min-height: 20px;
+    line-height: 20px;
+  }
+
+  .tv-cell > :is(.tv-static-value, .tv-checklist, .tv-priority-order) {
+    max-width: 100%;
+    min-height: 20px;
+    line-height: 20px;
+  }
+
+  // A quiet label over a louder value: the muted tier, a step below the value's size, so the value
+  // carries the field. One line, ellipsed: a long custom field name still has the card's width.
   .tv-cell-label {
     display: block;
-    flex: 0 0 92px;
+    flex: none;
+    align-self: stretch;
+    overflow: hidden;
     color: var(--text-muted);
-    font-size: 10px;
-    font-weight: 700;
+    font-size: var(--text-xs);
+    font-weight: 500;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   // Desktop centres the ordinal pill inside its compact column. In the stacked mobile layout the
@@ -1696,10 +1974,12 @@ k-card-labels.tv-labels {
     display: none;
   }
 
+  // Out of the flow, on the card's top-right corner level with the key line (see .tv-row above).
   .tv-actions-cell {
-    grid-row: 1;
-    grid-column: 2;
-    align-self: start;
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 44px;
     min-height: 44px;
     padding: 0;
   }
@@ -1783,13 +2063,13 @@ k-card-labels.tv-labels {
     display: none;
   }
 
-  // A flex sibling of the title rather than an overlay, so the title wraps short of it instead of
-  // running underneath. Qualified to outrank the coarse-pointer rule below, which sizes the same
-  // button for the one-line grid row.
+  // Beside the actions square on the key line, not beside the title: the title gets the card's whole
+  // width. The title cell is static here, so this resolves against .tv-row. Qualified to outrank the
+  // coarse-pointer rule below, which sizes the same button for the one-line grid row.
   .tv-row .tv-title-cell > .tv-title-open {
-    position: static;
-    flex: none;
-    align-self: flex-start;
+    position: absolute;
+    top: 0;
+    right: 44px;
     width: 44px;
     min-width: 44px;
     min-height: 44px;
@@ -1798,18 +2078,57 @@ k-card-labels.tv-labels {
     background: transparent;
   }
 
-  // The title gets two lines instead of an early ellipsis, with the key as a quiet inline prefix in
-  // full — clipped to 11ch it read as a truncated word ("DEVELOPM…") rather than an identifier.
-  // The 12px block padding with a 20px line puts the first line's centre at 22px, the centre of
-  // the 44px checkbox, open and actions squares on the same line.
+  // The key sits on its own small line above the title, in full, and the title gets two lines of its
+  // own before clamping. The 14px top padding centres the key's 16px line on the 44px checkbox, open
+  // and actions squares; the title starts under it, across the full width, and its first line passes
+  // below those squares' icons. Without a key the title itself is centred on that line instead, and
+  // keeps clear of the two trailing squares it would otherwise run under.
   .tv-title-trigger {
     align-items: flex-start;
     min-height: 44px;
-    padding-block: 12px;
+    padding-block: 14px 6px;
     line-height: 20px;
+
+    &:not(:has(.tv-card-key)) {
+      padding-block: 12px;
+    }
   }
 
+  // A two-column grid rather than a column: the key and the unread dot share the first line, the
+  // dot trailing the key like the board tile's, and the title spans both columns underneath, so it
+  // starts on the key's left edge on read and unread rows alike. Without a key the dot trails the
+  // title's line instead.
   .tv-title-trigger > .tv-title {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 0 6px;
+    width: 100%;
+    white-space: normal;
+  }
+
+  .tv-title > .tv-card-key {
+    grid-area: 1 / 1;
+  }
+
+  .tv-card-key + .tv-title-text {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+
+  .tv-title > .tv-unread {
+    grid-area: 1 / 2;
+    justify-self: start;
+  }
+
+  .tv-title:not(:has(.tv-card-key)) {
+    grid-template-columns: minmax(0, max-content) auto;
+    justify-content: start;
+
+    > .tv-title-text { grid-area: 1 / 1; }
+  }
+
+  .tv-title-text {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -1818,23 +2137,24 @@ k-card-labels.tv-labels {
     overflow-wrap: anywhere;
   }
 
-  .tv-title-text {
-    display: inline;
-    white-space: normal;
-  }
-
-  // Stacked rows wrap the key inline with the title, so the sizer slot gives way to the key's
-  // own width.
+  // The sizer slot exists to line titles up down a grid column; stacked, the key takes its own width.
   .tv-card-key {
-    display: inline;
-    margin-right: 6px;
+    display: block;
+    line-height: 16px;
   }
 
   .tv-key-sizer {
     display: none;
   }
 
-  .tv-title-trigger > .tv-unread {
+  // Centred on the key's 16px line when there is one (half of 16px less half the 7px dot), on the
+  // title's 20px first line otherwise.
+  .tv-title > .tv-unread {
+    align-self: start;
+    margin-top: 4.5px;
+  }
+
+  .tv-title:not(:has(.tv-card-key)) > .tv-unread {
     margin-top: 6.5px;
   }
 
@@ -1847,21 +2167,30 @@ k-card-labels.tv-labels {
     padding-inline: 0;
   }
 
+  .tv-title-trigger:not(:has(.tv-card-key)) {
+    padding-right: 88px;
+  }
+
   // A stacked row grows downward freely, so multi-value cells wrap instead of trimming every chip to
   // fit one line ("Repo…" beside "Feature / Enhan…"). Each label chip keeps its full text and only
   // ellipses when it alone is wider than the value column; assignee names wrap the same way. The
   // block padding keeps a second line of chips off the row rules either side.
   k-card-labels.tv-labels {
     overflow: visible;
+    mask-image: none;
     --label-bar-wrap: wrap;
     --label-bar-row-gap: 4px;
+    --label-chip-flex: 0 1 auto;
   }
 
+  // Values that can wrap start at the top; the extra lines grow the field downward under its label.
   .tv-cell-trigger:has(> k-card-labels, > .tv-assignee) {
-    padding-block: 6px;
+    align-items: flex-start;
+    padding-block: 0 2px;
   }
 
   .tv-cell-trigger > .tv-assignee {
+    align-items: flex-start;
     overflow: visible;
     white-space: normal;
 
@@ -1869,6 +2198,17 @@ k-card-labels.tv-labels {
       white-space: normal;
       overflow-wrap: anywhere;
     }
+  }
+
+  // A paired field takes half the card. Its trailing 12px padding is the gap between the two halves.
+  .tv-cell.tv-paired-field {
+    flex: 1 1 50%;
+  }
+
+  // The last card's bottom edge comes from the run's ring on desktop, which the stacked layout drops,
+  // so "Add card" drew straight under the last card's fields with nothing closing that card off.
+  .tv-run-rows:not(:empty) ~ .tv-run-foot {
+    border-top: 1px solid var(--border);
   }
 
   .tv-new-task {
@@ -1903,6 +2243,15 @@ k-card-labels.tv-labels {
     --tv-row-h: 44px;
     // The run header is the collapse control, so it takes the same finger-sized floor as the rows.
     --tv-run-h: 44px;
+    --tv-add-h: 44px;
+  }
+
+  // No hover to reveal it on touch, so the add row stays at full strength, at full label size too.
+  .tv-run-foot > .tv-run-add {
+    opacity: 1;
+    font-size: var(--text-base);
+
+    > i { font-size: var(--text-md); }
   }
 
   .tv-cell>button,
@@ -1924,6 +2273,12 @@ k-card-labels.tv-labels {
     min-height: 0;
     margin-right: calc(var(--tv-cell-pad-x) * -1 + 2px);
     background: transparent;
+  }
+
+  // The Open button already sits beside the title here, so there is nothing to step clear of.
+  .tv-row .tv-title-cell,
+  .tv-row:is(:hover, :focus-within) .tv-title-cell {
+    --tv-title-end: var(--tv-cell-pad-x);
   }
 
   .tv-row-gutter,

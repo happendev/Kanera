@@ -140,6 +140,14 @@ describe("DescriptionViewerComponent mentions", () => {
     expect(el.querySelector("p")?.textContent).toBe("Keep old and current");
   });
 
+  it("keeps an ordered list's numbering after an interrupting bullet list", async () => {
+    const { el } = await render(["1. First", "", "- Detail", "", "2. Second", "3. Third"].join("\n"));
+
+    const lists = el.querySelectorAll("ol");
+    expect(lists).toHaveLength(2);
+    expect(lists[1]?.getAttribute("start")).toBe("2");
+  });
+
   it("renders pasted markdown as formatted content", async () => {
     const { el } = await render([
       "## Plan",
