@@ -35,6 +35,7 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+- Deleting a standalone board removes it from the sidebar straight away instead of leaving a dead link until the page is reloaded.
 - **Numbered lists:** a numbered list interrupted by bullet points keeps its numbering after saving instead of restarting at 1.
 - Demo seed card creations and recent list moves now record their human actors, so teammates' recent work appears in the activity overview.
 - Updated application dependencies and monitoring images to resolve available high and critical security fixes.

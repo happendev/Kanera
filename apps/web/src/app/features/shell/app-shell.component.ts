@@ -1056,6 +1056,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
         this.workspaceService.updateAccentColor(workspace.id, workspace.accentColor ?? null);
       },
       "workspace:deleted": ({ workspaceId }) => {
+        // The API announces this (after board:deleted for its boards) before the delete commits, so a
+        // directory refresh that board:deleted scheduled could still read the workspace and put it
+        // back in the sidebar. Nothing in a deleted workspace needs that refresh, so drop it.
+        this.cancelShellBoardsRefresh();
         this.groups.update((groups) => groups.filter((g) => g.workspace.id !== workspaceId));
         this.workspaceService.removeWorkspace(workspaceId);
         this.syncHasWorkspaceFromGroups();
@@ -1339,6 +1343,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
       this.shellRefreshTimer = null;
       void this.refreshShellBoards().catch(() => undefined);
     }, 50);
+  }
+
+  private cancelShellBoardsRefresh(): void {
+    if (this.shellRefreshTimer !== null) clearTimeout(this.shellRefreshTimer);
+    this.shellRefreshTimer = null;
+    // Invalidates a refresh already in flight; its response is discarded by isCurrentShellLoad.
+    this.shellLoadVersion += 1;
   }
 
   private syncHasWorkspaceFromGroups(): void {

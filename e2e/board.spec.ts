@@ -68,3 +68,40 @@ test("workspace lists reach another board without a refresh", async ({ page, tes
   await scrollBoardToEnd(member);
   await expect(member.locator("k-list .list-header h3").filter({ hasText: name })).toBeVisible();
 });
+
+test("a deleted standalone board leaves the sidebar even when a home refresh reads it before the delete commits", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
+  const api = await apiAs("amelia");
+  const boardName = uniqueName("E2E standalone delete");
+  const created = await api.post("/api/workspaces", { data: { name: boardName, kind: "board", initialBoard: { name: boardName }, listNames: ["To do", "Done"], customFields: [] } });
+  expect(created.ok(), await created.text()).toBe(true);
+  const boardId = (await created.json() as { initialBoard: { id: string } }).initialBoard.id;
+
+  await signIn(page, "amelia");
+  await page.goto(`/b/${boardId}/settings/general`);
+  const navLink = page.locator(`a.board-link[href="/b/${boardId}"]`);
+  await expect(navLink).toHaveCount(1);
+
+  // The API announces board:deleted and workspace:deleted before its delete transaction commits,
+  // and board:deleted schedules a shell directory refresh. Serve that refresh the pre-delete
+  // directory so the race is deterministic instead of depending on how long the cascade takes.
+  const staleHome = await (await api.get("/api/home/boards")).text();
+  await page.route("**/api/home/boards", (route) => route.fulfill({ status: 200, contentType: "application/json", body: staleHome }));
+  const refreshed = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/home/boards");
+
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox").fill(boardName);
+  await dialog.getByRole("button", { name: "Delete board" }).click();
+  await refreshed;
+  await expect(page).toHaveURL(/\/$/);
+  await expect(navLink).toHaveCount(0);
+  // Let the scheduled shell refresh land on top of the live removal.
+  await page.waitForTimeout(500);
+  await expect(navLink).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("standalone-board-deleted.png") });
+
+  await page.unroute("**/api/home/boards");
+  await page.reload();
+  await expect(page.locator("a.board-link").first()).toBeAttached();
+  await expect(navLink).toHaveCount(0);
+});
