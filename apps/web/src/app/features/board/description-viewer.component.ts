@@ -24,7 +24,7 @@ import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { avatarFallbackColorStyle, blobatarFallbackUri, documentThemeIsDark } from "../../shared/avatar.component";
 import { stripEmptyTaskItems } from "../../shared/markdown-content";
-import { mermaidCacheKey, mermaidSources, renderMermaid, type MermaidTheme } from "../../shared/mermaid-diagram";
+import { documentMermaidTheme, mermaidCacheKey, mermaidSources, renderMermaid, type MermaidTheme } from "../../shared/mermaid-diagram";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UserProfileCardService } from "../../shared/user-profile/user-profile-card.service";
 import { githubStateLabel } from "./github-state-label";
@@ -231,19 +231,29 @@ function normalizePlainText(value: string): string {
     }
 
     .dv-has-copy {
-      padding-right: 24px;
+      /* Copy shares the first line; images, tables and later paragraphs retain the full width.
+         Contain the float so short descriptions still include the button in their height. */
+      display: flow-root;
+    }
+
+    /* Media-first content sits below copy instead of narrowing the entire block beside it. */
+    .dv-has-copy .dv-body > :is(table, pre, figure) {
+      clear: right;
     }
 
     .dv-copy-btn {
       appearance: none;
-      position: absolute;
-      top: -2px;
+      position: relative;
+      top: 0;
       right: 0;
+      float: right;
+      margin-left: var(--space-1);
       z-index: 1;
       display: inline-grid;
       place-items: center;
       width: 20px;
       height: 20px;
+      padding: 0;
       border: 0;
       border-radius: 0;
       background: transparent;
@@ -272,6 +282,19 @@ function normalizePlainText(value: string): string {
 
     .dv-copy-btn i {
       font-size: var(--text-md);
+    }
+
+    /* Touch has no hover: expose copy and give it a full tap target. Keep the glyph beside the
+       first line while the larger button reserves enough space to avoid covering nearby links. */
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .dv-copy-btn {
+        width: 44px;
+        height: 44px;
+        place-items: start end;
+        padding: var(--space-1);
+        opacity: 0.72;
+        pointer-events: auto;
+      }
     }
 
     .dv-empty {
@@ -590,6 +613,10 @@ function normalizePlainText(value: string): string {
 
     .dv-body .dv-mermaid {
       margin: 0 0 10px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
       overflow-x: auto;
     }
 
@@ -597,9 +624,9 @@ function normalizePlainText(value: string): string {
       display: block;
       width: 100%;
       height: auto;
-      /* Shrinks to fit down to 560px (or the natural width, if smaller), then the block scrolls:
-         below that, labels get too small to read. Off-scale on purpose, it is a diagram width. */
-      min-width: min(var(--dv-mermaid-width, 100%), 560px);
+      /* Allow only 10% shrinkage: a fixed width floor made large diagrams' labels microscopic.
+         Wider diagrams scroll inside the frame at every viewport size. */
+      min-width: calc(var(--dv-mermaid-width, 100%) * 0.9);
       max-width: var(--dv-mermaid-width, 100%);
       margin: 0 auto;
     }
@@ -732,7 +759,7 @@ export class DescriptionViewerComponent {
   private readonly resolvedMentionUsers = signal<Record<string, MentionUser>>({});
   private copyResetTimer: number | null = null;
   private readonly diagramSources = computed(() => (this.diagrams() ? mermaidSources(this.visibleValue()) : []));
-  private readonly diagramTheme = computed<MermaidTheme>(() => (documentThemeIsDark() ? "dark" : "neutral"));
+  private readonly diagramTheme = computed(documentMermaidTheme);
   /** Rendered SVG by cache key; `null` marks a source Mermaid could not parse. */
   private readonly renderedDiagrams = signal<Record<string, string | null>>({});
   private readonly diagramErrorLabel = $localize`:Shown under a diagram's source when it has a syntax error:This diagram couldn't be drawn.`;
@@ -1116,9 +1143,9 @@ export class DescriptionViewerComponent {
       const figure = doc.createElement("div");
       figure.className = "dv-mermaid";
       figure.innerHTML = svg;
-      // Mermaid caps the SVG at its natural width; carry that over so narrow screens scroll a wide
-      // diagram sideways instead of shrinking its labels past legibility.
-      const width = /max-width:\s*([\d.]+)px/.exec(figure.querySelector("svg")?.getAttribute("style") ?? "")?.[1];
+      // The viewBox includes diagram padding; Mermaid's inline max-width can omit it. Use the
+      // full drawing width so the scale floor protects the actual label size.
+      const width = figure.querySelector("svg")?.viewBox.baseVal.width;
       if (width) figure.style.setProperty("--dv-mermaid-width", `${width}px`);
       pre.replaceWith(figure);
     });

@@ -1,8 +1,27 @@
+import { signal } from "@angular/core";
+import type { Accent, Theme } from "@kanera/shared/appearance";
 import DOMPurify from "dompurify";
 import { marked, type Tokens } from "marked";
 import type MermaidApi from "mermaid";
 
-export type MermaidTheme = "neutral" | "dark";
+export interface MermaidTheme { name: Theme; accent: Accent }
+
+let currentTheme: ReturnType<typeof signal<MermaidTheme>> | null = null;
+
+/** Track the full appearance so cached SVGs follow both theme surfaces and the chosen accent. */
+export function documentMermaidTheme(): MermaidTheme {
+  if (!currentTheme) {
+    const root = document.documentElement;
+    const read = (): MermaidTheme => ({
+      name: (root.dataset["theme"] as Theme | undefined)
+        ?? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
+      accent: (root.dataset["accent"] as Accent | undefined) ?? "default",
+    });
+    currentTheme = signal(read());
+    new MutationObserver(() => currentTheme?.set(read())).observe(root, { attributes: true, attributeFilter: ["data-theme", "data-accent"] });
+  }
+  return currentTheme();
+}
 
 /** Rendered SVG, or `null` when the source does not parse. */
 type MermaidResult = string | null;
@@ -28,7 +47,7 @@ export function mermaidSources(markdown: string): string[] {
 }
 
 export function mermaidCacheKey(source: string, theme: MermaidTheme): string {
-  return `${theme}\n${source}`;
+  return `${theme.name}/${theme.accent}\n${source}`;
 }
 
 export function renderMermaid(source: string, theme: MermaidTheme): Promise<MermaidResult> {
@@ -37,7 +56,21 @@ export function renderMermaid(source: string, theme: MermaidTheme): Promise<Merm
   if (cached) return cached;
   // Mermaid keeps global config and measures text in a scratch node, so overlapping renders can
   // pick up each other's theme or sizes. Run them one at a time.
-  const result = queue.then(() => renderNow(source, theme));
+  // Capture the tokens before queueing: the user may switch themes while another diagram draws.
+  const styles = getComputedStyle(document.body);
+  const token = (name: string) => styles.getPropertyValue(name).trim();
+  const palette = {
+    background: token("--surface"),
+    fill: token("--surface-2"),
+    border: token("--border-strong"),
+    text: token("--text"),
+    muted: token("--text-muted"),
+    accent: token("--accent"),
+    font: styles.fontFamily,
+    fontSize: token("--text-md"),
+    radius: token("--radius"),
+  };
+  const result = queue.then(() => renderNow(source, theme, palette));
   queue = result.catch(() => undefined);
   cache.set(key, result);
   // Only a parse failure is an answer; a failed chunk load must be retried.
@@ -70,7 +103,10 @@ function loadMermaid(): Promise<Mermaid> {
   return mermaidModule;
 }
 
-async function renderNow(source: string, theme: MermaidTheme): Promise<MermaidResult> {
+async function renderNow(source: string, theme: MermaidTheme, palette: {
+  background: string; fill: string; border: string; text: string; muted: string; accent: string;
+  font: string; fontSize: string; radius: string;
+}): Promise<MermaidResult> {
   const mermaid = await loadMermaid();
   mermaid.initialize({
     startOnLoad: false,
@@ -79,8 +115,58 @@ async function renderNow(source: string, theme: MermaidTheme): Promise<MermaidRe
     securityLevel: "strict",
     htmlLabels: false,
     suppressErrorRendering: true,
-    theme,
-    fontFamily: getComputedStyle(document.body).fontFamily,
+    // Explicitly use the flat look; Mermaid's newer default adds shadows and gradients.
+    look: "classic",
+    theme: "base",
+    fontFamily: palette.font,
+    themeVariables: {
+      darkMode: theme.name === "dark" || theme.name === "carbon",
+      background: palette.background,
+      fontFamily: palette.font,
+      fontSize: palette.fontSize,
+      primaryColor: palette.fill,
+      primaryTextColor: palette.text,
+      primaryBorderColor: palette.border,
+      secondaryColor: palette.background,
+      secondaryTextColor: palette.text,
+      secondaryBorderColor: palette.border,
+      tertiaryColor: palette.background,
+      tertiaryTextColor: palette.text,
+      tertiaryBorderColor: palette.border,
+      lineColor: palette.muted,
+      textColor: palette.text,
+      edgeLabelBackground: palette.background,
+      actorBkg: palette.fill,
+      actorBorder: palette.border,
+      actorTextColor: palette.text,
+      actorLineColor: palette.border,
+      signalColor: palette.muted,
+      signalTextColor: palette.text,
+      labelBoxBkgColor: palette.background,
+      labelBoxBorderColor: palette.border,
+      labelTextColor: palette.text,
+      loopTextColor: palette.text,
+      noteBkgColor: palette.fill,
+      noteBorderColor: palette.border,
+      noteTextColor: palette.text,
+      activationBkgColor: palette.fill,
+      activationBorderColor: palette.border,
+    },
+    themeCSS: `
+      .node rect, .actor, .note {
+        rx: ${palette.radius}; ry: ${palette.radius};
+        fill: color-mix(in srgb, ${palette.fill} 90%, ${palette.accent});
+        stroke: color-mix(in srgb, ${palette.border} 55%, ${palette.accent});
+        stroke-width: 1.25px;
+      }
+      .node polygon {
+        fill: color-mix(in srgb, ${palette.fill} 78%, ${palette.accent});
+        stroke: ${palette.accent}; stroke-width: 1.5px;
+      }
+      .flowchart-link { stroke-width: 1.5px; }
+      .edgeLabel { font-weight: 600; }
+    `,
+    flowchart: { wrappingWidth: 220, nodeSpacing: 32, rankSpacing: 40, padding: 16 },
   });
   try {
     const { svg } = await mermaid.render(`kanera-mermaid-${++renderCount}`, source);

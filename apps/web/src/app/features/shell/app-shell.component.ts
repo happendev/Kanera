@@ -44,7 +44,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
 import { DisconnectPromptComponent } from "../../shared/disconnect-prompt.component";
 import { LogoComponent } from "../../shared/logo.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
-import { ShellNavService, type ShellNavAttention } from "../../shared/shell-nav.service";
+import { ShellNavService } from "../../shared/shell-nav.service";
 import { SupportSessionBannerComponent } from "../../shared/support-session-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpdatePromptComponent } from "../../shared/update-prompt.component";
@@ -176,6 +176,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly handleHostPointerMove = (event: PointerEvent) => this.onSidebarPointerMove(event);
   private readonly handleHostPointerUp = (event: PointerEvent) => this.onSidebarPointerUp(event);
   private readonly handleHostPointerCancel = (event: PointerEvent) => this.onSidebarPointerCancel(event);
+  private readonly handleTouchStart = (event: TouchEvent) => this.onNotificationsSwipeStart(event);
+  private readonly handleTouchMove = (event: TouchEvent) => this.onNotificationsSwipeMove(event);
+  private readonly handleTouchEnd = () => {
+    this.notificationsSwipe = null;
+  };
 
   readonly environmentBannerLabel = computed(() => {
     const environmentName = this.user()?.kaneraEnvironment;
@@ -403,6 +408,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
    */
   private static readonly SIDEBAR_WIDTH_COLLAPSED_MOBILE = 0;
   private static readonly SIDEBAR_SWIPE_INTENT_PX = 10;
+  /** The right-edge strip a notifications swipe must start in; see onNotificationsSwipeStart. */
+  private static readonly NOTIFICATIONS_SWIPE_EDGE_PX = 24;
+  private static readonly NOTIFICATIONS_SWIPE_OPEN_PX = 48;
   readonly sidebarCollapsed = signal<boolean>(this.readInitialCollapsed());
   readonly isMobile = signal<boolean>(window.innerWidth <= AppShellComponent.MOBILE_BREAKPOINT);
   /**
@@ -422,6 +430,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   });
   readonly sidebarSwipeSettling = signal(false);
   private sidebarSwipe: SidebarSwipe | null = null;
+  private notificationsSwipe: { startX: number; startY: number; horizontal: boolean; opened: boolean } | null = null;
   private suppressSidebarClick = false;
   private sidebarClickReset: ReturnType<typeof setTimeout> | null = null;
   private sidebarSettleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -596,6 +605,62 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (swipe.horizontal) this.settleSidebarSwipe(!swipe.startedCollapsed);
     this.finishSidebarSwipe();
     if (swipe.horizontal || swipe.vertical) this.scheduleSidebarClickReset();
+  }
+
+  /**
+   * Phones: a leftward swipe that starts at the right edge opens notifications, the panel people
+   * reach for most, without finding a button first. The strip is kept narrow because a leftward
+   * swipe a little further in is how a board scrolls to its next list. Touch events rather than the
+   * pointer events the drawer gesture uses: the board's own scroller would claim a pointer stream
+   * (pointercancel) before the swipe could tell itself apart, while touchmove keeps arriving and can
+   * still cancel the scroll once the swipe is recognised.
+   */
+  private onNotificationsSwipeStart(event: TouchEvent) {
+    this.notificationsSwipe = null;
+    if (!this.isMobile() || event.touches.length !== 1) return;
+    const touch = event.touches[0]!;
+    if (touch.clientX < window.innerWidth - AppShellComponent.NOTIFICATIONS_SWIPE_EDGE_PX) return;
+    // Only from the bare page: over anything modal (card detail, a dialog, the search overlay) or an
+    // open drawer or popover, the edge belongs to that surface.
+    if (!this.sidebarCollapsed() || this.notificationsOpen() || this.prioritiesOpen()) return;
+    if (this.scratchpad.open() && this.isScratchpadSheet()) return;
+    // CDK dialogs carry aria-modal too. Not .cdk-overlay-pane: tooltips leave empty panes behind.
+    if (this.panelStack.depth > 0 || document.querySelector("[aria-modal='true']")) return;
+    this.notificationsSwipe = { startX: touch.clientX, startY: touch.clientY, horizontal: false, opened: false };
+  }
+
+  private onNotificationsSwipeMove(event: TouchEvent) {
+    const swipe = this.notificationsSwipe;
+    if (!swipe) return;
+    const touch = event.touches[0];
+    if (!touch || event.touches.length !== 1) {
+      this.notificationsSwipe = null;
+      return;
+    }
+    const deltaX = touch.clientX - swipe.startX;
+    const deltaY = touch.clientY - swipe.startY;
+    const leftward = deltaX < 0 && Math.abs(deltaX) > Math.abs(deltaY);
+    if (!swipe.horizontal) {
+      if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= AppShellComponent.SIDEBAR_SWIPE_INTENT_PX) {
+        if (!leftward) {
+          this.notificationsSwipe = null;
+          return;
+        }
+        swipe.horizontal = true;
+      } else if (!leftward) {
+        return;
+      }
+    }
+    // Claimed from the first leftward move, before the intent threshold: only the first touchmove
+    // can stop a scroll, and once the board has started scrolling under the finger it keeps going
+    // under the panel. A drag that starts vertical is left alone, so the edge still scrolls lists.
+    if (event.cancelable) event.preventDefault();
+    // Opens mid-gesture, but keeps the touch until the finger lifts: released here, the rest of the
+    // stroke would scroll the board behind the panel.
+    if (!swipe.opened && deltaX <= -AppShellComponent.NOTIFICATIONS_SWIPE_OPEN_PX) {
+      swipe.opened = true;
+      this.openNotifications();
+    }
   }
 
   private setSidebarCollapsed(collapsed: boolean) {
@@ -775,22 +840,25 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * What the header's menu button shows while the drawer is closed, by the utility buttons' own
-   * rules: overdue Up next is danger and outranks unread notifications, which are neutral. A plain
-   * Up next count is not news, so it shows nothing, as its badge is a quiet count.
+   * Overdue Up next is the only drawer state the header's menu button marks: unread notifications
+   * have the header's own bell, and a plain Up next count is not news, as its badge is a quiet count.
    */
-  protected readonly navAttention = computed<ShellNavAttention>(() => {
-    if (this.myPriorities.overdueCount() > 0) return "danger";
-    if (this.notifications.unreadCount() > 0) return "unread";
-    return null;
-  });
+  private readonly navOverdue = computed(() => this.myPriorities.overdueCount() > 0);
 
   private readonly disconnectShellNav = this.shellNav.connect({
     drawerMode: this.isMobile,
-    attention: this.navAttention,
+    overdue: this.navOverdue,
     label: this.text.expandSidebar,
     open: () => this.openMobileSidebar(),
+    unreadNotifications: this.notifications.unreadCount,
+    notificationsLabel: this.notificationsLabel,
+    openNotifications: () => this.openNotifications(),
   });
+
+  /** Opens, never toggles: both callers (the header bell, the edge swipe) mean "show me". */
+  openNotifications(): void {
+    if (!this.notificationsOpen()) this.togglePanel("notifications");
+  }
   protected readonly showNavFallback = computed(() => this.isMobile() && !this.shellNav.hasHeaderTrigger());
 
   toggleScratchpad(): void {
@@ -984,6 +1052,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.host.nativeElement.addEventListener("pointerup", this.handleHostPointerUp, true);
     this.host.nativeElement.addEventListener("pointercancel", this.handleHostPointerCancel, true);
     document.addEventListener("keydown", this.handleDocumentKeydown);
+    // Not passive: a recognised swipe cancels the scroll it started (onNotificationsSwipeMove).
+    document.addEventListener("touchstart", this.handleTouchStart, { capture: true, passive: true });
+    document.addEventListener("touchmove", this.handleTouchMove, { capture: true, passive: false });
+    document.addEventListener("touchend", this.handleTouchEnd, true);
+    document.addEventListener("touchcancel", this.handleTouchEnd, true);
     this.routerSub = this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
       this.closeUserMenu();
       this.closeNavContextMenu();
@@ -1373,6 +1446,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.host.nativeElement.removeEventListener("pointerup", this.handleHostPointerUp, true);
     this.host.nativeElement.removeEventListener("pointercancel", this.handleHostPointerCancel, true);
     document.removeEventListener("keydown", this.handleDocumentKeydown);
+    document.removeEventListener("touchstart", this.handleTouchStart, true);
+    document.removeEventListener("touchmove", this.handleTouchMove, true);
+    document.removeEventListener("touchend", this.handleTouchEnd, true);
+    document.removeEventListener("touchcancel", this.handleTouchEnd, true);
     if (this.sidebarClickReset !== null) clearTimeout(this.sidebarClickReset);
     if (this.sidebarSettleTimer !== null) clearTimeout(this.sidebarSettleTimer);
     if (this.shellRefreshTimer !== null) clearTimeout(this.shellRefreshTimer);

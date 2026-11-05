@@ -39,6 +39,23 @@
   gap: 6px;
 }
 
+.wd-toolbar-left {
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+// Presets and navigation wrap as whole controls; shrinking their boxes lets their contents overlap.
+.wd-presets,
+.wd-nav,
+.wd-toolbar-right {
+  flex-shrink: 0;
+}
+
+.wd-toolbar-right {
+  align-self: flex-start;
+}
+
 // Anchored popovers position against this element, so it must stay their parent.
 .menu-anchor {
   position: relative;
@@ -149,6 +166,7 @@
 }
 
 .wd-summary {
+  flex-shrink: 0;
   margin-left: 4px;
   color: var(--text-muted);
   font-size: var(--text-base);
@@ -255,7 +273,7 @@
   height: 18px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   :host {
     --wd-gutter: 12px;
   }

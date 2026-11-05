@@ -83,16 +83,27 @@ export type PageHeaderVariant = "chrome" | "page";
   template: `
     <!--
       Phones have no sidebar rail, so the navigation drawer opens from here, the first thing on
-      every page (ShellNavService). Its dot carries what the drawer's utility buttons would show:
-      neutral for unread notifications, danger for overdue Up next.
+      every page (ShellNavService). Its dot marks overdue Up next.
+
+      Unread notifications get a bell of their own joined to the menu button, so the most-visited
+      drawer stays one tap away instead of two. It shows only while something is unread: a
+      permanent second button would cost every crowded title row (the board's) ~44px for nothing.
     -->
     <ng-template #menuButton>
-      <button type="button" class="ph-menu" (click)="nav.open()" [attr.aria-label]="nav.label()" [kTooltip]="nav.label()">
-        <i class="ti ti-menu-2" aria-hidden="true"></i>
-        @if (nav.attention(); as attention) {
-          <span class="ph-menu-dot" [class.is-danger]="attention === 'danger'" aria-hidden="true"></span>
+      <div class="ph-nav">
+        <button type="button" class="ph-menu" (click)="nav.open()" [attr.aria-label]="nav.label()" [kTooltip]="nav.label()">
+          <i class="ti ti-menu-2" aria-hidden="true"></i>
+          @if (nav.overdue()) {
+            <span class="ph-menu-dot" aria-hidden="true"></span>
+          }
+        </button>
+        @if (nav.unreadNotifications(); as unread) {
+          <button type="button" class="ph-bell" (click)="nav.openNotifications()" [attr.aria-label]="nav.notificationsLabel()" [kTooltip]="nav.notificationsLabel()">
+            <i class="ti ti-bell-ringing" aria-hidden="true"></i>
+            <span class="ph-bell-count" aria-hidden="true">{{ unread > 99 ? '99+' : unread }}</span>
+          </button>
         }
-      </button>
+      </div>
     </ng-template>
     @if (nav.drawerMode() && navBar()) {
       <div class="ph-nav-bar">
@@ -107,14 +118,18 @@ export type PageHeaderVariant = "chrome" | "page";
         @if (nav.drawerMode() && !navBar()) {
           <ng-container [ngTemplateOutlet]="menuButton" />
         }
+        <!-- The bell is paid for with the lead icon, which the title beside it already names, so a
+             crowded title row (the board's) only grows by a few pixels while something is unread. -->
         @if (icon(); as iconName) {
-          <i
-            class="ph-icon ti ti-{{ iconName }}"
-            [class.is-badge]="iconBadge()"
-            [style.color]="iconColor()"
-            [style.background]="badgeBackground()"
-            aria-hidden="true"
-          ></i>
+          @if (!bellInTitleRow()) {
+            <i
+              class="ph-icon ti ti-{{ iconName }}"
+              [class.is-badge]="iconBadge()"
+              [style.color]="iconColor()"
+              [style.background]="badgeBackground()"
+              aria-hidden="true"
+            ></i>
+          }
         }
         <div class="ph-titles">
           @if (eyebrow(); as eyebrowText) {
@@ -362,6 +377,8 @@ export class PageHeaderComponent implements AfterViewInit, OnDestroy {
    * header had replaced months earlier.
    */
   readonly loading = input(false);
+
+  protected readonly bellInTitleRow = computed(() => this.nav.drawerMode() && !this.navBar() && this.nav.unreadNotifications() > 0);
 
   /**
    * Only the badge form gets a fill, and only a coloured one gets a tint: a bare glyph with a

@@ -656,7 +656,7 @@
                   }
                   @case ('due') {
                     <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)">
-                      @if (card.dueDateLocalDate) { <span class="tv-due" [class.overdue]="isCardOverdue(card)" [class.due-soon]="isCardDueSoon(card)"><i aria-hidden="true" class="ti ti-calendar-event"></i><span>{{ formattedDue(card) }}</span></span> }
+                      @if (card.dueDateLocalDate) { <span class="tv-due" [class.overdue]="isCardOverdue(card)" [class.due-soon]="isCardDueSoon(card)"><i aria-hidden="true" class="ti ti-calendar-due"></i><span>{{ formattedDue(card) }}</span></span> }
                       @else { <span class="tv-muted">—</span> }
                     </button>
                     @if (pickerIsOpen(card.id, col)) {

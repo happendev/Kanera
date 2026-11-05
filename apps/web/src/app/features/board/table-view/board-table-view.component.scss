@@ -1549,20 +1549,15 @@
   }
 }
 
-// The due cell: plain while neutral, the shared urgency chips (shared/_chip.scss) once overdue or due
-// soon, so a date reads the same here as on the tile and in the queue.
+// The same complete due-date chip as card tiles, including its neutral state.
 .tv-due {
-  display: inline-flex;
-  align-items: center;
-  gap: inherit;
+  @include state-chip.due-chip;
   min-width: 0;
 
   > span {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-
-  @include state-chip.due-states;
 }
 
 .tv-assignee {

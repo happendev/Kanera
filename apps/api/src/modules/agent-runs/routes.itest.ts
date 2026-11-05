@@ -233,3 +233,25 @@ void test("agent runs require editor access on the card's board", async () => {
   });
   assert.ok(denied.statusCode === 403 || denied.statusCode === 404, `expected access denial, got ${denied.statusCode}`);
 });
+
+// This remains a concurrent-request smoke test, not proof of a forced database interleaving.
+// The ordered late heartbeat also checks the terminal-state guard deterministically.
+void test("finishing amid heartbeats leaves a terminal run immutable", async () => {
+  const { app, owner, card } = await setup();
+  const started = await app.inject({ method: "POST", url: `/cards/${card.id}/agent-runs`, headers: owner.auth, payload: { title: "Finishing" } });
+  assert.equal(started.statusCode, 201, started.body);
+  const run = started.json<RunRow>();
+  const patch = (payload: object) => app.inject({ method: "PATCH", url: `/agent-runs/${run.id}`, headers: owner.auth, payload });
+  const responses = await Promise.all([{ status: "succeeded" }, ...Array.from({ length: 10 }, () => ({}))].map(patch));
+  assert.equal(responses[0]!.statusCode, 200);
+  for (const response of responses.slice(1)) assert.ok([200, 409].includes(response.statusCode), response.body);
+  const read = () => app.inject({ method: "GET", url: `/agent-runs/${run.id}`, headers: owner.auth });
+  const finished = (await read()).json<RunRow>();
+  assert.equal(finished.status, "succeeded");
+  assert.ok(finished.endedAt);
+  assert.equal((await patch({})).statusCode, 409);
+  const after = (await read()).json<RunRow>();
+  assert.equal(after.status, finished.status);
+  assert.equal(after.endedAt, finished.endedAt);
+  assert.equal(after.heartbeatAt, finished.heartbeatAt);
+});

@@ -1147,6 +1147,10 @@ k-list.is-drop-target {
 
 html,
 body {
+  // Native touch highlighting can target document ancestors (the shell listens for gestures there),
+  // painting a blue rectangle or the entire viewport. Inherit this app-wide, including CDK overlays;
+  // component pressed/selected states and keyboard focus rings still provide interaction feedback.
+  -webkit-tap-highlight-color: transparent;
   height: 100%;
   margin: 0;
   // Kanera owns the viewport like an installed app. Omitting pinch-zoom also stops Safari's

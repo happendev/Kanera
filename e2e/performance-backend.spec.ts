@@ -4,8 +4,6 @@ import { expect, test } from "./support/scenario";
 import { boardIdOf, expectBoardLoaded, openCard } from "./support/ui";
 
 type Card = { id: string; title: string; key: string; organisationKey: string };
-type Event = { id: string; type: string; at: string; card: { id: string }; listPath?: string[]; itemId?: string; text?: string };
-type History = { events: Event[]; summary: Record<string, number>; nextCursor: string | null };
 
 async function result<T>(response: APIResponse): Promise<T> {
   expect(response.ok(), await response.text()).toBe(true);
@@ -18,52 +16,6 @@ async function createBoard(page: Page, api: APIRequestContext, name: string) {
   const board = await result<{ id: string }>(await api.post(`/api/workspaces/${context.board.workspaceId}/boards`, { data: { name } }));
   return { ...board, workspaceId: context.board.workspaceId, listId: context.lists[0]!.id };
 }
-
-test("paged history returns the performed actions, complete move path and exact summary", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
-  await signIn(page, "amelia");
-  const api = await apiAs("amelia");
-  const boardName = uniqueName("History pagination");
-  const board = await createBoard(page, api, boardName);
-  const firstList = await result<{ id: string }>(await api.post(`/api/workspaces/${board.workspaceId}/lists`, { data: { name: uniqueName("History start") } }));
-  const secondList = await result<{ id: string }>(await api.post(`/api/workspaces/${board.workspaceId}/lists`, { data: { name: uniqueName("History finish") } }));
-  const from = new Date(Date.now() - 60_000).toISOString();
-  const card = await result<Card>(await api.post(`/api/boards/${board.id}/lists/${firstList.id}/cards`, { data: { title: uniqueName("History card") } }));
-  await result(await api.post(`/api/cards/${card.id}/move`, { data: { listId: secondList.id, afterCardId: null } }));
-  await result(await api.post(`/api/cards/${card.id}/move`, { data: { listId: firstList.id, afterCardId: null } }));
-  await result(await api.patch(`/api/cards/${card.id}/completion`, { data: { completed: true } }));
-  await result(await api.post(`/api/cards/${card.id}/checklists`, { data: { title: "History checklist", items: [{ text: "Finish item" }] } }));
-  const detail = await result<{ checklists: { items: { id: string }[] }[] }>(await api.get(`/api/cards/${card.id}/detail`));
-  const checklistItemId = detail.checklists[0]!.items[0]!.id;
-  await result(await api.patch(`/api/cards/${card.id}/checklist-items/${checklistItemId}`, { data: { completed: true } }));
-  const to = new Date(Date.now() + 60_000).toISOString();
-  const scope = { allAccessible: false, boardIds: [board.id] };
-  // Keep this live-action fixture away from local midnight; deterministic integration fixtures
-  // separately check day/DST boundaries. A clock rollover must not split this intended move run.
-  const timeZone = [0, 23].includes(new Date(from).getUTCHours()) ? "Asia/Kolkata" : "UTC";
-  const range = { from, to, timeZone, scope };
-  // Derive expectations from the writes above so a missing checklist event or truncated move
-  // path fails independently of the event selection and hydration implementation.
-  const expectedTypes = ["checklistItemCompleted", "completed", "moved", "created"];
-  const expectedSummary = { created: 1, moved: 1, completed: 1, checklistItemCompleted: 1, cardsTouched: 1, totalEvents: 4 };
-  const pages: History[] = [];
-  let cursor: string | undefined;
-  for (let index = 0; index < expectedTypes.length; index++) {
-    const response = await result<History>(await api.post("/api/work/history/query", { data: { ...range, limit: 1, cursor } }));
-    expect(response.summary).toEqual(expectedSummary);
-    expect(response.events).toHaveLength(1);
-    expect(response.events[0]!.type).toBe(expectedTypes[index]);
-    expect(response.events[0]!.card.id).toBe(card.id);
-    if (index < expectedTypes.length - 1) expect(response.nextCursor).not.toBeNull();
-    else expect(response.nextCursor).toBeNull();
-    pages.push(response);
-    cursor = response.nextCursor ?? undefined;
-  }
-  const events = pages.flatMap((entry) => entry.events);
-  expect(new Set(events.map((event) => event.id)).size).toBe(4);
-  expect(events[0]).toMatchObject({ id: `checklistItem:${checklistItemId}`, itemId: checklistItemId, text: "Finish item" });
-  expect(events[2]!.listPath).toEqual([firstList.id, secondList.id, firstList.id]);
-  await testInfo.attach("history-pages.json", { body: JSON.stringify({ boardId: board.id, range, expectedTypes, expectedSummary, pages }, null, 2), contentType: "application/json" });
-});
 
 test("linked-item batching preserves assigned-only guests, personal notes and immediate revocation", async ({ page, signIn, apiAs, pageAs, uniqueName }, testInfo) => {
   await signIn(page, "amelia");

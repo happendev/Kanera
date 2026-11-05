@@ -227,6 +227,9 @@
   font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
+  // The native touch highlight paints a rectangle outside the capsule. Use the chip's own
+  // rounded press fill instead, while retaining the shared keyboard focus ring.
+  -webkit-tap-highlight-color: transparent;
 
   > i { flex: none; font-size: 15px; }
 
@@ -236,7 +239,8 @@
     white-space: nowrap;
   }
 
-  &:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--border-strong); }
+  &:hover:not(:disabled),
+  &:active:not(:disabled) { background: var(--surface-hover); border-color: var(--border-strong); }
   &:disabled { opacity: 0.5; cursor: not-allowed; }
 
   &.is-open,

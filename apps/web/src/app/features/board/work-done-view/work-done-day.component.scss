@@ -615,7 +615,7 @@
   .wd-row {
     grid-template-columns: 3.5rem 28px minmax(0, 1fr) auto;
     column-gap: 8px;
-    row-gap: 6px;
+    row-gap: var(--space-1);
   }
 
   // `display: contents` hoists the title line and the chip run into the row's own grid, which is what
@@ -625,12 +625,13 @@
     display: contents;
   }
 
+  // The leading cells span both lines so their height does not push metadata away from a short title.
   .wd-time {
-    grid-area: 1 / 1 / 2 / 2;
+    grid-area: 1 / 1 / 3 / 2;
   }
 
   .wd-icon {
-    grid-area: 1 / 2 / 2 / 3;
+    grid-area: 1 / 2 / 3 / 3;
   }
 
   // Inline flow, not a wrapping flex row. Flex breaks lines on whole items, which at these widths
@@ -762,11 +763,10 @@
   // The trailing stack folds the chip run into a ragged two-word column at this size. It takes its own
   // line here, still right-justified so the block keeps its bottom edge.
   //
-  // The leading tracks also shrink to what they hold. At full width a 3.5rem track keeps timestamps
-  // in a comfortable column, but on a ~310px panel it, the icon and the gaps were spending a third of
-  // the row on a five-character time — every pixel taken off them goes to the title.
+  // Size the time track to its text: a fixed short track overlaps the icon in locales with AM/PM.
+  // The smaller icon and gaps leave the rest of the phone-width panel for the title.
   .wd-row {
-    grid-template-columns: 2.4rem 24px minmax(0, 1fr);
+    grid-template-columns: max-content 24px minmax(0, 1fr);
     column-gap: 6px;
     row-gap: 4px;
   }

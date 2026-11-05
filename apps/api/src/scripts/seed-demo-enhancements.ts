@@ -10,6 +10,26 @@ import type { TxOnly } from "../db.js";
 import { allocateCardKeys } from "../lib/card-keys.js";
 import { type seedCalendar, MARKETING_DEADLINES, OTHER_DEADLINES } from "./seed-calendar.js";
 
+// The dated enhancement replaces the launch note, so both versions share its authored diagram.
+export const autumnLaunchSequence = `## Launch sequence
+
+\`\`\`mermaid
+flowchart TD
+    Package["Artwork, copy and partner package ready"] --> Approval["Amelia: final campaign approval"]
+    Approval --> Freeze["Ben: change freeze"]
+    Freeze --> Web["Leo: verify tracking, consent and signup form"]
+    Freeze --> Channels["Grace: check email and social schedules"]
+    Web --> Gate{"Ben: all launch checks passed?"}
+    Channels --> Gate
+    Gate -- No --> Hold["Hold distribution; record blockers on launch card"]
+    Hold --> Recheck["Channel owners resolve blockers and repeat checks"]
+    Recheck --> Web
+    Recheck --> Channels
+    Gate -- Yes --> Launch["09:00: publish across approved channels"]
+    Launch --> Confirm["Owners post go-live confirmations on launch card"]
+    Confirm --> Review["T+12h: review performance before changing spend"]
+\`\`\``;
+
 const ARCHIVED = [1, 2, 23, 24, 44, 45, 63, 66, 83, 84, 104, 105];
 const BUDGETS: Record<number, number> = {
   5: 600, 6: 300, 7: 1800, 8: 900, 9: 600, 10: 2400, 11: 300, 16: 1200,
@@ -278,7 +298,7 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
   const noteRows = await tx.select().from(notes).where(eq(notes.workspaceId, marketing.id));
   for (const row of noteRows) {
     let content = row.content;
-    if (row.title === "Autumn Campaign Launch Plan") content = `## Launch at a glance\n\nMessaging is complete. Final approval ${card(12).key} remains outstanding.\n\n${/!\[[^\]]*\]\([^\n]+\)/.exec(row.content)?.[0] ?? ""}\n\n| Milestone | Date (Europe/London) |\n| --- | --- |\n| Final campaign approval | ${calendar.label(4)} |\n| Change freeze | ${calendar.label(5)} |\n| Readiness and email scheduling | ${calendar.label(6)} |\n| Launch | ${calendar.label(7)}, 09:00 |\n\nBen coordinates; Amelia approves; Nina owns graphics; Zoe owns copy; Leo owns web/tracking; Grace owns schedule/social; Omar owns partners. Done means approved deliverables and passed checks. Update the main launch card when dependencies change, record channel go-live confirmations and hold the T+12h performance check before changing spend.`;
+    if (row.title === "Autumn Campaign Launch Plan") content = `## Launch at a glance\n\nMessaging is complete. Final approval ${card(12).key} remains outstanding.\n\n${/!\[[^\]]*\]\([^\n]+\)/.exec(row.content)?.[0] ?? ""}\n\n| Milestone | Date (Europe/London) |\n| --- | --- |\n| Final campaign approval | ${calendar.label(4)} |\n| Change freeze | ${calendar.label(5)} |\n| Readiness and email scheduling | ${calendar.label(6)} |\n| Launch | ${calendar.label(7)}, 09:00 |\n\nBen coordinates; Amelia approves; Nina owns graphics; Zoe owns copy; Leo owns web/tracking; Grace owns schedule/social; Omar owns partners. Done means approved deliverables and passed checks. Update the main launch card when dependencies change, record channel go-live confirmations and hold the T+12h performance check before changing spend.\n\n${autumnLaunchSequence}`;
     if (row.title === "Launch Week Run of Show") content = `## Launch week\n\n- ${calendar.label(4)}: final approvals, including landing-page copy.\n- ${calendar.label(5)}: change freeze, tracking/form checks and partner handoff.\n- ${calendar.label(6)}: readiness, email scheduling and social schedule checks.\n- ${calendar.label(7)}, 09:00 Europe/London: launch, monitor and record exceptions.\n\nBen coordinates the go/no-go call with Amelia. Grace maintains the schedule; channel owners report blockers on the main launch card. Pause distribution if approval, consent, tracking or the form is not ready.`;
     if (row.title === "Marketing Team Operating Guide" && !content?.includes("planned allocation in EUR")) content += "\n\n## Reporting fields\n\nBudget is a planned allocation in EUR, not actual spend. Campaign groups delivery work across boards. Leave unknown allocations blank.";
     if (content !== row.content) {

@@ -4,6 +4,8 @@
   (click)="closeMobileSidebar()" aria-hidden="true"></div>
 }
 <aside class="sidebar" [class.collapsed]="sidebarCollapsed()"
+  [inert]="isMobile() && sidebarCollapsed() && sidebarSwipeWidth() === null"
+  [attr.aria-hidden]="isMobile() && sidebarCollapsed() && sidebarSwipeWidth() === null ? 'true' : null"
   [class.mobile-open]="isMobile() && (!sidebarCollapsed() || sidebarSwipeWidth() !== null)"
   [class.swiping]="sidebarSwipeWidth() !== null" [class.settling]="sidebarSwipeSettling()">
   <div class="brand-row">

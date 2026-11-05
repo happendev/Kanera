@@ -1,19 +1,18 @@
 import type { Signal } from "@angular/core";
 import { Injectable, computed, signal } from "@angular/core";
 
-/**
- * What the sidebar's personal tools have waiting, condensed to the one mark a closed drawer can
- * show: `danger` when something in Up next is overdue, `unread` for unread notifications.
- */
-export type ShellNavAttention = "unread" | "danger" | null;
-
 type ShellNavSource = {
   /** True while the sidebar is an off-canvas drawer with no rail beside the page (phones). */
   drawerMode: Signal<boolean>;
-  attention: Signal<ShellNavAttention>;
+  /** Something in Up next is overdue: the one drawer state the menu button marks with a dot. */
+  overdue: Signal<boolean>;
   /** The drawer button's accessible name; the shell's own sidebar toggle string, so both match. */
   label: string;
   open: () => void;
+  unreadNotifications: Signal<number>;
+  /** The drawer bell's own accessible name, unread count included, so both triggers read alike. */
+  notificationsLabel: Signal<string>;
+  openNotifications: () => void;
 };
 
 /**
@@ -31,8 +30,10 @@ export class ShellNavService {
   private readonly triggers = signal(0);
 
   readonly drawerMode = computed(() => this.source()?.drawerMode() ?? false);
-  readonly attention = computed(() => this.source()?.attention() ?? null);
+  readonly overdue = computed(() => this.source()?.overdue() ?? false);
   readonly label = computed(() => this.source()?.label ?? "");
+  readonly unreadNotifications = computed(() => this.source()?.unreadNotifications() ?? 0);
+  readonly notificationsLabel = computed(() => this.source()?.notificationsLabel() ?? "");
   /**
    * Whether a page header on screen carries the drawer button. The shell shows its own fallback
    * button while none does, so a page that renders no header (or not yet) never strands the user
@@ -60,5 +61,9 @@ export class ShellNavService {
 
   open(): void {
     this.source()?.open();
+  }
+
+  openNotifications(): void {
+    this.source()?.openNotifications();
   }
 }

@@ -167,6 +167,27 @@
   to { box-shadow: 0 1px 0 var(--border); } // --divider all but vanishes on the dark surface.
 }
 
+@keyframes card-detail-status-band {
+  from { background: var(--surface-2); }
+  to { background: var(--surface); }
+}
+
+// The phone strip appears only once the panel scrolls. Hidden, not just transparent, at rest, so
+// taps on the title (edit) and the cover (lightbox) beneath it still land.
+@keyframes card-detail-strip-reveal {
+  from {
+    visibility: hidden;
+    opacity: 0;
+    box-shadow: 0 1px 0 transparent;
+  }
+
+  to {
+    visibility: visible;
+    opacity: 1;
+    box-shadow: 0 1px 0 var(--border);
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -895,11 +916,59 @@
     background: var(--surface);
   }
 
+  // Where the strip can follow the scroll, it takes no room at rest: the title shares its line with
+  // the close button, or the cover runs to the top with the button over it, as a phone header should.
+  // A permanent strip left a 52px band holding a lone ×, above even the cover. The strip only
+  // appears once the panel scrolls, so content still never scrolls under a bare button. Without
+  // scroll timelines the strip above stays in flow instead, since a strip that could not hide would
+  // cover the title.
   @supports (animation-timeline: scroll()) {
+    // Back to the status-bar backing alone, still solid and in flow. The header's colour at rest,
+    // the strip's once scrolled, so it reads as one bar with whichever sits under it.
     .panel.mode-modal::before {
-      animation: card-detail-strip-rule linear both;
+      order: -2;
+      height: env(safe-area-inset-top);
+      animation: card-detail-status-band linear both;
       animation-timeline: scroll(nearest block);
       animation-range: 0 8px;
+    }
+
+    // The strip itself: sticky under the status bar, overlapping the content below it by its own
+    // height (the negative margin), so it costs no layout.
+    .panel.mode-modal::after {
+      content: "";
+      order: -1;
+      position: sticky;
+      top: env(safe-area-inset-top);
+      z-index: 31;
+      flex-shrink: 0;
+      height: 52px;
+      margin-bottom: -52px;
+      background: var(--surface);
+      // Hidden unless the reveal runs: with animations stripped (a stylesheet override, a test
+      // harness), a strip stuck visible would sit over the title for good.
+      visibility: hidden;
+      animation: card-detail-strip-reveal linear both;
+      animation-timeline: scroll(nearest block);
+      animation-range: 0 8px;
+    }
+
+    // Clear the close button on the title's line, and centre that line on the button: the button is
+    // 32px at 10px from the top, the title's first line ~24px tall.
+    .panel.mode-modal .panel-header:not(.has-cover) {
+      padding-top: 14px;
+
+      .card-title {
+        padding-inline-end: 40px;
+      }
+
+      // The 36px input is taller than the title's line, so it rises by the difference to stay
+      // centred on the button while editing.
+      .title-input {
+        flex-basis: calc(100% - 40px);
+        margin-block-start: -6px;
+        margin-inline-end: 40px;
+      }
     }
   }
 
@@ -2264,10 +2333,17 @@ button.checklist-hide-toggle {
   line-height: 1;
 }
 
+.dates-heading-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
 /* Working-day length of the planned bar; a hint, so the lowest text tier that is still readable. */
 .due-duration-hint {
   color: var(--text-muted);
   font-size: var(--text-sm);
+  font-weight: 400;
   white-space: nowrap;
 }
 

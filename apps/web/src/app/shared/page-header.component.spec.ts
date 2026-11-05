@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from "@angular/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PageHeaderComponent, type PageHeaderVariant } from "./page-header.component";
-import { ShellNavService, type ShellNavAttention } from "./shell-nav.service";
+import { ShellNavService } from "./shell-nav.service";
 
 @Component({
   standalone: true,
@@ -45,13 +45,23 @@ async function mount() {
 }
 
 describe("PageHeaderComponent", () => {
-  it("carries the phone drawer's button, with the utilities' attention as a dot, only in drawer mode", async () => {
+  it("carries the phone drawer's button, an overdue dot and an unread bell, only in drawer mode", async () => {
     const drawerMode = signal(false);
-    const attention = signal<ShellNavAttention>(null);
+    const overdue = signal(false);
+    const unreadNotifications = signal(0);
     const open = vi.fn();
+    const openNotifications = vi.fn();
     const { fixture, host } = await mount();
     const nav = TestBed.inject(ShellNavService);
-    const disconnect = nav.connect({ drawerMode, attention, label: "Expand sidebar", open });
+    const disconnect = nav.connect({
+      drawerMode,
+      overdue,
+      label: "Expand sidebar",
+      open,
+      unreadNotifications,
+      notificationsLabel: signal("Notifications (3 unread)"),
+      openNotifications,
+    });
     fixture.detectChanges();
     expect(host.querySelector(".ph-menu")).toBeNull();
     // A header on screen tells the shell it need not show its own fallback button.
@@ -63,17 +73,29 @@ describe("PageHeaderComponent", () => {
     expect(button?.getAttribute("aria-label")).toBe("Expand sidebar");
     expect(button?.querySelector("i")?.getAttribute("aria-hidden")).toBe("true");
     // First in the identity group, ahead of the lead icon and title.
-    expect(host.querySelector(".ph-identity")?.firstElementChild).toBe(button);
+    expect(host.querySelector(".ph-identity")?.firstElementChild?.firstElementChild).toBe(button);
     expect(host.querySelector(".ph-menu-dot")).toBeNull();
+    expect(host.querySelector(".ph-bell")).toBeNull();
+    expect(host.querySelector(".ph-icon")).not.toBeNull();
     button?.click();
     expect(open).toHaveBeenCalledOnce();
 
-    attention.set("unread");
+    overdue.set(true);
     fixture.detectChanges();
-    expect(host.querySelector(".ph-menu-dot")?.classList.contains("is-danger")).toBe(false);
-    attention.set("danger");
+    expect(host.querySelector(".ph-menu-dot")).not.toBeNull();
+
+    // Unread notifications are one tap away, paid for with the lead icon.
+    unreadNotifications.set(3);
     fixture.detectChanges();
-    expect(host.querySelector(".ph-menu-dot")?.classList.contains("is-danger")).toBe(true);
+    const bell = host.querySelector<HTMLButtonElement>(".ph-bell");
+    expect(bell?.getAttribute("aria-label")).toBe("Notifications (3 unread)");
+    expect(bell?.querySelector(".ph-bell-count")?.textContent?.trim()).toBe("3");
+    expect(host.querySelector(".ph-icon")).toBeNull();
+    bell?.click();
+    expect(openNotifications).toHaveBeenCalledOnce();
+    unreadNotifications.set(140);
+    fixture.detectChanges();
+    expect(host.querySelector(".ph-bell-count")?.textContent?.trim()).toBe("99+");
 
     fixture.destroy();
     expect(nav.hasHeaderTrigger()).toBe(false);

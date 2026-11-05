@@ -77,6 +77,10 @@ test("board detail, Kanban, table and work done follow another member's card edi
   const tablePage = await pageAs("marcus");
   await openBoard(tablePage, testWorkspace.boardName);
   await showBoardView(tablePage, "Table view");
+  // List grouping hides Status by default; show the column whose live updates this test checks.
+  await tablePage.getByRole("button", { name: "Show or hide columns", exact: true }).click();
+  await tablePage.getByRole("menuitemcheckbox", { name: "Status", exact: true }).click();
+  await tablePage.keyboard.press("Escape");
   await expect(tableRow(tablePage, cardId)).toBeVisible();
   const workDonePage = await pageAs("marcus");
   await openBoard(workDonePage, testWorkspace.boardName);

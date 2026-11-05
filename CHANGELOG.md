@@ -6,7 +6,7 @@ All notable changes to Kanera are documented here.
 
 ### Added
 
-- **Mermaid diagrams:** ```` ```mermaid ```` code blocks are drawn as diagrams in card descriptions, notes and Markdown attachment previews, matching the light or dark theme. Wide diagrams scroll sideways on phones; comments keep showing the source.
+- **Mermaid diagrams:** ```` ```mermaid ```` code blocks are drawn as diagrams in card descriptions, notes and Markdown attachment previews, using the app's theme, accent colours and rounded shapes. Wide diagrams scroll within their frame to keep labels readable; comments keep showing the source.
 - **Mentions tab in notifications:** once someone has @-mentioned you, the notifications drawer gets a **Mentions** tab (with its unread count) listing every comment that mentions you, read or unread. On phones the drawer's Group, Board and User menus now share one row.
 - **Thumbs-up from notifications:** a notification for a comment that @-mentions you has a thumbs-up button beside the read dot, so you can acknowledge it without opening the card. Reacting marks the notification read.
 - **Agents filter in card activity:** cards an AI agent has commented on get an **Agents** tab beside All and Comments, showing only the comments and changes connected agents made and how their runs ended.
@@ -35,6 +35,8 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+- **Offline notes:** reopening a previously viewed workspace note while offline now shows its contents instead of “No note selected”. The note updates automatically when you're back online.
+- Rapidly reversing a list move now removes its activity and inbox notification. Forward moves remain separate, and every move still runs its events and automations. Applies to individual and bulk moves.
 - Deleting a standalone board removes it from the sidebar straight away instead of leaving a dead link until the page is reloaded.
 - **Numbered lists:** a numbered list interrupted by bullet points keeps its numbering after saving instead of restarting at 1.
 - Demo seed card creations and recent list moves now record their human actors, so teammates' recent work appears in the activity overview.

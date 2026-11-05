@@ -645,17 +645,6 @@ k-card-labels {
   max-width: 100%;
 }
 
-// The break before the long values. Zero height, and the line after it rides up by one row gap, so
-// moving the long value onto its own line costs no height: the break's extra row gap is given back.
-.card-footer-break.cf-wide-break {
-  height: 0;
-}
-
-.cf-wide-break + .cf-badge--wide,
-.cf-wide-break + .cf-badge--wide + .assignee-stack {
-  margin-top: calc(-1 * var(--footer-row-gap));
-}
-
 .cf-label,
 .cf-sep {
   display: none;
@@ -663,7 +652,7 @@ k-card-labels {
 
 .cf-badge>.ti {
   color: var(--text-muted);
-  font-size: var(--text-base);
+  font-size: 1em;
   flex-shrink: 0;
 }
 
@@ -761,30 +750,9 @@ k-card-labels {
   @include chip.chip-tone(danger);
 }
 
-// Shares the .cf-badge recipe (bare icon + text on the tertiary tier) because it sits on the same
-// metadata row; a due date is only worth a frame once it needs action, so overdue and due-soon are
-// the only states that become a chip (the shared due-states, identical in the table, the queue
-// rows and the overview).
-//
-// A neutral date sits one tier above every other fact (--text, against the --text-3 counts and field
-// values): it is the one fact a lane is scanned for, and on the same tier as a date custom field the
-// two read as interchangeable.
+// Every due date keeps the same chip metrics; urgency changes its colour, never its size or shape.
 .card-due {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-  font-weight: 500;
-  color: var(--text);
-  line-height: 1.5;
-
-  i {
-    color: var(--text-3);
-    font-size: var(--text-base);
-    line-height: 1;
-  }
-
-  @include chip.due-states;
+  @include chip.due-chip;
 }
 
 // Time in progress: the shared chip in the accent, since it describes work that is moving, not a
@@ -825,9 +793,16 @@ k-card-labels {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--footer-row-gap) 6px;
-  margin-top: 8px;
+  column-gap: 6px;
+  margin-top: calc(8px - var(--footer-row-gap));
   font-size: var(--text-sm);
+}
+
+// Put row spacing on the facts, so a zero-height forced break does not add a gap on both sides.
+// Subtract the first row's margin from the footer's top spacing to keep its distance from the title.
+.card-footer > :not(.card-footer-break, .card-indicators),
+.card-indicators > * {
+  margin-top: var(--footer-row-gap);
 }
 
 // Group starts. Only when an earlier group shares the line: the counts after a state fact, and the
@@ -846,13 +821,10 @@ k-card-labels {
   display: contents;
 }
 
-// Full-width item that ends the schedule line so the field badges start a line of their own. The
-// row gap on both sides of it, plus its own 2px, puts 10px between the two tiers against the 4px of
-// an ordinary wrap (8px against 3px in compact density), which is what makes them read as two groups
-// without drawing a rule across every tile.
+// End the line without adding height: the following facts supply the same spacing as a normal wrap.
 .card-footer-break {
   flex-basis: 100%;
-  height: 2px;
+  height: 0;
 }
 
 // Icons on --text-muted, values (the counts) on --text-3: the same two tiers as the field badges and
@@ -1201,11 +1173,6 @@ k-card-labels {
     display: none;
   }
 
-  // The long value it rode up with is hidden.
-  .assignee-stack {
-    margin-top: 0;
-  }
-
   .card-footer:not(:has(.card-blocked, .card-due, .card-time-in-progress, .assignee-stack)) {
     display: none;
   }
@@ -1245,15 +1212,14 @@ k-card-labels {
     --label-chip-height: 18px;
   }
 
-  .cf-badge,
-  .card-due {
+  .cf-badge {
     line-height: 1.45;
   }
 
   .card-footer {
     --footer-row-gap: 3px;
 
-    margin-top: 6px;
+    margin-top: calc(6px - var(--footer-row-gap));
     font-size: var(--text-xs);
   }
 

@@ -78,9 +78,11 @@ k-support-session-banner {
 // like it arrives from off-screen rather than emerging from beneath the sidebar it was opened from.
 // Scoped to that moment so the sidebar does not become a permanent stacking context that caps its
 // own anchored popovers against the rest of the page.
-:host(:has(.drawer)) .sidebar {
-  position: relative;
-  z-index: 72;
+@media (min-width: 641px) {
+  :host(:has(.drawer)) .sidebar {
+    position: relative;
+    z-index: 72;
+  }
 }
 
 .sidebar {
@@ -593,23 +595,17 @@ k-support-session-banner {
   padding: 2px 0 0;
 }
 
-// Tree nesting. A child row's leading mark lines up under its parent's *label*, the way a tree reads,
-// rather than under the parent's own icon (with a 15px container indent a board's icon sat directly
-// below the workspace icon and only the chevron said it was nested). Rows stay full width and take
-// the indent as extra leading padding (.board-link, .board-group-toggle, .board-empty read
-// --nav-indent), so every selected row keeps the same pill as Home.
-//
-// Offsets from the row's left edge, given the rows' 10px leading padding:
-// - a workspace label: 6px toggle padding + 14px chevron + 6px + 16px icon + 6px = 48px -> indent 38px
-// - a label with no icon (a guest organisation): 6px + 14px + 6px = 26px -> indent 16px
-// - a board group label: its 11px chevron + 4px gap = 15px past the group's own indent
+// Compact tree nesting leaves room for names: workspace children sit near the workspace glyph,
+// and grouped boards add just one 8px step. Indent through leading padding rather than narrowing
+// the row, so selected links keep the same full-width pill as Home.
+// Guest and standalone offsets follow their own iconless disclosure rows.
 .ws-me,
 .ws-boards {
-  --nav-indent: 38px;
+  --nav-indent: var(--space-4);
 }
 
 .ws-boards .board-nav-group .board-link {
-  --nav-indent: 53px;
+  --nav-indent: var(--space-6);
 }
 
 .standalone-nav-group .board-link {
@@ -1723,10 +1719,6 @@ k-support-session-banner {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  .sidebar:not(.mobile-open) {
-    display: none;
-  }
-
   .shell-main {
     grid-column: 1;
   }
@@ -1761,7 +1753,7 @@ k-support-session-banner {
   // Expanded sidebar slides over content instead of pushing it. Being fixed at
   // top:0 it escapes the shell's safe-area padding, so pad it here too (bare
   // env(), 0 elsewhere) to keep the brand row below the iOS status bar.
-  .sidebar.mobile-open {
+  .sidebar {
     position: fixed;
     left: 0;
     top: 0;
@@ -1771,6 +1763,19 @@ k-support-session-banner {
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
     overflow-y: auto;
     padding-top: env(safe-area-inset-top);
+    // Keep the drawer mounted off-canvas: display:none discarded the starting transform, so a
+    // menu-button click had nothing to animate. Delayed visibility also lets the close slide finish.
+    visibility: hidden;
+    transform: translate3d(-100%, 0, 0);
+    transition: transform var(--motion-base) var(--ease-drawer), visibility 0s var(--motion-base);
+
+    &.mobile-open {
+      visibility: visible;
+      // Release the containing block after opening so fixed account/context menus can overhang
+      // the sidebar instead of being clipped by its scroll container.
+      transform: none;
+      transition-delay: 0s;
+    }
 
     // Both `transform` and `will-change: transform` make the sidebar a containing block for its
     // `position: fixed` descendants, so anything floating inside it is dragged along with the drawer
@@ -1781,10 +1786,11 @@ k-support-session-banner {
       width: var(--sidebar-width);
       transform: translate3d(calc(var(--sidebar-swipe-width) - var(--sidebar-width)), 0, 0);
       will-change: transform;
+      transition: none;
     }
 
     &.settling {
-      transition: transform var(--motion-base) ease;
+      transition: transform var(--motion-base) var(--ease-drawer);
     }
   }
 }
@@ -1806,6 +1812,12 @@ k-support-session-banner {
   .section-label .new-ws-btn,
   .section-label .new-board-btn {
     margin-block: -8px;
+  }
+
+  // The 44px collapse button fills the row instead of adding to its padding, so the brand row
+  // stays the 56px every drawer header and the page's top bar share.
+  .sidebar:not(.collapsed) .brand-row {
+    padding-block: 5px;
   }
 
   .nav-item,

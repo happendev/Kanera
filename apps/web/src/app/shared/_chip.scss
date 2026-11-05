@@ -122,3 +122,17 @@
     @include chip-tone(warning);
   }
 }
+
+// Card tiles and table cells share the full due-date recipe, including the neutral state, so a
+// deadline keeps its shape and type as it becomes due soon or overdue and when switching views.
+@mixin due-chip {
+  @include chip;
+  @include chip-tone(neutral);
+  color: var(--text);
+
+  > i {
+    color: var(--text-3);
+  }
+
+  @include due-states;
+}

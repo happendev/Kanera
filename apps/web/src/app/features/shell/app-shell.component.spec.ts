@@ -610,13 +610,14 @@ describe("AppShellComponent board search", () => {
     fixture.detectChanges();
     expect(root.querySelector("aside.sidebar.mobile-open")).toBeNull();
 
-    expect(nav.attention()).toBeNull();
+    expect(nav.unreadNotifications()).toBe(0);
     notifications.unreadCount.set(4);
-    expect(nav.attention()).toBe("unread");
+    expect(nav.unreadNotifications()).toBe(4);
+    expect(nav.notificationsLabel()).toBe("Notifications (4 unread)");
+    // Swapped before the first read: the computed would otherwise hold the old signal's value.
     const priorities = TestBed.inject(MyPrioritiesService);
     Object.defineProperty(priorities, "overdueCount", { value: signal(1), configurable: true });
-    notifications.unreadCount.set(5);
-    expect(nav.attention()).toBe("danger");
+    expect(nav.overdue()).toBe(true);
   });
 
   it("keeps the rail and shows no drawer button above phone width", async () => {

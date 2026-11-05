@@ -207,8 +207,8 @@ input.comment-search-input {
   &::after {
     content: "";
     flex: 1;
-    height: 1px;
-    background: var(--border); // --divider all but vanishes on the dark comments pane.
+    // Borders snap to device pixels, keeping every rule equally thin at fractional zoom.
+    border-top: 1px solid var(--border); // --divider all but vanishes on the dark comments pane.
   }
 
   &:first-child {
