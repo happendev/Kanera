@@ -9,6 +9,7 @@ import { CardLabelsComponent, type CardLabelPresentation } from "../../features/
 import { suppressDropCommitTransitions } from "../../features/board/drop-commit-transition";
 import { formatDueDate, isDueSoon, isOverdue } from "../../features/board/due-date.util";
 import { AnchoredPickerPopover } from "../anchored-picker.popover";
+import { BoardIconComponent } from "../board-icon.component";
 import { CardKeyDisplayService } from "../card-key-display.service";
 import type { PickerGroup } from "../picker-list.component";
 import { priorityRankHeat } from "../priority-rank";
@@ -24,8 +25,9 @@ type QueueRow = {
   entry: WorkPriorityItem;
   card: WireCardSummary | null;
   boardName: string;
-  boardIconClass: string;
-  boardIconColor: string | null;
+  /** Raw icon name and colour token, for `k-board-icon`. */
+  boardIcon: string;
+  boardColor: string | null;
   listName: string;
   /**
    * The list's own icon and colour, resolved the same way the board's are. A queued card's list *is*
@@ -72,7 +74,7 @@ type QueueActionsMenu = {
 @Component({
   selector: "k-priority-queue",
   standalone: true,
-  imports: [AnchoredPickerPopover, CardActionsMenuPopover, CardLabelsComponent, CdkDrag, CdkDropList, TooltipDirective],
+  imports: [AnchoredPickerPopover, BoardIconComponent, CardActionsMenuPopover, CardLabelsComponent, CdkDrag, CdkDropList, TooltipDirective],
   templateUrl: "./priority-queue.component.html",
   styleUrl: "./priority-queue.component.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -221,8 +223,8 @@ export class PriorityQueueComponent {
         entry,
         card,
         boardName: entry.context?.boardName ?? board?.name ?? "",
-        boardIconClass: `ti ti-${icon}`,
-        boardIconColor: iconColor ? `var(--color-${iconColor})` : null,
+        boardIcon: icon,
+        boardColor: iconColor,
         listName: entry.context?.listName ?? list?.name ?? "",
         listIconClass: `ti ti-${listIcon}`,
         listColor: listColor ? `var(--color-${listColor})` : null,

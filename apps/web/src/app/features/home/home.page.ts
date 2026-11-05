@@ -61,19 +61,15 @@ type AccountStatusBanner = {
 type ScatterKind = "ring" | "dash" | "square" | "dot" | "arc" | "check";
 interface ScatterItem { kind: ScatterKind; x: number; y: number; size: number; rotate?: number; accent: "teal" | "sky" | "indigo" }
 
+// A sparse cluster in the trailing third, well clear of the greeting: on a working page the shapes
+// are a light touch of the brand, not a field that competes with the title.
 const HERO_SCATTER: readonly ScatterItem[] = [
-  { kind: "ring", x: 52, y: 8, size: 12, accent: "teal" },
-  { kind: "dash", x: 60, y: 30, size: 30, rotate: -24, accent: "sky" },
-  { kind: "dot", x: 56, y: 62, size: 6, accent: "indigo" },
-  { kind: "check", x: 66, y: 74, size: 16, rotate: -8, accent: "teal" },
-  { kind: "square", x: 72, y: 14, size: 14, rotate: 18, accent: "indigo" },
-  { kind: "arc", x: 78, y: 52, size: 20, rotate: 160, accent: "sky" },
-  { kind: "dot", x: 84, y: 26, size: 7, accent: "teal" },
-  { kind: "dash", x: 88, y: 78, size: 26, rotate: 20, accent: "indigo" },
-  { kind: "ring", x: 93, y: 10, size: 9, accent: "sky" },
-  { kind: "check", x: 96, y: 44, size: 14, rotate: 10, accent: "sky" },
-  { kind: "dot", x: 98, y: 88, size: 5, accent: "teal" },
-  { kind: "square", x: 63, y: 92, size: 10, rotate: -12, accent: "teal" },
+  { kind: "square", x: 72, y: 18, size: 12, rotate: 18, accent: "indigo" },
+  { kind: "arc", x: 80, y: 56, size: 18, rotate: 160, accent: "sky" },
+  { kind: "dot", x: 85, y: 24, size: 6, accent: "teal" },
+  { kind: "dash", x: 90, y: 76, size: 22, rotate: 20, accent: "indigo" },
+  { kind: "ring", x: 93, y: 14, size: 9, accent: "sky" },
+  { kind: "check", x: 97, y: 46, size: 13, rotate: 10, accent: "teal" },
 ];
 
 @Component({
@@ -136,6 +132,8 @@ export class HomePage implements OnInit {
   readonly hasNoBoards = computed(() => this.state.boardCount() === 0);
 
   /** The page title: a time-of-day greeting with the viewer's name, as one message per greeting. */
+  // The phone nav bar's page name; the sidebar's own message, so no new translation.
+  readonly homeLabel = $localize`:Sidebar link to the home page:Home`;
   readonly greeting = computed(() => {
     const hour = new Date().getHours();
     const name = this.displayName();
@@ -381,7 +379,6 @@ export class HomePage implements OnInit {
     label: $localize`:Activity strip series - cards completed:Completed`,
     noun: "card",
     countLabel: (count) => icu($localize`:Activity strip day tooltip count:{count, plural, one {# card} other {# cards}}`, { count }),
-    tone: "success",
     counts: new Map(this.state.trend().byDay.map((day) => [
       day.date,
       day.completedCards,

@@ -1,4 +1,4 @@
-import { enhanceDemoSeed } from "./seed-demo-enhancements.js";
+import { autumnLaunchSequence, enhanceDemoSeed } from "./seed-demo-enhancements.js";
 import { seedActivityTime, seedCalendar, seedNotificationTime, type SeedNotificationTime } from "./seed-calendar.js";
 import type { ColorToken } from "@kanera/shared/colors";
 import { workingMs } from "@kanera/shared/time-in-progress";
@@ -841,6 +841,20 @@ API reference: https://docs.kanera.app/api`,
               "Onboarding should create a useful engineering workspace in one pass: boards, shared lists, fields, and labels included.",
               "The API payload is the remaining design decision. Validate it against an existing workspace before we let the rollout touch customer data.",
               "A fresh-account check is required because this path only runs when `me.hasWorkspace === false`.",
+              `## Workspace bootstrap flow
+
+\`\`\`mermaid
+flowchart TD
+    Account["Account loaded"] --> Empty{"Has a workspace?"}
+    Empty -- Yes --> Existing["Open existing workspace"]
+    Empty -- No --> Choose["Choose engineering template"]
+    Choose --> Validate["Validate template payload"]
+    Validate --> Transaction["Create workspace in one transaction"]
+    Transaction --> Shared["Create workspace-scoped lists and custom fields"]
+    Shared --> Boards["Create boards using the shared configuration"]
+    Boards --> Defaults["Add labels and initial board memberships"]
+    Defaults --> Commit["Commit and open the first board"]
+\`\`\``,
             ),
             list: "Planning / Review",
             createdBy: "priya",
@@ -911,6 +925,27 @@ API reference: https://docs.kanera.app/api`,
             description: note(
               "Northstar received the same billing export twice after a storage write succeeded and the database transaction retried.",
               "Reproduce the sequence, make delivery creation idempotent, and leave one clear activity entry for support to reference.",
+              `## Proposed retry boundary
+
+\`\`\`mermaid
+sequenceDiagram
+    participant Worker as Export worker
+    participant Storage as Export storage
+    participant DB as Database
+    Worker->>Storage: Write export at stable export key
+    Storage-->>Worker: Stored successfully
+    Worker->>DB: Begin delivery transaction
+    DB-->>Worker: Retryable transaction failure
+    Note over Worker,Storage: Reuse stored file on retry
+    Worker->>DB: Retry with the same export ID
+    alt Delivery already exists
+        DB-->>Worker: Return retained delivery
+    else First successful commit
+        Worker->>DB: Insert unique delivery and activity entry
+        DB-->>Worker: Commit
+    end
+    Note over Worker,DB: One delivery and one activity entry per export
+\`\`\``,
             ),
             list: "Bugs / Issues / Feedback",
             createdBy: "omar",
@@ -3024,6 +3059,8 @@ Shared plan for the autumn launch across creative, content, web, email, social, 
 
 > **Blocked:** product messaging is signed off. The launch now waits on Amelia's final package approval. Grace maintains the hour-by-hour launch schedule, and channel owners keep their go-live checks on the launch card.
 
+${autumnLaunchSequence}
+
 ## Launch-day rules
 
 1. Update the main launch card **first** when a dependency changes.
@@ -4084,6 +4121,7 @@ async function insertSeedActivity(
     boardId: input.boardId,
     workspaceId: input.workspaceId,
     actorId: input.actorId,
+    actorKind: "user",
     entityType: input.entityType,
     entityId: input.entityId,
     action: input.action,

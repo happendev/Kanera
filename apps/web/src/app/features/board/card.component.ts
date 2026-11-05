@@ -12,6 +12,7 @@ import { NotificationsService } from "../../core/notifications/notifications.ser
 import { unreadMarkLabel } from "../../core/notifications/unread-mark";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { BoardIconComponent } from "../../shared/board-icon.component";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState } from "./board-state";
@@ -48,12 +49,16 @@ export interface CardBulkMenuIntent {
   point: { x: number; y: number };
 }
 
-const COVER_HEIGHT_FALLBACK_PX = "160px";
+// The .card-cover max-height: a legacy cover with no stored size fills the cap.
+const COVER_HEIGHT_FALLBACK_PX = "128px";
+// About two thirds of a tile line at --text-sm: past this a text value is the branch-like kind that
+// ellipsizes, so it takes a badge row of its own.
+const WIDE_BADGE_MIN_CHARS = 14;
 
 @Component({
   selector: "k-card",
   standalone: true,
-  imports: [CardActionsMenuPopover, CardLabelsComponent, NgOptimizedImage, AvatarComponent, TooltipDirective, WatcherPopoverComponent],
+  imports: [CardActionsMenuPopover, CardLabelsComponent, NgOptimizedImage, AvatarComponent, BoardIconComponent, TooltipDirective, WatcherPopoverComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./card.component.html",
   styleUrl: "./card.component.scss",
@@ -447,7 +452,31 @@ export class CardComponent implements OnChanges, OnDestroy {
   }
 
   hasVisibleCustomFieldBadges(): boolean {
-    return this.customFields().some((field) => field.showOnCard && this.hasBadge(field));
+    return this.badgeFields().length > 0;
+  }
+
+  /**
+   * The card-front field badges, long text values (a branch, a long reference) last. A long value gets
+   * a line of its own (.cf-badge--wide) so it never shares one with an unrelated short field, where
+   * "3" read as the next word of a branch name. Last, so the short values wrap together above it and
+   * the long one shares the closing line with the assignees: the same line count as when it sat
+   * beside a short value. Otherwise the workspace's field order.
+   */
+  readonly badgeFields = computed(() => {
+    const visible = this.customFields().filter((field) => field.showOnCard && this.hasBadge(field));
+    const wide = visible.filter((field) => this.isWideBadge(field));
+    return wide.length ? [...visible.filter((field) => !wide.includes(field)), ...wide] : visible;
+  });
+
+  /** Where the long values start, when short ones precede them: the footer breaks the line there. */
+  readonly wideBadgeBreakIndex = computed(() => {
+    const index = this.badgeFields().findIndex((field) => this.isWideBadge(field));
+    return index > 0 ? index : -1;
+  });
+
+  /** A text value long enough that, ellipsized beside other badges, it would read as a fragment. */
+  isWideBadge(field: AnyCustomField): boolean {
+    return field.type === "text" && this.valueFor(field.id).trim().length > WIDE_BADGE_MIN_CHARS;
   }
 
   hasDescription(): boolean {
@@ -533,6 +562,13 @@ export class CardComponent implements OnChanges, OnDestroy {
       return new Intl.NumberFormat(appLocale(), { maximumFractionDigits: 20 }).format(Number(value));
     }
     return value;
+  }
+
+  /** The field name, plus the value wherever the badge can ellipsize it on a narrow tile. */
+  badgeTooltip(field: AnyCustomField): string {
+    if (field.type === "checkbox" || field.type === "url" || field.type === "user") return field.name;
+    const value = field.type === "select" ? this.selectedOptions(field).map((option) => option.label).join(", ") : this.badgeValueFor(field);
+    return value ? `${field.name} · ${value}` : field.name;
   }
 
   goToBoardLabel(name: string): string {

@@ -28,6 +28,29 @@
   }
 }
 
+// The range bar hangs 4-6px below the last strip (see .activity-range), inside the panel's bottom
+// padding; a few more pixels keep it from reading as a rule on the panel's border.
+.activity-panel.has-range:not(.is-flat) {
+  padding-bottom: 18px;
+}
+
+// Inside a host panel that already supplies the frame: drop the box so it is not a box in a box,
+// and the row label column, which for a single series only repeats the heading.
+.activity-panel.is-flat {
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+
+  .activity-strips {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .activity-row-label {
+    display: none;
+  }
+}
+
 .activity-legend {
   display: flex;
   align-items: center;
@@ -35,8 +58,12 @@
   // The legend sits outside a strip, so it needs its own swatch colour.
   --cell-color: var(--accent);
 
-  span {
+  // Legend words are text: the AA --text-muted tier, at the axis labels' size and weight. Written
+  // under the header so it outranks the header's own span rule.
+  .activity-panel > header & > span {
+    color: var(--text-muted);
     font-size: var(--text-xs);
+    font-weight: 500;
   }
 
   .activity-cell {
@@ -48,6 +75,10 @@
 
 .activity-strips {
   // Row labels take what they need; the strips share every remaining pixel.
+  // Relative and isolated for the range wash: it is placed on the strips' grid area, and sits at
+  // z -1 behind the cells without dropping under the panel's own background.
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
@@ -70,12 +101,16 @@
   }
 }
 
+// Axis text is text, so it takes the AA --text-muted tier at the scale's smallest size and a
+// medium weight. At an off-scale 10px and regular weight the thin strokes antialiased to roughly
+// 3:1 on screen even though the token itself passes.
 .activity-months {
   display: flex;
   gap: 2px;
   color: var(--text-muted);
-  font-size: 10px;
-  line-height: 12px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 14px;
 
   // Matches the day columns below; labels overflow to the right rather than widening a column.
   span {
@@ -86,13 +121,10 @@
 }
 
 .activity-strip {
+  position: relative;
   display: flex;
   gap: 2px;
   --cell-color: var(--accent);
-
-  &[data-tone="success"] {
-    --cell-color: var(--success);
-  }
 
   .activity-cell {
     flex: 1;
@@ -101,34 +133,132 @@
     min-width: 0;
   }
 
-  // Monday starts a new week: a slightly stronger left edge keeps the eye from losing its place
-  // across dozens of undifferentiated columns.
+  // Monday starts a new week: a faint tick in the gap before it keeps the eye from losing its place
+  // across dozens of undifferentiated columns. Translucent, because that gap is exactly where the
+  // range wash shows: the opaque --surface edge this replaced cut white cracks through it. A
+  // pseudo-element rather than an outer box-shadow, whose rounded corners wrapped the cell as a
+  // bracket; widening the gap instead would break the equal-column maths .activity-range relies on.
   .activity-cell.week-start {
-    box-shadow: -2px 0 0 var(--surface);
+    position: relative;
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: 2px;
+      bottom: 2px;
+      left: -2px;
+      width: 2px;
+      border-radius: 1px;
+      background: color-mix(in srgb, var(--text-muted) 28%, transparent);
+      pointer-events: none;
+    }
   }
 }
 
+// Days outside the host's period draw their counts from a weaker ramp, so the period is the lit
+// stretch of the strip. The ramp still mixes towards the empty fill, so a busy day outside never
+// reads paler than an idle day inside; idle days keep the plain empty fill either way, because any
+// tint on them read as activity. The period itself is marked once, by .activity-range below.
+.has-range .activity-strip .activity-cell.out-of-range {
+  --cell-color: color-mix(in srgb, var(--accent) 60%, var(--surface-3));
+}
+
+// One accent bar under the last strip spanning the period's columns and the gaps between them. It is
+// positioned out of flow so it costs the layout nothing: the strip is centred in a row as tall as its
+// two-line label, so there is room below it. 4px down clears the selected day's 2px outline (offset
+// 1px) instead of butting into it. The columns are equal flex items with a 2px gap, so
+// column i starts at (100% + 2px) * i / n and a run of k columns is (100% + 2px) * k / n - 2px wide.
+.activity-range {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: calc((100% + 2px) * var(--band-start) / var(--band-columns));
+  width: calc((100% + 2px) * var(--band-span) / var(--band-columns) - 2px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+// The same columns as the bar, bled 2px past the cells on every side, behind every strip row. Not
+// 3px: that touched the month label above and the range bar below. The cells are opaque, so the
+// fill shows only around and between them. A faint fill plus a ring, not a strong fill: the wash
+// spans the label-height space between two strips too, and at 18% that space read as a third,
+// solid bar under the month label. The ring carries the period's edges up through every row; the
+// 8% fill only tints the gaps inside it.
+.activity-range-wash {
+  position: absolute;
+  grid-column: -2 / -1;
+  z-index: -1;
+  top: -2px;
+  bottom: -2px;
+  left: calc((100% + 2px) * var(--band-start) / var(--band-columns) - 2px);
+  width: calc((100% + 2px) * var(--band-span) / var(--band-columns) + 2px);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+  pointer-events: none;
+}
+
+// Narrow layouts only (see the mixin below), where the month row is gone.
+.activity-ends {
+  display: none;
+}
+
 .activity-cell {
+  // A filled step rather than an outlined box: --surface-2 with a touch of the muted text colour, so
+  // empty days keep a visible but quiet slot on the panel's --surface in every theme (1.2:1 in
+  // light, 1.4:1 in dark). The ramp below mixes from this.
+  --cell-empty: color-mix(in srgb, var(--text-muted) 8%, var(--surface-2));
+  // Accent share of the three intermediate steps. The first step has to read as activity, not as
+  // another empty day. Dark values here, light below: on navy a 40% step was only ~1.8:1 off empty,
+  // so dark starts at 52% (>= 2.1:1 with every theme accent and board colour; 2.2 / 2.9 / 3.6 / 4.4
+  // for the default teal). Light keeps 40% (1.7 / 2.3 / 3.2 / 4.5 for teal), where the step reads.
+  --cell-step-1: 52%;
+  --cell-step-2: 68%;
+  --cell-step-3: 84%;
   width: 14px;
   height: 14px;
+  border: 0;
   border-radius: 3px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: var(--cell-empty);
+
+  // Stated per level so a selectable column (a button) keeps its fill against the global
+  // button:hover:not(:disabled) accent, which outranks a bare class.
+  &[data-level="0"] {
+    background: var(--cell-empty);
+  }
 
   &[data-level="1"] {
-    background: color-mix(in srgb, var(--cell-color) 28%, var(--surface-2));
+    background: color-mix(in srgb, var(--cell-color) var(--cell-step-1), var(--cell-empty));
   }
 
   &[data-level="2"] {
-    background: color-mix(in srgb, var(--cell-color) 50%, var(--surface-2));
+    background: color-mix(in srgb, var(--cell-color) var(--cell-step-2), var(--cell-empty));
   }
 
   &[data-level="3"] {
-    background: color-mix(in srgb, var(--cell-color) 72%, var(--surface-2));
+    background: color-mix(in srgb, var(--cell-color) var(--cell-step-3), var(--cell-empty));
   }
 
   &[data-level="4"] {
     background: var(--cell-color);
+  }
+}
+
+@mixin light-cell-steps {
+  --cell-step-1: 40%;
+  --cell-step-2: 60%;
+  --cell-step-3: 80%;
+}
+
+:host-context([data-theme="light"]) .activity-cell,
+:host-context([data-theme="paper"]) .activity-cell {
+  @include light-cell-steps;
+}
+
+@media (prefers-color-scheme: light) {
+  :host-context(:not([data-theme])) .activity-cell {
+    @include light-cell-steps;
   }
 }
 
@@ -141,6 +271,15 @@
 @mixin narrow-activity-strip {
   .activity-panel > header .activity-legend {
     display: none;
+  }
+
+  // Phone chrome: the panel sits above the content it navigates, so every pixel here pushes the
+  // first day further down. The bottom no longer needs room for the range bar, since the end dates
+  // sit between the bar and the border.
+  .activity-panel:not(.is-flat),
+  .activity-panel.has-range:not(.is-flat) {
+    gap: 8px;
+    padding: 12px;
   }
 
   // Stacked: the label column costs a fifth of a narrow panel, and the day columns need every
@@ -179,7 +318,26 @@
 
   // A label directly under the strip above it needs air; the first one already has the header's.
   .activity-strip + .activity-row-label {
-    margin-top: 6px;
+    margin-top: 4px;
+  }
+
+  // Stacked, the strips are separated by their labels, so a wash spanning them would tint the
+  // label rows too. The bar under the last strip marks the period on its own here.
+  .activity-range-wash {
+    display: none;
+  }
+
+  // The window's first and last day at either end, under the last strip. The top margin clears the
+  // range bar, which hangs 4-6px below the strip; at 6px the bar sat on the end date's label.
+  .activity-ends {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    line-height: 14px;
+    font-variant-numeric: tabular-nums;
   }
 }
 

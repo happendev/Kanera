@@ -13,7 +13,12 @@
        hosts: the board and Global Work each own search and Filter in their page toolbar, and a
        second, differently-scoped pair here would be two ways to narrow the same rows. The inputs stay
        so an embedding without a toolbar of its own can still turn them on. What is unconditional is
-       table-specific — columns, collapse, breakdown, export. -->
+       table-specific — columns, collapse, breakdown, export.
+
+       A host with a page toolbar of its own sets hostRendersControls and places the two templates
+       below there instead (Group where its Board view keeps its grouping control, the rest after its
+       Filter), so the sheet does not open under a second, mostly empty control row. -->
+  @if (!hostRendersControls()) {
   <div class="tv-toolbar" kFitLabels>
     @if (showSearch()) {
       <div class="tv-search">
@@ -55,49 +60,13 @@
     </span>
     }
 
-    <span class="tv-menu-wrap">
-      <!-- No single value to show, so this keeps its noun; is-set marks a column set the reader
-           chose over the default for this sheet's shape. -->
-      <button
-        type="button"
-        class="k-toolbar-btn k-toolbar-collapsible-label"
-        [class.is-open]="columnsOpen()"
-        [class.is-set]="columnsIsSet()"
-        [class.has-clear]="columnsIsSet()"
-        kTooltip="Show or hide columns"
-        i18n-kTooltip
-        aria-label="Show or hide columns"
-        i18n-aria-label
-        (click)="toggleColumnsMenu($event)"
-      >
-        <i aria-hidden="true" class="ti ti-columns-3"></i><span i18n="Toolbar button that opens the column picker">Columns</span>
-      </button>
-      @if (columnsIsSet()) {
-        <button type="button" class="k-toolbar-clear" kTooltip="Restore default columns" i18n-kTooltip aria-label="Restore default columns" i18n-aria-label (click)="clearColumns()">
-          <i aria-hidden="true" class="ti ti-x"></i>
-        </button>
-      }
-      @if (columnsOpen()) {
-        <div kMenu class="ap-panel tv-columns-menu"
-          kAnchoredPanel
-          [apAnchor]="columnsAnchor()"
-          [apPlacement]="{ align: 'end', width: 310, maxHeight: 520 }"
-          (apDismissed)="columnsOpen.set(false)"
-        >
-          <div class="k-menu-heading tv-panel-title" i18n="Column picker heading">Show / hide</div>
-          <div class="tv-columns-list">
-            @for (column of pickableColumns(); track column.id) {
-              <button type="button" class="k-menu-item tv-menu-row" (click)="toggleColumn(column.id)">
-                <i aria-hidden="true" [class]="'ti ti-' + column.icon"></i>
-                <span>{{ column.label }}</span>
-                @if (column.visible) { <i aria-hidden="true" class="ti ti-check"></i> }
-              </button>
-            }
-          </div>
-        </div>
-      }
-    </span>
+    <ng-container [ngTemplateOutlet]="groupControlTemplate" />
+    <ng-container [ngTemplateOutlet]="tableToolsTemplate" />
+  </div>
+  }
 
+  <!-- Grouping (or, under a host-owned grouping, the summary breakdown). -->
+  <ng-template #groupControlTemplate>
     @if (showGroupingControl()) {
       <!-- When the host owns grouping, this collapses to the breakdown control alone. Hosts without
            useful summary breakdowns can hide it while board tables retain their grouping menu. -->
@@ -162,6 +131,59 @@
       </span>
     }
 
+  </ng-template>
+
+  <!-- Columns, Sort, collapse-all and the overflow menu. -->
+  <ng-template #tableToolsTemplate>
+    <span class="tv-menu-wrap">
+      <!-- No single value to show, so this keeps its noun; is-set marks a column set the reader
+           chose over the default for this sheet's shape. -->
+      <button
+        type="button"
+        class="k-toolbar-btn k-toolbar-collapsible-label"
+        [class.is-open]="columnsOpen()"
+        [class.is-set]="columnsIsSet()"
+        [class.has-clear]="columnsIsSet()"
+        kTooltip="Show or hide columns"
+        i18n-kTooltip
+        aria-label="Show or hide columns"
+        i18n-aria-label
+        (click)="toggleColumnsMenu($event)"
+      >
+        <i aria-hidden="true" class="ti ti-columns-3"></i><span i18n="Toolbar button that opens the column picker">Columns</span>
+      </button>
+      @if (columnsIsSet()) {
+        <button type="button" class="k-toolbar-clear" kTooltip="Restore default columns" i18n-kTooltip aria-label="Restore default columns" i18n-aria-label (click)="clearColumns()">
+          <i aria-hidden="true" class="ti ti-x"></i>
+        </button>
+      }
+      @if (columnsOpen()) {
+        <div kMenu class="ap-panel tv-columns-menu"
+          role="menu"
+          aria-label="Show or hide columns"
+          i18n-aria-label
+          kAnchoredPanel
+          [apAnchor]="columnsAnchor()"
+          [apPlacement]="{ align: 'end', width: 240, maxHeight: 520 }"
+          (apDismissed)="columnsOpen.set(false)"
+        >
+          <div class="k-menu-heading tv-panel-title" i18n="Column picker heading">Show / hide</div>
+          <!-- The list is the scroller (the panel is only its frame), so the scroll cue sits here and
+               clears the panel's padding. Each row is a toggle: the check keeps its slot and shows
+               from aria-checked, the shared multi-toggle recipe. -->
+          <div class="tv-columns-list k-scroll-fade">
+            @for (column of pickableColumns(); track column.id) {
+              <button type="button" class="k-menu-item tv-menu-row" role="menuitemcheckbox" [attr.aria-checked]="column.visible" (click)="toggleColumn(column.id)">
+                <i aria-hidden="true" [class]="'ti ti-' + column.icon"></i>
+                <span>{{ column.label }}</span>
+                <i aria-hidden="true" class="ti ti-check k-menu-check"></i>
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </span>
+
     @if (!hostSortBy()) {
       <span class="tv-menu-wrap">
         <button
@@ -182,7 +204,11 @@
           </button>
         }
         @if (sortOpen()) {
-          <div kMenu class="ap-panel tv-small-menu" kAnchoredPanel [apPlacement]="{ align: 'end', width: 230 }" (apDismissed)="sortOpen.set(false)">
+          <!-- No maxHeight cap of its own: the shared 420px default cut the fifteenth option in half on
+               a 900px screen. Placement still clamps the panel to the room beside its trigger. -->
+          <div kMenu class="ap-panel tv-small-menu tv-sort-menu k-scroll-fade" kAnchoredPanel [apPlacement]="{ align: 'end', width: 230, maxHeight: 720 }" (apDismissed)="sortOpen.set(false)">
+            <!-- The same "Sort by" heading Global Work's sort picker carries, so no new string. -->
+            <div class="k-menu-heading tv-panel-title" i18n="Picker heading">Sort by</div>
             @for (option of sortOptions(); track option.value) {
               <button type="button" class="k-menu-item tv-menu-row" [class.is-selected]="sortBy() === option.value" (click)="setSort(option.value)">
                 <span>{{ option.label }}</span>
@@ -194,6 +220,9 @@
       </span>
     }
 
+    <!-- One unit, so the two icon buttons sit side by side when a host's phone panel stacks its
+         controls into full-width rows. -->
+    <span class="tv-icon-pair">
     @if (canCollapseGroups()) {
       <button
         type="button"
@@ -243,7 +272,8 @@
         </div>
       }
     </span>
-  </div>
+    </span>
+  </ng-template>
 
   @if (savingEdit() || editError()) {
     <div class="tv-edit-feedback" [class.is-error]="!!editError()">
@@ -313,7 +343,15 @@
               />
             </span>
           }
-          <i aria-hidden="true" class="ti ti-forms"></i><span i18n="Table column header - card title">Title</span>
+          <!-- The rows lead with a key column (a hidden sizer gives every key the widest key's
+               width), so the label sits behind a matching slot and starts where the titles do
+               rather than over the keys. The icon rides at the slot's trailing edge. -->
+          @if (showCardKeys()) {
+            <span class="tv-card-key tv-head-key-slot" aria-hidden="true"><span class="tv-key-sizer">{{ keySlotSizer() }}</span><i class="ti ti-forms" aria-hidden="true"></i></span>
+          } @else {
+            <i aria-hidden="true" class="ti ti-forms"></i>
+          }
+          <span i18n="Table column header - card title">Title</span>
           <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" i18n-kTooltip="Tooltip on a column's resize handle" (pointerdown)="startColumnResize('title', $event)" (dblclick)="autoFitColumn('title', $event)"></span>
         </div>
         @for (col of visibleColumns(); track col) {
@@ -504,13 +542,11 @@
                        view already reserves a gutter for the bulk-select checkbox. Toggling stays in
                        the row actions menu. -->
                   @if (card.completedAt) { <i aria-hidden="true" class="ti ti-circle-check tv-completed-icon" kTooltip="Completed" i18n-kTooltip="Tooltip on the tick shown beside a completed card's title"></i> }
-                  <!-- Inline before the key, the same slot and shape as on the board tile. It indents
-                       the title on marked rows only, which the completed tick beside it already does —
-                       reserving the width on every row would tax the column people actually read. -->
-                  @if (unreadCount(card.id) > 0) {
-                    <span class="tv-unread" [kTooltip]="unreadLabel(card.id)" [attr.aria-label]="unreadLabel(card.id)"></span>
-                  }
-                  <span class="tv-title">@if (showCardKeys()) { <span class="tv-card-key"><span class="tv-key-sizer" aria-hidden="true">{{ keySlotSizer() }}</span><span class="tv-key-text">{{ card.key }}</span></span> }<span class="tv-title-text">{{ card.title }}</span></span>
+                  <!-- A trailing status mark, like the board tile's dot at the end of its key row:
+                       the scss orders it after the title in the grid and after the key on the stacked
+                       phone card, so keys and titles start on one edge on read and unread rows alike
+                       and the row number stays put. -->
+                  <span class="tv-title">@if (unreadCount(card.id) > 0) { <span class="tv-unread" [kTooltip]="unreadLabel(card.id)" [attr.aria-label]="unreadLabel(card.id)"></span> }@if (showCardKeys()) { <span class="tv-card-key"><span class="tv-key-sizer" aria-hidden="true">{{ keySlotSizer() }}</span><span class="tv-key-text">{{ card.key }}</span></span> }<span class="tv-title-text">{{ card.title }}</span></span>
                 </button>
                 <button type="button" class="tv-open-btn tv-title-open tv-row-stop" aria-label="Open card" i18n-aria-label kTooltip="Open card" i18n-kTooltip (click)="$event.stopPropagation(); cardOpened.emit(card.id)">
                   <i aria-hidden="true" class="ti ti-arrows-maximize"></i>
@@ -519,7 +555,7 @@
             </div>
 
             @for (col of visibleColumns(); track col) {
-              <div class="tv-cell" [attr.data-col]="col">
+              <div class="tv-cell" [class.tv-paired-field]="pairedColumns().has(col)" [attr.data-col]="col">
                 <span class="tv-cell-label">{{ columnLabel(col) }}</span>
                 @switch (col) {
                   @case ('priority') {
@@ -619,8 +655,8 @@
                     }
                   }
                   @case ('due') {
-                    <button type="button" class="tv-cell-trigger" [class.is-overdue]="isCardOverdue(card)" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)">
-                      @if (card.dueDateLocalDate) { <i aria-hidden="true" class="ti ti-calendar-event"></i><span>{{ formattedDue(card) }}</span> }
+                    <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)">
+                      @if (card.dueDateLocalDate) { <span class="tv-due" [class.overdue]="isCardOverdue(card)" [class.due-soon]="isCardDueSoon(card)"><i aria-hidden="true" class="ti ti-calendar-due"></i><span>{{ formattedDue(card) }}</span></span> }
                       @else { <span class="tv-muted">—</span> }
                     </button>
                     @if (pickerIsOpen(card.id, col)) {
@@ -664,7 +700,9 @@
                   @case ('labels') {
                     <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openLabelsCellPicker(card, col, $event)">
                       @if (labelsForCard(card.id).length) {
-                        <k-card-labels class="tv-labels" [labels]="labelsForCard(card.id)" [limit]="3" [showOverflow]="true" [interactive]="false" [alwaysExpanded]="true" />
+                        <!-- Two chips is what the default column fits; a third folds into "+N"
+                             rather than running under the cell's fade. -->
+                        <k-card-labels class="tv-labels" [labels]="labelsForCard(card.id)" [limit]="2" [showOverflow]="true" [interactive]="false" [alwaysExpanded]="true" />
                       } @else { <span class="tv-muted">—</span> }
                     </button>
                     @if (pickerIsOpen(card.id, col)) {
@@ -806,7 +844,7 @@
                   <input
                     type="text"
                     autofocus
-                    [placeholder]="text.newTaskIn(group.name)"
+                    [placeholder]="text.addCardTo(group.name)"
                     [value]="runTaskTitle()"
                     [disabled]="creatingTask()"
                     (input)="runTaskTitle.set($any($event.target).value)"
@@ -814,8 +852,8 @@
                   />
                 </form>
               } @else {
-                <button type="button" class="tv-run-add" [attr.aria-label]="text.addTaskTo(group.name)" (click)="startRunCompose(group.listId, $event)">
-                  <i aria-hidden="true" class="ti ti-plus"></i><span i18n="Button - add a task to this list">New task</span>
+                <button type="button" class="tv-run-add" [attr.aria-label]="text.addCardTo(group.name)" (click)="startRunCompose(group.listId, $event)">
+                  <i aria-hidden="true" class="ti ti-plus"></i><span i18n="Button at the foot of a list">Add card</span>
                 </button>
               }
             </div>
@@ -843,7 +881,7 @@
                   <input
                     type="text"
                     autofocus
-                    [placeholder]="text.newTaskIn(list.name)"
+                    [placeholder]="text.addCardTo(list.name)"
                     [value]="runTaskTitle()"
                     [disabled]="creatingTask()"
                     (input)="runTaskTitle.set($any($event.target).value)"
@@ -851,8 +889,8 @@
                   />
                 </form>
               } @else {
-                <button type="button" class="tv-run-add" [attr.aria-label]="text.addTaskTo(list.name)" (click)="startRunCompose(list.id, $event)">
-                  <i aria-hidden="true" class="ti ti-plus"></i><span i18n="Button - add a task to this list">New task</span>
+                <button type="button" class="tv-run-add" [attr.aria-label]="text.addCardTo(list.name)" (click)="startRunCompose(list.id, $event)">
+                  <i aria-hidden="true" class="ti ti-plus"></i><span i18n="Button at the foot of a list">Add card</span>
                 </button>
               }
             </div>

@@ -891,12 +891,16 @@ const newCardFields = {
 };
 const boardBatchScope = "Board-scoped: for workspace-wide work, list the workspace's boards and call this separately for each board.";
 
-type ToolBehavior = Pick<ToolAnnotations, "readOnlyHint" | "destructiveHint" | "idempotentHint">;
-const READ: ToolBehavior = { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
-const ADD: ToolBehavior = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
-// Publishing comments or activating workflows can cause irreversible sends even when the stored entity is removable.
-const SEND: ToolBehavior = { readOnlyHint: false, destructiveHint: true, idempotentHint: false };
-const CHANGE: ToolBehavior = { readOnlyHint: false, destructiveHint: true, idempotentHint: true };
+type ToolBehavior = Pick<ToolAnnotations, "readOnlyHint" | "destructiveHint" | "idempotentHint" | "openWorldHint">;
+const READ: ToolBehavior = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const READ_PUBLIC: ToolBehavior = { ...READ, openWorldHint: true };
+const ADD: ToolBehavior = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+// Workspace events can publish to arbitrary configured webhook/chat destinations. Even an
+// additive record can cause irreversible sends. Automations may change the requested state
+// again inside the same call, so their triggering writes cannot promise harmless retries.
+const SEND: ToolBehavior = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
+const CHANGE: ToolBehavior = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+const EXTERNAL_CHANGE: ToolBehavior = { ...CHANGE, openWorldHint: true };
 
 // MCP defines destructiveHint=false as additive-only, not merely "reversible". Keep every tool's
 // behavior explicit so a new verb cannot silently inherit incorrect safety metadata from its name.
@@ -906,7 +910,7 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   "workspaces.list_templates": READ,
   "workspaces.create": ADD,
   "boards.create_standalone": ADD,
-  "boards.create": ADD,
+  "boards.create": SEND,
   "boards.list_accessible": READ,
   "workspaces.get": READ,
   "workspaces.list_boards": READ,
@@ -917,55 +921,55 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   "automations.list": READ,
   "automations.list_executions": READ,
   "automations.create": SEND,
-  "automations.update": CHANGE,
-  "automations.set_enabled": CHANGE,
-  "automations.delete": CHANGE,
+  "automations.update": SEND,
+  "automations.set_enabled": SEND,
+  "automations.delete": EXTERNAL_CHANGE,
   "search.content": READ,
-  "search.docs": READ,
+  "search.docs": READ_PUBLIC,
   "cards.get": READ,
   "cards.get_content": READ,
   "cards.list_history": READ,
-  "cards.create": ADD,
-  "cards.bulk_create": ADD,
-  "cards.update": CHANGE,
-  "cards.move": CHANGE,
-  "cards.duplicate": ADD,
-  "cards.move_to_board": CHANGE,
-  "cards.archive": CHANGE,
-  "cards.set_completion": CHANGE,
-  "cards.bulk_set_completion": CHANGE,
-  "cards.bulk_set_due_date": CHANGE,
-  "cards.bulk_patch_labels": CHANGE,
-  "cards.bulk_patch_assignees": CHANGE,
-  "cards.bulk_move": CHANGE,
-  "cards.bulk_archive": CHANGE,
-  "cards.bulk_duplicate": ADD,
-  "cards.bulk_set_custom_field": CHANGE,
-  "lists.set_card_completion": CHANGE,
-  "lists.move_cards": CHANGE,
-  "lists.archive_cards": CHANGE,
-  "separators.create": ADD,
-  "separators.update": CHANGE,
-  "separators.move": CHANGE,
-  "separators.delete": CHANGE,
-  "cards.set_assignees": CHANGE,
-  "cards.set_labels": CHANGE,
-  "cards.set_relations": CHANGE,
+  "cards.create": SEND,
+  "cards.bulk_create": SEND,
+  "cards.update": SEND,
+  "cards.move": SEND,
+  "cards.duplicate": SEND,
+  "cards.move_to_board": SEND,
+  "cards.archive": SEND,
+  "cards.set_completion": SEND,
+  "cards.bulk_set_completion": SEND,
+  "cards.bulk_set_due_date": SEND,
+  "cards.bulk_patch_labels": SEND,
+  "cards.bulk_patch_assignees": SEND,
+  "cards.bulk_move": SEND,
+  "cards.bulk_archive": SEND,
+  "cards.bulk_duplicate": SEND,
+  "cards.bulk_set_custom_field": SEND,
+  "lists.set_card_completion": SEND,
+  "lists.move_cards": SEND,
+  "lists.archive_cards": SEND,
+  "separators.create": SEND,
+  "separators.update": SEND,
+  "separators.move": EXTERNAL_CHANGE,
+  "separators.delete": EXTERNAL_CHANGE,
+  "cards.set_assignees": SEND,
+  "cards.set_labels": SEND,
+  "cards.set_relations": SEND,
   "cards.dependency_graph": READ,
-  "cards.set_custom_field_value": CHANGE,
+  "cards.set_custom_field_value": SEND,
   "comments.add": SEND,
   "comments.list": READ,
-  "comments.delete": CHANGE,
+  "comments.delete": EXTERNAL_CHANGE,
   "checklists.get": READ,
-  "checklists.create": ADD,
-  "checklists.update": CHANGE,
-  "checklists.delete": CHANGE,
-  "checklists.move": CHANGE,
-  "checklists.add_items": ADD,
-  "checklists.update_items": CHANGE,
-  "checklists.bulk_update_items": CHANGE,
-  "checklists.delete_item": CHANGE,
-  "checklists.move_item": CHANGE,
+  "checklists.create": SEND,
+  "checklists.update": EXTERNAL_CHANGE,
+  "checklists.delete": SEND,
+  "checklists.move": SEND,
+  "checklists.add_items": SEND,
+  "checklists.update_items": SEND,
+  "checklists.bulk_update_items": SEND,
+  "checklists.delete_item": EXTERNAL_CHANGE,
+  "checklists.move_item": SEND,
   "activity.list": READ,
   "work.query_cards": READ,
   "work.query_history": READ,
@@ -974,36 +978,36 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   "work.schedule": READ,
   "priorities.list_targets": READ,
   "priorities.list": READ,
-  "priorities.add": ADD,
-  "priorities.move": CHANGE,
-  "priorities.remove": CHANGE,
+  "priorities.add": SEND,
+  "priorities.move": EXTERNAL_CHANGE,
+  "priorities.remove": EXTERNAL_CHANGE,
   "notes.list": READ,
   "notes.get": READ,
   "notes.get_backlinks": READ,
   "notes.list_attachments": READ,
-  "notes.create": ADD,
-  "notes.update": CHANGE,
-  "notes.add_link": ADD,
-  "notes.add_attachment": ADD,
-  "notes.duplicate": ADD,
-  "notes.move": CHANGE,
+  "notes.create": SEND,
+  "notes.update": SEND,
+  "notes.add_link": SEND,
+  "notes.add_attachment": SEND,
+  "notes.duplicate": SEND,
+  "notes.move": SEND,
   "scratchpad.capture": ADD,
   "scratchpad.list": READ,
   "scratchpad.get": READ,
-  "scratchpad.update": CHANGE,
-  "cards.add_attachment": ADD,
-  "cards.delete_attachment": CHANGE,
+  "scratchpad.update": { ...CHANGE, idempotentHint: false },
+  "cards.add_attachment": SEND,
+  "cards.delete_attachment": EXTERNAL_CHANGE,
   "cards.get_attachment": READ,
   "cards.create_upload_link": ADD,
-  "cards.set_cover": CHANGE,
+  "cards.set_cover": SEND,
   "cards.set_watching": CHANGE,
-  "cards.set_reminder": CHANGE,
+  "cards.set_reminder": SEND,
   "reminders.list": READ,
   "notifications.list": READ,
-  "comments.update": CHANGE,
-  "comments.set_reaction": CHANGE,
-  "runs.start": ADD,
-  "runs.update": CHANGE,
+  "comments.update": SEND,
+  "comments.set_reaction": EXTERNAL_CHANGE,
+  "runs.start": SEND,
+  "runs.update": SEND,
   "runs.list": READ,
 };
 
@@ -1020,9 +1024,6 @@ function toolAnnotations(name: string): ToolAnnotations {
   return {
     title: toolTitle(name),
     ...behavior,
-    // Automation configuration can arrange future sends to admin-selected external webhook
-    // destinations. Reading/deleting a rule stays within the private workspace catalog.
-    openWorldHint: ["automations.create", "automations.update", "automations.set_enabled"].includes(name),
   };
 }
 
@@ -1616,16 +1617,24 @@ function registerKaneraTool<T extends z.ZodRawShape>(
   ctx: KaneraMcpContext,
   outputSchema: z.ZodType<Record<string, unknown>> = z.looseObject({}),
 ) {
-  if (ctx.readOnly && toolAnnotations(name).readOnlyHint !== true) return;
+  const annotations = toolAnnotations(name);
+  // The automation catalog is read-only business behavior, but its admin API deliberately
+  // requires a write-capable credential. Keep OAuth requirements separate from safety hints.
+  const requiresWriteScope = annotations.readOnlyHint !== true
+    || name === "automations.list" || name === "automations.list_executions";
+  if (ctx.readOnly && requiresWriteScope) return;
   const supportsReplayProtection = toolBehaviors[name]?.idempotentHint === false
     && name !== "cards.add_attachment"
     && name !== "notes.add_attachment";
   const registeredInputSchema = supportsReplayProtection && !("idempotencyKey" in inputSchema)
     ? {
         ...inputSchema,
-        idempotencyKey: z.uuid().optional().describe("Stable UUID reused only when retrying the same mutation after an ambiguous failure. Retained for 24 hours."),
+        idempotencyKey: z.uuid().optional().describe("Same-write UUID (24h)."),
       }
     : inputSchema;
+  const deliveryNote = annotations.openWorldHint && !annotations.readOnlyHint && !annotations.idempotentHint && !description.includes("webhook")
+    ? " May send webhooks."
+    : "";
   // The SDK infers handler argument types per tool; this registry erases them on purpose so one
   // wrapper can strip idempotencyKey and map errors for every tool. The schema passed below is a
   // z.object (the current overload); the deprecated raw-shape overload is never used.
@@ -1646,22 +1655,22 @@ function registerKaneraTool<T extends z.ZodRawShape>(
     title: toolTitle(name),
     // A creation remains non-idempotent without its optional replay key; avoid contradictory
     // retry guidance while keeping the discovery catalog within the host's size budget.
-    description: supportsReplayProtection
+    description: (supportsReplayProtection
       ? description.replace("This is not idempotent; do not retry after an ambiguous success.", "Without idempotencyKey, do not retry after ambiguous success.")
-      : description,
+      : description) + deliveryNote,
     // Input objects are strict at every level: a misspelled or invented field (say `dueDate` for
     // `dueDateLocalDate`) must fail loudly rather than be stripped, or the model believes it set a
     // value that was never written. stripRedundantKeywords keeps the catalog free of the matching
     // additionalProperties: false; enforcement happens here at call time.
     inputSchema: draft7Schema(z.strictObject(describeInputParameters(registeredInputSchema))),
     outputSchema: draft7Schema(outputSchema),
-    annotations: toolAnnotations(name),
+    annotations,
     // SDK 2 serializes _meta but drops a top-level securitySchemes registration field.
     // OpenAI's compatibility location keeps the policy visible on tools/list in both eras.
     _meta: {
       securitySchemes: [{
         type: "oauth2",
-        scopes: toolAnnotations(name).readOnlyHint ? [MCP_RESOURCE_SCOPES[0]] : [...MCP_RESOURCE_SCOPES],
+        scopes: requiresWriteScope ? [...MCP_RESOURCE_SCOPES] : [MCP_RESOURCE_SCOPES[0]],
       }],
     },
   }, async (args, handlerCtx): Promise<CallToolResult> => {

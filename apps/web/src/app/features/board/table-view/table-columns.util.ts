@@ -96,6 +96,56 @@ export function distributeColumnSlack(options: {
 }
 
 /**
+ * Hand the width secondary columns are not using to the first column (Title) while it is still
+ * truncating. The defaults are sized for a typical value ("Omar, Priya", two label chips, a date and
+ * its icon), so a sheet whose values ran shorter carried a band of empty space in those columns while
+ * the one column people read ellipsed beside them.
+ *
+ * Width only moves between tracks, so the sheet's total width (and whether it scrolls) is unchanged.
+ * Only a column that starts inside the visible sheet (`available`) lends, and never so much that its
+ * left edge leaves it: a loan from column j moves the columns between Title and j right by the loan,
+ * but they stay left of j's new left edge, so every column that was fully in view stays fully in view.
+ * Lending from a column off to the right would push visible ones out. The column straddling the edge
+ * can show less of itself, which is the trade: it was already cut, and Title is the column people read.
+ *
+ * A donor never goes below `floorFor` (its measured content plus breathing room); a column without a
+ * measurement yet, or one the viewer sized by hand, gives nothing. A hand-sized Title takes nothing.
+ */
+export function lendSpareWidthToFirst(options: {
+  ids: readonly string[];
+  widths: Record<string, number>;
+  available: number;
+  targetFor: (id: string) => number;
+  floorFor: (id: string) => number;
+  isPinned?: (id: string) => boolean;
+}): Record<string, number> {
+  const { ids, widths, available, targetFor, floorFor, isPinned } = options;
+  const [first, ...rest] = ids;
+  if (first === undefined || isPinned?.(first)) return widths;
+  let need = Math.floor(targetFor(first) - widths[first]!);
+  if (!(need > 0)) return widths;
+
+  const next = { ...widths };
+  // A column's left edge moves only by its own loan (Title grows by what earlier columns gave, and
+  // they shrank by the same), and everything before the last lender ends at that lender's left edge.
+  // So capping each loan at "left edge stays in view" keeps every earlier column in view as well.
+  let left = widths[first]!;
+  for (const id of rest) {
+    const start = left;
+    left += widths[id]!;
+    if (need <= 0 || start >= available) break;
+    if (isPinned?.(id)) continue;
+    const spare = Math.floor(Math.min(next[id]! - floorFor(id), available - start));
+    if (spare <= 0) continue;
+    const loan = Math.min(spare, need);
+    next[id] = next[id]! - loan;
+    next[first] = next[first]! + loan;
+    need -= loan;
+  }
+  return next;
+}
+
+/**
  * Measure the widest mounted value in each requested column.
  *
  * This walks the cells once rather than querying once per column. The returned widths are intrinsic
@@ -117,11 +167,28 @@ export function measuredColumnContentWidths(
 }
 
 export function measuredColumnContentWidth(el: HTMLElement): number {
+  return measureElement(el).width;
+}
+
+/**
+ * The element's intrinsic border-box width, plus its inline margins for the parent to add. Margins
+ * count because the cell triggers bleed over the cell's padding with a negative margin (and stacked
+ * avatars overlap the same way): summing border boxes alone counted that padding twice, so every
+ * trigger column measured ~20px wider than its content and auto-fit and the Title loan left a band of
+ * empty space in each.
+ */
+function measureElement(el: HTMLElement): { width: number; margin: number } {
   const style = getComputedStyle(el);
-  if (style.display === "none" || style.position === "absolute" || style.position === "fixed") return 0;
-  const padding = numericStyle(style.paddingLeft) + numericStyle(style.paddingRight);
+  if (style.display === "none" || style.position === "absolute" || style.position === "fixed") return { width: 0, margin: 0 };
+  const margin = numericStyle(style.marginLeft) + numericStyle(style.marginRight);
+  // Border too: an avatar's ring is a border on its host, and leaving it out undercounted a face pile.
+  const border = numericStyle(style.borderLeftWidth) + numericStyle(style.borderRightWidth);
+  const padding = numericStyle(style.paddingLeft) + numericStyle(style.paddingRight) + border;
   const children = [...el.children].filter((child): child is HTMLElement => child instanceof HTMLElement);
-  const widths = children.map(measuredColumnContentWidth).filter((width) => width > 0);
+  const widths = children
+    .map(measureElement)
+    .filter((child) => child.width > 0)
+    .map((child) => Math.max(0, child.width + child.margin));
 
   // An ellipsed leaf exposes its full text through scrollWidth. A mixed node such as the Title span
   // does too: its card key is a child element but the actual card title is a direct text node. The
@@ -131,13 +198,14 @@ export function measuredColumnContentWidth(el: HTMLElement): number {
   const hasDirectText = [...el.childNodes].some(
     (node) => node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim()),
   );
-  const ownIntrinsicWidth = children.length === 0 || hasDirectText ? el.scrollWidth : 0;
-  if (!widths.length) return Math.max(ownIntrinsicWidth, padding);
+  // scrollWidth is the padding box, so the border is added back.
+  const ownIntrinsicWidth = children.length === 0 || hasDirectText ? el.scrollWidth + border : 0;
+  if (!widths.length) return { width: Math.max(ownIntrinsicWidth, padding), margin };
 
   const childWidth = style.display.includes("flex")
     ? widths.reduce((total, width) => total + width, 0) + (widths.length - 1) * numericStyle(style.columnGap || style.gap)
     : Math.max(...widths);
-  return Math.max(ownIntrinsicWidth, padding + childWidth);
+  return { width: Math.max(ownIntrinsicWidth, padding + childWidth), margin };
 }
 
 function numericStyle(value: string): number {

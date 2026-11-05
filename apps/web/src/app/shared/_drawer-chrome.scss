@@ -10,8 +10,9 @@
 // near-neighbour but not the same recipe (lighter scrim, taller header, its own keyframes), so it
 // keeps its own chrome rather than being bent into this one.
 
-// Starts at the sidebar's edge, not the viewport's: the rail stays fully interactive while a drawer
-// is open, so the button that opened it is also the button that closes it.
+// Starts at the sidebar's edge, not the viewport's: where a rail shows (tablet and up), it stays
+// fully interactive while a drawer is open, so the button that opened it is also the button that
+// closes it. Phones have no rail, so --drawer-edge is 0 there.
 @mixin drawer-backdrop {
   position: fixed;
   top: 0;
@@ -19,7 +20,7 @@
   bottom: 0;
   left: var(--drawer-edge, 0px);
   z-index: 70;
-  background: rgb(0 0 0 / 36%);
+  background: var(--drawer-scrim);
   animation: fade-in 0.16s ease-out;
 }
 
@@ -34,9 +35,16 @@
   border-bottom: 1px solid var(--border);
 }
 
+// Also the notifications drawer's phone-only mark-all button, which sits beside close in the header.
+// The 56px header has room for the 44px touch floor, so coarse pointers get it.
 @mixin drawer-close-btn {
   width: 30px;
   height: var(--h-md);
   color: var(--text-muted);
   font-size: var(--text-lg);
+
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    width: 44px;
+    height: 44px;
+  }
 }

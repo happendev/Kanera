@@ -38,6 +38,21 @@
   padding: 8px var(--pt-gutter, 16px);
 }
 
+// Compact, the chrome header above ends in its view row and 6px of padding over a bottom border
+// (page-header.component.scss). The toolbar always follows that header, so it overlaps both: the
+// header, view switch and search read as one block on a phone instead of two bands split by a rule,
+// and the 7px go back to content. 6px of block padding here for the same reason; the toolbar's own
+// border still closes the block. Sticky, so the overlap never matters once the header has scrolled.
+@media (max-width: bp.$bp-compact) {
+  :host {
+    margin-top: -7px;
+  }
+
+  .pt-bar {
+    padding-block: 6px;
+  }
+}
+
 // The query controls wrap inside their own track, so a second line of controls never moves the tail.
 .pt-main {
   display: flex;
@@ -162,6 +177,24 @@
     }
   }
 
+  // Opt-in exception for a two-way switch (Work done's List / Report): icon-only it is two 44px
+  // squares, which leaves the field most of the row, so it stays beside the field instead of
+  // spending a full row of a phone's chrome on two icons. The four-way switches that motivated the
+  // row above still take it. Not filling, the switch keeps its labels collapsed to their tooltips.
+  :host ::ng-deep .pt-search > :has(> k-segmented.pt-inline-switch) {
+    flex-wrap: nowrap;
+
+    > k-search-field {
+      flex: 1 1 auto;
+    }
+
+    > k-segmented {
+      flex: none;
+      --sg-fill-width: initial;
+      --sg-fill-flex: initial;
+    }
+  }
+
   // Collapsed, the search field is the only thing left in .pt-main. A page without one (a page of
   // counts has nothing to search) was left with an empty query track pushing
   // the ⚙ and the tail to the far right of an otherwise blank row. Swapping which track flexes puts
@@ -177,8 +210,8 @@
     // `top: calc(100% + 8px)` resolves against the bar with none of the static/relative juggling
     // the board's two header rows used to need.
     //
-    // Full-bleed rather than `right: 0; min-width: 280px`: the shell still holds a 52px collapsed
-    // sidebar at phone widths, so a 280px card is the full width of a 323px column anyway.
+    // Full-bleed rather than `right: 0; min-width: 280px`: on a narrow column a 280px card is
+    // nearly the full width anyway, and a fixed minimum would overhang it.
     //
     // No transform, filter, backdrop-filter, will-change, contain or container-type here, ever —
     // see the class comment on PageToolbarComponent.

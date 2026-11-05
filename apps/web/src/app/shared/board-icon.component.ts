@@ -40,8 +40,11 @@ import { ChangeDetectionStrategy, Component, computed, input } from "@angular/co
         box-shadow: none;
       }
 
+      /* Whole-pixel glyph: a fractional size (8.68px on a 14px tile) rasterises off-centre, worst on
+         diagonal glyphs like the rocket. Small tiles get a slightly larger share (11px on 16px) so
+         thin strokes such as the rocket's flame survive and the glyph's mass sits centred. */
       i {
-        font-size: calc(var(--bi-size) * 0.62);
+        font-size: round(max(calc(var(--bi-size) * 0.62), min(var(--bi-size) - 5px, 11px)), 1px);
         line-height: 1;
       }
     `,

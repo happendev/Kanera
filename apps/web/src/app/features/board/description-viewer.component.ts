@@ -24,6 +24,7 @@ import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { avatarFallbackColorStyle, blobatarFallbackUri, documentThemeIsDark } from "../../shared/avatar.component";
 import { stripEmptyTaskItems } from "../../shared/markdown-content";
+import { documentMermaidTheme, mermaidCacheKey, mermaidSources, renderMermaid, type MermaidTheme } from "../../shared/mermaid-diagram";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UserProfileCardService } from "../../shared/user-profile/user-profile-card.service";
 import { githubStateLabel } from "./github-state-label";
@@ -47,7 +48,9 @@ const ALLOWED_TAGS = [
   "a", "img", "hr", "span",
 ];
 
-const ALLOWED_ATTR = ["href", "title", "src", "alt", "target", "rel", "class", "style", "data-user-id", "type", "checked", "disabled"];
+// `start` keeps an ordered list's numbering when a nested-looking bullet list splits it in two: the
+// editor saves the continuation as `2. …`, which marked renders as `<ol start="2">`.
+const ALLOWED_ATTR = ["href", "title", "src", "alt", "target", "rel", "class", "style", "data-user-id", "type", "checked", "disabled", "start"];
 const MENTION_RE = /@\[([^\]]+)\]\(kanera-user:([0-9a-fA-F-]{36})\)/g;
 
 type MentionUser = Pick<WireBoardMemberUser, "userId" | "displayName" | "avatarUrl">;
@@ -228,19 +231,29 @@ function normalizePlainText(value: string): string {
     }
 
     .dv-has-copy {
-      padding-right: 24px;
+      /* Copy shares the first line; images, tables and later paragraphs retain the full width.
+         Contain the float so short descriptions still include the button in their height. */
+      display: flow-root;
+    }
+
+    /* Media-first content sits below copy instead of narrowing the entire block beside it. */
+    .dv-has-copy .dv-body > :is(table, pre, figure) {
+      clear: right;
     }
 
     .dv-copy-btn {
       appearance: none;
-      position: absolute;
-      top: -2px;
+      position: relative;
+      top: 0;
       right: 0;
+      float: right;
+      margin-left: var(--space-1);
       z-index: 1;
       display: inline-grid;
       place-items: center;
       width: 20px;
       height: 20px;
+      padding: 0;
       border: 0;
       border-radius: 0;
       background: transparent;
@@ -269,6 +282,19 @@ function normalizePlainText(value: string): string {
 
     .dv-copy-btn i {
       font-size: var(--text-md);
+    }
+
+    /* Touch has no hover: expose copy and give it a full tap target. Keep the glyph beside the
+       first line while the larger button reserves enough space to avoid covering nearby links. */
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .dv-copy-btn {
+        width: 44px;
+        height: 44px;
+        place-items: start end;
+        padding: var(--space-1);
+        opacity: 0.72;
+        pointer-events: auto;
+      }
     }
 
     .dv-empty {
@@ -585,6 +611,32 @@ function normalizePlainText(value: string): string {
       color: inherit;
     }
 
+    .dv-body .dv-mermaid {
+      margin: 0 0 10px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      overflow-x: auto;
+    }
+
+    .dv-body .dv-mermaid svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      /* Allow only 10% shrinkage: a fixed width floor made large diagrams' labels microscopic.
+         Wider diagrams scroll inside the frame at every viewport size. */
+      min-width: calc(var(--dv-mermaid-width, 100%) * 0.9);
+      max-width: var(--dv-mermaid-width, 100%);
+      margin: 0 auto;
+    }
+
+    .dv-body .dv-mermaid-error {
+      margin: -4px 0 10px;
+      color: var(--text-muted);
+      font-size: var(--text-sm);
+    }
+
     .dv-body blockquote {
       /* accent-stripe-ok: the conventional neutral quote rule on a blockquote, not an accent */
       border-left: 3px solid var(--border-strong);
@@ -680,6 +732,11 @@ export class DescriptionViewerComponent {
   readonly handleAttachmentLinks = input<boolean>(false);
   readonly showCopy = input<boolean>(false);
   /**
+   * Draws ```mermaid fences as diagrams. Full-size reading surfaces only: compact rows (comments,
+   * activity, notifications) are too narrow for a diagram and keep the source as a code block.
+   */
+  readonly diagrams = input<boolean>(false);
+  /**
    * Bumped by the host when its card/note receives a links-changed invalidation (a linked item was
    * renamed, recoloured or deleted). Chip titles are resolved once per URL, so without this a chip
    * keeps the old title until the viewer is recreated.
@@ -701,6 +758,11 @@ export class DescriptionViewerComponent {
   private readonly resolvedGitHubLinks = signal<Record<string, ResolvedGitHubLink>>({});
   private readonly resolvedMentionUsers = signal<Record<string, MentionUser>>({});
   private copyResetTimer: number | null = null;
+  private readonly diagramSources = computed(() => (this.diagrams() ? mermaidSources(this.visibleValue()) : []));
+  private readonly diagramTheme = computed(documentMermaidTheme);
+  /** Rendered SVG by cache key; `null` marks a source Mermaid could not parse. */
+  private readonly renderedDiagrams = signal<Record<string, string | null>>({});
+  private readonly diagramErrorLabel = $localize`:Shown under a diagram's source when it has a syntax error:This diagram couldn't be drawn.`;
 
   private readonly cleanHtml = computed(() => {
     const withBareLinks = this.linkBareGitHubUrls(this.linkBareInternalUrls(this.visibleValue()));
@@ -719,10 +781,24 @@ export class DescriptionViewerComponent {
     const decoratedGitHub = this.decorateGitHubLinks(decoratedInternal, this.resolvedGitHubLinks());
     const decorated = this.decorateAttachmentLinks(decoratedGitHub);
     const withVisibleMedia = this.suppressExpiredMediaImages(decorated);
-    return this.sanitizer.bypassSecurityTrustHtml(withVisibleMedia);
+    const withDiagrams = this.insertDiagrams(withVisibleMedia, this.diagramSources(), this.diagramTheme(), this.renderedDiagrams());
+    return this.sanitizer.bypassSecurityTrustHtml(withDiagrams);
   });
 
   constructor() {
+    effect(() => {
+      const theme = this.diagramTheme();
+      const rendered = untracked(() => this.renderedDiagrams());
+      for (const source of new Set(this.diagramSources())) {
+        const key = mermaidCacheKey(source, theme);
+        if (key in rendered) continue;
+        // A failed chunk load (offline) leaves the source showing; the next value change retries.
+        void renderMermaid(source, theme)
+          .then((svg) => this.renderedDiagrams.update((all) => ({ ...all, [key]: svg })))
+          .catch(() => undefined);
+      }
+    });
+
     effect(() => {
       const known = new Set(this.mentionMembers().map((member) => member.userId));
       const resolved = untracked(() => this.resolvedMentionUsers());
@@ -1037,6 +1113,42 @@ export class DescriptionViewerComponent {
         changed = true;
       }
     }
+    return changed ? doc.body.innerHTML : html;
+  }
+
+  /**
+   * Swaps each rendered ```mermaid block for its SVG. Fences are matched by order: marked emits one
+   * `pre > code.language-mermaid` per fence the lexer found. A block still rendering (or offline,
+   * before the Mermaid chunk loads) keeps its source; one that failed to parse keeps it with a note.
+   */
+  private insertDiagrams(html: string, sources: string[], theme: MermaidTheme, rendered: Record<string, string | null>): string {
+    if (!sources.length) return html;
+    const doc = this.parseHtml(html);
+    if (!doc) return html;
+    let changed = false;
+    doc.querySelectorAll("pre > code.language-mermaid").forEach((code, index) => {
+      const source = sources[index];
+      if (source === undefined) return;
+      const svg = rendered[mermaidCacheKey(source, theme)];
+      if (svg === undefined) return;
+      const pre = code.parentElement!;
+      changed = true;
+      if (svg === null) {
+        const note = doc.createElement("p");
+        note.className = "dv-mermaid-error";
+        note.textContent = this.diagramErrorLabel;
+        pre.after(note);
+        return;
+      }
+      const figure = doc.createElement("div");
+      figure.className = "dv-mermaid";
+      figure.innerHTML = svg;
+      // The viewBox includes diagram padding; Mermaid's inline max-width can omit it. Use the
+      // full drawing width so the scale floor protects the actual label size.
+      const width = figure.querySelector("svg")?.viewBox.baseVal.width;
+      if (width) figure.style.setProperty("--dv-mermaid-width", `${width}px`);
+      pre.replaceWith(figure);
+    });
     return changed ? doc.body.innerHTML : html;
   }
 

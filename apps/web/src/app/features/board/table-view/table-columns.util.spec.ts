@@ -10,6 +10,7 @@ import {
   cssEscape,
   distributeColumnSlack,
   gridTemplateFrom,
+  lendSpareWidthToFirst,
   measuredColumnContentWidth,
   measuredColumnContentWidths,
 } from "./table-columns.util";
@@ -84,6 +85,48 @@ describe("table column helpers", () => {
       });
       expect(widths).toEqual({ title: 180, priority: 100, status: 220, due: 180 });
     });
+  });
+
+  describe("lendSpareWidthToFirst", () => {
+    const ids = ["title", "assignees", "due", "labels"];
+    const widths = { title: 400, assignees: 150, due: 120, labels: 250 };
+    const floors: Record<string, number> = { assignees: 130, due: 90, labels: 230 };
+    const floorFor = (id: string) => floors[id]!;
+    const targetFor = (id: string) => (id === "title" ? 600 : widths[id as keyof typeof widths]);
+
+    it("moves only what the visible columns are not using, keeping the sheet's total width", () => {
+      const next = lendSpareWidthToFirst({ ids, widths, available: 2_000, targetFor, floorFor });
+      expect(next).toEqual({ title: 470, assignees: 130, due: 90, labels: 230 });
+    });
+
+    it("never borrows from a column that starts beyond the visible sheet", () => {
+      // labels starts at 670, so a 660px viewport must not shift assignees or due out of view for it.
+      const next = lendSpareWidthToFirst({ ids, widths, available: 660, targetFor, floorFor });
+      expect(next).toEqual({ title: 450, assignees: 130, due: 90, labels: 250 });
+    });
+
+    it("leaves a hand-sized Title and hand-sized donors alone", () => {
+      expect(lendSpareWidthToFirst({ ids, widths, available: 2_000, targetFor, floorFor, isPinned: (id) => id === "title" }))
+        .toEqual(widths);
+      expect(lendSpareWidthToFirst({ ids, widths, available: 2_000, targetFor, floorFor, isPinned: (id) => id === "assignees" }))
+        .toEqual({ title: 450, assignees: 150, due: 90, labels: 230 });
+    });
+  });
+
+  it("counts negative margins once, so a trigger bleeding over its cell's padding is not measured twice", () => {
+    const cell = document.createElement("div");
+    cell.style.display = "flex";
+    cell.style.padding = "0 10px";
+    const trigger = document.createElement("button");
+    trigger.style.display = "flex";
+    trigger.style.margin = "0 -10px";
+    trigger.style.padding = "0 10px";
+    const value = document.createElement("span");
+    Object.defineProperty(value, "scrollWidth", { configurable: true, value: 80 });
+    trigger.append(value);
+    cell.append(trigger);
+
+    expect(measuredColumnContentWidth(cell)).toBe(100);
   });
 
   it("measures direct text alongside child elements without feeding back the assigned cell width", () => {

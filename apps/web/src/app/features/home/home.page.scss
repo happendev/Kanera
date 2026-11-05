@@ -18,8 +18,10 @@
 .content {
   max-width: 960px;
   min-width: 0;
-  padding-block: 40px 64px;
-  gap: 26px;
+  // A working page, not a landing page: the queue and agenda are what people come for, so the top
+  // padding and section rhythm stay tight enough that Up next starts above the fold on a laptop.
+  padding-block: var(--space-6) 64px;
+  gap: var(--space-5);
 
   // Grid and component hosts default to a min-content floor. Let every direct section shrink to
   // the reading column so one long title or board name cannot make the whole page swipe sideways.
@@ -36,7 +38,7 @@
 .home-side {
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  gap: var(--space-5);
   min-width: 0;
 
   > * {
@@ -58,7 +60,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
     align-items: start;
-    gap: 26px 28px;
+    gap: var(--space-5) var(--space-6);
   }
 }
 
@@ -92,8 +94,10 @@
   width: var(--scatter-size);
   height: var(--scatter-size);
   color: var(--color-teal);
-  // Quieter than the marketing hero: this is a working page, not a landing page.
-  opacity: 0.28;
+  // Far quieter than the marketing hero: this is a working page, not a landing page, and the
+  // greeting is the only thing in the header that should draw the eye. At 0.16 a reviewer read
+  // the shapes as stray marks, so they sit at the edge of notice.
+  opacity: 0.09;
   transform: translate(-50%, -50%) rotate(var(--scatter-rotate));
   // Keep the welcome motion finite: even transform-only loops keep producing frames while
   // someone leaves Home open. Return to the static transform after one staggered cycle.
@@ -106,7 +110,7 @@
   &.is-dot {
     border-radius: 999px;
     background: currentColor;
-    opacity: 0.34;
+    opacity: 0.11;
   }
 
   &.is-ring {
@@ -135,7 +139,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    opacity: 0.34;
+    opacity: 0.11;
 
     .ti {
       font-size: var(--scatter-size);
@@ -257,12 +261,14 @@
 
 // ─── Progress ───────────────────────────────────────────────────────────────
 
+// The figure takes only the width it needs and a divider joins it to the strip, so the two halves
+// read as one panel instead of a number stranded at one end of a fixed track.
 .progress-panel {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) 1fr;
-  gap: 18px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-5);
   align-items: center;
-  padding: 16px;
+  padding: var(--space-4);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -271,6 +277,9 @@
 .progress-figure {
   display: grid;
   gap: 4px;
+  // The caption is this column's widest line; capping it keeps a long translation from taking the
+  // strip's room. It wraps onto a second line instead.
+  max-width: 200px;
 
   strong {
     font-size: 34px;
@@ -317,24 +326,28 @@
   // scrolls horizontally.
   min-width: 0;
   overflow-x: auto;
-}
-
-.progress-empty {
-  margin: 6px 0 0;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--divider);
 }
 
 // ─── Jump back in ───────────────────────────────────────────────────────────
 
 // ─── Priorities ─────────────────────────────────────────────────────────────
 
-.priorities-section .section-title {
+// The two column heads share one row height, so Up next and My recent activity start their titles
+// and their panels on the same line: Up next's row is set by its See all button (36px less the 4px
+// overhang either side), and a text-only title beside it sat ~9px higher with its panel ~9px higher.
+.priorities-section .section-title,
+.activity-section .section-title {
   display: flex;
   align-items: center;
+  min-height: calc(var(--h-lg) - 8px);
+}
+
+.priorities-section .section-title {
   gap: 10px;
 
-  // The same ghost-button pill as the agenda group headers' See all (agenda-group.component.scss —
+  // The same small outlined button as the agenda group headers' See all (agenda-group.component.scss —
   // keep the two in step): a bare muted text link disappeared beside the heading and offered a
   // few-pixel hit target. Right-aligned so both See alls live in the same place on the page.
   .agenda-see-all {
@@ -342,15 +355,21 @@
     align-items: center;
     gap: 4px;
     margin-left: auto;
-    min-height: 28px;
-    padding: 0 11px;
+    // The page's other calls to action are 36px at --text-sm; at 28px and --text-xs this one read as
+    // a caption beside its heading.
+    // The size touch already had, now on every pointer.
+    min-height: var(--h-lg);
+    // Overhangs its header row by 4px each side, so the row keeps the 28px it had and the panel
+    // below does not drop out of line with its neighbour.
+    margin-block: -4px;
+    padding: 0 14px;
     color: var(--text);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     font-weight: 600;
     text-decoration: none;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: var(--radius);
 
     &:hover {
       background: var(--surface-2);
@@ -360,13 +379,18 @@
     i {
       font-size: var(--text-base);
     }
-  }
-}
 
-@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
-  .priorities-section .section-title .agenda-see-all {
-    min-height: var(--h-lg);
-    padding: 0 14px;
+    // Coarse pointers get the 44px floor without growing the row: an invisible halo past the
+    // button's own 36px, so the header (and both panels) stay aligned on touch too.
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      position: relative;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: -4px 0;
+      }
+    }
   }
 }
 
@@ -440,7 +464,7 @@
 
 .home-skeleton {
   display: grid;
-  gap: 26px;
+  gap: var(--space-5);
 }
 
 .skeleton-tile {
@@ -851,13 +875,25 @@
   .progress-panel {
     grid-template-columns: 1fr;
     align-items: start;
+    gap: var(--space-4);
+  }
+
+  // Stacked, the divider turns to run between the figure and the strip below it.
+  .progress-strip {
+    padding: var(--space-4) 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--divider);
+  }
+
+  .progress-figure {
+    max-width: none;
   }
 }
 
 @container (max-width: 640px) {
   .content {
-    padding: 24px 12px 48px;
-    gap: 20px;
+    padding: var(--space-4) 12px 48px;
+    gap: var(--space-4);
   }
 
   .account-status-banner {
@@ -884,5 +920,15 @@
     // The activity cells flex down to the available width; this is a final guard against the
     // progress panel becoming a second horizontal scrolling surface on very small phones.
     overflow-x: hidden;
+  }
+}
+
+// On a phone the header opens with the drawer button's own bar (k-page-header navBar), which is the
+// top edge of the page like every other page's header: the column's top padding would leave a band
+// of page above it. 640px is the shell's drawer breakpoint (AppShellComponent.MOBILE_BREAKPOINT), a
+// viewport fact, so a media query; placed after the container rule above so it wins over it.
+@media (max-width: 640px) {
+  .content {
+    padding-top: 0;
   }
 }

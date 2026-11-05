@@ -16,13 +16,21 @@
       (click)="toggled.emit(day().dateKey)"
     >
       <i aria-hidden="true" class="wd-day-chevron ti" [class.ti-chevron-down]="!collapsed()" [class.ti-chevron-right]="collapsed()"></i>
-      <span class="wd-day-label">{{ day().label }}</span>
+      <!-- One date, not two: "Fri 30 Oct" over "Friday, 30 October 2026" said the same thing twice.
+           The long form only joins a relative label (Today / Yesterday), which names no date, and
+           is always the label's title, so it is one hover away where narrow panels hide it. -->
+      <span class="wd-day-label" [title]="day().fullLabel">{{ day().label }}</span>
+      @if (day().relative) {
       <span class="wd-day-date">{{ day().fullLabel }}</span>
+      }
     </button>
 
     <!--
       Fixed-width slots, every metric always present. Sits in its own header track rather than inside
       the toggle so the variable-width contributor stack beside it cannot shift the columns.
+      Each count carries its full phrase ("1 card completed"): shown beside the icon wherever the
+      panel has room (see the stylesheet), otherwise visually hidden, where it is still what screen
+      readers announce and, being cut short, what turns the tooltip on.
     -->
     <span class="wd-day-counts">
       <span class="wd-day-cards">{{ cardCountText() }}</span>
@@ -31,8 +39,11 @@
         [class]="'wd-count wd-count--' + count.type"
         [class.is-zero]="count.value === 0"
         [kTooltip]="count.tooltip"
+        kTooltipTruncationTarget=".wd-count-text"
       >
-        <i aria-hidden="true" class="ti ti-{{ count.icon }}"></i>{{ count.value }}
+        <i aria-hidden="true" class="ti ti-{{ count.icon }}"></i>
+        <span class="wd-count-num" aria-hidden="true">{{ count.value }}</span>
+        <span class="wd-count-text">{{ count.tooltip }}</span>
       </span>
       }
     </span>
@@ -69,7 +80,7 @@
       i18n-kTooltip
       (click)="copyRequested.emit(day())"
     >
-      <i aria-hidden="true" class="ti ti-clipboard-text"></i>
+      <i aria-hidden="true" class="ti ti-copy"></i>
     </button>
   </header>
 
@@ -106,11 +117,15 @@
           }
         </span>
 
+        <!--
+          Two lines under the title, each with one job: what happened to the card that day (its
+          milestones, as plain neutral chips with the type's colour on the glyph only), then the
+          card's own facts (labels, tracked time). Mixed into one run, labels, milestones, lists
+          and timers shared a shape and a blue wash and could not be told apart.
+        -->
+        @if (hasMilestones(digest) || labelsFor(digest).length || timeInProgressFor(digest)) {
         <span class="wd-meta">
-          @if (labelsFor(digest).length) {
-          <k-card-labels [labels]="labelsFor(digest)" />
-          }
-
+          @if (hasMilestones(digest)) {
           <!--
             The day's milestones, in the order they read as a sentence: started, travelled, shipped.
             Whichever milestone the leading verb already names is omitted here, so no row says
@@ -118,39 +133,53 @@
           -->
           <span class="wd-milestones">
             @if (digest.created && digest.leadType !== 'created') {
-            <span class="wd-chip wd-chip--created"><i aria-hidden="true" class="ti ti-plus"></i><ng-container i18n="Work done milestone chip - the card was created that day">Created</ng-container></span>
+            <span class="wd-chip wd-chip--created"><i aria-hidden="true" class="ti ti-plus"></i><span><ng-container i18n="Work done milestone chip - the card was created that day">Created</ng-container></span></span>
             }
             @if (digest.listPath.length > 1) {
-            <span class="wd-chip wd-chip--moved">
+            <span class="wd-path wd-chip--moved">
+              <!-- Each arrow travels with the step it points to, so a wrap never leaves one dangling at
+                   the end of a line with its destination on the next. -->
               @for (step of digest.listPath; track $index) {
+              <span class="wd-path-step">
                 @if (!$first) {
-                <i class="ti ti-arrow-narrow-right" aria-hidden="true"></i>
+                <i class="ti ti-arrow-narrow-right wd-path-arrow" aria-hidden="true"></i>
                 }
                 @if (step.ellipsis) {
                 <span class="wd-path-ellipsis">{{ step.text }}</span>
                 } @else {
-                <span class="wd-list-name">
+                <span class="wd-list-name" [style.--list-color]="step.color ? 'var(--color-' + step.color + ')' : null">
                   @if (step.icon) {
-                  <i class="ti ti-{{ step.icon }}" [style.color]="step.color ? 'var(--color-' + step.color + ')' : null" aria-hidden="true"></i>
+                  <i class="ti ti-{{ step.icon }}" aria-hidden="true"></i>
                   }
-                  {{ step.text }}
+                  <span>{{ step.text }}</span>
                 </span>
                 }
+              </span>
               }
             </span>
             }
             @if (digest.checklistTicks.length) {
             <span class="wd-chip wd-chip--checklistItemCompleted" [kTooltip]="checklistTooltip(digest)">
-              <i aria-hidden="true" class="ti ti-checkbox"></i>{{ checklistChipText(digest) }}
+              <i aria-hidden="true" class="ti ti-checkbox"></i><span>{{ checklistChipText(digest) }}</span>
             </span>
             }
+          </span>
+          }
+
+          @if (labelsFor(digest).length || timeInProgressFor(digest)) {
+          <span class="wd-facts">
+            @if (labelsFor(digest).length) {
+            <k-card-labels [labels]="labelsFor(digest)" />
+            }
             @if (timeInProgressFor(digest); as timer) {
-            <span class="wd-chip wd-chip--time" [class.is-running]="timer.running" [kTooltip]="timer.label" [attr.aria-label]="timer.label">
+            <span class="wd-chip--time" [class.is-running]="timer.running" [class.is-paused]="timer.paused" [kTooltip]="timer.label" [attr.aria-label]="timer.label">
               <i aria-hidden="true" class="ti" [class.ti-progress]="timer.running && !timer.paused" [class.ti-clock-pause]="timer.paused" [class.ti-clock]="!timer.running"></i>{{ timer.text }}
             </span>
             }
           </span>
+          }
         </span>
+        }
       </span>
 
       <!--

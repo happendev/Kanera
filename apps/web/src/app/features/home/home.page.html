@@ -13,7 +13,7 @@
         </span>
         }
       </div>
-      <k-page-header variant="page" [title]="greeting()" [subtitle]="todayLabel()" />
+      <k-page-header variant="page" [navBar]="true" [navBarTitle]="homeLabel" [title]="greeting()" [subtitle]="todayLabel()" />
     </div>
 
     @if (accountStatusBanner(); as account) {
@@ -233,35 +233,10 @@
          order are the same at every width. -->
     <div class="home-columns" [class.has-side]="state.activity() !== null">
       <div class="home-main">
-        <!-- First under the tiles: it carries the week's completed count and its trend, which the
-             tile row no longer shows, and keeps the page opening on progress before the to-do list. -->
-        <section class="progress-section" id="home-progress">
-          <h2 class="section-title" i18n="Section heading">Your progress</h2>
-          <div class="progress-panel">
-            <div class="progress-figure">
-              <strong>{{ state.completedThisWeek() }}</strong>
-              <span class="progress-caption" i18n="Caption under the number of cards completed">{ state.completedThisWeek(), plural, =1 {card completed in the last 7 days} other {cards completed in the last 7 days} }</span>
-              <span class="progress-delta" [class.is-up]="state.weekDelta() > 0" [class.is-level]="state.weekDelta() === 0">
-                <i aria-hidden="true" class="ti ti-{{ state.weekDelta() > 0 ? 'trending-up' : state.weekDelta() < 0 ? 'trending-down' : 'minus' }}"></i>
-                @if (state.weekDelta() === 0) {
-                <ng-container i18n="Progress compared with last week">Level with last week</ng-container>
-                } @else {
-                <ng-container i18n="Progress compared with last week; delta is a signed number like +2 or -5">{{ (state.weekDelta() > 0 ? '+' : '') + state.weekDelta() // i18n(ph="delta") }} vs last week</ng-container>
-                }
-              </span>
-            </div>
-            <div class="progress-strip">
-              <k-activity-strip heading="Completed" i18n-heading="Activity strip heading: cards completed" [series]="trendSeries()" [windowDays]="visibleTrendDays()" />
-              @if (state.trend().byDay.length === 0) {
-              <p class="progress-empty" i18n="Progress empty state">{ visibleTrendDays(), plural, =1 {No cards completed in the last day.} other {No cards completed in the last {{ visibleTrendDays() }} days.} }</p>
-              }
-            </div>
-          </div>
-        </section>
-
-        <!-- Under Your progress and above recent boards: "what do I do next" outranks both
-             recent boards and the week agenda, and sitting above the agenda means it cannot push the
-             "all clear" state around as the queue grows and shrinks. -->
+        <!-- First under the tiles: "what do I do next" is what people open Home for, so it outranks
+             Your progress, recent boards and the week agenda, and reviewers found it below the fold
+             when it sat under the progress panel. Sitting above the agenda also means it cannot push
+             the "all clear" state around as the queue grows and shrinks. -->
         @if (showPriorities()) {
         <section class="priorities-section">
           <h2 class="section-title">
@@ -295,6 +270,35 @@
         <!-- Under Up next: both answer "what do I come back to", and reminders often sit on cards that
              are not yours to own, which the agenda below never shows. Renders nothing when empty. -->
         <k-upcoming-reminders />
+
+        <!-- Under Up next and reminders (first under the tiles when neither shows): it carries the
+             week's completed count and its trend, which the tile row no longer shows. -->
+        <section class="progress-section" id="home-progress">
+          <h2 class="section-title" i18n="Section heading">Your progress</h2>
+          <div class="progress-panel">
+            <div class="progress-figure">
+              <strong>{{ state.completedThisWeek() }}</strong>
+              <span class="progress-caption" i18n="Caption under the number of cards completed">{ state.completedThisWeek(), plural, =1 {card completed in the last 7 days} other {cards completed in the last 7 days} }</span>
+              <!-- Nothing this week and nothing last week is already said by the 0 above; "level" would
+                   say it a second time. -->
+              @if (state.completedThisWeek() > 0 || state.weekDelta() !== 0) {
+              <span class="progress-delta" [class.is-up]="state.weekDelta() > 0" [class.is-level]="state.weekDelta() === 0">
+                <i aria-hidden="true" class="ti ti-{{ state.weekDelta() > 0 ? 'trending-up' : state.weekDelta() < 0 ? 'trending-down' : 'minus' }}"></i>
+                @if (state.weekDelta() === 0) {
+                <ng-container i18n="Progress compared with last week">Level with last week</ng-container>
+                } @else {
+                <ng-container i18n="Progress compared with last week; delta is a signed number like +2 or -5">{{ (state.weekDelta() > 0 ? '+' : '') + state.weekDelta() // i18n(ph="delta") }} vs last week</ng-container>
+                }
+              </span>
+              }
+            </div>
+            <!-- Flat: this panel is already the frame, and the heading names the one series. The empty
+                 cells carry a quiet month; the figure beside them already says the number. -->
+            <div class="progress-strip">
+              <k-activity-strip heading="Completed" i18n-heading="Activity strip heading: cards completed" [series]="trendSeries()" [windowDays]="visibleTrendDays()" [flat]="true" />
+            </div>
+          </div>
+        </section>
 
         @if (recentBoards().length > 0) {
         <section class="recent-section">

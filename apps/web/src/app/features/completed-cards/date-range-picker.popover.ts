@@ -5,6 +5,7 @@ import { WEEKDAY_LABELS } from "../../shared/week-start";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { formatDate } from "../../shared/date-format";
+import { hasCoarsePointer } from "../../core/browser/input-modality";
 import { icu } from "../../core/i18n/icu";
 import { parseDateInputValue } from "../../shared/day-key.util";
 import { buildMonthGrid, monthStart, shiftMonth } from "../../shared/month-grid";
@@ -20,6 +21,8 @@ type CalendarDay = {
   isRangeStart: boolean;
   isRangeEnd: boolean;
   isInRange: boolean;
+  /** An endpoint of a multi-day range, so its inner corners square off into the in-range band. */
+  joinsBand: boolean;
 };
 
 type RangeShortcut = {
@@ -65,7 +68,7 @@ function compareDateValue(a: string, b: string): number {
 
       <div class="drp-presets">
         @for (preset of presets; track preset.preset) {
-        <button type="button" (click)="selectPreset(preset.preset)">
+        <button type="button" [class.is-active]="activeShortcut() === preset.preset" (click)="selectPreset(preset.preset)">
           {{ preset.label }}
         </button>
         }
@@ -73,12 +76,15 @@ function compareDateValue(a: string, b: string): number {
 
       <div class="drp-shortcuts">
         @for (shortcut of shortcuts; track shortcut.days) {
-        <button type="button" (click)="selectLastDays(shortcut.days)">
+        <button type="button" [class.is-active]="activeShortcut() === shortcut.days" (click)="selectLastDays(shortcut.days)">
           {{ shortcut.label }}
         </button>
         }
       </div>
 
+      <!-- The only part that scrolls: when 44px touch rows outgrow the room below the trigger, the
+           calendar gives way and the range chips above and Clear / Apply below stay in view. -->
+      <div class="drp-body k-scroll-fade">
       <div class="drp-weekdays" aria-hidden="true">
         @for (weekday of weekdays; track weekday) {
         <span>{{ weekday }}</span>
@@ -95,6 +101,7 @@ function compareDateValue(a: string, b: string): number {
           [class.is-in-range]="day.isInRange"
           [class.is-range-start]="day.isRangeStart"
           [class.is-range-end]="day.isRangeEnd"
+          [class.joins-band]="day.joinsBand"
           (click)="select(day.value)"
           [attr.aria-pressed]="day.isRangeStart || day.isRangeEnd || day.isInRange"
           [attr.aria-label]="ariaLabel(day.date)"
@@ -102,6 +109,7 @@ function compareDateValue(a: string, b: string): number {
           {{ day.day }}
         </button>
         }
+      </div>
       </div>
 
       @if (!instant() || draftFrom() || draftTo() || from() || to()) {
@@ -123,16 +131,30 @@ function compareDateValue(a: string, b: string): number {
     .drp-panel {
       width: 100%;
       max-height: var(--ap-max-height, 560px);
-      overflow-y: auto;
+      overflow: hidden;
       padding: 10px;
       display: flex;
       flex-direction: column;
       gap: 8px;
       background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--overlay-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-pop);
       color: var(--text);
+    }
+
+    .drp-panel > * {
+      flex: none;
+    }
+
+    /* Ruled off from the chips above, so header, summary, chips and calendar do not run together. */
+    .drp-panel > .drp-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-top: 8px;
+      border-top: 1px solid var(--overlay-separator);
     }
 
     .drp-head {
@@ -155,18 +177,17 @@ function compareDateValue(a: string, b: string): number {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid transparent;
+      border: 0;
       border-radius: var(--radius-sm);
       background: transparent;
       color: var(--text-muted);
       cursor: pointer;
       padding: 0;
-      transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+      transition: background-color var(--motion-fast), color var(--motion-fast);
 
-      &:hover {
-        background: var(--surface-2);
+      &:hover:not(:disabled) {
+        background: var(--surface-hover);
         color: var(--text);
-        border-color: var(--border);
       }
 
       i {
@@ -174,67 +195,79 @@ function compareDateValue(a: string, b: string): number {
       }
     }
 
+    /* Read-only: plain text, so it is not mistaken for a control beside the chips. */
     .drp-summary {
-      min-height: 28px;
+      min-height: 20px;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 0 10px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--surface-2);
       color: var(--text-muted);
       font-size: var(--text-sm);
-      font-weight: 700;
+      font-weight: 600;
       text-align: center;
     }
 
+    /* A hairline between the named periods and the day counts: two kinds of shortcut, two groups. */
     .drp-shortcuts {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
+      gap: var(--space-1);
+      padding-top: 8px;
+      border-top: 1px solid var(--overlay-separator);
     }
 
-    /* Named periods wrap as content-width chips rather than a fixed grid: their labels vary a lot in
-       length across languages ("Letztes Quartal" vs "先月") and must never truncate. */
+    /* Six tracks: three periods of two tracks over two of three, so both rows end flush with no
+       empty cell. Labels vary a lot in length across languages ("Letztes Quartal" vs "先月") and
+       must never truncate, so a long one wraps inside its chip instead. */
     .drp-presets {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: var(--space-1);
 
-      button {
-        flex: 1 1 auto;
-        white-space: nowrap;
-      }
+      button { grid-column: span 2; }
+      button:nth-child(n + 4) { grid-column: span 3; }
     }
 
+    /* Prefixed to outrank the shared chip rule below, which pins one 28px line. */
+    .drp-panel .drp-presets button {
+      height: auto;
+      min-height: 28px;
+      padding-block: 4px;
+      line-height: 1.2;
+      white-space: normal;
+      text-wrap: balance;
+    }
+
+    /* Quiet chips: a hairline edge so every shortcut reads as a control (borderless, the named periods
+       looked like plain text), but no fill, so nine of them do not outweigh the calendar. The chip
+       matching the current range takes the single-select recipe: the accent wash and weight 600,
+       ink unchanged. */
     .drp-shortcuts,
     .drp-presets {
       button {
         height: 28px;
         padding: 0 6px;
-        border: 1px solid var(--border);
+        border: 1px solid var(--overlay-separator);
         border-radius: var(--radius-sm);
-        background: var(--surface-2);
+        background: transparent;
         color: var(--text);
         cursor: pointer;
         font-size: var(--text-sm);
-        font-weight: 600;
-        transition: background-color 0.12s, border-color 0.12s;
+        font-weight: 500;
+        transition: background-color var(--motion-fast), color var(--motion-fast);
 
-        &:hover {
+        &:hover:not(:disabled) {
           background: var(--surface-hover);
-          border-color: var(--border-strong);
+          color: var(--text);
         }
-      }
-    }
 
-    /* Touch: the range chips are the quickest path on a phone, so they get the app's 44px targets.
-       The panel clamps to the viewport and scrolls if that pushes it past a short screen. */
-    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
-      .drp-shortcuts button,
-      .drp-presets button {
-        height: 44px;
+        &.is-active,
+        &.is-active:hover:not(:disabled) {
+          border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+          background: var(--accent-soft);
+          color: var(--text);
+          font-weight: 600;
+        }
       }
     }
 
@@ -242,7 +275,6 @@ function compareDateValue(a: string, b: string): number {
     .drp-grid {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
-      gap: 4px;
     }
 
     .drp-weekdays span {
@@ -255,10 +287,15 @@ function compareDateValue(a: string, b: string): number {
       font-weight: 700;
     }
 
+    /* No column gap: the in-range days join into one continuous band. */
+    .drp-grid {
+      row-gap: 2px;
+    }
+
     .drp-day {
       height: 34px;
       min-width: 0;
-      border: 1px solid transparent;
+      border: 0;
       border-radius: var(--radius-sm);
       background: transparent;
       color: var(--text);
@@ -266,39 +303,74 @@ function compareDateValue(a: string, b: string): number {
       font-size: var(--text-base);
       font-weight: 600;
       padding: 0;
-      transition: background-color 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
+      transition: background-color var(--motion-fast), color var(--motion-fast);
 
-      &:hover {
-        background: var(--surface-2);
-        border-color: var(--border);
+      &:hover:not(:disabled) {
+        background: var(--surface-hover);
+        color: var(--text);
       }
 
+      /* Days of the neighbouring months are selectable, so they are a tier quieter, not faded out. */
       &.is-muted {
-        color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+        color: var(--text-muted);
       }
 
+      /* Today is the one cell with an outline, so it still reads inside the band. */
       &.is-today {
-        border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 65%, var(--border));
         color: var(--accent);
       }
 
+      /* Square inside the band; rounded where the band meets a week edge. Full ink, a neighbouring
+         month's day included: inside the range it is chosen, not secondary. The overlay selection
+         token is the stronger wash that still reads on the dark overlay. */
       &.is-in-range {
-        background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
-        border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+        border-radius: 0;
+        background: var(--overlay-selected, var(--accent-soft));
       }
 
+      &.is-in-range:not(.is-today) {
+        color: var(--text);
+      }
+
+      &.is-in-range:nth-child(7n + 1) {
+        border-start-start-radius: var(--radius-sm);
+        border-end-start-radius: var(--radius-sm);
+      }
+
+      &.is-in-range:nth-child(7n) {
+        border-start-end-radius: var(--radius-sm);
+        border-end-end-radius: var(--radius-sm);
+      }
+
+      &.is-in-range:hover:not(:disabled) {
+        background: var(--surface-hover);
+      }
+
+      /* Only the endpoints are filled. No --ring halo: in dark it muddied the fill's edge. */
       &.is-range-start,
-      &.is-range-end {
+      &.is-range-start:hover:not(:disabled),
+      &.is-range-end,
+      &.is-range-end:hover:not(:disabled) {
         background: var(--accent);
-        border-color: var(--accent);
         color: var(--accent-fg);
-        box-shadow: 0 0 0 2px var(--ring);
+        box-shadow: none;
+      }
+
+      &.is-range-start.joins-band:not(:nth-child(7n)) {
+        border-start-end-radius: 0;
+        border-end-end-radius: 0;
+      }
+
+      &.is-range-end.joins-band:not(:nth-child(7n + 1)) {
+        border-start-start-radius: 0;
+        border-end-start-radius: 0;
       }
     }
 
     .drp-foot {
       padding-top: 6px;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--overlay-separator);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -320,7 +392,7 @@ function compareDateValue(a: string, b: string): number {
       background: transparent;
       color: var(--text-muted);
 
-      &:hover {
+      &:hover:not(:disabled) {
         background: var(--danger-soft);
         color: var(--danger);
       }
@@ -340,6 +412,60 @@ function compareDateValue(a: string, b: string): number {
       &:disabled {
         cursor: not-allowed;
         opacity: 0.45;
+      }
+    }
+
+    /* Touch: every target takes the 44px floor. The range chips are the quickest path on a phone;
+       the panel widens (see the placement) so seven 44px days fit a row. The chrome between the
+       targets tightens instead, so all six weeks and the footer fit under the work-done toolbar on
+       a 390x844 phone (about 578px of 583px); a shorter screen scrolls the calendar body. */
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .drp-panel {
+        padding: 8px;
+        gap: 4px;
+      }
+
+      .drp-summary {
+        min-height: 16px;
+      }
+
+      .drp-shortcuts,
+      .drp-panel > .drp-body,
+      .drp-foot {
+        padding-top: 4px;
+      }
+
+      .drp-weekdays span {
+        height: 16px;
+      }
+
+      .drp-grid {
+        row-gap: 1px;
+      }
+
+      .drp-head {
+        grid-template-columns: 44px 1fr 44px;
+      }
+
+      .drp-panel .drp-presets button {
+        min-height: 44px;
+      }
+
+      .drp-icon-btn,
+      .drp-shortcuts button,
+      .drp-day,
+      .drp-clear,
+      .drp-apply {
+        height: 44px;
+      }
+
+      .drp-icon-btn {
+        width: 44px;
+      }
+
+      .drp-clear,
+      .drp-apply {
+        padding-inline: 14px;
       }
     }
   `,
@@ -390,7 +516,9 @@ export class DateRangePickerPopover implements OnInit {
       // Apply footer — fits without an inner scrollbar. The panel is ~490px tall at this width (more
       // when long translations wrap the presets onto a third row); anything lower hid the footer
       // behind a scroll the user had to discover. Placement still clamps it to short viewports.
-      placement: () => ({ align: "end", width: 288, maxHeight: 560 }),
+      // Touch widens the panel so seven 44px day targets fit a row (still clamped to the viewport),
+      // and allows the taller panel those targets make.
+      placement: () => (hasCoarsePointer() ? { align: "end", width: 340, maxHeight: 700 } : { align: "end", width: 288, maxHeight: 560 }),
       inline: () => this.inline(),
       onDismiss: () => this.dismiss.emit(),
     });
@@ -410,7 +538,24 @@ export class DateRangePickerPopover implements OnInit {
       isRangeStart: value === start,
       isRangeEnd: value === end,
       isInRange: !!start && !!end && compareDateValue(value, start) > 0 && compareDateValue(value, end) < 0,
+      joinsBand: !!start && !!end && start !== end && (value === start || value === end),
     }));
+  });
+
+  /**
+   * The preset or "last N days" shortcut whose range the draft currently equals, so the chip that
+   * produced it (or a calendar pick that happens to match one) reads as selected. Named periods win
+   * a tie with a day count ("This month" on the 7th is also "7 days"), being the more specific name.
+   */
+  readonly activeShortcut = computed<DateRangePreset | number | null>(() => {
+    const from = this.draftFrom();
+    const to = this.draftTo();
+    if (!from || !to) return null;
+    const today = new Date();
+    const matches = (range: DateRangeKeys) => range.from === from && range.to === to;
+    return this.presets.find((p) => matches(resolveDateRangePreset(p.preset, today)))?.preset
+      ?? this.shortcuts.find((s) => matches(resolveLastDays(s.days, today)))?.days
+      ?? null;
   });
 
   ngOnInit() {

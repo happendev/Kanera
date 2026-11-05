@@ -59,8 +59,8 @@ describe("PickerListComponent", () => {
 
     // Under a heading every row steps in once, then once more per nesting level, so the heading
     // visibly owns its rows instead of sharing their left edge.
-    expect(board!.style.paddingLeft).toBe("20px");
-    expect(list!.style.paddingLeft).toBe("34px");
+    expect(board!.style.paddingLeft).toBe("26px");
+    expect(list!.style.paddingLeft).toBe("40px");
     expect(board!.classList.contains("is-grouped")).toBe(true);
     fixture.destroy();
   });
@@ -84,7 +84,7 @@ describe("PickerListComponent", () => {
     expect(rows.length).toBe(1);
     // Matches are flattened: a hit keeps its group's single step of indentation, but not the depth
     // of a parent row that may have been filtered out.
-    expect(rows[0]!.style.paddingLeft).toBe("20px");
+    expect(rows[0]!.style.paddingLeft).toBe("26px");
     fixture.destroy();
   });
 

@@ -25,7 +25,7 @@ export type StatTileTone = "neutral" | "danger" | "warning" | "success";
         }
         {{ label() }}
       </span>
-      <strong>{{ value() }}</strong>
+      <strong [class.is-zero]="isZero()">{{ value() }}</strong>
       @if (deltaLabel(); as delta) {
         <span class="stat-tile-delta" [class.is-up]="isUp()">
           <i aria-hidden="true" class="ti ti-{{ deltaIcon() }}"></i>
@@ -92,6 +92,12 @@ export class StatTileComponent {
   readonly activated = output<void>();
 
   readonly isUp = computed(() => (this.delta() ?? 0) > 0);
+
+  /** A zero recedes so the counts that need something stand out (see `.is-zero`). */
+  protected readonly isZero = computed(() => {
+    const value = this.value();
+    return value === 0 || value === "0";
+  });
 
   readonly deltaIcon = computed(() => {
     const delta = this.delta() ?? 0;

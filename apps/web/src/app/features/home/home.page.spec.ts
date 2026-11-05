@@ -606,7 +606,7 @@ describe("HomePage", () => {
     const chips = [...host().querySelectorAll(".recent-chip")].map((chip) => chip.textContent?.trim());
     expect(chips).toEqual(["Hiring Plan", "Roadmap"]);
     expect(text()).toContain("Recent boards");
-    // Your progress comes first under the tiles, then (with no Up next queue) recent boards, then
+    // With no Up next queue, Your progress comes first under the tiles, then recent boards, then
     // the agenda: recent boards and the tiles are both quick exits off the page.
     const sections = [...host().querySelectorAll("section")].map((section) => section.className);
     expect(sections.indexOf("progress-section")).toBe(sections.indexOf("focus-grid") + 1);
@@ -873,6 +873,36 @@ describe("HomePage", () => {
     expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 23, percent: 9 });
   });
 
+  // Ten of 23 done: past the 40% at which the card starts compact.
+  const MOSTLY_DONE = checklist({
+    createCard: true, assignCard: true, comment: true, mention: true, completeCard: true,
+    quickEdit: true, useFilter: true, commandPalette: true, viewWorkDone: true, groupTable: true,
+  });
+
+  it("starts a mostly finished checklist as one row with the next step, and remembers an expand", async () => {
+    // Isolated because the threshold and the stored preference are pure state an E2E run would have
+    // to stage across two visits: the compact row must still carry the next step's button, and an
+    // explicit expand must survive the next load rather than re-compacting.
+    await render({ isOrgAdmin: true, gettingStarted: MOSTLY_DONE, registeredBoards: [{ id: "board-1", name: "Roadmap", icon: null, iconColor: null }] });
+    expect(host().querySelector(".gs-step")).toBeNull();
+    expect(host().querySelector(".gs-next-title")?.textContent?.trim()).toBe("Total a column");
+    expect(host().querySelector(".gs-next a.gs-action")?.getAttribute("href")).toBe("/b/board-1?view=table");
+    expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("10/23");
+
+    host().querySelector<HTMLButtonElement>(".gs-toggle")!.click();
+    fixture.detectChanges();
+    expect(host().querySelector(".gs-next")).toBeNull();
+    expect(host().querySelectorAll(".gs-step").length).toBe(23);
+    expect(localStorage.getItem(STORAGE_KEYS.GETTING_STARTED_LAYOUT)).toBe("expanded");
+  });
+
+  it("keeps a stored expand over the progress threshold", async () => {
+    localStorage.setItem(STORAGE_KEYS.GETTING_STARTED_LAYOUT, "expanded");
+    await render({ isOrgAdmin: true, gettingStarted: MOSTLY_DONE });
+    expect(host().querySelector(".gs-next")).toBeNull();
+    expect(host().querySelectorAll(".gs-step").length).toBe(23);
+  });
+
   it("does not show a checklist hidden on another device", async () => {
     await render({ isOrgAdmin: true, gettingStarted: { ...checklist({}), hidden: true } });
     expect(host().querySelector(".getting-started")).toBeNull();
@@ -962,6 +992,10 @@ describe("HomePage", () => {
     expect(host().querySelectorAll(".priorities-section .panel-row")).toHaveLength(5);
     expect(host().querySelector(".panel-more")?.textContent).toContain("1 more");
     expect(text()).not.toContain("Nothing has been added to your Up next yet");
+    // Up next is what people open Home for, so it leads the main column, above Your progress.
+    const sections = [...host().querySelectorAll("section")].map((section) => section.className);
+    expect(sections.indexOf("priorities-section")).toBe(sections.indexOf("focus-grid") + 1);
+    expect(sections.indexOf("progress-section")).toBeGreaterThan(sections.indexOf("priorities-section"));
   });
 
   it("keeps the queue visible and read-only offline", async () => {

@@ -1,8 +1,13 @@
 <header class="panel-head">
   <i aria-hidden="true" class="ti ti-list-numbers"></i>
   <h3 i18n="Name of the personal priority queue panel">Up next</h3>
-  <!-- No "N of 50" readout: the cap only matters when it is hit, and the capacity note below
-       says so then. The toggle button in the page chrome already carries the count. -->
+  <!-- The queue's size, as the shell drawer's head shows it, so the two read as one surface. The
+       toolbar toggle also carries it, but not for a teammate's queue docked from Team overview, nor
+       once a phone's sheet covers the toolbar. Still no "N of 50": the cap only matters when it is
+       hit, and the capacity note below says so then. -->
+  @if (totalCount() > 0) {
+    <span class="panel-count">{{ totalCount() }}</span>
+  }
   @if (targetName(); as name) {
     <span class="panel-target" [kTooltip]="targetTooltip(name)">{{ name }}</span>
   }
@@ -10,7 +15,7 @@
     <span class="panel-head-add-anchor">
       <button
         type="button"
-        class="panel-head-tool"
+        class="k-toolbar-icon-btn is-ghost panel-head-tool"
         aria-label="Add card to Up next"
         i18n-aria-label
         [disabled]="atCapacity() || addableCards().length === 0"
@@ -36,7 +41,7 @@
       }
     </span>
   }
-  <button type="button" class="panel-close" aria-label="Close Up next" i18n-aria-label kTooltip="Close" i18n-kTooltip="Tooltip: close the panel" (click)="closed.emit()">
+  <button type="button" class="k-toolbar-icon-btn is-ghost panel-close" aria-label="Close Up next" i18n-aria-label kTooltip="Close" i18n-kTooltip="Tooltip: close the panel" (click)="closed.emit()">
     <i aria-hidden="true" class="ti ti-x"></i>
   </button>
 </header>
@@ -106,7 +111,7 @@
       >
         @for (group of notQueuedGroups(); track group.boardId) {
           <h5 class="not-queued-board">
-            <i [class]="group.boardIconClass" [style.color]="group.boardIconColor"></i>
+            <k-board-icon [icon]="group.boardIcon" [color]="group.boardColor" [size]="16" />
             <span>{{ group.boardName }}</span>
           </h5>
           @for (row of group.rows; track row.card.id) {
@@ -121,13 +126,13 @@
               <button type="button" class="not-queued-main" (click)="cardOpened.emit(row.card.id)">
                 @if (showCardKeys()) { <span class="not-queued-key">{{ row.card.key }}</span> }
                 <span class="not-queued-title">{{ row.card.title }}</span>
-                <span class="not-queued-list">
-                  <i [class]="row.listIconClass" [style.color]="row.listColor"></i>
-                  <span [style.color]="row.listColor">{{ row.card.listName }}</span>
+                <span class="not-queued-list" [style.--list-color]="row.listColor">
+                  <i aria-hidden="true" [class]="row.listIconClass"></i>
+                  <span>{{ row.card.listName }}</span>
                 </span>
               </button>
               @if (row.due) {
-                <span class="not-queued-due" [class.overdue]="row.overdue" [class.due-soon]="row.dueSoon">{{ row.due }}</span>
+                <span class="not-queued-due" [class.overdue]="row.overdue" [class.due-soon]="row.dueSoon">@if (row.overdue || row.dueSoon) { <i aria-hidden="true" class="ti ti-calendar-event"></i> }{{ row.due }}</span>
               }
               <button
                 type="button"

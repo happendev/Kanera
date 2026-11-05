@@ -128,7 +128,7 @@
   width: min(var(--drawer-width), calc(100vw - var(--drawer-edge, 0px)));
   background: var(--surface);
   border-right: 1px solid var(--border);
-  box-shadow: 8px 0 24px rgb(0 0 0 / 18%);
+  box-shadow: var(--shadow-drawer);
   animation: slide-in 0.22s var(--ease-drawer);
 
   // Fixed at top:0, so it sits under the iOS status bar. As the first flex item this spacer
@@ -249,8 +249,9 @@
     color: var(--danger);
   }
 
+  // --warning, not the --color-amber identity hue: amber text is ~1.9:1 on a light surface.
   .is-due-soon {
-    color: var(--color-amber);
+    color: var(--warning);
   }
 
   .pressure-sep {

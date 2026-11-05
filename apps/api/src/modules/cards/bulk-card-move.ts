@@ -1,16 +1,16 @@
 import { inProgressClockOf, SERVER_EVENTS } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, cards, lists, type ActivityEvent } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, cards, lists } from "@kanera/shared/schema";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db, type Tx } from "../../db.js";
 import type { assertBoardAccess } from "../../lib/access.js";
-import { recordActivity } from "../../lib/activity.js";
+import { recordCoalescedActivity, type CoalescedActivityResult } from "../../lib/activity.js";
 import { emitAutomationEffects, runCardMoveAutomations } from "../../lib/automations.js";
 import { emitRelationNeighboursChanged, lockWorkspaceRelations } from "../../lib/card-relations.js";
 import { lockCardsForWrite } from "../../lib/card-write-lock.js";
 import { between } from "../../lib/position.js";
 import { emitToBoard } from "../../realtime/emit.js";
-import { emitCardActivityFeedItem } from "./route-support.js";
+import { emitCoalescedCardActivityFeedItem } from "./route-support.js";
 
 type BoardAccessContext = Awaited<ReturnType<typeof assertBoardAccess>>;
 type Card = typeof cards.$inferSelect;
@@ -19,7 +19,7 @@ type BulkCardMove = {
   previous: Card;
   card: Card;
   finalCard: Card;
-  activity: ActivityEvent;
+  activity: CoalescedActivityResult;
   automationEffects: Awaited<ReturnType<typeof runCardMoveAutomations>>;
 };
 
@@ -77,13 +77,21 @@ export async function moveBulkCards({
         .set({ listId, position, updatedAt: new Date() })
         .where(eq(cards.id, current.id))
         .returning();
-      const activity = await recordActivity(tx, {
+      const activity = await recordCoalescedActivity(tx, {
         boardId,
         workspaceId: ctx.workspaceId,
         actorId: auth.sub,
         entityType: "card",
         entityId: current.id,
         action: ACTIVITY_ACTION.MOVED,
+        // Share single-move undo detection so reversing a bulk move (or vice versa)
+        // removes its feed entry and notifications while forward moves stay separate.
+        coalesceKey: "card:list",
+        coalesceRevertsOnly: true,
+        windowMs: 60_000,
+        preservePayloadKeys: ["fromListId", "prevPosition"],
+        fromValue: current.listId,
+        toValue: listId,
         payload: { fromListId: current.listId, toListId: listId, prevPosition: current.position, position },
       });
       const automationEffects = await runCardMoveAutomations(tx, {
@@ -119,7 +127,7 @@ export async function emitBulkCardMoves(moves: readonly BulkCardMove[], opts: { 
       prevPosition: move.previous.position,
       ...inProgressClockOf(move.card),
     });
-    await emitCardActivityFeedItem(boardId, move.card.id, move.activity);
+    await emitCoalescedCardActivityFeedItem(boardId, move.card.id, move.activity);
     await emitAutomationEffects(move.automationEffects);
   }
   await emitRelationNeighboursChanged(moves.map((move) => move.card.id));

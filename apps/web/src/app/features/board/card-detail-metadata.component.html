@@ -51,7 +51,12 @@
       <section class="detail-section card-detail-section">
         <div class="section-label card-detail-section-label">
           <i aria-hidden="true" class="ti ti-calendar-event"></i>
-          &ngsp;<ng-container i18n="Card detail section heading - the card's start and due dates">Dates</ng-container>
+          <span class="dates-heading-text">
+            &ngsp;<ng-container i18n="Card detail section heading - the card's start and due dates">Dates</ng-container>
+            @if (vm.durationHint(); as hint) {
+            <span class="due-duration-hint">{{ hint }}</span>
+            }
+          </span>
         </div>
         <div class="due-date-row">
           @if (vm.timelineEnabled()) {
@@ -121,9 +126,6 @@
             <k-date-picker [value]="vm.dueDateInputValue()" [slot]="vm.dueDateSlot()" (applyDate)="vm.setDueDate($event.value, $event.slot)" (clear)="vm.setDueDate('')" (close)="vm.dueDatePickerOpen.set(false)" />
             }
           </div>
-          @if (vm.durationHint(); as hint) {
-          <span class="due-duration-hint">{{ hint }}</span>
-          }
         </div>
       </section>
 
@@ -169,7 +171,7 @@
           &ngsp;<ng-container i18n="Card detail section heading: the board the card belongs to">Board</ng-container>
         </div>
         <button type="button" class="card-board-badge is-clickable" (click)="vm.goToBoard()" [attr.aria-label]="vm.labels.goToBoard(board.name)">
-          <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <k-board-icon [icon]="board.icon" [color]="board.iconColor" [size]="16" />
           <span class="card-board-name">{{ board.name }}</span>
         </button>
       </section>

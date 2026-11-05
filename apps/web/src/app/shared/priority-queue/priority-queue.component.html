@@ -56,21 +56,18 @@
           <span class="row-context">
             @if (row.boardName) {
               <span class="row-board">
-                <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
+                <k-board-icon [icon]="row.boardIcon" [color]="row.boardColor" [size]="16" />
                 <span class="row-context-part">{{ row.boardName }}</span>
               </span>
             }
             @if (row.listName) {
-              @if (row.boardName) {
-                <i class="ti ti-chevron-right row-sep-chevron" aria-hidden="true"></i>
-              }
-              <!-- The list is the queued card's state, and it says so in its own icon and colour —
-                   the notifications drawer's breadcrumb treatment exactly, so "board › list" reads
-                   the same on both personal surfaces. Colour is bound rather than classed because it
-                   is a per-list workspace token; unset simply leaves the inherited muted colour. -->
-              <span class="row-list">
-                <i [class]="row.listIconClass" [style.color]="row.listColor"></i>
-                <span class="row-context-part" [style.color]="row.listColor">{{ row.listName }}</span>
+              <!-- The list is the queued card's state, so it wears the list-chip every surface names a
+                   list with, at breadcrumb size. The pill's own edge separates it from the board, so
+                   there is no "›" to strand at the end of a line when the trail wraps. Colour is bound rather than classed because it is a
+                   per-list workspace token; unset leaves the chip's neutral grey. -->
+              <span class="row-list" [style.--list-color]="row.listColor">
+                <i aria-hidden="true" [class]="row.listIconClass"></i>
+                <span>{{ row.listName }}</span>
               </span>
             }
           </span>
@@ -84,7 +81,11 @@
           }
         </button>
         @if (dueText(card); as due) {
-          <span class="row-due" [class.overdue]="dueOverdue(card)" [class.due-soon]="dueSoon(card)">{{ due }}</span>
+          <span class="row-due" [class.overdue]="dueOverdue(card)" [class.due-soon]="dueSoon(card)">
+            <!-- The calendar glyph comes with the chip, as on every surface's urgent date; a plain
+                 date in this column stays bare text. -->
+            @if (dueOverdue(card) || dueSoon(card)) { <i aria-hidden="true" class="ti ti-calendar-event"></i> }{{ due }}
+          </span>
         }
         @if (isDraggable(row.entry) || allowQuickComplete()) {
           <span class="row-tools">

@@ -2,13 +2,33 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   boards, workspaces, lists, cards, cardAssignees, cardCustomFieldValues, customFields,
   cardChecklistItems, cardChecklists, cardLabels, cardLabelAssignments, cardRelations,
-  boardSeparators, cardPriorities, notes,
+  boardSeparators, cardPriorities, notes, activityEvents,
 } from "@kanera/shared/schema";
 import type { ColorToken } from "@kanera/shared/colors";
 import { addWorkingDays, dateKeyOf, dayNumber } from "@kanera/shared/schedule";
 import type { TxOnly } from "../db.js";
 import { allocateCardKeys } from "../lib/card-keys.js";
 import { type seedCalendar, MARKETING_DEADLINES, OTHER_DEADLINES } from "./seed-calendar.js";
+
+// The dated enhancement replaces the launch note, so both versions share its authored diagram.
+export const autumnLaunchSequence = `## Launch sequence
+
+\`\`\`mermaid
+flowchart TD
+    Package["Artwork, copy and partner package ready"] --> Approval["Amelia: final campaign approval"]
+    Approval --> Freeze["Ben: change freeze"]
+    Freeze --> Web["Leo: verify tracking, consent and signup form"]
+    Freeze --> Channels["Grace: check email and social schedules"]
+    Web --> Gate{"Ben: all launch checks passed?"}
+    Channels --> Gate
+    Gate -- No --> Hold["Hold distribution; record blockers on launch card"]
+    Hold --> Recheck["Channel owners resolve blockers and repeat checks"]
+    Recheck --> Web
+    Recheck --> Channels
+    Gate -- Yes --> Launch["09:00: publish across approved channels"]
+    Launch --> Confirm["Owners post go-live confirmations on launch card"]
+    Confirm --> Review["T+12h: review performance before changing spend"]
+\`\`\``;
 
 const ARCHIVED = [1, 2, 23, 24, 44, 45, 63, 66, 83, 84, 104, 105];
 const BUDGETS: Record<number, number> = {
@@ -69,8 +89,23 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
     return found;
   };
   const update = async (number: number, values: Partial<typeof cards.$inferInsert>) => {
-    await tx.update(cards).set(values).where(eq(cards.id, card(number).id));
-    Object.assign(card(number), values);
+    const row = card(number);
+    if (values.listId && values.listId !== row.listId) {
+      const [owner] = await tx.select().from(cardAssignees).where(eq(cardAssignees.cardId, row.id))
+        .orderBy(cardAssignees.assignedAt, cardAssignees.userId).limit(1);
+      // These authored moves represent the owner's recent work. Without an audit row the
+      // overview sees only the older replayed history and incorrectly presents an idle team.
+      await tx.insert(activityEvents).values({
+        boardId: row.boardId, workspaceId: row.workspaceId,
+        actorId: owner?.userId ?? row.createdById, actorKind: "user",
+        entityType: "card", entityId: row.id, action: "moved",
+        payload: { fromListId: row.listId, toListId: values.listId, prevPosition: row.position, position: row.position },
+        createdAt: at, updatedAt: at,
+      });
+      values = { ...values, listEnteredAt: at, updatedAt: at };
+    }
+    await tx.update(cards).set(values).where(eq(cards.id, row.id));
+    Object.assign(row, values);
   };
   const fieldRows = await tx.select().from(customFields).where(eq(customFields.workspaceId, marketing.id));
   const field = async (row: typeof cards.$inferSelect, name: string, value: string | number | boolean) => {
@@ -99,6 +134,12 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
         dueDateLocalDate: offset === null ? null : calendar.business(offset), dueDateSlot: null,
         dueDateTimezone: offset === null ? null : "Europe/London", createdById: userIds.get(owner)!, createdAt: at, updatedAt: at,
       }).returning();
+      await tx.insert(activityEvents).values({
+        boardId: row!.boardId, workspaceId: row!.workspaceId,
+        actorId: userIds.get(owner)!, actorKind: "user",
+        entityType: "card", entityId: row!.id, action: "created",
+        payload: { title, listId: row!.listId }, createdAt: at, updatedAt: at,
+      });
       marketingCards.push(row!);
       byNumber.set(row!.number, row!);
       created.push({ alias, id: row!.id, key: row!.key });
@@ -257,7 +298,7 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
   const noteRows = await tx.select().from(notes).where(eq(notes.workspaceId, marketing.id));
   for (const row of noteRows) {
     let content = row.content;
-    if (row.title === "Autumn Campaign Launch Plan") content = `## Launch at a glance\n\nMessaging is complete. Final approval ${card(12).key} remains outstanding.\n\n${/!\[[^\]]*\]\([^\n]+\)/.exec(row.content)?.[0] ?? ""}\n\n| Milestone | Date (Europe/London) |\n| --- | --- |\n| Final campaign approval | ${calendar.label(4)} |\n| Change freeze | ${calendar.label(5)} |\n| Readiness and email scheduling | ${calendar.label(6)} |\n| Launch | ${calendar.label(7)}, 09:00 |\n\nBen coordinates; Amelia approves; Nina owns graphics; Zoe owns copy; Leo owns web/tracking; Grace owns schedule/social; Omar owns partners. Done means approved deliverables and passed checks. Update the main launch card when dependencies change, record channel go-live confirmations and hold the T+12h performance check before changing spend.`;
+    if (row.title === "Autumn Campaign Launch Plan") content = `## Launch at a glance\n\nMessaging is complete. Final approval ${card(12).key} remains outstanding.\n\n${/!\[[^\]]*\]\([^\n]+\)/.exec(row.content)?.[0] ?? ""}\n\n| Milestone | Date (Europe/London) |\n| --- | --- |\n| Final campaign approval | ${calendar.label(4)} |\n| Change freeze | ${calendar.label(5)} |\n| Readiness and email scheduling | ${calendar.label(6)} |\n| Launch | ${calendar.label(7)}, 09:00 |\n\nBen coordinates; Amelia approves; Nina owns graphics; Zoe owns copy; Leo owns web/tracking; Grace owns schedule/social; Omar owns partners. Done means approved deliverables and passed checks. Update the main launch card when dependencies change, record channel go-live confirmations and hold the T+12h performance check before changing spend.\n\n${autumnLaunchSequence}`;
     if (row.title === "Launch Week Run of Show") content = `## Launch week\n\n- ${calendar.label(4)}: final approvals, including landing-page copy.\n- ${calendar.label(5)}: change freeze, tracking/form checks and partner handoff.\n- ${calendar.label(6)}: readiness, email scheduling and social schedule checks.\n- ${calendar.label(7)}, 09:00 Europe/London: launch, monitor and record exceptions.\n\nBen coordinates the go/no-go call with Amelia. Grace maintains the schedule; channel owners report blockers on the main launch card. Pause distribution if approval, consent, tracking or the form is not ready.`;
     if (row.title === "Marketing Team Operating Guide" && !content?.includes("planned allocation in EUR")) content += "\n\n## Reporting fields\n\nBudget is a planned allocation in EUR, not actual spend. Campaign groups delivery work across boards. Leave unknown allocations blank.";
     if (content !== row.content) {

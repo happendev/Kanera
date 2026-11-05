@@ -1,4 +1,5 @@
 import { Directive, ElementRef, HostListener, inject, input, type AfterViewInit } from "@angular/core";
+import { hasCoarsePointer } from "../core/browser/input-modality";
 
 const ITEM_SELECTOR = '.k-menu-item:not([disabled]):not([aria-disabled="true"])';
 
@@ -28,7 +29,17 @@ export class MenuDirective implements AfterViewInit {
     // Next frame: anchored panels position themselves after first paint, and focusing an element that
     // is still `visibility: hidden` is a no-op.
     requestAnimationFrame(() => {
-      if (this.el.nativeElement.contains(document.activeElement)) return;
+      const host = this.el.nativeElement;
+      if (host.contains(document.activeElement)) return;
+      // Touch: focus the menu itself, not its first row. A focused row wears the hover wash, so on a
+      // phone the first action looked pre-selected before anything was touched. Focus still moves
+      // into the menu (screen readers announce it, and an attached keyboard's arrows start from
+      // here: onKeydown treats "no row focused" as before the first row).
+      if (hasCoarsePointer()) {
+        if (!host.hasAttribute("tabindex")) host.setAttribute("tabindex", "-1");
+        host.focus({ preventScroll: true });
+        return;
+      }
       this.items()[0]?.focus({ preventScroll: true });
     });
   }
@@ -48,7 +59,8 @@ export class MenuDirective implements AfterViewInit {
     };
     switch (event.key) {
       case "ArrowDown": return focus(current + 1);
-      case "ArrowUp": return focus(current - 1);
+      // From the menu container (nothing focused yet) Up wraps to the last row, not the one above it.
+      case "ArrowUp": return focus(current < 0 ? items.length - 1 : current - 1);
       case "Home": return focus(0);
       case "End": return focus(items.length - 1);
     }

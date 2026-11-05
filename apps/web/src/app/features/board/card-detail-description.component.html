@@ -23,7 +23,7 @@
         <k-draft-banner mode="saved" [canEdit]="vm.canEdit()" (edit)="vm.startEditDescription()" (discard)="vm.discardDescriptionDraft()" />
         <div class="description-viewer-wrap dv-copy-hover-scope" [class.is-readonly]="!vm.canEdit()" [class.is-empty]="!vm.editorInitialValue().trim()" (click)="vm.startEditDescription()" [kTooltip]="vm.canEdit() ? vm.labels.clickToEdit : ''">
           <div class="description-viewer-inner">
-            <k-description-viewer [value]="vm.editorInitialValue()" [linkRevision]="vm.linkRevision()" [workspaceId]="vm.workspaceId()" [mentionMembers]="vm.members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="vm.imageLightbox.open({ src: $event })" (attachmentClick)="vm.openInlineAttachment($event)" />
+            <k-description-viewer [value]="vm.editorInitialValue()" [diagrams]="true" [linkRevision]="vm.linkRevision()" [workspaceId]="vm.workspaceId()" [mentionMembers]="vm.members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="vm.imageLightbox.open({ src: $event })" (attachmentClick)="vm.openInlineAttachment($event)" />
           </div>
         </div>
         } @else if (!vm.canEditRole() && !vm.draftDescription().trim()) {
@@ -32,7 +32,7 @@
         <div class="description-viewer-wrap dv-copy-hover-scope" [class.is-readonly]="!vm.canEdit()" [class.is-clamped]="vm.descriptionOverflows() && !vm.descriptionExpanded()" [class.is-empty]="!vm.draftDescription().trim()" (click)="vm.onDescriptionViewerClick()"
           [kTooltip]="vm.descriptionOverflows() && !vm.descriptionExpanded() ? vm.labels.showFullDescription : (vm.canEdit() ? vm.labels.clickToEdit : '')">
           <div #descViewerInner class="description-viewer-inner">
-            <k-description-viewer [value]="vm.draftDescription()" [linkRevision]="vm.linkRevision()" [workspaceId]="vm.workspaceId()" [mentionMembers]="vm.members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="vm.imageLightbox.open({ src: $event })" (attachmentClick)="vm.openInlineAttachment($event)" />
+            <k-description-viewer [value]="vm.draftDescription()" [diagrams]="true" [linkRevision]="vm.linkRevision()" [workspaceId]="vm.workspaceId()" [mentionMembers]="vm.members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="vm.imageLightbox.open({ src: $event })" (attachmentClick)="vm.openInlineAttachment($event)" />
           </div>
         </div>
         @if (vm.descriptionOverflows()) {

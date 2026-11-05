@@ -1,7 +1,8 @@
 import { createComponentFixture } from "../../test/component-fixture";
+import { OverlayContainer } from "@angular/cdk/overlay";
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipDirective, resetTooltipWarmWindow } from "./tooltip.directive";
 
 @Component({
@@ -39,12 +40,23 @@ class TruncationHostComponent {
   readonly name = "Quarterly Roadmap Planning";
 }
 
+function tooltipElement(): HTMLElement | null {
+  // Other specs can leave overlays in the shared document. Assert against this fixture's service.
+  return TestBed.inject(OverlayContainer).getContainerElement().querySelector<HTMLElement>(".k-tooltip");
+}
+
 describe("TooltipDirective", () => {
+  beforeEach(() => {
+    // Directive modules are shared across spec files; the first test must start cold too.
+    resetTooltipWarmWindow();
+  });
+
   afterEach(() => {
+    // Teardown can warm the hover window; destroy fixtures before resetting it and restoring timers.
+    TestBed.resetTestingModule();
     resetTooltipWarmWindow();
     vi.useRealTimers();
     document.body.classList.remove("is-checklist-dragging");
-    document.querySelectorAll(".cdk-overlay-container").forEach((el) => el.remove());
   });
 
   it("shows after the hover delay and removes the native title", () => {
@@ -61,13 +73,13 @@ describe("TooltipDirective", () => {
 
     button.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(299);
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(tooltipElement()).toBeNull();
 
     vi.advanceTimersByTime(1);
     fixture.detectChanges();
 
-    expect(document.querySelector(".k-tooltip")?.textContent).toBe("Helpful text");
-    expect(document.querySelector(".k-tooltip-panel")?.classList.contains("k-tooltip-panel-top")).toBe(true);
+    expect(tooltipElement()?.textContent).toBe("Helpful text");
+    expect(tooltipElement()?.closest(".k-tooltip-panel")?.classList.contains("k-tooltip-panel-top")).toBe(true);
   });
 
   it("hides on mouse leave", () => {
@@ -82,12 +94,12 @@ describe("TooltipDirective", () => {
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
     button.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(300);
-    expect(document.querySelector(".k-tooltip")).not.toBeNull();
+    expect(tooltipElement()).not.toBeNull();
 
     button.dispatchEvent(new Event("mouseleave"));
     fixture.detectChanges();
 
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(tooltipElement()).toBeNull();
     expect(button.hasAttribute("aria-describedby")).toBe(false);
   });
 
@@ -102,12 +114,12 @@ describe("TooltipDirective", () => {
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
     button.dispatchEvent(new FocusEvent("focusin"));
     fixture.detectChanges();
-    expect(document.querySelector(".k-tooltip")).not.toBeNull();
+    expect(tooltipElement()).not.toBeNull();
 
     fixture.nativeElement.dispatchEvent(new Event("scroll"));
     fixture.detectChanges();
 
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(tooltipElement()).toBeNull();
     expect(button.hasAttribute("aria-describedby")).toBe(false);
   });
 
@@ -124,16 +136,16 @@ describe("TooltipDirective", () => {
     button.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
-    expect(document.querySelector(".k-tooltip")).not.toBeNull();
+    expect(tooltipElement()).not.toBeNull();
 
     vi.advanceTimersByTime(9_999);
     fixture.detectChanges();
-    expect(document.querySelector(".k-tooltip")).not.toBeNull();
+    expect(tooltipElement()).not.toBeNull();
 
     vi.advanceTimersByTime(1);
     fixture.detectChanges();
 
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(tooltipElement()).toBeNull();
     expect(button.hasAttribute("aria-describedby")).toBe(false);
   });
 
@@ -149,15 +161,40 @@ describe("TooltipDirective", () => {
     button.dispatchEvent(new FocusEvent("focusin"));
     fixture.detectChanges();
 
-    const tooltip = document.querySelector(".k-tooltip") as HTMLElement | null;
+    const tooltip = tooltipElement();
     expect(tooltip?.id).toBeTruthy();
     expect(button.getAttribute("aria-describedby")).toBe(tooltip?.id);
 
     button.dispatchEvent(new FocusEvent("focusout"));
     fixture.detectChanges();
 
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(tooltipElement()).toBeNull();
     expect(button.hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  // The touch window only covers events right after a tap; a focus a phone restores later (a panel
+  // closing onto its trigger) would otherwise raise a tooltip nothing can hover away.
+  it("never shows on a touch-only device, for hover or focus", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("any-hover: none"), media: query }));
+    try {
+      TestBed.configureTestingModule({
+        imports: [TooltipHostComponent],
+        providers: [provideZonelessChangeDetection()],
+      });
+      const fixture = createComponentFixture(TooltipHostComponent);
+      fixture.detectChanges();
+
+      const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
+      button.dispatchEvent(new Event("mouseenter"));
+      vi.advanceTimersByTime(300);
+      button.dispatchEvent(new FocusEvent("focusin"));
+      fixture.detectChanges();
+
+      expect(tooltipElement()).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("suppresses empty and disabled tooltips", () => {
@@ -173,14 +210,14 @@ describe("TooltipDirective", () => {
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
     button.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(300);
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(tooltipElement()).toBeNull();
 
     fixture.componentInstance.text.set("Helpful text");
     fixture.componentInstance.disabled.set(true);
     fixture.detectChanges();
     button.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(300);
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(tooltipElement()).toBeNull();
   });
 
   it("hides on Escape even when another document handler consumes the bubbling event", () => {
@@ -221,16 +258,16 @@ describe("TooltipDirective", () => {
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
     button.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(300);
-    expect(document.querySelector(".k-tooltip")).not.toBeNull();
+    expect(tooltipElement()).not.toBeNull();
 
     document.body.classList.add("is-checklist-dragging");
     document.dispatchEvent(new CustomEvent("kanera:drag-start"));
     fixture.detectChanges();
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(tooltipElement()).toBeNull();
 
     button.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(300);
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(tooltipElement()).toBeNull();
   });
   it("with a truncation target, shows only while that element overflows", () => {
     vi.useFakeTimers();
@@ -247,7 +284,7 @@ describe("TooltipDirective", () => {
     link.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(400);
     fixture.detectChanges();
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(tooltipElement()).toBeNull();
 
     link.dispatchEvent(new Event("mouseleave"));
     vi.advanceTimersByTime(400);
@@ -256,6 +293,6 @@ describe("TooltipDirective", () => {
     link.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(400);
     fixture.detectChanges();
-    expect(document.querySelector(".k-tooltip")?.textContent).toBe("Quarterly Roadmap Planning");
+    expect(tooltipElement()?.textContent).toBe("Quarterly Roadmap Planning");
   });
 });

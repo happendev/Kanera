@@ -84,8 +84,9 @@
                 <div class="k-menu-heading display-menu-heading" i18n="Menu heading: display settings">Display</div>
                 @if (effectiveDisplay() === "board") {
                   <button type="button" class="k-menu-item display-menu-item" role="menuitemcheckbox" [attr.aria-checked]="compactCards()" (click)="toggleCompactCards()">
-                    <i aria-hidden="true" class="ti" [class.ti-checkbox]="compactCards()" [class.ti-square]="!compactCards()"></i>
+                    <i aria-hidden="true" class="ti ti-baseline-density-small"></i>
                     <span i18n="Menu item: show smaller cards">Compact cards</span>
+                    <i aria-hidden="true" class="ti ti-check k-menu-check"></i>
                   </button>
                 }
                 <button type="button" class="k-menu-item display-menu-item" role="menuitem" (click)="openBackgroundFromMenu()">
@@ -117,7 +118,8 @@
       controls collapse behind the single trigger.
     -->
     <k-page-toolbar
-      [compactActive]="toolbarFilterActive()"
+      [compactActive]="toolbarFilterActive() || (effectiveDisplay() === 'table' && !!tableView()?.hostControlsSet())"
+      [class.is-table-toolbar]="effectiveDisplay() === 'table'"
       [disabled]="!state.interactionReady()"
     >
         <div ptSearch class="work-search">
@@ -130,7 +132,7 @@
           />
           @if (effectiveDisplay() === "history") {
             <k-segmented
-              class="work-done-layout-switch"
+              class="work-done-layout-switch pt-inline-switch"
               [options]="workDoneLayoutOptions()"
               [value]="workDoneLayout()"
               [autoLabels]="true"
@@ -161,7 +163,7 @@
           }
         </div>
 
-      <div ptControls class="k-toolbar-group">
+      <div ptControls class="k-toolbar-group" kFitLabels [class.is-table-controls]="effectiveDisplay() === 'table'">
         @if (showTeammateFilter()) {
           <div class="menu-anchor">
             <button
@@ -292,13 +294,17 @@
 
         @if (showUpNextControl()) {
           <!-- The queue belongs beside Filter because both controls narrow the work currently in
-               focus. Disabled rather than hidden when no single person is selected, so a manager
-               on Team Cards can still see what choosing a teammate unlocks. -->
+               focus. Unavailable rather than hidden when no single person is selected, so a manager
+               on Team Cards can still see what choosing a teammate unlocks. aria-disabled, not
+               disabled: the global reset gives a disabled button pointer-events: none, so its tooltip
+               saying how to unlock it never showed and it was just a greyed-out control. The click
+               handler ignores it while unavailable. Open, it wears the toolbar's engaged .is-set
+               like Filter: the dock is changing what the page shows. -->
           <button
             type="button"
             class="k-toolbar-btn k-toolbar-collapsible-label up-next-toggle"
-            [class.is-open]="upNextOpen()"
-            [disabled]="!upNextAvailable()"
+            [class.is-set]="upNextOpen()"
+            [attr.aria-disabled]="upNextAvailable() ? null : 'true'"
             [kTooltip]="upNextAvailable()
               ? (upNextOpen() ? closeUpNextLabel : openUpNextLabel)
               : upNextUnavailableTooltip()"
@@ -405,6 +411,16 @@
               />
             }
           </div>
+        }
+
+        @if (effectiveDisplay() === "table") {
+          <!-- The table's own controls, in this row rather than a second one under it. Group and Sort
+               above are this page's (they belong to the saved view), so the table's group slot holds
+               its summary Breakdown, which sits after them with Columns, collapse and its menu. -->
+          @if (tableView()?.hostControls(); as controls) {
+            <ng-container [ngTemplateOutlet]="controls.group" />
+            <ng-container [ngTemplateOutlet]="controls.tools" />
+          }
         }
       </div>
 
@@ -680,6 +696,7 @@
               <k-board
                 class="workspace-lanes"
                 [class.fills-frame]="fillsBoardFrame()"
+                [kPhoneLaneHeight]="!fillsBoardFrame()"
                 [attr.id]="'workspace-board-' + workspace.id"
               >
                 @for (list of listsForWorkspace(workspace.id); track list.id) {
@@ -809,7 +826,9 @@
         -->
         @defer (on immediate) {
         <k-board-table-view
+          #tableView
           class="work-table-view"
+          [hostRendersControls]="true"
           [boardId]="'global-work-' + lens()"
           [boardName]="pageTitle()"
           [cards]="state.cards()"
@@ -915,17 +934,18 @@
                           <strong>{{ item.text }}</strong>
                           <!-- Board · list · card: an item means nothing without knowing where it lives. -->
                           <span class="checklist-context">
-                            <i [class]="boardIconClass(item.boardId)" [style.color]="boardIconColor(item.boardId)"></i>
+                            <k-board-icon [icon]="boardsById().get(item.boardId)?.icon ?? null" [color]="boardsById().get(item.boardId)?.iconColor ?? null" [size]="16" />
                             <span>{{ item.boardName }}</span>
-                            <span class="checklist-sep">·</span>
-                            <i [class]="listIconClass(item.listId)" [style.color]="listIconColor(item.listId)"></i>
-                            <span>{{ listNameById(item.listId) }}</span>
+                            <span class="checklist-list-chip" [style.--list-color]="listIconColor(item.listId)">
+                              <i aria-hidden="true" [class]="listIconClass(item.listId)"></i>
+                              <span>{{ listNameById(item.listId) }}</span>
+                            </span>
                             <span class="checklist-sep">·</span>
                             <span>{{ item.cardTitle }}</span>
                             @if (showCardKeys()) { <span class="checklist-card-key">{{ item.cardKey }}</span> }
                           </span>
                         </span>
-                        <time [class.overdue]="isChecklistOverdue(item)">{{ checklistDueText(item) }}</time>
+                        <time [class.overdue]="isChecklistOverdue(item)">@if (isChecklistOverdue(item)) { <i aria-hidden="true" class="ti ti-calendar-event"></i> }{{ checklistDueText(item) }}</time>
                       </button>
                     }
                   </div>

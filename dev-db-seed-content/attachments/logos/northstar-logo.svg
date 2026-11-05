@@ -7,6 +7,6 @@
   </defs>
   <rect width="320" height="160" rx="28" fill="#071224"/>
   <polygon points="78,80 132,34 120,70 162,70 92,126 106,90 68,90" fill="url(#nsGrad)"/>
-  <text x="176" y="78" fill="#f5f7fb" font-size="28" font-family="Verdana, DejaVu Sans, sans-serif" font-weight="700">Northstar</text>
+  <text x="176" y="78" fill="#f5f7fb" font-size="22" font-family="Verdana, DejaVu Sans, sans-serif" font-weight="700" textLength="120" lengthAdjust="spacingAndGlyphs">Northstar</text>
   <text x="176" y="104" fill="#93a4bd" font-size="14" font-family="Verdana, DejaVu Sans, sans-serif">platform ops</text>
 </svg>

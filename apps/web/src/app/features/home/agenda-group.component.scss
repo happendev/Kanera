@@ -39,23 +39,30 @@
   }
 }
 
-// A small ghost-button pill, not a bare text link: as muted 11.5px text it disappeared next to the
-// count badge and offered a few-pixel hit target. Restated in home.page.scss for the priorities
-// header (emulated encapsulation) — keep the two in step.
+// A small outlined button, not a bare text link: as muted 11.5px text it disappeared next to the
+// count badge and offered a few-pixel hit target. The toolbar buttons' --radius rather than a pill,
+// so it reads as the same kind of control as every other outlined button. Restated in
+// home.page.scss for the priorities header (emulated encapsulation) — keep the two in step.
 .agenda-see-all {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   margin-left: auto;
-  min-height: 28px;
-  padding: 0 11px;
+  // The page's other calls to action are 36px at --text-sm; at 28px and --text-xs this one read as
+  // a caption beside its heading.
+  // The size touch already had, now on every pointer.
+  min-height: var(--h-lg);
+  // Overhangs its header row by 4px each side, so the row keeps the 28px it had and the panel
+  // below does not drop out of line with its neighbour.
+  margin-block: -4px;
+  padding: 0 14px;
   color: var(--text);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   text-decoration: none;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius);
 
   &:hover {
     background: var(--surface-2);
@@ -64,13 +71,6 @@
 
   i {
     font-size: var(--text-base);
-  }
-}
-
-@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
-  .agenda-see-all {
-    min-height: var(--h-lg);
-    padding: 0 14px;
   }
 }
 

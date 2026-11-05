@@ -7,7 +7,6 @@ function series(counts: Record<string, number>, noun = "move"): ActivityStripSer
     key: "moved",
     label: "Card movement",
     noun,
-    tone: "accent",
     counts: new Map(Object.entries(counts)),
   };
 }
@@ -70,7 +69,7 @@ describe("buildActivityStripCells", () => {
   it("keeps every series on identical day columns so metrics stack", () => {
     const moved = buildActivityStripCells(series({ [todayKey]: 8 }), 30, today);
     const completed = buildActivityStripCells(
-      { ...series({ [yesterdayKey]: 4 }), key: "completed", tone: "success" },
+      { ...series({ [yesterdayKey]: 4 }), key: "completed" },
       30,
       today,
     );
