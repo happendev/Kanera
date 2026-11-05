@@ -140,7 +140,7 @@
     }
     @if (vm.boardSummary(); as board) {
     <button type="button" class="card-board-badge is-clickable" (click)="vm.goToBoard()" [attr.aria-label]="vm.labels.goToBoard(board.name)">
-      <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+      <k-board-icon [icon]="board.icon" [color]="board.iconColor" [size]="16" />
       <span class="card-board-name">{{ board.name }}</span>
     </button>
     }

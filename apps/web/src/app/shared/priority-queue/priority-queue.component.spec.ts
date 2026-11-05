@@ -503,7 +503,7 @@ describe("PriorityQueueComponent", () => {
   // "Which list" is the queued card's state, and the row's whole reason for a second line. It has to
   // arrive from the server's `context` — Home mounts this component with no work catalog to resolve a
   // list id against — and it has to survive a list with no colour of its own.
-  it("names the list in its own icon and colour, and stays neutral without one", () => {
+  it("names the list as a list-chip in its own colour, and stays neutral without one", () => {
     const coloured = entry("p1", 1, true);
     coloured.context!.listName = "Review & Approval";
     coloured.context!.listIcon = "eye-check";
@@ -514,18 +514,17 @@ describe("PriorityQueueComponent", () => {
     const lists = [...host.querySelectorAll<HTMLElement>(".row-list")];
     expect(lists[0]?.textContent?.trim()).toBe("Review & Approval");
     expect(lists[0]?.querySelector("i")?.className).toBe("ti ti-eye-check");
-    // Icon and name both take the colour, the way the notifications breadcrumb renders a list.
-    expect(lists[0]?.querySelector<HTMLElement>("i")?.style.color).toBe("var(--color-violet)");
-    expect(lists[0]?.querySelector<HTMLElement>(".row-context-part")?.style.color).toBe("var(--color-violet)");
+    // The chip takes its hue from --list-color, the list-chip mixin's contract.
+    expect(lists[0]?.style.getPropertyValue("--list-color")).toBe("var(--color-violet)");
 
-    // No colour set: nothing is written, so the line's inherited muted colour applies rather than a
+    // No colour set: nothing is written, so the mixin's neutral fallback applies rather than a
     // literal grey the theme cannot follow.
-    expect(lists[1]?.querySelector<HTMLElement>("i")?.style.color).toBe("");
+    expect(lists[1]?.style.getPropertyValue("--list-color")).toBe("");
     expect(lists[1]?.querySelector("i")?.className).toBe("ti ti-list");
 
-    // Board › list, so the hierarchy is explicit; the separator only exists between the two.
+    // The board is named by its tinted k-board-icon tile, never a bare glyph.
     expect(host.querySelector(".row-board")?.textContent?.trim()).toBe("Roadmap");
-    expect(host.querySelectorAll(".row-sep-chevron")).toHaveLength(2);
+    expect(host.querySelector(".row-board k-board-icon")).not.toBeNull();
   });
 
   it("shows a completed row as done, and drops its due pressure with it", () => {

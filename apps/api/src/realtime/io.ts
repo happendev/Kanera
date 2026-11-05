@@ -90,29 +90,30 @@ export async function closeRealtimeIo(): Promise<void> {
   presence = null;
   closeAdapterPair = null;
 
-  if (server && activePresence) {
-    const events = await activePresence.close();
-    for (const event of events) {
-      const payload = await recordPresenceOffline(event);
-      server.to(`workspace:${payload.workspaceId}`).emit(SERVER_EVENTS.PRESENCE_CHANGED, payload);
+  try {
+    if (server && activePresence) {
+      const events = await activePresence.close();
+      for (const event of events) {
+        const payload = await recordPresenceOffline(event);
+        server.to(`workspace:${payload.workspaceId}`).emit(SERVER_EVENTS.PRESENCE_CHANGED, payload);
+      }
+    } else {
+      await activePresence?.close();
     }
-  } else {
-    await activePresence?.close();
+  } finally {
+    try {
+      // Socket.IO unsubscribes its adapter while closing. Keep Valkey connected until that
+      // finishes, even if presence cleanup failed because Postgres or Valkey stopped first.
+      if (server) {
+        const hasEngine = Boolean((server as unknown as { engine?: unknown }).engine);
+        if (hasEngine) await server.close();
+        // Broadcast-only servers have no engine; Socket.IO's close() would throw there.
+        else await server.sockets.adapter.close();
+      }
+    } finally {
+      await closeAdapter?.();
+    }
   }
-
-  await Promise.allSettled([
-    closeAdapter?.(),
-    new Promise<void>((resolve) => {
-      if (!server) return resolve();
-      // Broadcast-only servers (worker, public API) are created via `new Server()` with no
-      // attached HTTP server, so socket.io never initialises an engine. Calling close() on
-      // such a server throws on `this.engine.close()`. The adapter pair is torn down
-      // separately above, so there is nothing else to close — just resolve.
-      const hasEngine = Boolean((server as unknown as { engine?: unknown }).engine);
-      if (!hasEngine) return resolve();
-      void server.close(() => resolve());
-    }),
-  ]);
 }
 
 export async function setupIo(app: FastifyInstance): Promise<IoServer> {

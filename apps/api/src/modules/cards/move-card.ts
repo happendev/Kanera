@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
 import type { assertCardAccess } from "../../lib/access.js";
-import { recordActivity } from "../../lib/activity.js";
+import { recordCoalescedActivity } from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { emitAutomationEffects, runCardMoveAutomations } from "../../lib/automations.js";
 import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
@@ -15,7 +15,7 @@ import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { toWireCard } from "../../lib/wire-card.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { assertGlobalWorkSeparatorContext, positionForGlobalWorkLaneInsert } from "../global-work-separators/routes.js";
-import { emitCardActivityFeedItem } from "./route-support.js";
+import { emitCardActivityFeedItem, emitCoalescedCardActivityFeedItem } from "./route-support.js";
 
 type CardAccessContext = Awaited<ReturnType<typeof assertCardAccess>>;
 
@@ -161,13 +161,21 @@ export async function moveCard({
     // Same-list moves are reorders. Keep them realtime-only so card activity
     // does not fill with redundant "Backlog -> Backlog" entries.
     const activity = enteringNewList
-      ? await recordActivity(tx, {
+      ? await recordCoalescedActivity(tx, {
         boardId: current.boardId,
         workspaceId: ctx.workspaceId,
         actorId: auth.sub,
         entityType: "card",
         entityId: id,
         action: ACTIVITY_ACTION.MOVED,
+        // Hide a rapid undo without merging forward transitions. Movement events and
+        // list-entry automations still run for every move, including the reversal.
+        coalesceKey: "card:list",
+        coalesceRevertsOnly: true,
+        windowMs: 60_000,
+        preservePayloadKeys: ["fromListId", "prevPosition"],
+        fromValue: fromListId,
+        toValue: body.listId,
         payload: { fromListId, toListId: body.listId, prevPosition, position },
       })
       : null;
@@ -259,7 +267,7 @@ export async function emitCardMoved({ auth, result }: { auth: AuthClaims; result
   });
   // Related cards show this card's list in their Dependencies section.
   if (fromListId !== toListId) await emitRelationNeighboursChanged([id]);
-  if (activity) await emitCardActivityFeedItem(boardId, id, activity);
+  if (activity) await emitCoalescedCardActivityFeedItem(boardId, id, activity);
   if (completedCard && completionActivity) {
     const wireCard = toWireCard(completedCard, auth.cid);
     await emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: wireCard });

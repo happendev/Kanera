@@ -6,6 +6,7 @@ All notable changes to Kanera are documented here.
 
 ### Added
 
+- **Mermaid diagrams:** ```` ```mermaid ```` code blocks are drawn as diagrams in card descriptions, notes and Markdown attachment previews, using the app's theme, accent colours and rounded shapes. Wide diagrams scroll within their frame to keep labels readable; comments keep showing the source.
 - **Mentions tab in notifications:** once someone has @-mentioned you, the notifications drawer gets a **Mentions** tab (with its unread count) listing every comment that mentions you, read or unread. On phones the drawer's Group, Board and User menus now share one row.
 - **Thumbs-up from notifications:** a notification for a comment that @-mentions you has a thumbs-up button beside the read dot, so you can acknowledge it without opening the card. Reacting marks the notification read.
 - **Agents filter in card activity:** cards an AI agent has commented on get an **Agents** tab beside All and Comments, showing only the comments and changes connected agents made and how their runs ended.
@@ -26,6 +27,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Interface refresh:** a cleaner, more consistent look across boards, tables, Home, My Cards and Team Cards, notifications, menus, the new card dialog and card detail, with clearer light and dark themes. Phones get the full screen width, with navigation behind a menu button, and larger touch targets.
 - **Faster card details:** sections render independently, large collections defer offscreen rendering, and realtime bursts share one offline-cache write. Detail/feed loads are cancellable and deduplicated, unchanged reconnects use conditional requests, and per-card revisions preserve live edits without retrying the initial detail load.
 
 - **Onboarding templates:** lists now start with colors suited to their workflow stages, carried through to workspace and standalone boards.
@@ -33,6 +35,15 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+- **Offline notes:** reopening a previously viewed workspace note while offline now shows its contents instead of “No note selected”. The note updates automatically when you're back online.
+- Rapidly reversing a list move now removes its activity and inbox notification. Forward moves remain separate, and every move still runs its events and automations. Applies to individual and bulk moves.
+- Deleting a standalone board removes it from the sidebar straight away instead of leaving a dead link until the page is reloaded.
+- **Numbered lists:** a numbered list interrupted by bullet points keeps its numbering after saving instead of restarting at 1.
+- Demo seed card creations and recent list moves now record their human actors, so teammates' recent work appears in the activity overview.
+- Updated application dependencies and monitoring images to resolve available high and critical security fixes.
+- Conditional card detail and activity reads now finish their 304 response once, avoiding duplicate-send errors.
+- API and worker shutdown now drain background work before closing realtime and shared connections, handle idle PostgreSQL connection errors, and finish connection cleanup when a dependency stops first.
+- Workspace deletion now recovers from transient database deadlocks while realtime events are being dispatched.
 - Fixed cases where text in Scratchpad, Notes, card and checklist descriptions, or comments could disappear or revert after reconnecting or reopening an editor. Older save responses no longer discard newer drafts, and failed background refreshes keep the current scratchpad text intact.
 - **Comment saves:** failed saves now show an error and leave your draft available to retry.
 - Lines that start with "1.", "-" or "#" after a Shift+Enter line break in a description, comment or note no longer reopen as a list or heading with a stray `\` left behind.

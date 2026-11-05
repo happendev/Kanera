@@ -56,6 +56,8 @@ export interface CoalescedActivityInput extends ActivityInput {
   windowMs: number;
   coalesceAcrossBoards?: boolean;
   coalesceActions?: ActivityAction[];
+  /** Keep forward transitions separate; merge only an immediate reversal of the latest edit. */
+  coalesceRevertsOnly?: boolean;
   preservePayloadKeys?: string[];
   fromValue?: unknown;
   toValue?: unknown;
@@ -163,7 +165,7 @@ export async function recordCoalescedActivity(tx: Tx, input: CoalescedActivityIn
   const boardScope = input.coalesceAcrossBoards ? undefined : sameBoard;
   // Only visible activity can be extended. Once a burst returns to its original
   // value, the row is hidden and later edits start a new visible story.
-  const [existing] = await tx
+  const [latest] = await tx
     .select()
     .from(activityEvents)
     .where(
@@ -198,6 +200,13 @@ export async function recordCoalescedActivity(tx: Tx, input: CoalescedActivityIn
     fromValue: Object.prototype.hasOwnProperty.call(nextPayload, "fromValue") ? nextPayload.fromValue : input.fromValue,
     toValue: nextToValue,
   };
+  const latestPayload = latest?.payload as Record<string, unknown> | undefined;
+  // List transitions can trigger automations, so forward movement stays visible step by step.
+  // Only a matching reverse transition cancels its predecessor, rather than rewriting the journey.
+  const revertsLatest = latestPayload
+    && activityValuesEqual(latestPayload.fromValue, nextToValue)
+    && activityValuesEqual(latestPayload.toValue, insertPayload.fromValue);
+  const existing = input.coalesceRevertsOnly && !revertsLatest ? undefined : latest;
 
   if (existing) {
     const previousBoardId = existing.boardId;

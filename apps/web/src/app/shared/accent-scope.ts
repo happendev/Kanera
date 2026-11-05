@@ -1,8 +1,9 @@
 /**
  * Re-tints a subtree's accent tokens with an identity colour (a board's or a workspace's).
  *
- * The identity colour is decorative; the *-accent token is its contrast-checked action tone (light
- * mode only — dark falls back to the identity colour and relies on --accent-ink). --accent-soft
+ * The identity colour is decorative; the *-accent token is its contrast-checked action tone (every
+ * hue in light; in dark only the few hues too dim to read as text on a card — the rest fall back to
+ * the identity colour and rely on --accent-ink for fills). --accent-soft
  * resolves its var(--accent) where it is *declared*, so the :root definition would stay the default
  * teal here; it is rebound explicitly so engaged controls tint with the scope colour too.
  */

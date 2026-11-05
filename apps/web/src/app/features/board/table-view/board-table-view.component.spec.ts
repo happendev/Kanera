@@ -191,6 +191,7 @@ describe("BoardTableViewComponent", () => {
 
   it("shows title, status, assignees, due date, time in progress, labels, and every custom field by default, including showOnCard=false", () => {
     const component = fixture().componentInstance;
+    component.setGroupBy("completion");
 
     expect(["title", ...component.visibleColumns()]).toEqual([
       "title",
@@ -201,6 +202,21 @@ describe("BoardTableViewComponent", () => {
       "labels",
       "cf:field-1",
     ]);
+  });
+
+  it("hides Status by default only while grouped by list, where the run headers already name the list", () => {
+    const component = fixture().componentInstance;
+
+    expect(component.effectiveGroupBy()).toBe("list");
+    expect(component.visibleColumns()).not.toContain("status");
+    expect(component.columnsIsSet()).toBe(false);
+
+    component.toggleColumn("status");
+    expect(component.visibleColumns()).toContain("status");
+
+    component.clearColumns();
+    component.setGroupBy("completion");
+    expect(component.visibleColumns()).toContain("status");
   });
 
   it("offers a hidden Start date column that renders the planned start as a plain date", async () => {
@@ -257,8 +273,9 @@ describe("BoardTableViewComponent", () => {
   it("restores column visibility and order, grouping, and sorting when the board table is reopened", () => {
     const firstVisit = fixture();
     const first = firstVisit.componentInstance;
-    first.onColumnDrop({ previousIndex: 4, currentIndex: 0 } as never);
+    // Grouped first: grouped by list, Status is hidden by default and the drop indices would shift.
     first.setGroupBy("completion");
+    first.onColumnDrop({ previousIndex: 4, currentIndex: 0 } as never);
     first.setSort("title-desc");
     firstVisit.destroy();
 

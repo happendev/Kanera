@@ -83,9 +83,10 @@ import { byPosition } from "../../shared/position-sort";
     `
     .lp-panel {
       background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
+      /* Picker elevation role (apps/web/AGENTS.md), shared with the label and member pickers. */
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow-pop);
       padding: 10px;
       width: 100%;
       max-height: var(--ap-max-height, 340px);
@@ -113,8 +114,10 @@ import { byPosition } from "../../shared/position-sort";
     }
 
     .lp-search {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
+      /* Field fill and border tier, as in the label picker: --surface-2 is the selected-row wash,
+         and on dark overlays --border all but vanishes. */
+      background: var(--input-bg);
+      border: 1px solid var(--border-strong);
       border-radius: var(--radius-sm);
       color: var(--text);
       padding: 6px 8px;
@@ -145,6 +148,9 @@ import { byPosition } from "../../shared/position-sort";
       display: flex;
       align-items: center;
       gap: 8px;
+      /* Menu-row size (.k-menu-item), matching the label picker, instead of the global 36px button. */
+      height: auto;
+      min-height: 32px;
       padding: 6px 8px;
       background: transparent;
       border: none;
@@ -162,6 +168,18 @@ import { byPosition } from "../../shared/position-sort";
         background: var(--surface-hover);
         box-shadow: inset 0 0 0 1px var(--border-strong);
       }
+    }
+
+    /* 44px rows for a finger; desktop keeps the dense list. */
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .lp-row {
+        height: auto;
+        min-height: 44px;
+      }
+
+      /* The search field matches the rows under it rather than the 36px global input; the element
+         selector is needed to outrank that global input rule. */
+      input.lp-search { flex: none; height: 44px; }
     }
 
     .lp-dot {

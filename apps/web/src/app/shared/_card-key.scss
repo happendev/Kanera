@@ -12,3 +12,13 @@
   letter-spacing: 0;
   white-space: nowrap;
 }
+
+// The one variant, for rows that list cards (table, queue rows, Team overview, Up next's Not queued,
+// the checklist queue): the same face, size and weight, on --text-muted. A tile fades its --text-3
+// key to 70% at rest (card.component.scss), which lands on about this tone; a row has no hover lift
+// to undo a fade, so it takes the tone directly. Either way the key reads as one quiet prefix beside
+// a title, never as dark bold text competing with it.
+@mixin card-key-row {
+  @include card-key;
+  color: var(--text-muted);
+}

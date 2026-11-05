@@ -222,13 +222,14 @@ describe("CardComponent", () => {
     expect(fixture.nativeElement.querySelector(".card-unread-dot")).toBeNull();
   });
 
-  it("collapses the key row only when both the hidden key and priority rank are absent", async () => {
+  it("collapses the key row only when the hidden key, priority rank, inactivity and unread marks are all absent", async () => {
     const showCardKeys = signal(true);
     configure();
     TestBed.overrideProvider(CardKeyDisplayService, { useValue: { showCardKeys } });
 
     const fixture = createComponentFixture(CardComponent);
-    fixture.componentRef.setInput("card", card());
+    // Recently updated, so the inactivity mark (which also lives in this row) stays out of it.
+    fixture.componentRef.setInput("card", card({ updatedAt: new Date() }));
     fixture.componentRef.setInput("showActions", false);
     await fixture.whenStable();
     const element = fixture.nativeElement as HTMLElement;
@@ -255,7 +256,25 @@ describe("CardComponent", () => {
     expect(element.querySelector(".card-key-row")).toBeNull();
   });
 
-  it("renders a bare unread dot before the card title, and marks the tile unread", () => {
+  it("keeps the inactivity mark in the key row, out of the title line", async () => {
+    const showCardKeys = signal(false);
+    configure();
+    TestBed.overrideProvider(CardKeyDisplayService, { useValue: { showCardKeys } });
+
+    const fixture = createComponentFixture(CardComponent);
+    fixture.componentRef.setInput("card", card());
+    fixture.componentRef.setInput("showActions", false);
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+
+    const mark = element.querySelector(".card-attention") as HTMLElement | null;
+    expect(mark?.closest(".card-key-row")).not.toBeNull();
+    expect(element.querySelector(".card-body .card-attention")).toBeNull();
+    expect(mark?.getAttribute("role")).toBe("img");
+    expect(mark?.getAttribute("aria-label")).toContain("No activity");
+  });
+
+  it("renders a bare unread dot at the end of the key row, and marks the tile unread", () => {
     configure(2);
 
     const fixture = createComponentFixture(CardComponent);
@@ -263,16 +282,18 @@ describe("CardComponent", () => {
     fixture.componentRef.setInput("showActions", false);
     fixture.detectChanges();
 
-    const body = fixture.nativeElement.querySelector(".card-body") as HTMLElement;
-    const dot = body.querySelector(".card-unread-dot") as HTMLElement | null;
-    const title = body.querySelector(".card-title-text") as HTMLElement | null;
+    const row = fixture.nativeElement.querySelector(".card-key-row") as HTMLElement;
+    const dot = row.querySelector(".card-unread-dot") as HTMLElement | null;
+    const title = fixture.nativeElement.querySelector(".card-body .card-title-text") as HTMLElement | null;
 
     expect(dot?.getAttribute("aria-label")).toBe("2 unread notifications");
     // The mark never carries digits, whatever the count; the host class drives the heavier title.
     expect(dot?.textContent?.trim()).toBe("");
     expect((fixture.nativeElement as HTMLElement).classList.contains("has-unread")).toBe(true);
     expect(title?.textContent?.trim()).toBe("Ship tests");
-    expect(Array.from(body.children).indexOf(dot!)).toBeLessThan(Array.from(body.children).indexOf(title!));
+    // The corner mark, not a bullet in front of the title.
+    expect(row.lastElementChild).toBe(dot);
+    expect(fixture.nativeElement.querySelector(".card-body .card-unread-dot")).toBeNull();
   });
 
   it("leaves a single unread notification as the same bare dot", () => {
@@ -302,7 +323,7 @@ describe("CardComponent", () => {
     expect(dot.getAttribute("aria-label")).toBe("42 unread notifications");
   });
 
-  it("keeps the completed icon before the unread dot and title", () => {
+  it("keeps the completed icon before the title, with the unread dot out of the title line", () => {
     configure(1);
 
     const fixture = createComponentFixture(CardComponent);
@@ -313,7 +334,6 @@ describe("CardComponent", () => {
     const body = fixture.nativeElement.querySelector(".card-body") as HTMLElement;
     expect(Array.from(body.children).map((el) => (el as HTMLElement).className)).toEqual([
       "ti ti-circle-check card-complete-icon",
-      "card-unread-dot",
       "card-title-text",
     ]);
   });
@@ -416,11 +436,11 @@ describe("CardComponent", () => {
     const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card({ coverUrl: "/cover-legacy.jpg" }));
     expect(fixture.componentInstance.coverAspectRatio()).toBeNull();
-    expect(fixture.componentInstance.coverHeightPx()).toBe("160px");
+    expect(fixture.componentInstance.coverHeightPx()).toBe("128px");
 
     fixture.componentRef.setInput("card", card({ coverUrl: "/cover-invalid.jpg", coverImageWidth: 0, coverImageHeight: 400 }));
     expect(fixture.componentInstance.coverAspectRatio()).toBeNull();
-    expect(fixture.componentInstance.coverHeightPx()).toBe("160px");
+    expect(fixture.componentInstance.coverHeightPx()).toBe("128px");
   });
 
   it("updates reserved geometry when the summary cover dimensions change or are removed", () => {
@@ -435,7 +455,7 @@ describe("CardComponent", () => {
 
     fixture.componentRef.setInput("card", card());
     expect(fixture.componentInstance.coverAspectRatio()).toBeNull();
-    expect(fixture.componentInstance.coverHeightPx()).toBe("160px");
+    expect(fixture.componentInstance.coverHeightPx()).toBe("128px");
   });
 
   it("recreates the optimized cover when a move changes its list priority", () => {

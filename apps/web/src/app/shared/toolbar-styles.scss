@@ -41,6 +41,10 @@
   border-radius: var(--radius);
   font-size: var(--text-base);
   font-weight: 500;
+  // The global button reset centres its text. Invisible while the trigger hugs its label, but in the
+  // phone tray every trigger is a full-width row and a centred value sat apart from its left icon.
+  justify-content: flex-start;
+  text-align: left;
   cursor: pointer;
 
   // Neutral, deliberately *not* the accent: "the menu is showing" and "this control is away from
@@ -336,6 +340,24 @@
 .k-toolbar-collapsible-label.is-label-dropped,
 k-page-header.is-tight .k-toolbar-collapsible-label {
   @include collapsed-label;
+}
+
+// A header button that has dropped its label is an icon control like the header's icon cluster, so
+// it wears the same ghost treatment (.k-toolbar-icon-btn.is-ghost). Left outlined, a tight header
+// mixed three looks in one cluster — the solid primary, a bordered square (Save view) and a
+// borderless menu — and the outlined one read as the odd control out. The primary keeps its fill,
+// and an engaged control keeps `.is-set`, which is information rather than chrome.
+k-page-header.is-tight .k-toolbar-btn.k-toolbar-collapsible-label:not(.is-primary):not(.is-set) {
+  color: var(--text-muted);
+  border-color: transparent;
+  background: transparent;
+
+  &:hover:not(:disabled),
+  &.is-open {
+    color: var(--text);
+    border-color: transparent;
+    background: var(--surface-2);
+  }
 }
 
 // ─── Touch targets ───────────────────────────────────────────────────────────

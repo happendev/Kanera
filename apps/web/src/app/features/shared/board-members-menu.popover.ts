@@ -82,16 +82,22 @@ function errorMessage(error: unknown): string {
     <div class="bmp-panel">
       @if (canManage() && !loading() && candidates().length > 0) {
         <form class="bmp-add" (submit)="$event.preventDefault(); addMember()">
-          <select class="bmp-member-select" aria-label="Member to add" i18n-aria-label [value]="addUserId()" (input)="addUserId.set($any($event.target).value)" [disabled]="busy() || candidates().length === 0">
-            <option value="" [selected]="!addUserId()">{{ candidateScope() === "organisation" ? selectOrganisationMember : selectWorkspaceMember }}</option>
-            @for (candidate of candidates(); track candidate.userId) {
-              <option [value]="candidate.userId" [selected]="candidate.userId === addUserId()">{{ candidate.displayName }}</option>
-            }
-          </select>
-          <select aria-label="Role" i18n-aria-label="Select: board role for the new member" [value]="addRole()" (input)="addRole.set($any($event.target).value)" [disabled]="busy()">
-            <option value="observer" [selected]="addRole() === 'observer'" i18n="Board role: can view but not edit">Observer</option>
-            <option value="editor" [selected]="addRole() === 'editor'" i18n="Board role: can edit">Editor</option>
-          </select>
+          <span class="bmp-select-wrap bmp-member-wrap">
+            <select class="bmp-member-select" aria-label="Member to add" i18n-aria-label [value]="addUserId()" (input)="addUserId.set($any($event.target).value)" [disabled]="busy() || candidates().length === 0">
+              <option value="" [selected]="!addUserId()">{{ candidateScope() === "organisation" ? selectOrganisationMember : selectWorkspaceMember }}</option>
+              @for (candidate of candidates(); track candidate.userId) {
+                <option [value]="candidate.userId" [selected]="candidate.userId === addUserId()">{{ candidate.displayName }}</option>
+              }
+            </select>
+            <i aria-hidden="true" class="ti ti-chevron-down"></i>
+          </span>
+          <span class="bmp-select-wrap">
+            <select aria-label="Role" i18n-aria-label="Select: board role for the new member" [value]="addRole()" (input)="addRole.set($any($event.target).value)" [disabled]="busy()">
+              <option value="observer" [selected]="addRole() === 'observer'" i18n="Board role: can view but not edit">Observer</option>
+              <option value="editor" [selected]="addRole() === 'editor'" i18n="Board role: can edit">Editor</option>
+            </select>
+            <i aria-hidden="true" class="ti ti-chevron-down"></i>
+          </span>
           <button type="submit" [disabled]="busy() || !addUserId()" aria-label="Add member" i18n-aria-label><i aria-hidden="true" class="ti ti-user-plus"></i></button>
           <button class="bmp-access-toggle bmp-add-access" type="button" [class.is-active]="addAssignedItemsOnly()" [attr.aria-pressed]="addAssignedItemsOnly()" (click)="addAssignedItemsOnly.update(value => !value)" [disabled]="busy()" [title]="assignedItemsOnlyTooltip(addAssignedItemsOnly())">
             <i aria-hidden="true" [class]="addAssignedItemsOnly() ? 'ti ti-lock' : 'ti ti-lock-open'"></i>
@@ -99,7 +105,7 @@ function errorMessage(error: unknown): string {
           </button>
         </form>
       } @else if (canManage() && !loading() && candidates().length === 0 && !error()) {
-        <div class="bmp-all-added">
+        <div class="k-menu-note bmp-all-added">
           <i aria-hidden="true" class="ti ti-user-check"></i>
           <span>@if (candidateScope() === "organisation") { <ng-container i18n>All organisation members are already on this board.</ng-container> } @else { <ng-container i18n>All workspace members are already on this board.</ng-container> }</span>
         </div>
@@ -107,6 +113,8 @@ function errorMessage(error: unknown): string {
       @if (error()) { <p class="bmp-error"><i aria-hidden="true" class="ti ti-alert-circle"></i> {{ error() }}</p> }
       @if (loading() && renderedMembers().length === 0) { <p class="bmp-empty"><i aria-hidden="true" class="ti ti-loader-2 spin"></i> <ng-container i18n>Loading members…</ng-container></p> }
       @else {
+        <!-- The roster is the part that scrolls: the add form above and Leave below stay in view. -->
+        <div class="bmp-list k-scroll-fade">
         <section class="bmp-section">
           <div class="bmp-section-title" i18n="Section heading: board members">Members</div>
           @for (member of localMembers(); track member.userId) {
@@ -119,14 +127,14 @@ function errorMessage(error: unknown): string {
                   @else if (isAccessRow(member) && member.email) { <span class="bmp-email" [title]="member.email">{{ member.email }}</span> }
                 </div>
               </div>
-              <div class="bmp-actions">
+              <div class="bmp-actions" [class.is-managed]="canManage() && isAccessRow(member) && !member.pinned">
                 @if (canManage() && isAccessRow(member)) {
                   @if (member.pinned) { <span class="bmp-role bmp-role-admin" i18n="Role badge">Admin</span> }
                   @else {
-                    <select class="bmp-role-select" [attr.aria-label]="roleForLabel(member.displayName)" [value]="member.role" (input)="changeRole(member.userId, $any($event.target).value)" [disabled]="busy()">
+                    <span class="bmp-select-wrap"><select class="bmp-role-select" [attr.aria-label]="roleForLabel(member.displayName)" [value]="member.role" (input)="changeRole(member.userId, $any($event.target).value)" [disabled]="busy()">
                       <option value="observer" [selected]="member.role === 'observer'" i18n="Board role: can view but not edit">Observer</option>
                       <option value="editor" [selected]="member.role === 'editor'" i18n="Board role: can edit">Editor</option>
-                    </select>
+                    </select><i aria-hidden="true" class="ti ti-chevron-down"></i></span>
                     <button class="bmp-access-toggle" type="button" [class.is-active]="member.assignedItemsOnly" [attr.aria-pressed]="member.assignedItemsOnly" (click)="changeRestriction(member, !member.assignedItemsOnly)" [disabled]="busy()" [attr.aria-label]="assignedOnlyForLabel(member.displayName)" [title]="assignedItemsOnlyTooltip(!!member.assignedItemsOnly)"><i aria-hidden="true" [class]="member.assignedItemsOnly ? 'ti ti-lock' : 'ti ti-lock-open'"></i></button>
                     <button class="bmp-remove" type="button" (click)="removeMember(member)" [disabled]="busy()" [attr.aria-label]="removeLabel(member.displayName)"><i aria-hidden="true" class="ti ti-trash"></i></button>
                   }
@@ -150,12 +158,12 @@ function errorMessage(error: unknown): string {
                     @if (guest.userId === currentUserId()) { <span class="bmp-you" i18n="Badge next to the current user's own name">You</span> }
                   </div>
                 </div>
-                <div class="bmp-actions">
+                <div class="bmp-actions" [class.is-managed]="canManage() && isAccessRow(guest)">
                   @if (canManage() && isAccessRow(guest)) {
-                    <select class="bmp-role-select" [attr.aria-label]="roleForLabel(guest.displayName)" [value]="guest.role" (input)="changeRole(guest.userId, $any($event.target).value)" [disabled]="busy()">
+                    <span class="bmp-select-wrap"><select class="bmp-role-select" [attr.aria-label]="roleForLabel(guest.displayName)" [value]="guest.role" (input)="changeRole(guest.userId, $any($event.target).value)" [disabled]="busy()">
                       <option value="observer" [selected]="guest.role === 'observer'" i18n="Board role: can view but not edit">Observer</option>
                       <option value="editor" [selected]="guest.role === 'editor'" i18n="Board role: can edit">Editor</option>
-                    </select>
+                    </select><i aria-hidden="true" class="ti ti-chevron-down"></i></span>
                     <button class="bmp-access-toggle" type="button" [class.is-active]="guest.assignedItemsOnly" [attr.aria-pressed]="guest.assignedItemsOnly" (click)="changeRestriction(guest, !guest.assignedItemsOnly)" [disabled]="busy()" [attr.aria-label]="assignedOnlyForLabel(guest.displayName)" [title]="assignedItemsOnlyTooltip(!!guest.assignedItemsOnly)"><i aria-hidden="true" [class]="guest.assignedItemsOnly ? 'ti ti-lock' : 'ti ti-lock-open'"></i></button>
                     <button class="bmp-remove" type="button" (click)="removeMember(guest)" [disabled]="busy()" [attr.aria-label]="removeLabel(guest.displayName)"><i aria-hidden="true" class="ti ti-trash"></i></button>
                   } @else {
@@ -167,6 +175,7 @@ function errorMessage(error: unknown): string {
             }
           </section>
         }
+        </div>
         @if (leavingMember(); as member) {
           <div class="bmp-footer">
             <button class="bmp-leave" type="button" (click)="leaveMembership(member)" [disabled]="busy() || confirmingRemoval()">
@@ -181,10 +190,90 @@ function errorMessage(error: unknown): string {
   styles: [
     ANCHORED_HOST_STYLES,
     `
-    .bmp-footer{padding-top:8px;border-top:1px solid var(--overlay-separator)}.bmp-leave{display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;min-height:34px;padding:7px 8px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--danger);font:inherit;font-size: var(--text-sm);text-align:left;cursor:pointer;transition:background .15s ease}.bmp-leave i{font-size: var(--text-lg)}.bmp-leave:not(:disabled):hover{background:color-mix(in srgb,var(--danger) 10%,transparent)}.bmp-leave:focus-visible{outline:2px solid var(--danger);outline-offset:2px}
-    .bmp-panel{width:100%;max-height:min(520px,calc(100vh - 24px));overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:12px;background:var(--surface-overlay);border:1px solid var(--overlay-border);border-radius:var(--radius-lg);box-shadow:0 8px 32px rgba(0,0,0,.25)}
-    .bmp-add{display:grid;grid-template-columns:minmax(0,1fr) 36px;gap:6px}.bmp-add select,.bmp-role-select{min-width:0;height:36px;padding:0 9px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size: var(--text-sm);outline:0;transition:border-color .15s ease,box-shadow .15s ease}.bmp-add select:focus-visible,.bmp-role-select:focus-visible{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}.bmp-member-select{grid-column:1/-1;width:100%}.bmp-add .bmp-role-select{width:100%}.bmp-add button,.bmp-remove{border:0;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);cursor:pointer}.bmp-add button[type="submit"]{width:36px;height:36px;border:1px solid var(--border);font-size: var(--text-md)}.bmp-add button[type="submit"]:not(:disabled):hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,var(--surface-2));color:var(--accent)}.bmp-add .bmp-add-access{grid-column:1/-1;width:100%;justify-content:flex-start;padding:0 9px;border:1px solid var(--border);background:transparent;color:var(--text-muted)}.bmp-add .bmp-add-access.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.bmp-remove{width:28px;height:28px;color:var(--danger)}button:disabled,select:disabled{cursor:not-allowed;opacity:.55}.bmp-all-added{display:flex;align-items:center;gap:7px;padding:8px 9px;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text-muted);font-size: var(--text-sm)}.bmp-all-added i{color:var(--text)}
-    .bmp-section{display:flex;flex-direction:column;gap:4px}.bmp-guests{padding-top:8px;border-top:1px solid var(--overlay-separator)}.bmp-section-title{padding:0 4px 4px;color:var(--text-muted);font-size: var(--text-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase}.bmp-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-height:44px;padding:6px;border-radius:var(--radius-sm)}.bmp-row:hover{background:var(--surface-hover)}.bmp-identity{display:flex;min-width:0;align-items:center;gap:8px}.bmp-person{display:flex;min-width:0;flex:1;flex-direction:column;gap:1px}.bmp-name,.bmp-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bmp-name{color:var(--text);font-size: var(--text-base);font-weight:600}.bmp-email,.bmp-you{color:var(--text-muted);font-size:10px}.bmp-actions{display:flex;flex:0 0 auto;align-items:center;gap:4px}.bmp-access-toggle{display:inline-flex;width:28px;height:28px;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font-size: var(--text-sm);cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}.bmp-access-toggle:hover{background:var(--surface-hover);color:var(--text)}.bmp-access-toggle.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.bmp-access-readonly{display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size: var(--text-xs);transition:background .15s ease,box-shadow .15s ease}.bmp-access-readonly:hover,.bmp-access-readonly:focus-visible{background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent);outline:0}.bmp-role{color:var(--text-muted);font-size: var(--text-xs);font-weight:600}.bmp-role-admin{padding:4px 7px;border-radius:999px;background:var(--surface-3)}.bmp-role-select{width:84px;height:28px}.bmp-empty,.bmp-error{margin:0;padding:6px;color:var(--text-muted);font-size: var(--text-sm)}.bmp-error{color:var(--danger)}
+    .bmp-footer{flex:none;padding-top:8px;border-top:1px solid var(--overlay-separator)}.bmp-leave{display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;min-height:34px;padding:7px 8px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--danger);font:inherit;font-size: var(--text-sm);text-align:left;cursor:pointer;transition:background .15s ease}.bmp-leave i{font-size: var(--text-lg)}.bmp-leave:not(:disabled):hover{background:color-mix(in srgb,var(--danger) 10%,transparent)}.bmp-leave:focus-visible{outline:2px solid var(--danger);outline-offset:2px}
+    .bmp-panel{width:100%;max-height:var(--ap-max-height,720px);overflow:hidden;display:flex;flex-direction:column;gap:12px;padding:12px;background:var(--surface-overlay);border:1px solid var(--overlay-border);border-radius:var(--radius-md);box-shadow:var(--shadow-pop)}
+    .bmp-panel > *{flex:none}
+    /* Takes whatever height the placement leaves after the add form and footer. */
+    /* Reaches through the panel's side and bottom padding (and the gap above a Leave footer), so the
+       last row scrolls clear of the border instead of being clipped 12px above it, and the scroll
+       cue spans the full width. */
+    .bmp-panel > .bmp-list{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:12px;margin:0 -12px -12px;padding:0 12px 12px;--k-scroll-fade-pad:12px;--k-scroll-fade-gap:12px}
+    .bmp-add{display:grid;grid-template-columns:minmax(0,1fr) 36px;gap:6px}
+    .bmp-member-wrap{grid-column:1/-1}
+    /* Selects draw their own Tabler chevron (the notifications filter pattern): the native arrow
+       differed per OS and crowded the label. */
+    .bmp-select-wrap{position:relative;display:block;min-width:0}
+    .bmp-select-wrap > i{position:absolute;top:50%;right:8px;transform:translateY(-50%);color:var(--text-muted);font-size:var(--text-sm);pointer-events:none}
+    .bmp-select-wrap:has(select:disabled) > i{opacity:.55}
+    /* Controls sit on floating chrome, so they take --overlay-border: --border is nearly the overlay fill on
+       dark and left the selects, the add button and the access toggle with no visible edge. */
+    .bmp-add select,.bmp-role-select{appearance:none;width:100%;min-width:0;height:36px;padding:0 26px 0 9px;border:1px solid var(--overlay-border);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:var(--text-sm);outline:0;cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease}
+    .bmp-add select:focus,.bmp-role-select:focus{box-shadow:none}
+    .bmp-add select:focus-visible,.bmp-role-select:focus-visible{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}
+    .bmp-add button{border:0;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);cursor:pointer}
+    .bmp-add button[type="submit"]{width:36px;height:36px;border:1px solid var(--overlay-border);font-size: var(--text-md)}
+    .bmp-add button[type="submit"]:not(:disabled):hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,var(--surface-2));color:var(--accent)}
+    .bmp-add .bmp-add-access{grid-column:1/-1;width:100%;justify-content:flex-start;padding:0 9px;border:1px solid var(--overlay-border);background:transparent;color:var(--text-3)}
+    .bmp-add .bmp-add-access.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+    button:disabled,select:disabled{cursor:not-allowed;opacity:.55}
+    /* Disabled until a member is picked, which is the form's resting state, so it must stay legible: a
+       thin icon faded to 55% on --surface-2 all but disappeared. The placeholder tier reads as inert. */
+    .bmp-add button[type="submit"]:disabled{opacity:1;color:var(--text-4)}
+    /* An outlined note, not a filled well: --surface-2 is darker than the dark overlay and read as sunken. */
+    /* The shared .k-menu-note: muted text and a small icon, no box (bordered, it read as a disabled
+       input). Inset to the rows' avatar edge rather than the note's usual icon-column indent. */
+    .bmp-all-added{display:flex;align-items:flex-start;gap:6px;padding:0 6px;text-wrap:pretty}
+    .bmp-all-added i{flex:none;font-size:var(--text-sm);line-height:inherit}
+    .bmp-section{display:flex;flex-direction:column;gap:4px}
+    .bmp-guests{padding-top:8px;border-top:1px solid var(--overlay-separator)}
+    /* The .k-menu-heading recipe, inset to the rows' avatar edge. */
+    .bmp-section-title{padding:4px 6px;color:var(--text-3);font-size:var(--text-xs);font-weight:600}
+    .bmp-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-height:44px;padding:6px;border-radius:var(--radius-sm)}
+    .bmp-row:hover{background:var(--surface-hover)}
+    .bmp-identity{display:flex;min-width:0;align-items:center;gap:8px}
+    .bmp-person{display:flex;min-width:0;flex:1;flex-direction:column;gap:1px}
+    .bmp-name,.bmp-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bmp-name{color:var(--text);font-size:var(--text-base);font-weight:600}
+    .bmp-email,.bmp-you{color:var(--text-muted);font-size:var(--text-xs)}
+    .bmp-actions{display:flex;flex:0 0 auto;align-items:center;gap:4px}
+    /* Fixed width so every row's select lines up and the longest role label in any locale clears the chevron. */
+    .bmp-actions .bmp-select-wrap{width:104px}
+    /* Editable rows share one column grid, so the selects, locks and bins line up down the list. An
+       admin's badge stays flush right (auto column), leaving the name and email the room. */
+    .bmp-actions.is-managed{display:grid;grid-template-columns:104px var(--h-md) var(--h-md);justify-items:start}
+    .bmp-role-select{height:var(--h-md)}
+    .bmp-access-toggle,.bmp-remove{display:inline-flex;flex:none;width:var(--h-md);height:var(--h-md);padding:0;align-items:center;justify-content:center;border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font-size:var(--text-md);cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}
+    /* One ghost family: borderless at rest, filled on hover. The restriction toggle keeps its accent
+       wash while on, which is state rather than chrome. */
+    .bmp-access-toggle,.bmp-remove{border:0}
+    .bmp-access-toggle:hover:not(:disabled){background:var(--surface-hover);color:var(--text)}
+    .bmp-access-toggle.is-active,.bmp-access-toggle.is-active:hover:not(:disabled){background:var(--accent-soft);color:var(--accent)}
+    /* Neutral at rest: a column of red bins read as an alarm. Danger shows only on intent. */
+    .bmp-remove:hover:not(:disabled),.bmp-remove:focus-visible{background:var(--danger-soft);color:var(--danger)}
+    .bmp-access-readonly{display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size: var(--text-xs);transition:background .15s ease,box-shadow .15s ease}
+    .bmp-access-readonly:hover,.bmp-access-readonly:focus-visible{background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent);outline:0}
+    .bmp-role{color:var(--text-muted);font-size: var(--text-xs);font-weight:600}
+    /* Outlined rather than filled: --surface-3 all but vanished on the dark overlay. */
+    .bmp-role-admin{padding:3px 7px;border:1px solid var(--overlay-border);border-radius:999px;background:transparent;color:var(--text-muted)}
+    .bmp-empty,.bmp-error{margin:0;padding:6px;color:var(--text-muted);font-size: var(--text-sm)}
+    .bmp-error{color:var(--danger)}
+    /* Touch: 44px controls. Inline beside them the name and email had about 88px at 390px and every
+       email truncated, so an editable member's identity takes the full width and its controls drop
+       to a second line that starts at the name's edge (avatar 30 + gap 8), the select taking the
+       slack. Admin rows keep their badge inline. */
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .bmp-actions{gap:2px}
+      .bmp-actions.is-managed{grid-template-columns:104px 44px 44px}
+      .bmp-row:has(.bmp-role-select){grid-template-columns:minmax(0,1fr);row-gap:2px}
+      .bmp-row:has(.bmp-role-select) > .bmp-actions.is-managed{justify-self:stretch;grid-template-columns:minmax(0,1fr) 44px 44px;padding-left:38px}
+      .bmp-actions.is-managed .bmp-select-wrap{width:auto;justify-self:stretch}
+      .bmp-add{grid-template-columns:minmax(0,1fr) 44px}
+      .bmp-add select,.bmp-role-select{height:auto;min-height:44px}
+      .bmp-add button[type="submit"]{width:44px;height:44px}
+      .bmp-add .bmp-add-access{height:44px}
+      .bmp-access-toggle,.bmp-remove{width:44px;height:44px}
+      .bmp-leave{min-height:44px}
+    }
   `,
   ],
 })
@@ -223,7 +312,10 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   constructor() {
     inject(DestroyRef).onDestroy(() => { this.destroyed = true; });
     this.panel.configure({
-      placement: () => ({ width: 320, maxHeight: 520 }),
+      // 360 rather than 320: a fixed-width role select and two 30px buttons left the name and email
+      // column about 60px, so every email truncated. Placement still clamps it on phones.
+      // maxHeight is a ceiling, not the size: the viewport clamp decides, so a phone uses its height.
+      placement: () => ({ width: 360, maxHeight: 720 }),
       // An outside click during a removal confirmation must not tear the popover down: the DELETE is
       // still in flight and its success output has to reach the board page. Escape can dismiss the
       // confirmation stage, but an active write must keep its success/error handler mounted.

@@ -1,5 +1,7 @@
 // A progress header over two parts: a spotlight on the one open step (what it teaches and the button
-// that does it) and the full checklist beside it. Done steps keep a tick and quiet text rather than a
+// that does it) and the full checklist under it. The spotlight is one compact row rather than a
+// column of its own: the open row in the list already names the step, and a tall callout pushed the
+// rest of home below the fold. Done steps keep a tick and quiet text rather than a
 // strikethrough, so a mostly finished list stays calm and the steps left stand out. Rows never
 // reorder, so nothing jumps under the pointer when the palette or a push prompt ticks a step off.
 :host {
@@ -11,11 +13,23 @@
   // window beside an open sidebar.
   container-type: inline-size;
   display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5) var(--space-5);
+  // Tighter than a standalone panel: everything this card adds to its height pushes the focus tiles
+  // and the Up next queue further below the fold.
+  --gs-pad-x: var(--space-4);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--gs-pad-x);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+}
+
+// A phone-width host (home's content column is an inline-size container): a tighter frame, since
+// every pixel here is one the focus tiles below sit further down the first screen.
+@container (max-width: 640px) {
+  .getting-started {
+    --gs-pad-x: var(--space-3);
+    gap: var(--space-2);
+  }
 }
 
 .gs-head {
@@ -59,6 +73,61 @@
   }
 }
 
+// The compact card (see `compact` in the component): the head row alone, carrying the next step and
+// its button between the title and the progress ring. One row on a wide card; a phone-width card
+// cannot fit the title, the step, its button and two 44px controls on one line, so the step drops to
+// a second line of its own rather than ellipsing to nothing.
+.gs-next {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-left: var(--space-3);
+
+  .gs-ring {
+    border-color: var(--accent);
+  }
+
+  .gs-action {
+    flex: none;
+    margin-left: auto;
+  }
+}
+
+.gs-next-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The next step takes the slack, so the ring and count sit beside the controls instead of being
+// pushed to the middle by their usual auto margin.
+.is-compact .gs-ring-progress {
+  margin-left: var(--space-3);
+}
+
+@container (max-width: 640px) {
+  .is-compact .gs-head {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+
+  .is-compact .gs-ring-progress {
+    margin-left: auto;
+  }
+
+  .gs-next {
+    order: 1;
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+}
+
 .gs-bar {
   position: relative;
   height: 4px;
@@ -90,9 +159,8 @@
 
 .gs-body {
   display: grid;
-  gap: var(--space-4) var(--space-6);
+  gap: var(--space-2);
   min-width: 0;
-  margin-top: var(--space-1);
 }
 
 // Narrow cards open the step under its row, where the tap was; the spotlight would sit above the
@@ -102,11 +170,6 @@
 }
 
 @container (min-width: 720px) {
-  .gs-body.has-spotlight {
-    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
-    align-items: start;
-  }
-
   .gs-spotlight {
     display: grid;
   }
@@ -115,95 +178,194 @@
   .gs-step .gs-inline {
     display: none;
   }
+
+  // The spotlight above already shouts this step, so its row only keeps the accent ring that ties
+  // the two together: a washed, bold row under the banner said the same thing twice. The .gs-list
+  // prefix outranks the base .gs-step.is-open wash further down.
+  .gs-list .gs-step.is-open {
+    background: transparent;
+
+    .gs-label {
+      font-weight: 450;
+    }
+  }
 }
 
+// Icon, then the title over what it teaches, then the action at the trailing edge.
 .gs-spotlight {
-  justify-items: start;
-  align-content: start;
-  gap: var(--space-2);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon title action"
+    "icon text action"
+    "icon error action";
+  align-items: center;
+  gap: 0 var(--space-3);
   min-width: 0;
-  padding: var(--space-5);
+  padding: 6px var(--space-3);
   border-radius: var(--radius-md);
   // A tinted wash with a matching ring marks it as the step to do, without a stripe.
   background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 
   .gs-text {
+    grid-area: text;
     color: var(--text-3);
-    font-size: var(--text-md);
-    line-height: 1.5;
+    line-height: 1.4;
+  }
+
+  .gs-error {
+    grid-area: error;
   }
 
   .gs-action {
-    margin-top: var(--space-2);
+    grid-area: action;
   }
 }
 
 .gs-spotlight-icon {
+  grid-area: icon;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  margin-bottom: var(--space-2);
+  // 28px: the spotlight's two lines of text are about that tall, so the icon no longer sets the
+  // row's height.
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--accent-fg);
-  font-size: 22px; // glyph sized to the 40px tile, off the text scale
-}
-
-.gs-eyebrow {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
+  font-size: var(--text-md);
 }
 
 .gs-spotlight-title {
+  grid-area: title;
   margin: 0;
   color: var(--text);
-  font-size: var(--text-lg);
-  font-weight: 650;
-  letter-spacing: var(--tracking-tight);
-  line-height: 1.3;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.35;
 }
 
-// Sections flow down balanced columns, so a two-step section doesn't leave a hole beside a
-// five-step one the way grid rows would.
+// One section per column, each as wide as its longest step and sharing the slack, so a desktop card
+// is one band of short columns rather than balanced newspaper columns, which stacked two sections in
+// the last column and wrapped its labels while the others had room. A card too narrow for every
+// section starts a second band on the same column lines.
 .gs-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, auto));
+  align-items: start;
+  gap: var(--space-2) 10px;
   min-width: 0;
-  columns: 200px;
-  column-gap: var(--space-5);
 }
 
 .gs-section {
   display: grid;
-  gap: 2px;
+  gap: var(--space-2);
   min-width: 0;
-  margin-bottom: var(--space-3);
-  break-inside: avoid;
 }
 
+// --text-sm in --text at 600 over --text-sm rows: the heading leads by weight and colour rather
+// than by size, so it reads as the group's name without outshouting the steps.
 .gs-section-label {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  margin: 0 0 2px;
-  padding: 0 8px;
-  color: var(--text-muted);
+  margin: 0;
+  padding: 0 6px;
+  color: var(--text);
   font-size: var(--text-sm);
-  font-weight: 550;
+  font-weight: 600;
+}
+
+// Wide cards list every section; the chip strip is the narrow layout's folded form (below).
+.gs-chips {
+  display: none;
+}
+
+// Narrow cards: the current section stays open and the others fold to one row of chips under it,
+// so a phone shows the step to do and the overall progress instead of all twenty-odd rows.
+@container (max-width: 719.98px) {
+  .gs-sections {
+    display: block;
+  }
+
+  .gs-section:not(.is-current) {
+    display: none;
+  }
+
+  // Runs out to the card's edges (the negative margin cancels the card's inline padding), so a chip
+  // cut by the edge reads as "scroll for more" rather than as the end of the row. The block padding
+  // gives the chips' 4px touch halo room inside the scrollport, and the matching negative margin
+  // keeps that room from adding to the card's height.
+  .gs-chips {
+    display: flex;
+    gap: 6px;
+    margin: -4px calc(var(--gs-pad-x) * -1);
+    padding: 4px var(--gs-pad-x);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    scroll-padding-inline: var(--gs-pad-x);
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    // A chip cut flat at the card edge read as clipped rather than as "more this way". Only while
+    // chips remain past the edge (the component measures it), so a strip scrolled to its end, or
+    // one that fits, shows its last chip whole.
+    &.has-more {
+      // 24px: a wider fade left the last visible chip a ghost sliver on a phone.
+      mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    }
+  }
+
+  // The global button reset pins buttons to 36px with an accent fill; a chip needs neither.
+  .gs-section-chip {
+    flex: none;
+    white-space: nowrap;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: var(--h-md);
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-3);
+    font-size: var(--text-base);
+    font-weight: 500;
+
+    &:hover:not(:disabled) {
+      border-color: var(--border-strong);
+      background: var(--surface-2);
+      color: var(--text);
+    }
+
+    .gs-section-count {
+      margin-left: 0;
+    }
+
+    // Touch reaches 44px through this halo rather than a 44px pill, which keeps the strip short.
+    // Half the 6px gap on each side, so neighbouring halos meet without overlapping.
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -4px -3px;
+    }
+  }
 }
 
 .gs-section-count {
   margin-left: auto;
-  color: var(--text-4);
+  // --text-muted, not --text-4: the count is information, and --text-4 is the placeholder tier.
+  color: var(--text-muted);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 
-  .gs-section.is-done & {
+  .gs-section.is-done &,
+  .gs-section-chip.is-done & {
     color: var(--accent);
   }
 }
@@ -233,16 +395,18 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   height: auto;
-  min-height: 32px;
-  padding: 5px 8px;
+  // Keep the long checklist compact while leaving breathing room around each ring and label.
+  // Open steps still get 44px on touch (below).
+  min-height: var(--h-sm);
+  padding: var(--space-1) 6px;
   border: 0;
   border-radius: var(--radius);
   background: transparent;
   color: var(--text);
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
   font-weight: 450;
   text-align: left;
   white-space: normal;
@@ -283,10 +447,12 @@
     border-color: var(--accent);
   }
 
-  // A soft tick, so the finished steps recede and the open ones carry the list.
+  // A filled --success tick: finished steps read as done at a glance, unlike the hollow rings of
+  // the steps left, while their muted labels keep them receding behind the open ones.
   .is-done & {
     border-color: transparent;
-    background: var(--accent-soft);
+    background: var(--success-soft);
+    color: var(--success);
   }
 
   .just-done & {
@@ -308,24 +474,33 @@
   }
 }
 
-// On a narrow card the chevron points down at the step's inline detail.
+// A wide card opens the step in the spotlight, and the row's hover wash already says it is a target:
+// the chevron there only cost each column its width.
+@container (min-width: 720px) {
+  .gs-chevron {
+    display: none;
+  }
+}
+
+// On a narrow card the chevron points down at the step's inline detail, and the detail starts at
+// the ring rather than past it: on a phone the label indent cost the copy a fifth of its line.
 @container (max-width: 719.98px) {
   .is-open .gs-chevron {
     transform: rotate(90deg);
+  }
+
+  // Outranks the base .gs-inline rule further down.
+  .gs-step .gs-inline {
+    padding-left: 6px;
   }
 }
 
 .gs-inline {
   display: grid;
   justify-items: start;
-  gap: var(--space-2);
+  gap: 6px;
   // Lines the text up under the label, past the ring and its gap.
-  padding: 0 8px 10px 36px;
-
-  .gs-action {
-    height: var(--h-md);
-    font-size: var(--text-base);
-  }
+  padding: 0 6px var(--space-2) 32px;
 }
 
 .gs-text {
@@ -350,6 +525,10 @@
 }
 
 .gs-action {
+  height: var(--h-sm);
+  padding: 0 10px;
+  font-size: var(--text-sm);
+
   .ti-arrow-right {
     transition: transform var(--dur);
   }
@@ -360,8 +539,10 @@
 }
 
 // Hover-revealed controls stay visible on touch, and rows and buttons grow to touch size.
+// Done rows are plain text, not targets, so they keep the dense height and a phone's open section
+// is not four 44px rows of finished steps.
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
-  .gs-step .gs-row {
+  .gs-step button.gs-row {
     min-height: 44px;
   }
 
@@ -370,14 +551,21 @@
   }
 
   .gs-inline .gs-action,
-  .gs-spotlight .gs-action {
+  .gs-spotlight .gs-action,
+  .gs-next .gs-action {
     height: 44px;
     padding: 0 14px;
   }
 
-  .gs-close {
+  .gs-close,
+  .gs-toggle {
     width: 44px;
     height: 44px;
+  }
+
+  // 36 + the 4px halo above and below = 44px.
+  .gs-section-chip {
+    height: var(--h-lg);
   }
 }
 

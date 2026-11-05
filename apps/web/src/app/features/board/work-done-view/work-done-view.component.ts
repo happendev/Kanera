@@ -87,10 +87,22 @@ function presetStart(preset: Exclude<WorkDoneRangePreset, "custom">, today: Date
   return addDays(today, -(PRESET_DAYS[preset] - 1));
 }
 
-/** Labelled, not icon-only: "7d" is already as short as an icon and far clearer than one. */
-const PRESET_OPTIONS: SegmentedOption<Exclude<WorkDoneRangePreset, "custom">>[] = [
+/**
+ * Labelled, not icon-only: "7d" is already as short as an icon and far clearer than one.
+ *
+ * Two kinds of control rather than one: Today and Week jump to a calendar period while 7d, 14d and
+ * 30d are rolling ranges, and side by side in one track the two ideas read as one five-step scale.
+ * The calendar pair renders as plain toolbar buttons, not a second segmented track: both controls
+ * set the one period, so at most one of them can be lit, and a track with nothing selected beside
+ * one with a selection read as a broken control. A jump that is the current period wears the
+ * toolbar's `.is-set`; the rolling track keeps the segmented pill.
+ */
+const CALENDAR_PRESET_OPTIONS: SegmentedOption<Exclude<WorkDoneRangePreset, "custom">>[] = [
   { id: "today", label: $localize`:Work done period preset - today:Today`, tooltip: $localize`:Work done period preset tooltip:Today only` },
   { id: "week", label: $localize`:Work done period preset - the current working week:Week`, tooltip: $localize`:Work done period preset tooltip:This week, Monday to today` },
+];
+
+const ROLLING_PRESET_OPTIONS: SegmentedOption<Exclude<WorkDoneRangePreset, "custom">>[] = [
   { id: "7d", label: $localize`:Work done period preset - abbreviation for 7 days:7d`, tooltip: $localize`:Work done period preset tooltip:Last 7 days` },
   { id: "14d", label: $localize`:Work done period preset - abbreviation for 14 days:14d`, tooltip: $localize`:Work done period preset tooltip:Last 14 days` },
   { id: "30d", label: $localize`:Work done period preset - abbreviation for 30 days:30d`, tooltip: $localize`:Work done period preset tooltip:Last 30 days` },
@@ -103,28 +115,24 @@ const EVENT_TYPE_SERIES: Record<WorkDoneEventType, Omit<ActivityStripSeries, "co
     label: $localize`:Activity strip series - cards created:Created`,
     noun: "created card",
     countLabel: (count) => icu($localize`:Activity strip day tooltip:{count, plural, one {# created card} other {# created cards}}`, { count }),
-    tone: "accent",
   },
   moved: {
     key: "moved",
     label: $localize`:Activity strip series - cards moved between lists:Card movement`,
     noun: "move",
     countLabel: (count) => icu($localize`:Activity strip day tooltip - card moves:{count, plural, one {# move} other {# moves}}`, { count }),
-    tone: "accent",
   },
   completed: {
     key: "completed",
     label: $localize`:Activity strip series - cards completed:Completed`,
     noun: "completion",
     countLabel: (count) => icu($localize`:Activity strip day tooltip:{count, plural, one {# completion} other {# completions}}`, { count }),
-    tone: "success",
   },
   checklistItemCompleted: {
     key: "checklistItemCompleted",
     label: $localize`:Activity strip series - checklist items ticked:Checklist items`,
     noun: "checklist completion",
     countLabel: (count) => icu($localize`:Activity strip day tooltip:{count, plural, one {# checklist completion} other {# checklist completions}}`, { count }),
-    tone: "success",
   },
 };
 
@@ -233,7 +241,8 @@ export class WorkDoneViewComponent {
   private previousSeq = 0;
 
   readonly skeletonRows = Array.from({ length: SKELETON_ROW_COUNT }, (_unused, index) => index);
-  readonly presetOptions = PRESET_OPTIONS;
+  readonly calendarPresetOptions = CALENDAR_PRESET_OPTIONS;
+  readonly rollingPresetOptions = ROLLING_PRESET_OPTIONS;
   // Narrow viewports show half the window: 56 columns inside a phone-width panel are a couple of
   // pixels each, which is neither readable nor tappable.
   private readonly narrowStrip = mediaQuerySignal(NARROW_STRIP_QUERY);

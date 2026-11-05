@@ -81,6 +81,8 @@ export interface WorkDoneDay {
   label: string;
   /** "Sunday, 26 July 2026" — the unambiguous form, used for tooltips and copied text. */
   fullLabel: string;
+  /** True when `label` is "Today" / "Yesterday" rather than a date, so the header also shows the date. */
+  relative: boolean;
   digests: CardDayDigest[];
   eventCount: number;
   counts: Record<WorkDoneEventType, number>;

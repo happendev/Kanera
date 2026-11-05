@@ -383,6 +383,11 @@ RAM** for the stack. Prometheus discovers and scrapes every `api`/`public-api`
 replica automatically via Docker DNS, and also scrapes the monitoring stack
 itself (Grafana, Loki, Alloy, exporters) so its own health is alertable.
 
+Grafana packages its provisioning files and bundled dashboards in its image rather than binding
+them from the checkout. Dokploy replaces checkout directories on deployment; an unchanged
+container would otherwise keep deleted directories mounted. Rebuild Grafana when changing
+its provisioning files or dashboard JSON. Its database remains in the persistent data volume.
+
 **Disk safety.** Prometheus is capped by `PROMETHEUS_RETENTION_SIZE`. Loki's
 filesystem store has **no** hard size cap — retention deletes by age, so a burst can
 fill the disk before compaction

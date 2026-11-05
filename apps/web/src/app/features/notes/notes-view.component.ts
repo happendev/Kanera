@@ -203,9 +203,10 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
     try {
       await this.state.init({ workspaceId: wsId, boardId });
       if (loadVersion !== this.loadVersion) return;
-      if (!this.mentionMembers()) await this.loadWorkspaceMentionMembers(wsId);
-      if (loadVersion !== this.loadVersion) return;
       this.restoreSelectedNote();
+      // Mention suggestions need the network; reading a cached note must not wait for them or
+      // lose its selection when that optional request fails during an outage.
+      if (!this.mentionMembers()) await this.loadWorkspaceMentionMembers(wsId).catch(() => undefined);
     } catch (err) {
       if (loadVersion !== this.loadVersion) return;
       console.error("Failed to load notes", err);

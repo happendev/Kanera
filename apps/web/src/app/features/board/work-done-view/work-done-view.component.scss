@@ -1,3 +1,5 @@
+@use "../../../shared/toolbar-styles" as toolbar;
+
 :host {
   // Side gutter for the toolbar, the strip and the day stream. A custom property because the board
   // page drops this view straight into the board chrome, where it has to supply its own gutter,
@@ -24,7 +26,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px var(--wd-gutter) 10px;
+  padding: 8px var(--wd-gutter);
   flex-wrap: wrap;
   flex-shrink: 0;
 }
@@ -37,20 +39,55 @@
   gap: 6px;
 }
 
+.wd-toolbar-left {
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+// Presets and navigation wrap as whole controls; shrinking their boxes lets their contents overlap.
+.wd-presets,
+.wd-nav,
+.wd-toolbar-right {
+  flex-shrink: 0;
+}
+
+.wd-toolbar-right {
+  align-self: flex-start;
+}
+
 // Anchored popovers position against this element, so it must stay their parent.
 .menu-anchor {
   position: relative;
   display: inline-flex;
 }
 
-// The period control is k-segmented, so the app has one segmented treatment rather than four.
+// Today and Week are jump buttons and the rolling ranges one k-segmented track (see
+// CALENDAR_PRESET_OPTIONS for why they are not two tracks). The jumps keep the plain bordered
+// .k-toolbar-btn at the track's height (--h-lg, 44px on coarse pointers like k-segmented's track):
+// as ghost text beside the bordered 7d|14d|30d track they read as unrelated to it. The jump that is
+// the current period takes the canonical `.is-set` from toolbar-styles, which is the selection here.
+.wd-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 
+  // The same inline room as the jump buttons beside it (.k-toolbar-btn pads 11px), so "7d" does
+  // not sit cramped in a 30px segment next to roomier word buttons.
+  k-segmented {
+    --sg-btn-padding: 10px;
+  }
+}
+
+// --h-lg, the height of the k-segmented track beside them and of the board's search and filter row
+// above, so the whole period row shares one control height.
 .wd-icon-btn,
 .wd-range {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 32px;
+  height: var(--h-lg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -78,7 +115,7 @@
 }
 
 .wd-icon-btn {
-  width: 32px;
+  width: var(--h-lg);
   padding: 0;
   color: var(--text-muted);
 
@@ -109,6 +146,13 @@
   }
 }
 
+.wd-range-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: left;
+}
+
 .wd-range-label {
   overflow: hidden;
   font-weight: 600;
@@ -116,7 +160,14 @@
   white-space: nowrap;
 }
 
+// Phone-only copy of the summary (see the template); the toolbar's own copy serves wider screens.
+.wd-range-summary {
+  display: none;
+}
+
 .wd-summary {
+  flex-shrink: 0;
+  margin-left: 4px;
   color: var(--text-muted);
   font-size: var(--text-base);
   font-weight: 500;
@@ -147,16 +198,24 @@
   padding-top: 2px;
 }
 
+// Directly under the strip and as wide as it, so the empty result reads as the answer for the period
+// the strip highlights, not as a card adrift in the canvas. The small size keeps it a compact line
+// of news under the strip rather than a second panel as tall as the strip itself.
 .wd-empty {
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
-  padding: clamp(32px, 10vh, 88px) var(--wd-gutter) 24px;
+  padding: 0 var(--wd-gutter) 24px;
   color: var(--text-muted);
   font-size: var(--text-md);
   text-align: center;
+
+  // Raised states default to a 440px reading width; here the strip above sets the width. The copy
+  // keeps its own measure inside.
+  k-empty-state {
+    width: 100%;
+  }
 }
 
 @keyframes wd-shimmer {
@@ -214,28 +273,82 @@
   height: 18px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   :host {
     --wd-gutter: 12px;
   }
 
+  // Two rows, never more: the presets with the copy action at their end, then the period navigator
+  // across the full width. The range label is the one thing on this screen that must never truncate
+  // ("29 Oct – 4 …" hid the end of the period being reported), so nothing shares its row; the event
+  // count moves inside the range button, under the dates it counts (the activity strip's header was
+  // the other free slot, but there it sat beside "Past 4 weeks" and read as the strip's total).
+  .wd-toolbar {
+    padding-top: 6px;
+    row-gap: 6px;
+  }
+
   .wd-toolbar-left {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .wd-nav {
-    flex: 1;
-  }
-
-  .wd-range {
-    flex: 1;
-    min-width: 132px;
+    display: contents;
   }
 
   .wd-toolbar-right {
-    width: 100%;
-    justify-content: flex-end;
+    order: 1;
+    margin-left: auto;
+  }
+
+  .wd-nav {
+    order: 2;
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+
+  // The selector glyph already marks the range as a picker; the calendar glyph would only take
+  // width from the dates.
+  .wd-range .ti-calendar-event {
+    display: none;
+  }
+
+  // The range button sits in its popover anchor, so the anchor is what has to take the row's slack.
+  .wd-nav .menu-anchor,
+  .wd-range {
+    flex: 1;
+    min-width: 0;
+  }
+
+  // Visually hidden rather than removed: the range button's visible copy is aria-hidden behind its
+  // own label, so this stays the summary screen readers get.
+  .wd-summary {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .wd-range-summary {
+    display: block;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// Touch gets the shared 44px floor, matching the k-segmented track in the same row.
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .wd-icon-btn,
+  .wd-range {
+    height: 44px;
+  }
+
+  .wd-icon-btn {
+    width: 44px;
   }
 }
 

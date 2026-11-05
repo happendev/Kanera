@@ -34,7 +34,7 @@
           @let attachmentDisplay = vm.attachmentDisplayById().get(a.id);
           <li class="attach-row">
             @if (attachmentDisplay?.isImage) {
-            <button type="button" class="attach-thumb is-image" (click)="vm.openAttachmentImage(a.id, $event)" [kTooltip]="a.fileName">
+            <button type="button" class="attach-thumb is-image" [class.is-svg]="attachmentDisplay?.isSvg" (click)="vm.openAttachmentImage(a.id, $event)" [kTooltip]="a.fileName">
               @if (attachmentDisplay?.thumbnailUrl; as thumb) {
               <img [ngSrc]="thumb" fill [alt]="a.fileName" />
               } @else {
@@ -92,19 +92,19 @@
                 <span class="source-pill" kTooltip="Added via comment" i18n-kTooltip><i aria-hidden="true" class="ti ti-message-circle"></i>&ngsp;<ng-container i18n="Badge: the attachment was added in a comment">comment</ng-container></span>
                 }
               </div>
-              <span class="attach-sub">{{ attachmentDisplay?.subtitle }}</span>
+              <span class="attach-sub">@for (part of attachmentDisplay?.subtitleParts ?? []; track $index) {@if (!$first) {&ngsp;}<span class="attach-sub-part">@if (!$first) {•&ngsp;}{{ part }}</span>}</span>
             </div>
             <div class="attach-actions">
               @if (vm.canEditRole() && attachmentDisplay?.isImage) {
-              <button type="button" class="ghost xs" [disabled]="!vm.canEdit()" (click)="vm.setCover(a.id)" [kTooltip]="vm.coverAttachmentId() === a.id ? vm.labels.removeCover : vm.labels.setAsCover">
+              <button type="button" class="ghost icon sm" [disabled]="!vm.canEdit()" (click)="vm.setCover(a.id)" [kTooltip]="vm.coverAttachmentId() === a.id ? vm.labels.removeCover : vm.labels.setAsCover">
                 <i aria-hidden="true" class="ti" [class.ti-photo]="vm.coverAttachmentId() !== a.id" [class.ti-photo-off]="vm.coverAttachmentId() === a.id"></i>
               </button>
               }
-              <button type="button" class="ghost xs" (click)="vm.downloadAttachment(a.url, a.fileName)" kTooltip="Download" i18n-kTooltip="Button: download the attachment">
+              <button type="button" class="ghost icon sm" (click)="vm.downloadAttachment(a.url, a.fileName)" kTooltip="Download" i18n-kTooltip="Button: download the attachment">
                 <i aria-hidden="true" class="ti ti-download"></i>
               </button>
               @if (vm.canEditRole()) {
-              <button type="button" class="ghost xs" [disabled]="!vm.canEdit()" (click)="vm.confirmDeleteAttachment(a.id, a.fileName)" kTooltip="Delete" i18n-kTooltip="Button: delete the attachment">
+              <button type="button" class="ghost icon sm" [disabled]="!vm.canEdit()" (click)="vm.confirmDeleteAttachment(a.id, a.fileName)" kTooltip="Delete" i18n-kTooltip="Button: delete the attachment">
                 <i aria-hidden="true" class="ti ti-trash"></i>
               </button>
               }

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output, si
 import { CdkDrag, CdkDropList } from "@angular/cdk/drag-drop";
 import type { WorkCatalog, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
+import { BoardIconComponent } from "../../shared/board-icon.component";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import type { PickerGroup } from "../../shared/picker-list.component";
 import { priorityAddGroups, type PriorityAddableCard } from "../../shared/priority-queue/priority-add-cards";
@@ -37,7 +38,7 @@ export type UpNextAddableCard = PriorityAddableCard;
 @Component({
   selector: "k-up-next-panel",
   standalone: true,
-  imports: [AnchoredPickerPopover, CdkDrag, CdkDropList, PriorityQueueComponent, TooltipDirective],
+  imports: [AnchoredPickerPopover, BoardIconComponent, CdkDrag, CdkDropList, PriorityQueueComponent, TooltipDirective],
   templateUrl: "./up-next-panel.component.html",
   styleUrl: "./up-next-panel.component.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -126,8 +127,8 @@ export class UpNextPanelComponent {
       const group = groups.get(card.boardId) ?? {
         boardId: card.boardId,
         boardName: card.boardName,
-        boardIconClass: `ti ti-${card.boardIcon ?? "layout-kanban"}`,
-        boardIconColor: card.boardIconColor ? `var(--color-${card.boardIconColor})` : null,
+        boardIcon: card.boardIcon,
+        boardColor: card.boardIconColor,
         rows: [],
       };
       group.rows.push({
@@ -186,8 +187,9 @@ type NotQueuedRow = {
 type NotQueuedGroup = {
   boardId: string;
   boardName: string;
-  boardIconClass: string;
-  boardIconColor: string | null;
+  /** Raw icon name and colour token, for `k-board-icon`. */
+  boardIcon: string | null;
+  boardColor: string | null;
   rows: NotQueuedRow[];
 };
 

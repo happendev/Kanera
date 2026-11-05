@@ -66,7 +66,7 @@ export class CardLabelsComponent {
   readonly interactive = input(true);
   readonly labelsCompressed = computed(() => !this.alwaysExpanded() && this.labelDisplay.labelsCompressed());
   /**
-   * Compact density swaps the filled pill for a colour dot beside plain text, so three labels on a
+   * Compact density swaps the filled chip for a colour dot beside plain text, so three labels on a
    * tile stay quiet. It is a device setting, so every surface follows it; the compressed (dot-only)
    * toggle still works on top of it.
    */

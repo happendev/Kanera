@@ -1,6 +1,6 @@
 import type { WorkDoneEvent, WorkDoneEventType } from "@kanera/shared/dto";
 import { dayFullLabel, dayGroupLabel } from "../../../shared/date-format";
-import { localDateKey } from "../../../shared/day-key.util";
+import { addDays, localDateKey } from "../../../shared/day-key.util";
 import { appLocale } from "../../../core/i18n/locale";
 import { icu } from "../../../core/i18n/icu";
 import type {
@@ -218,6 +218,8 @@ export function groupIntoDays(
       dateKey,
       label: dayGroupLabel(dateKey, today),
       fullLabel: dayFullLabel(dateKey),
+      // The same test dayGroupLabel makes, so the header knows when its label is a word, not a date.
+      relative: dateKey === localDateKey(today) || dateKey === localDateKey(addDays(today, -1)),
       digests: [...byCardAndActor.values()]
         .map((bucket) => buildDigest(dateKey, bucket.actorKey, bucket.events, lists))
         .sort((a, b) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime()),

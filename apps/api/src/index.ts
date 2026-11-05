@@ -1,12 +1,12 @@
 import { buildServer } from "./server.js";
 import { env } from "./env.js";
-import { pool } from "./db.js";
+import { closeServiceResources } from "./lib/close-service-resources.js";
 import { installGracefulShutdown } from "./lib/graceful-shutdown.js";
 
 // Background schedulers live in the worker process (worker-index.ts); this process serves requests
 // and realtime only.
 const app = await buildServer();
-installGracefulShutdown({ app, closeResources: () => pool.end(), service: "api" });
+installGracefulShutdown({ app, closeResources: closeServiceResources, service: "api" });
 
 try {
   await app.listen({ port: env.API_PORT, host: "0.0.0.0" });
@@ -19,7 +19,10 @@ try {
   } else {
     app.log.error(err);
   }
-  await app.close();
-  await pool.end();
+  try {
+    await app.close();
+  } finally {
+    await closeServiceResources();
+  }
   process.exit(1);
 }

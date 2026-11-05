@@ -16,6 +16,7 @@ import { NotificationsService, type NotificationFeedMode } from "../../core/noti
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { BoardIconComponent } from "../../shared/board-icon.component";
 import { SystemAvatarComponent } from "../../shared/system-avatar.component";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
@@ -29,7 +30,7 @@ import { openCardDetailInNewTab } from "../board/card-navigation.util";
 import { BoardState } from "../board/board-state";
 import { DescriptionViewerComponent } from "../board/description-viewer.component";
 import { buildFeedEntries, type ActivityChangeSummary, type NotificationCluster, type NotificationFeedEntry } from "./notification-clusters";
-import { dayGroupLabel, formatFeedTime } from "../../shared/date-format";
+import { dayGroupLabel, formatFeedTime, formatTime } from "../../shared/date-format";
 import { icu } from "../../core/i18n/icu";
 
 interface NotificationGroupView {
@@ -40,6 +41,8 @@ interface NotificationGroupView {
   /** What actually renders: `items` projected onto rows and card+day blocks. */
   entries: NotificationFeedEntry[];
   icon: string;
+  /** By-board bands only: the board's Tabler icon name, drawn as its `k-board-icon` tile. */
+  boardIcon: string | null;
   iconColor: string | null;
   avatarUrl: string | null;
   actorId: string | null;
@@ -53,7 +56,7 @@ const UNKNOWN_USER = $localize`:Fallback name for a person who no longer exists:
 @Component({
   selector: "k-notifications-panel",
   standalone: true,
-  imports: [CdkTrapFocus, NgOptimizedImage, AvatarComponent, SystemAvatarComponent, EmptyStateComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
+  imports: [CdkTrapFocus, NgOptimizedImage, AvatarComponent, BoardIconComponent, SystemAvatarComponent, EmptyStateComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
   providers: [BoardState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./notifications-panel.component.html",
@@ -146,7 +149,9 @@ export class NotificationsPanelComponent {
   /** CSS var string for the workspace accent, or null to fall back to --accent. */
   readonly workspaceAccentVar = computed<string | null>(() => {
     const color = this.workspaceService.activeAccentColor();
-    return color ? `var(--color-${color})` : null;
+    // The -accent step where the theme defines one: the raw palette hue is a pale label colour in
+    // light (blue is ~2.4:1 on a card), short of the 3:1 the unread dot needs as a graphical mark.
+    return color ? `var(--color-${color}-accent, var(--color-${color}))` : null;
   });
   // The service projects `items` onto the active tab's feed (the unread feed is
   // already unread-only and drops rows the moment they're marked read), so the
@@ -256,6 +261,7 @@ export class NotificationsPanelComponent {
       count: this.notifications.groupCount(key) || items.length,
       items,
       entries: buildFeedEntries(items, this.summariseRow),
+      boardIcon: null as string | null,
       iconColor: null as string | null,
       avatarUrl: null as string | null,
       actorId: null as string | null,
@@ -264,13 +270,15 @@ export class NotificationsPanelComponent {
     if (this.groupBy() === "day") {
       // Shared day-key helpers, so this label and the card+day block boundary in
       // notification-clusters.ts can never drift onto different calendar days.
-      return { ...base, label: dayGroupLabel(key.slice("day:".length)), icon: "ti ti-calendar" };
+      // No icon: every band is a day here, so a calendar glyph on each one said nothing new.
+      return { ...base, label: dayGroupLabel(key.slice("day:".length)), icon: "" };
     }
     if (this.groupBy() === "board") {
       return {
         ...base,
         label: first.boardName ?? first.workspaceName ?? $localize`:Notification group heading when the board and workspace are unknown:Workspace`,
-        icon: `ti ti-${first.boardId ? first.boardIcon || "layout-kanban" : first.workspaceIcon || "building"}`,
+        icon: `ti ti-${first.workspaceIcon || "building"}`,
+        boardIcon: first.boardId ? first.boardIcon || "layout-kanban" : null,
         iconColor: first.boardIconColor,
       };
     }
@@ -605,7 +613,18 @@ export class NotificationsPanelComponent {
     return Boolean(notification.cardId && notification.boardId && notification.viewerRole && notification.viewerRole !== "observer");
   }
 
-  async openCardActions(event: MouseEvent, notification: NotificationRow): Promise<void> {
+  /** The row's visible actions button: anchors the menu under the button, not at a pointer that a keyboard click doesn't have. */
+  openCardActionsFromButton(event: MouseEvent, notification: NotificationRow): void {
+    if (this.actionsMenuNotificationId() === notification.id) {
+      event.stopPropagation();
+      this.closeActionsMenu();
+      return;
+    }
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    void this.openCardActions(event, notification, { x: rect.left, y: rect.bottom });
+  }
+
+  async openCardActions(event: MouseEvent, notification: NotificationRow, anchor?: { x: number; y: number }): Promise<void> {
     if (!this.canShowCardActions(notification)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -619,7 +638,7 @@ export class NotificationsPanelComponent {
       if (this.actionsMenuLoadingNotificationId() === notification.id) this.actionsMenuLoadingNotificationId.set(null);
     }
     this.actionsMenuNotificationId.set(notification.id);
-    this.actionsMenuPoint.set({ x: event.clientX, y: event.clientY });
+    this.actionsMenuPoint.set(anchor ?? { x: event.clientX, y: event.clientY });
   }
 
   closeActionsMenu(): void {
@@ -703,8 +722,13 @@ export class NotificationsPanelComponent {
       : icu($localize`:Tooltip on "via agent" in a notification:Done by an AI agent on behalf of {person}`, { person: actorName ?? "" });
   }
 
-  relativeTime(value: string | Date): string {
-    return formatFeedTime(value);
+  /**
+   * Inside a day band the band already states the date, so an older row shows only its clock time.
+   * Other groupings mix days in one band and keep the date. The last hour stays relative either way.
+   */
+  rowTime(value: string | Date): string {
+    if (this.groupBy() !== "day" || Date.now() - new Date(value).getTime() < 60 * 60_000) return formatFeedTime(value);
+    return formatTime(value);
   }
 
   /** Delegates to the shared summariser so the drawer and watched-activity push bodies agree. */

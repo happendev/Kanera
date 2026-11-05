@@ -30,6 +30,9 @@ function boardOption(board: WorkCatalogBoard, id: string, depth: number): Picker
     label: board.name,
     icon: board.icon || "layout-kanban",
     color: board.iconColor,
+    // A board's identity is its tinted tile everywhere else in the app; a bare glyph here made boards
+    // look like the workspace rows they sit under.
+    board: true,
     depth,
   };
 }
@@ -55,7 +58,8 @@ export function scopePickerGroups(catalog: WorkCatalog): PickerGroup[] {
     const options: PickerOption[] = [{
       id: `o:${organisation.id}`,
       label: $localize`:Scope picker option:Everything in this organisation`,
-      icon: "building",
+      // Not the organisation heading's building, which this row sits directly under and would repeat.
+      icon: "layout-grid",
     }];
 
     for (const workspace of workspaces) {

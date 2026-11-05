@@ -153,7 +153,8 @@ for local verification or updating an unrelated card.
 - Comment the "why" where it isn't obvious from the code: product rules, tenancy and access decisions,
   realtime fanout, notification suppression, automation side effects, coalescing, ordering. Explain
   intent and constraints, not mechanics or history.
-- Add user-visible changes to `CHANGELOG.md`. Keep succinct.
+- Add only substantial user-visible changes or fixes to `CHANGELOG.md`; skip minor tweaks.
+  Keep entries succinct but useful for end users.
 
 ## Done means
 

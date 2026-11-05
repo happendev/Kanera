@@ -10,6 +10,7 @@ concurrent request bursts do not replace deterministic database race tests.
 
 | Spec | Coverage |
 |---|---|
+| [shutdown](shutdown.spec.ts) | All four services exiting after SIGTERM with real Valkey, Valkey connection loss, API presence cleanup, and worker recovery after an idle PostgreSQL session is terminated. |
 | [account-settings-pages](account-settings-pages.spec.ts) | Security and Preferences navigation, direct reloads, Profile section boundaries, and phone layout. |
 | [agent-files](agent-files.spec.ts) | Agent scratchpad capture and uploaded files reaching an open browser through realtime. |
 | [angular-editor-races](angular-editor-races.spec.ts) | Pending or rejected saves preserving newer drafts, selections, uploads, note locks, and editor usability across navigation and backgrounding. |
@@ -22,18 +23,18 @@ concurrent request bursts do not replace deterministic database race tests.
 | [auth](auth.spec.ts) | Password login, invalid credentials, refresh-cookie proxying, reload persistence, and logout. |
 | [billing-realtime](billing-realtime.spec.ts) | Committed plan conversions updating live navigation through separate processes; rolled-back conversions emitting nothing. |
 | [board](board.spec.ts) | Card persistence, board and workspace-list fanout, reload convergence, and late cards beyond the lane render cap. |
-| [board-overview](board-overview.spec.ts) | Neutral counts, inactivity preferences, completed-card exclusion, filter drill-downs, and phone layout. |
+| [board-overview](board-overview.spec.ts) | Exact counts, inactivity preferences, completed-card exclusion, filter drill-downs and phone access. |
 | [card-dependencies](card-dependencies.spec.ts) | Dependency editing, blocked completion, cross-board fanout, archive/restore, notifications, ready automations, and relationship search. |
-| [card-detail-layout](card-detail-layout.spec.ts) | Drawer sections, nested controls, overflow, and picker placement across themes and desktop, tablet, and phone widths. |
-| [card-detail-performance](card-detail-performance.spec.ts) | Large-card section isolation, request/cache budgets, checklist drag indices, 304 revisions, and first-open outbox reconciliation. |
+| [card-detail-layout](card-detail-layout.spec.ts) | Reachable drawer/editor controls, overflow, title/close separation and picker placement in desktop panel/modal and phone layouts. |
+| [card-detail-performance](card-detail-performance.spec.ts) | Large-card request/cache budgets, checklist drag indices and responsiveness, 304 revisions, and first-open outbox reconciliation. |
 | [card-follow](card-follow.spec.ts) | Reminder creation, scheduling, firing, clearing, watching, filters, and live drawer, tile, Home, and inbox updates. |
 | [card-links](card-links.spec.ts) | Canonical clipboard links, two-way links and renames, SPA navigation, editor preservation, unlinking, and coalesced refreshes. |
-| [card-move](card-move.spec.ts) | List/board moves converging across Kanban and table with correct transfer activity. |
+| [card-move](card-move.spec.ts) | List/board moves converging across Kanban and table with correct transfer activity; rapid single/bulk list reversals remove live and persisted activity/inbox entries while forward moves stay separate. |
 | [checklist-activity](checklist-activity.spec.ts) | Checklist activity coalescing and live row updates while delayed acknowledgements preserve the next draft. |
 | [cli-oauth](cli-oauth.spec.ts) | Device consent, denial, token storage/rotation/revocation, read-only enforcement, catalogue reuse, logout, and live CLI/stdio writes. |
 | [client-board-sync](client-board-sync.spec.ts) | Client comments/files syncing live while internal fields and discussion remain private and later updates remain ordered. |
 | [comment-reply](comment-reply.spec.ts) | Caret and typed replies staying outside quotes in fresh, open, and existing-draft composers. |
-| [correctness-scan](correctness-scan.spec.ts) | Concurrent refresh/checklist/run writes, transfer access cleanup, post-automation responses and comment context, and deleted-list fanout. |
+| [correctness-scan](correctness-scan.spec.ts) | Concurrent refresh/checklist writes, transfer access cleanup, post-automation responses and comment context, and deleted-list fanout. |
 | [dependency-automations](dependency-automations.spec.ts) | Cross-board MCP dependency triggers, retry suppression, reopen/restore/unlink transitions, and worker-chained mirror handoffs. |
 | [dependency-map](dependency-map.spec.ts) | Cross-board graph updates, dependency editing/undo, readiness, critical paths, date-axis layout, filters, and touch/phone geometry. |
 | [drag-and-drop](drag-and-drop.spec.ts) | Pointer-driven lane scrolling and precise same-list/cross-list ordering reaching another viewer and surviving reload. |
@@ -54,18 +55,21 @@ concurrent request bursts do not replace deterministic database race tests.
 | [live-card-edits](live-card-edits.spec.ts) | Another member’s edits converging across mounted detail, Kanban, table, Work done, My Cards, and Team Cards. |
 | [mcp-checklists](mcp-checklists.spec.ts) | Nested checklist plans and updates through MCP/CLI: realtime ordering, idempotency, atomic rejection, ambiguous targets, and audit activity. |
 | [mcp-events](mcp-events.spec.ts) | Event discovery/schema/filter validation, callback security, live tool writes, and revoked-credential rejection. |
-| [mcp-protocol](mcp-protocol.spec.ts) | HTTP/stdio protocol eras, usable Draft 7 schemas, safety labels, live writes, resources/prompts, cancellation recovery, and distinct error shapes. |
+| [mcp-protocol](mcp-protocol.spec.ts) | HTTP/stdio protocol eras, usable Draft 7 schemas, catalog-wide safety labels, replay guidance and OAuth scopes, live writes, resources/prompts, cancellation recovery, and distinct error shapes. |
+| [mermaid-diagrams](mermaid-diagrams.spec.ts) | Mermaid fences draw as SVG in descriptions, notes and Markdown attachments, update when switching themes and returning to a cached theme, retain readable sizing and scroll within phone layouts, stay code in comments, and keep their source when they fail to parse. |
 | [mentions](mentions.spec.ts) | Mention selection, live notifications, persisted read state, deep links, and coalesced badge updates across sessions. |
 | [mfa-invite](mfa-invite.spec.ts) | New/existing invitees enrolling before session access, signed-in invitation handling, and navigation after enrollment. |
+| [mobile-navigation](mobile-navigation.spec.ts) | Notification taps/swipes, navigation open/dismiss behavior, reduced-motion usability, hidden personal tools and desktop sidebar access. |
 | [notes-save-recovery](notes-save-recovery.spec.ts) | Recovered drafts retaining their baseline and newer text across remote edits, delayed responses, locks, and navigation. |
 | [notes-toggle](notes-toggle.spec.ts) | Workspace/standalone Notes switches updating navigation, API access, search, and linked items live while retaining stored notes. |
 | [offline-navigation](offline-navigation.spec.ts) | Offline navigation and shortcut restrictions, retained local actions, phone controls, and recovery on reconnect. |
 | [offline-team-overview](offline-team-overview.spec.ts) | Cold reload preserving overview activity, unowned work, focused-person queues, read-only behavior, and reconnect freshness. |
 | [offline-up-next](offline-up-next.spec.ts) | Persisted personal queues, offline reloads, disabled edits across hosts, and reconnect convergence. |
+| [offline-notes](offline-notes.spec.ts) | Workspace note selection and cached body after an offline reload, read-only controls, and reconnect convergence. |
 | [offline-views](offline-views.spec.ts) | Offline Timeline, Dependencies, Work done, and reports retaining data, disabling writes, isolating history queries, and recovering on reconnect. |
 | [onboarding](onboarding.spec.ts) | Workspace and standalone signup, shared configuration, template flags/colours, and correct onboarding completion state. |
 | [performance-async](performance-async.spec.ts) | Mirror creation/title/comment fanout, no historical backfill, pause enforcement, cursor-reset reconciliation, and persistence. |
-| [performance-backend](performance-backend.spec.ts) | Exact paged history and summaries, permission-safe linked-item batching/revocation, and child-activity timestamps. |
+| [performance-backend](performance-backend.spec.ts) | Permission-safe linked-item batching/revocation and child-activity timestamps. |
 | [performance-frontend](performance-frontend.spec.ts) | Complete description diffs, coalesced bounded deep-table refreshes retaining exact IDs, and offline note persistence without unrelated rewrites. |
 | [planning-features](planning-features.spec.ts) | Organisation/workspace feature switches changing live views, deep links, API access, and retained planning data. |
 | [promise-toasts](promise-toasts.spec.ts) | Bulk actions, imports, and exports settling one toast correctly while preserving saved state, dismissal, and supported restore behavior. |
@@ -93,6 +97,7 @@ Check their failure-mode comments before removing or replacing tests.
 
 | Area | Suite and boundary |
 |---|---|
+| API-only history and runs | [History pagination](../apps/api/src/modules/work/history-pagination.itest.ts) checks request-generated events, cursors, move paths and summaries. [Agent runs](../apps/api/src/modules/agent-runs/routes.itest.ts) checks concurrent finish/heartbeat requests and deterministic rejection after completion; concurrency is smoke coverage, not a forced interleaving. |
 | Card detail | [Persistence](../apps/web/src/app/features/board/card-detail-persistence.service.spec.ts), [requests](../apps/web/src/app/features/board/card-detail-request.spec.ts), and [board state](../apps/web/src/app/features/board/board-state.spec.ts): lifecycle, cancellation, revision and ordering races. [API](../apps/api/src/modules/cards/routes.itest.ts): database isolation, cascades and rollback. |
 | Dependencies | [Relations](../apps/api/src/modules/cards/relations.itest.ts): concurrent blocker transitions, exactly-once actions, access and notification rules. [Graph](../apps/api/src/modules/cards/dependency-graph.itest.ts): visibility boundaries. |
 | Working time | [In-progress integration](../apps/api/src/modules/lists/in-progress.itest.ts): aged/disabled intervals, write-path parity, flag-change races, imports, and once-per-stint triggers. |
@@ -102,6 +107,7 @@ Check their failure-mode comments before removing or replacing tests.
 | Lifecycle email | [Lifecycle integration](../apps/api/src/lib/lifecycle-emails.itest.ts): hosted eligibility, timing and deduplication requiring backdated history. |
 | Billing | [Reliability](../apps/api/src/modules/billing/reliability.itest.ts): Stripe response ordering, duplicate Checkout and transaction failures. |
 | Storage | [Storage integration](../apps/api/src/modules/clients/storage.itest.ts): usage, privacy/access, description cleanup and warning-email rearming. |
+| Workspace deletion | [Deletion integration](../apps/api/src/lib/workspace-delete.itest.ts): forced outbox deadlock recovery, atomic notification deletion, bounded retries, and unrelated-error propagation. |
 | Toasts | [Toast service](../apps/web/src/app/shared/toast.service.spec.ts): exact timer boundaries, concurrent settlement, dismissal/teardown and result propagation. |
 
 ## Additional checks

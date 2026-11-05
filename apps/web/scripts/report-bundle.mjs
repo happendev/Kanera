@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 const projectRoot = resolve(import.meta.dirname, "..");
 const distRoot = resolve(projectRoot, "dist/web");
 const browserRoot = resolve(distRoot, "browser");
-const stats = JSON.parse(await readFile(resolve(distRoot, "stats.json"), "utf8"));
+const stats = JSON.parse(await readFile(resolve(distRoot, "browser-stats.json"), "utf8"));
 const outputs = stats.outputs;
 const check = process.argv.includes("--check");
 const failures = [];

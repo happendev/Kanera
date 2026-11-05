@@ -20,7 +20,7 @@
               }
               @case ('url') {
               <div class="cf-url">
-                <input class="cf-input" type="url" inputmode="url" placeholder="https://…" [value]="fieldValue?.valueUrl ?? ''" [readonly]="!vm.canEdit()" [disabled]="!vm.canEdit()"
+                <input class="cf-input" type="url" inputmode="url" placeholder="https://…" [value]="fieldValue?.valueUrl ?? ''" [attr.title]="fieldValue?.valueUrl || null" [readonly]="!vm.canEdit()" [disabled]="!vm.canEdit()"
                   (blur)="vm.setUrlField(field, $any($event.target).value)" (keydown.enter)="vm.setUrlField(field, $any($event.target).value); $event.preventDefault()" />
                 @if (fieldValue?.valueUrl; as fieldUrl) {
                 <a class="cf-url-open" [href]="fieldUrl" target="_blank" rel="noopener noreferrer" kTooltip="Open link" i18n-kTooltip><i aria-hidden="true" class="ti ti-external-link"></i></a>
@@ -48,7 +48,8 @@
                   @if (selectedFieldOptions.length) {
                   <span class="cf-chips">
                     @for (option of selectedFieldOptions; track option.id) {
-                    <span class="cf-chip" [style.background]="option.color ? 'var(--color-' + option.color + ')' : 'var(--surface-2)'" [style.color]="option.color ? 'var(--color-' + option.color + '-cf, #fff)' : 'var(--text)'">{{ option.label }}</span>
+                    <!-- A lone uncoloured option reads as the field's value, set like the text inputs' values; chips stay for colour and for telling several options apart. -->
+                    <span class="cf-chip" [class.is-plain]="!option.color && selectedFieldOptions.length === 1" [style.background]="option.color ? 'var(--color-' + option.color + ')' : selectedFieldOptions.length === 1 ? null : 'var(--surface-2)'" [style.color]="option.color ? 'var(--color-' + option.color + '-cf, #fff)' : 'var(--text)'">{{ option.label }}</span>
                     }
                   </span>
                   } @else {
@@ -82,7 +83,7 @@
               </div>
               }
               @default {
-              <input class="cf-input" [type]="field.type === 'number' ? 'number' : 'text'" [attr.step]="field.type === 'number' ? 'any' : null" [value]="fieldValue?.valueText ?? fieldValue?.valueNumber ?? ''" [readonly]="!vm.canEdit()" [disabled]="!vm.canEdit()"
+              <input class="cf-input" [type]="field.type === 'number' ? 'number' : 'text'" [attr.step]="field.type === 'number' ? 'any' : null" [value]="fieldValue?.valueText ?? fieldValue?.valueNumber ?? ''" [attr.title]="fieldValue?.valueText || null" [readonly]="!vm.canEdit()" [disabled]="!vm.canEdit()"
                 (blur)="vm.setField(field, $any($event.target).value)" (keydown.enter)="vm.setField(field, $any($event.target).value); $event.preventDefault()" />
               }
             }

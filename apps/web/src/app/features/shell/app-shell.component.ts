@@ -44,6 +44,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
 import { DisconnectPromptComponent } from "../../shared/disconnect-prompt.component";
 import { LogoComponent } from "../../shared/logo.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
+import { ShellNavService } from "../../shared/shell-nav.service";
 import { SupportSessionBannerComponent } from "../../shared/support-session-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpdatePromptComponent } from "../../shared/update-prompt.component";
@@ -151,6 +152,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly offlineCache = inject(OfflineCacheService);
   protected readonly offlineCacheError = computed(() => this.offlineCache.persistenceError?.() ?? null);
   private readonly panelStack = inject(PanelStackService);
+  private readonly shellNav = inject(ShellNavService);
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
   readonly online = this.sockets.online;
@@ -174,6 +176,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly handleHostPointerMove = (event: PointerEvent) => this.onSidebarPointerMove(event);
   private readonly handleHostPointerUp = (event: PointerEvent) => this.onSidebarPointerUp(event);
   private readonly handleHostPointerCancel = (event: PointerEvent) => this.onSidebarPointerCancel(event);
+  private readonly handleTouchStart = (event: TouchEvent) => this.onNotificationsSwipeStart(event);
+  private readonly handleTouchMove = (event: TouchEvent) => this.onNotificationsSwipeMove(event);
+  private readonly handleTouchEnd = () => {
+    this.notificationsSwipe = null;
+  };
 
   readonly environmentBannerLabel = computed(() => {
     const environmentName = this.user()?.kaneraEnvironment;
@@ -232,6 +239,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly notificationsPanel = viewChild<NotificationsPanelComponent>("notificationsPanel");
   readonly prioritiesPanel = viewChild<MyPrioritiesPanelComponent>("prioritiesPanel");
   readonly pendingPanel = signal<"notifications" | "priorities" | null>(null);
+  /** Open, or requested while its lazy component downloads: drives the trigger's pressed look and aria-expanded. */
+  readonly prioritiesOpen = computed(() => this.pendingPanel() === "priorities" || (this.prioritiesPanel()?.open() ?? false));
+  readonly notificationsOpen = computed(() => this.pendingPanel() === "notifications" || (this.notificationsPanel()?.open() ?? false));
 
   private readonly openDeferredPanel = effect(() => {
     const pending = this.pendingPanel();
@@ -250,6 +260,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
    * owns both triggers, is the one place that knows there are two.
    */
   togglePanel(which: "notifications" | "priorities"): void {
+    // On a phone the trigger sits in the open nav drawer, which stacks above the panels: close it so
+    // the panel it opened is what the user sees.
+    this.closeMobileSidebar();
     const wasPending = this.pendingPanel() === which;
     this.pendingPanel.set(null);
     const other = which === "notifications" ? this.prioritiesPanel() : this.notificationsPanel();
@@ -388,8 +401,16 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private static readonly MOBILE_BREAKPOINT = 640;
   private static readonly SIDEBAR_WIDTH = 260;
   private static readonly SIDEBAR_WIDTH_COLLAPSED = 60;
-  private static readonly SIDEBAR_WIDTH_COLLAPSED_MOBILE = 52;
+  /**
+   * Phones have no rail: closed, the drawer is entirely off-canvas and the page takes the full
+   * width, with the drawer's button at the start of every page header (ShellNavService). A 52px rail
+   * used to stay beside every page, which cost a phone an eighth of its width for six icons.
+   */
+  private static readonly SIDEBAR_WIDTH_COLLAPSED_MOBILE = 0;
   private static readonly SIDEBAR_SWIPE_INTENT_PX = 10;
+  /** The right-edge strip a notifications swipe must start in; see onNotificationsSwipeStart. */
+  private static readonly NOTIFICATIONS_SWIPE_EDGE_PX = 24;
+  private static readonly NOTIFICATIONS_SWIPE_OPEN_PX = 48;
   readonly sidebarCollapsed = signal<boolean>(this.readInitialCollapsed());
   readonly isMobile = signal<boolean>(window.innerWidth <= AppShellComponent.MOBILE_BREAKPOINT);
   /**
@@ -409,6 +430,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   });
   readonly sidebarSwipeSettling = signal(false);
   private sidebarSwipe: SidebarSwipe | null = null;
+  private notificationsSwipe: { startX: number; startY: number; horizontal: boolean; opened: boolean } | null = null;
   private suppressSidebarClick = false;
   private sidebarClickReset: ReturnType<typeof setTimeout> | null = null;
   private sidebarSettleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -585,6 +607,62 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (swipe.horizontal || swipe.vertical) this.scheduleSidebarClickReset();
   }
 
+  /**
+   * Phones: a leftward swipe that starts at the right edge opens notifications, the panel people
+   * reach for most, without finding a button first. The strip is kept narrow because a leftward
+   * swipe a little further in is how a board scrolls to its next list. Touch events rather than the
+   * pointer events the drawer gesture uses: the board's own scroller would claim a pointer stream
+   * (pointercancel) before the swipe could tell itself apart, while touchmove keeps arriving and can
+   * still cancel the scroll once the swipe is recognised.
+   */
+  private onNotificationsSwipeStart(event: TouchEvent) {
+    this.notificationsSwipe = null;
+    if (!this.isMobile() || event.touches.length !== 1) return;
+    const touch = event.touches[0]!;
+    if (touch.clientX < window.innerWidth - AppShellComponent.NOTIFICATIONS_SWIPE_EDGE_PX) return;
+    // Only from the bare page: over anything modal (card detail, a dialog, the search overlay) or an
+    // open drawer or popover, the edge belongs to that surface.
+    if (!this.sidebarCollapsed() || this.notificationsOpen() || this.prioritiesOpen()) return;
+    if (this.scratchpad.open() && this.isScratchpadSheet()) return;
+    // CDK dialogs carry aria-modal too. Not .cdk-overlay-pane: tooltips leave empty panes behind.
+    if (this.panelStack.depth > 0 || document.querySelector("[aria-modal='true']")) return;
+    this.notificationsSwipe = { startX: touch.clientX, startY: touch.clientY, horizontal: false, opened: false };
+  }
+
+  private onNotificationsSwipeMove(event: TouchEvent) {
+    const swipe = this.notificationsSwipe;
+    if (!swipe) return;
+    const touch = event.touches[0];
+    if (!touch || event.touches.length !== 1) {
+      this.notificationsSwipe = null;
+      return;
+    }
+    const deltaX = touch.clientX - swipe.startX;
+    const deltaY = touch.clientY - swipe.startY;
+    const leftward = deltaX < 0 && Math.abs(deltaX) > Math.abs(deltaY);
+    if (!swipe.horizontal) {
+      if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= AppShellComponent.SIDEBAR_SWIPE_INTENT_PX) {
+        if (!leftward) {
+          this.notificationsSwipe = null;
+          return;
+        }
+        swipe.horizontal = true;
+      } else if (!leftward) {
+        return;
+      }
+    }
+    // Claimed from the first leftward move, before the intent threshold: only the first touchmove
+    // can stop a scroll, and once the board has started scrolling under the finger it keeps going
+    // under the panel. A drag that starts vertical is left alone, so the edge still scrolls lists.
+    if (event.cancelable) event.preventDefault();
+    // Opens mid-gesture, but keeps the touch until the finger lifts: released here, the rest of the
+    // stroke would scroll the board behind the panel.
+    if (!swipe.opened && deltaX <= -AppShellComponent.NOTIFICATIONS_SWIPE_OPEN_PX) {
+      swipe.opened = true;
+      this.openNotifications();
+    }
+  }
+
   private setSidebarCollapsed(collapsed: boolean) {
     this.sidebarCollapsed.set(collapsed);
     localStorage.setItem(this.orgStorageKey(STORAGE_KEYS.SIDEBAR_COLLAPSED), collapsed ? "1" : "0");
@@ -752,6 +830,40 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (this.isMobile() && !this.sidebarCollapsed()) {
       this.sidebarCollapsed.set(true);
     }
+  }
+
+  /** Phones: the drawer is the only way to the sidebar, opened from the page header's menu button. */
+  openMobileSidebar() {
+    if (!this.isMobile()) return;
+    this.clearSidebarSettle();
+    this.sidebarCollapsed.set(false);
+  }
+
+  /**
+   * Overdue Up next is the only drawer state the header's menu button marks: unread notifications
+   * have the header's own bell, and a plain Up next count is not news, as its badge is a quiet count.
+   */
+  private readonly navOverdue = computed(() => this.myPriorities.overdueCount() > 0);
+
+  private readonly disconnectShellNav = this.shellNav.connect({
+    drawerMode: this.isMobile,
+    overdue: this.navOverdue,
+    label: this.text.expandSidebar,
+    open: () => this.openMobileSidebar(),
+    unreadNotifications: this.notifications.unreadCount,
+    notificationsLabel: this.notificationsLabel,
+    openNotifications: () => this.openNotifications(),
+  });
+
+  /** Opens, never toggles: both callers (the header bell, the edge swipe) mean "show me". */
+  openNotifications(): void {
+    if (!this.notificationsOpen()) this.togglePanel("notifications");
+  }
+  protected readonly showNavFallback = computed(() => this.isMobile() && !this.shellNav.hasHeaderTrigger());
+
+  toggleScratchpad(): void {
+    this.closeMobileSidebar();
+    this.scratchpad.toggle();
   }
 
   onEscape() {
@@ -940,6 +1052,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.host.nativeElement.addEventListener("pointerup", this.handleHostPointerUp, true);
     this.host.nativeElement.addEventListener("pointercancel", this.handleHostPointerCancel, true);
     document.addEventListener("keydown", this.handleDocumentKeydown);
+    // Not passive: a recognised swipe cancels the scroll it started (onNotificationsSwipeMove).
+    document.addEventListener("touchstart", this.handleTouchStart, { capture: true, passive: true });
+    document.addEventListener("touchmove", this.handleTouchMove, { capture: true, passive: false });
+    document.addEventListener("touchend", this.handleTouchEnd, true);
+    document.addEventListener("touchcancel", this.handleTouchEnd, true);
     this.routerSub = this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
       this.closeUserMenu();
       this.closeNavContextMenu();
@@ -1012,6 +1129,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
         this.workspaceService.updateAccentColor(workspace.id, workspace.accentColor ?? null);
       },
       "workspace:deleted": ({ workspaceId }) => {
+        // The API announces this (after board:deleted for its boards) before the delete commits, so a
+        // directory refresh that board:deleted scheduled could still read the workspace and put it
+        // back in the sidebar. Nothing in a deleted workspace needs that refresh, so drop it.
+        this.cancelShellBoardsRefresh();
         this.groups.update((groups) => groups.filter((g) => g.workspace.id !== workspaceId));
         this.workspaceService.removeWorkspace(workspaceId);
         this.syncHasWorkspaceFromGroups();
@@ -1297,6 +1418,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }, 50);
   }
 
+  private cancelShellBoardsRefresh(): void {
+    if (this.shellRefreshTimer !== null) clearTimeout(this.shellRefreshTimer);
+    this.shellRefreshTimer = null;
+    // Invalidates a refresh already in flight; its response is discarded by isCurrentShellLoad.
+    this.shellLoadVersion += 1;
+  }
+
   private syncHasWorkspaceFromGroups(): void {
     const hasWorkspace = this.standardGroups().length > 0;
     if (this.user()?.hasWorkspace !== hasWorkspace) {
@@ -1306,6 +1434,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.disconnectShellNav();
     this.shellLoadVersion += 1;
     this.teardownSessionState();
     this.detach?.();
@@ -1317,6 +1446,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.host.nativeElement.removeEventListener("pointerup", this.handleHostPointerUp, true);
     this.host.nativeElement.removeEventListener("pointercancel", this.handleHostPointerCancel, true);
     document.removeEventListener("keydown", this.handleDocumentKeydown);
+    document.removeEventListener("touchstart", this.handleTouchStart, true);
+    document.removeEventListener("touchmove", this.handleTouchMove, true);
+    document.removeEventListener("touchend", this.handleTouchEnd, true);
+    document.removeEventListener("touchcancel", this.handleTouchEnd, true);
     if (this.sidebarClickReset !== null) clearTimeout(this.sidebarClickReset);
     if (this.sidebarSettleTimer !== null) clearTimeout(this.sidebarSettleTimer);
     if (this.shellRefreshTimer !== null) clearTimeout(this.shellRefreshTimer);
@@ -1556,9 +1689,17 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return count > 99 ? "99+" : String(count);
   }
 
+  /** A board glyph's colour: its own, else its workspace's; see navGlyphColor. */
   boardAttentionColor(board: Pick<Board, "iconColor">, workspaceId: string): string | null {
-    const color = board.iconColor ?? this.accentColorForWorkspace(workspaceId);
-    // Fill behind --accent-fg text, so use the contrast-checked action tone where the theme has one.
+    return this.navGlyphColor(board.iconColor ?? this.accentColorForWorkspace(workspaceId));
+  }
+
+  /**
+   * A sidebar identity glyph's colour: the contrast-checked action tone where the theme has one
+   * (every hue in light, the dimmer hues in dark), else the identity colour. The raw identity
+   * colours are swatch tones; amber and green sat near 2:1 on the light sidebar.
+   */
+  navGlyphColor(color: string | null | undefined): string | null {
     return color ? `var(--color-${color}-accent, var(--color-${color}))` : null;
   }
 
@@ -1662,8 +1803,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
    * theme-aware emphasis tone (near-white on dark, a softened slate on light).
    */
   workspaceIconColor(workspaceId: string): string {
-    const color = this.accentColorForWorkspace(workspaceId);
-    return color ? `var(--color-${color})` : "var(--nav-text-strong)";
+    return this.navGlyphColor(this.accentColorForWorkspace(workspaceId)) ?? "var(--nav-text-strong)";
   }
 
   async logout() {

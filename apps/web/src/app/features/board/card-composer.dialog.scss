@@ -20,13 +20,15 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 32px rgb(0 0 0 / 40%);
+  box-shadow: var(--shadow-lg);
   animation: cmp-slide-in 120ms ease;
 }
 
 .cmp-head {
   display: flex;
-  align-items: flex-start;
+  // Centred so the close button sits on the title's line box rather than 2-3px below it (the button
+  // is taller than the title's line).
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 16px 18px 10px;
@@ -35,19 +37,8 @@
 .cmp-title {
   margin: 0;
   color: var(--text);
-  font-size: 15px;
+  font-size: var(--text-md);
   font-weight: 600;
-}
-
-.cmp-sub {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 3px 0 0;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-
-  i { font-size: var(--text-md); }
 }
 
 // Opts out of the global 36px button reset: this is a 26px close affordance in a dialog header,
@@ -101,9 +92,15 @@
 
   &::placeholder { color: var(--text-4); }
 
+  // The quiet focus recipe: the global field rule's 3px --ring halo is sized for small inputs, and
+  // around the largest field in the dialog it dominated the form. The accent border carries the
+  // state; the 2px soft ring keeps it visible without a glow. `:focus` (not only `:focus-visible`)
+  // because that is the selector the global halo hangs off.
+  &:focus,
   &:focus-visible {
     border-color: var(--accent);
     outline: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
   }
 }
 
@@ -111,6 +108,25 @@
 // composer body is the card's whole description, not a one-line comment, so it opens a little taller
 // than the compact default the comment box uses.
 .cmp-description ::ng-deep .de-compact .de-host { min-height: 88px; }
+
+// Same quiet focus recipe as the title and inline fields, so every field in the dialog announces
+// focus the same way. The editor's shell has no focus treatment of its own, so it is scoped here.
+.cmp-description ::ng-deep .de-shell {
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+
+  &:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+}
+
+// The placeholder is a hint, not content: the editor's own muted tier read almost as heavy as typed
+// text beside the title's placeholder, so the composer drops it to the placeholder tier like every
+// other field.
+.cmp-description ::ng-deep .de-host .ProseMirror p.is-editor-empty:first-child::before {
+  color: var(--text-4);
+  font-weight: 400;
+}
 
 // Covers the whole dialog while a file drag is over the overlay. `pointer-events: none` matters:
 // the element appears mid-drag, and without it the dragleave/drop events would fire against a
@@ -211,8 +227,11 @@
   font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
+  // The native touch highlight paints a rectangle outside the capsule. Use the chip's own
+  // rounded press fill instead, while retaining the shared keyboard focus ring.
+  -webkit-tap-highlight-color: transparent;
 
-  > i { flex: none; font-size: 15px; color: var(--text-muted); }
+  > i { flex: none; font-size: 15px; }
 
   > span {
     overflow: hidden;
@@ -220,7 +239,8 @@
     white-space: nowrap;
   }
 
-  &:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--border-strong); }
+  &:hover:not(:disabled),
+  &:active:not(:disabled) { background: var(--surface-hover); border-color: var(--border-strong); }
   &:disabled { opacity: 0.5; cursor: not-allowed; }
 
   &.is-open,
@@ -230,7 +250,18 @@
   }
 }
 
+// An empty chip is quieter than a set one without a second fill state: its label drops to the hint
+// tier and regular weight, its icon to the muted tier. A chip with a value keeps --text and a
+// stronger icon (or the list/board colour), so set and unset read apart in both themes at a glance.
 .cmp-chip-empty { color: var(--text-muted); }
+
+.cmp-chip > i { color: var(--text-3); }
+
+.cmp-chip:has(> .cmp-chip-empty) {
+  font-weight: 400;
+
+  > i { color: var(--text-muted); }
+}
 
 .cmp-avatars {
   display: inline-flex;
@@ -266,24 +297,69 @@
   align-items: center;
   gap: 6px;
   min-height: var(--h-md);
-  padding: 2px 4px 2px 9px;
+  // The square well must sit wholly in the capsule's straight run, clear of its round end. With a
+  // 14px inner radius and the well 3px off the top and bottom, its corner meets the curve about 5.3px
+  // in from the end; 8px leaves a visible sliver of chip around the corner instead of a poke-through.
+  padding: 0 8px 0 9px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
   font-size: var(--text-base);
+  cursor: text;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
 
   > i { flex: none; font-size: 15px; color: var(--text-muted); }
 
+  // The input is an inset text well inside the chip: a transparent input read as a label trailed by
+  // empty pill, with nothing saying "type here". The chip keeps its pill shape; the well carries the
+  // affordance. It is squared off like every other field (a round empty well inside a pill read as a
+  // toggle switch's thumb track). At rest it is a quiet fill with no edge: a bordered box holding a
+  // dash read as a disabled field, and its corners crowded the capsule's round end. The field border
+  // tier appears on hover and focus (below), when the well is about to take input. The fill is
+  // --surface rather than --input-bg because dark leaves --input-bg transparent by design, which
+  // would erase the well entirely; --surface is the field fill in light and a recessed slot in dark.
+  // The transparent border keeps the well's size identical in every state.
   input {
+    flex: none;
     width: 120px;
-    height: 24px;
+    height: var(--h-xs);
     padding: 0 8px;
     color: var(--text);
-    background: transparent;
-    border: none;
+    background: var(--surface);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
     font-size: var(--text-base);
+    cursor: text;
+    // The focus ring belongs to the chip (focus-within below); the global input focus shadow would
+    // otherwise sit inside the pill as a second ring.
+    box-shadow: none;
 
-    &:focus-visible { outline: none; }
+    &::placeholder { color: var(--text-4); }
+
+    &:focus,
+    &:focus-visible { outline: none; box-shadow: none; border-color: var(--border-strong); }
+  }
+
+  &:hover input:not(:disabled) { border-color: var(--border-strong); }
+
+  // Empty fields size to a short well instead of reserving 120px; the fixed width above is the
+  // fallback where field-sizing is unsupported. The minimums keep an empty well wide enough to read
+  // as "type here" (~10ch for text and URLs, ~7ch for numbers) without a long blank bar.
+  @supports (field-sizing: content) {
+    input {
+      width: auto;
+      min-width: 10ch;
+      max-width: 180px;
+      field-sizing: content;
+    }
+
+    input[type="number"] { min-width: 7ch; }
+  }
+
+  // Same quiet recipe as the title field, so the dialog has one focus language.
+  &:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
   }
 }
 
@@ -294,10 +370,12 @@
   flex-direction: column;
   min-height: 0;
   padding: 6px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  // Floating chrome, so it takes the picker elevation role (apps/web/AGENTS.md), matching the label,
+  // member and select pickers opened from the neighbouring chips.
+  background: var(--surface-overlay);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg, 0 8px 24px rgb(0 0 0 / 30%));
+  box-shadow: var(--shadow-pop);
 }
 
 .cmp-panel-head {
@@ -331,17 +409,14 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
+  // Same size as the footer buttons and the secondary text tier, so it reads as a real option of
+  // the footer; the buttons' 600 weight and fills keep it subordinate.
+  color: var(--text-3);
+  font-size: var(--text-base);
   cursor: pointer;
 
-  // The global input reset stretches inputs to full width; a checkbox must stay square.
-  input {
-    width: 14px;
-    height: 14px;
-    margin: 0;
-    accent-color: var(--accent);
-  }
+  // The global themed checkbox (16px, --border-strong edge) as is; only its margin is reset.
+  input { margin: 0; }
 }
 
 .cmp-cancel,
@@ -373,20 +448,76 @@
   &:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
 }
 
-// Phones keep the centred modal rather than becoming a bottom sheet — this is a form the user is
-// filling in, not a menu of choices, so it should sit where their attention already is. Only the
-// width cap and the chip clamps change; `dvh` so the on-screen keyboard shrinks the dialog instead
-// of pushing its footer off the bottom.
+// Touch targets key on the pointer, not the viewport (apps/web/AGENTS.md). Desktop keeps the
+// compact chip row; a finger gets 44px rows, chips and buttons.
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .cmp-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  // Pulled into the header's padding so the bigger hit area does not push the title down.
+  .cmp-head > .cmp-icon-btn { margin: -9px -10px -9px 0; }
+
+  .cmp-chip,
+  .cmp-inline-field { min-height: 44px; }
+
+  // The capsule is the wrapping <label>, so a tap anywhere on it (icon, name or well) focuses the
+  // input natively: the whole 44px capsule is the input's target, and the well can stay a visual
+  // slot. At this height the inner radius is 21px; a 30px well (6px off top and bottom) clears the
+  // round end with 10px of end padding, where a taller well would need far more.
+  .cmp-inline-field {
+    padding-right: 10px;
+
+    input { height: var(--h-md); }
+  }
+
+  .cmp-cancel,
+  .cmp-submit { height: 44px; }
+
+  .cmp-another {
+    min-height: 44px;
+
+    input {
+      width: 18px;
+      height: 18px;
+    }
+  }
+}
+
+// Phones keep the modal rather than becoming a bottom sheet — this is a form the user is filling in,
+// not a menu of choices, so it should sit where their attention already is. It is top-aligned rather
+// than centred: a centred dialog grows both ways as the title wraps, so each new line shifted the
+// chips half a line under the thumb; anchored near the top, growth only pushes downward. `dvh` so
+// the on-screen keyboard shrinks the dialog instead of pushing its footer off the bottom.
 @media (max-width: 560px) {
-  .cmp-backdrop { padding: 12px; }
+  .cmp-backdrop {
+    align-items: flex-start;
+    padding: 8dvh 12px 12px;
+  }
 
   .cmp-dialog {
     max-width: none;
-    max-height: calc(100dvh - 24px);
+    max-height: calc(92dvh - 12px);
   }
 
   .cmp-chip,
   .cmp-inline-field { max-width: 100%; }
+
+  // Narrower empty wells so two inline fields share a row on a phone instead of each taking its
+  // own; a typed value still grows the well up to the cap.
+  @supports (field-sizing: content) {
+    .cmp-inline-field input,
+    .cmp-inline-field input[type="number"] {
+      min-width: 6ch;
+      max-width: 110px;
+    }
+  }
+
+  // The composer's description opens at about two lines here rather than reserving desktop room on
+  // a short screen; it still grows with its content.
+  .cmp-description ::ng-deep .de-compact .de-host { min-height: 64px; }
+  .cmp-description ::ng-deep .de-compact .de-host .ProseMirror { min-height: 44px; }
 }
 
 @keyframes cmp-fade-in {

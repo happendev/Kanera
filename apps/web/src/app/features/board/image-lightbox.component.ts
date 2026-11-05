@@ -126,7 +126,7 @@ class PreviewTooLargeError extends Error {}
         } @else if (isMarkdown()) {
           <article class="lb-markdown" (click)="$event.stopPropagation()">
             @if (markdown(); as value) {
-            <k-description-viewer [value]="value" emptyLabel="This Markdown file is empty." i18n-emptyLabel emptyIcon="markdown" [showCopy]="true" />
+            <k-description-viewer [value]="value" [diagrams]="true" emptyLabel="This Markdown file is empty." i18n-emptyLabel emptyIcon="markdown" [showCopy]="true" />
             } @else {
             <div class="lb-file-card lb-markdown-state">
               <i aria-hidden="true" class="ti ti-markdown lb-file-icon"></i>

@@ -126,6 +126,11 @@ export class WorkDoneDayComponent {
       .filter((label): label is CardLabelPresentation => Boolean(label));
   }
 
+  /** Whether the row has a milestone line: anything beyond what its leading verb already says. */
+  hasMilestones(digest: CardDayDigest): boolean {
+    return (digest.created && digest.leadType !== "created") || digest.listPath.length > 1 || digest.checklistTicks.length > 0;
+  }
+
   /** First word of a display name; the full name stays in the row's tooltip. */
   actorTooltip(actor: WorkDoneActor): string {
     return icu(

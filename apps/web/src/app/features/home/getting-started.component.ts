@@ -1,9 +1,10 @@
-import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
+import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, afterRenderEffect, computed, inject, input, output, signal, viewChild } from "@angular/core";
 import { NgTemplateOutlet } from "@angular/common";
 import { RouterLink } from "@angular/router";
 import type { GettingStartedStep } from "@kanera/shared/dto";
 import { ApiClient } from "../../core/api/api.client";
+import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { TOUCH_ONLY_QUERY } from "../../core/browser/input-modality";
 import { GettingStartedService } from "../../core/getting-started/getting-started.service";
 import { icu } from "../../core/i18n/icu";
@@ -26,13 +27,29 @@ type StepAction =
 interface StepView {
   key: GettingStartedStep;
   done: boolean;
-  /** The section's label, shown above the step in the spotlight. */
-  section: string;
   icon: string;
   title: string;
   text: string;
   actionLabel: string;
   action: StepAction | null;
+}
+
+/**
+ * Past this share of steps done, the card starts as one compact row (progress, the next step and its
+ * button) rather than the full checklist: by then the viewer knows the card, and twenty-odd rows of
+ * mostly ticked steps are what push the focus tiles and Up next below the fold.
+ */
+const AUTO_COMPACT_SHARE = 0.4;
+
+type LayoutPreference = "expanded" | "collapsed";
+
+function readLayoutPreference(): LayoutPreference | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.GETTING_STARTED_LAYOUT);
+    return stored === "expanded" || stored === "collapsed" ? stored : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The palette shortcut as this platform writes it: "⌘K" on Apple devices, "Ctrl+K" elsewhere. */
@@ -114,8 +131,9 @@ const SECTIONS: readonly { key: string; label: string; steps: readonly GettingSt
  * The "Getting started" checklist on home: the guidance between the one-time onboarding wizard and
  * a team that uses Kanera fully.
  *
- * A guided list rather than a wall of tips: one step at a time is open, shown in a spotlight beside
- * the list (or under its row on a narrow card) with what it teaches and the button that does it, and it is the first open step unless the user picked another. When a
+ * A guided list rather than a wall of tips: one step at a time is open, shown in a spotlight over
+ * the list as one compact row (or under its row on a narrow card, where every other section folds
+ * to a chip) with what it teaches and the button that does it, and it is the first open step unless the user picked another. When a
  * step ticks, the next one opens, so the card walks people through the core loop of a card before
  * the team and setup steps.
  *
@@ -168,7 +186,6 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
     return state.steps.map(({ key, done }) => ({
       key,
       done,
-      section: SECTIONS.find((section) => section.steps.includes(key))?.label ?? "",
       icon: STEP_ICONS[key],
       ...this.describe(key, target, boardId, notesWorkspaceId, timelineBoardId),
     }));
@@ -191,12 +208,48 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
     if (picked && !picked.done) return picked.key;
     return steps.find((step) => !step.done)?.key ?? null;
   });
+  /** A section opened from its chip that has no open step to pick, so it is shown on its own. */
+  private readonly pickedSection = signal<string | undefined>(undefined);
+
+  /**
+   * The section narrow cards keep expanded: the open step's, unless the user opened a finished one
+   * from its chip. Wide cards show every section and ignore it.
+   */
+  readonly currentSection = computed<string | null>(() => {
+    const sections = this.sections();
+    const picked = this.pickedSection();
+    if (picked && sections.some((section) => section.key === picked)) return picked;
+    const open = this.openKey();
+    return (sections.find((section) => section.steps.some((step) => step.key === open)) ?? sections[0])?.key ?? null;
+  });
+
   readonly openStep = computed(() => this.steps().find((step) => step.key === this.openKey()) ?? null);
   readonly doneCount = computed(() => this.steps().filter((step) => step.done).length);
   readonly allDone = computed(() => this.steps().length > 0 && this.doneCount() === this.steps().length);
   readonly percent = computed(() => (this.steps().length ? Math.round((this.doneCount() / this.steps().length) * 100) : 0));
   readonly progressLabel = computed(() =>
     icu($localize`:Getting started checklist progress for screen readers:{done} of {total} steps done`, { done: this.doneCount(), total: this.steps().length }));
+
+  /**
+   * The viewer's own expand or collapse, which always wins and sticks on this device; without one the
+   * card compacts itself past AUTO_COMPACT_SHARE. A finished checklist never compacts: "You're all
+   * set" is its whole message.
+   */
+  private readonly layoutPreference = signal<LayoutPreference | null>(readLayoutPreference());
+  readonly compact = computed(() => {
+    if (this.allDone()) return false;
+    const preference = this.layoutPreference();
+    if (preference) return preference === "collapsed";
+    const total = this.steps().length;
+    return total > 0 && this.doneCount() / total > AUTO_COMPACT_SHARE;
+  });
+
+  /**
+   * Whether the phone chip strip has chips past its trailing edge, which fades that edge. Only then:
+   * a fade on a strip that already shows its last chip would promise more than there is.
+   */
+  readonly chipsOverflow = signal(false);
+  private readonly chipsRef = viewChild<ElementRef<HTMLElement>>("chips");
 
   readonly visible = computed(() => {
     const state = this.service.state();
@@ -212,6 +265,37 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
   private readonly onVisibilityChange = () => {
     if (document.visibilityState === "visible") void this.reload();
   };
+
+  constructor() {
+    // Re-measured when the strip is resized (a rotation, the sidebar) and whenever its chips change;
+    // scrolling is handled by the template's (scroll) binding.
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => this.measureChips());
+    inject(DestroyRef).onDestroy(() => observer?.disconnect());
+    afterRenderEffect(() => {
+      const el = this.chipsRef()?.nativeElement;
+      this.sections();
+      this.currentSection();
+      if (!el) return;
+      observer?.observe(el);
+      this.measureChips();
+    });
+  }
+
+  measureChips(): void {
+    const el = this.chipsRef()?.nativeElement;
+    // 1px of slack: fractional widths can leave a sub-pixel "overflow" on a strip that fits.
+    this.chipsOverflow.set(!!el && el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }
+
+  toggleCompact(): void {
+    const next: LayoutPreference = this.compact() ? "expanded" : "collapsed";
+    this.layoutPreference.set(next);
+    try {
+      localStorage.setItem(STORAGE_KEYS.GETTING_STARTED_LAYOUT, next);
+    } catch {
+      // Private mode or blocked storage: the choice holds for this visit only.
+    }
+  }
 
   ngOnInit(): void {
     void this.reload();
@@ -249,6 +333,14 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
   toggle(key: GettingStartedStep): void {
     // Closing the open step falls back to the first open one, so a step is always shown expanded.
     this.picked.set(this.openKey() === key ? undefined : key);
+    this.pickedSection.set(undefined);
+  }
+
+  /** Unfolds a section on a narrow card by opening its first step left, as tapping that row would. */
+  openSection(key: string): void {
+    const next = this.sections().find((section) => section.key === key)?.steps.find((step) => !step.done);
+    if (next) this.picked.set(next.key);
+    this.pickedSection.set(next ? undefined : key);
   }
 
   openPalette(): void {
@@ -285,7 +377,7 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
     boardId: string | null,
     notesWorkspaceId: string | null,
     timelineBoardId: string | null,
-  ): Omit<StepView, "key" | "done" | "section" | "icon"> {
+  ): Omit<StepView, "key" | "done" | "icon"> {
     const openBoard = $localize`:Getting started step button:Open a board`;
     const boardLink: StepAction | null = boardId ? { kind: "link", commands: ["/b", boardId] } : null;
     const openTable = $localize`:Getting started step button; Table is a view name:Open a table`;

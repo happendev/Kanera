@@ -17,6 +17,7 @@ import { ApiClient } from "../../core/api/api.client";
 import { CachedViewService } from "../../core/offline/cached-view.service";
 import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { BoardIconComponent } from "../../shared/board-icon.component";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { icu } from "../../core/i18n/icu";
 import { formatRelativeTime } from "../../shared/date-format";
@@ -72,9 +73,13 @@ type DueTone = "overdue" | "soon" | "muted";
 type OverviewRow = {
   card: WireCardSummary;
   boardName: string;
-  boardIconClass: string;
-  boardIconColor: string | null;
+  /** Raw icon name and colour token, for `k-board-icon`. */
+  boardIcon: string | null;
+  boardColor: string | null;
   listName: string;
+  /** The list's icon class and `--color-*` hue for its list-chip; null hue is the neutral pill. */
+  listIconClass: string;
+  listColor: string | null;
   /** Tracked time in progress: running (accent), past its workspace alert (amber) or stopped (muted). */
   time: TimeInProgressChip | null;
   due: { text: string; tone: DueTone } | null;
@@ -104,7 +109,11 @@ type PersonOverview = {
   inProgressMore: number;
   recent: OverviewRow[];
   /** null when this viewer may not read the person's queue; the section is then omitted. */
-  upNext: { rows: OverviewRow[]; total: number; hidden: number } | null;
+  /**
+   * `canEdit` is the queue's own write scope: workspace admins may curate a teammate's queue even
+   * when none of its cards are visible to them, so "hidden" alone never decides whether Edit shows.
+   */
+  upNext: { rows: OverviewRow[]; total: number; hidden: number; canEdit: boolean } | null;
   assigned: OverviewRow[];
   assignedMore: number;
   doneRows: OverviewRow[];
@@ -143,7 +152,7 @@ type Touch = { at: string; verb: TouchVerb };
 @Component({
   selector: "k-team-overview",
   standalone: true,
-  imports: [AvatarComponent, NgTemplateOutlet, TooltipDirective],
+  imports: [AvatarComponent, BoardIconComponent, NgTemplateOutlet, TooltipDirective],
   templateUrl: "./team-overview.component.html",
   styleUrl: "./team-overview.component.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -432,6 +441,7 @@ export class TeamOverviewComponent {
               .slice(0, UP_NEXT_LIMIT),
             total: queue.totalCount,
             hidden: queue.hiddenCount,
+            canEdit: queue.canReorder,
           }
         : null;
 
@@ -472,14 +482,18 @@ export class TeamOverviewComponent {
         this.row(card, nowMs, touchNote(touch.verb, formatRelativeTime(touch.at, { now })))
       );
       const upNext = base.upNext
-        ? { rows: base.upNext.entries.map(({ card, rank }) => ({ ...this.row(card, nowMs), rank })), total: base.upNext.total, hidden: base.upNext.hidden }
+        ? { rows: base.upNext.entries.map(({ card, rank }) => ({ ...this.row(card, nowMs), rank })), total: base.upNext.total, hidden: base.upNext.hidden, canEdit: base.upNext.canEdit }
         : null;
       const doneRow = ({ at, card }: { at: string; card: WireCardSummary }) =>
         this.row(card, nowMs, $localize`:Overview row note, e.g. "Done 2h ago":Done ${formatRelativeTime(at, { now })}:time:`, { withDue: false });
 
       // What is already on screen above is not repeated: the panel is a summary, and every row
-      // carries its own due chip, so nothing due disappears by being listed elsewhere.
-      const shown = new Set([...inProgressRows, ...recent, ...(upNext?.rows ?? [])].map((row) => row.card.id));
+      // carries its own due chip, so nothing due disappears by being listed elsewhere. While this
+      // person's queue is docked the inline Up next section is not rendered, so its head rows must
+      // not be subtracted either: the dock is a separate pane, and the panel would otherwise drop
+      // exactly the most important cards from its own sections.
+      const upNextShown = upNext && !this.isDocked(base.person.userId) ? upNext.rows : [];
+      const shown = new Set([...inProgressRows, ...recent, ...upNextShown].map((row) => row.card.id));
       const assignedAll = base.byAgenda.filter(({ card }) => !shown.has(card.id));
       const overdueCards = base.byAgenda
         .filter(({ card }) => isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone, now))
@@ -613,6 +627,15 @@ export class TeamOverviewComponent {
       : $localize`:Button on the Team overview person strip; shows only this teammate and their Up next:Show only ${name}:person:`;
   }
 
+  /**
+   * A tapped chip half under the strip's end fade settles fully into view. `nearest` moves the strip
+   * only as far as needed (not at all for a chip already in view), and the scroller's
+   * scroll-padding keeps it clear of the fade rather than stopping flush under it.
+   */
+  revealChip(event: Event): void {
+    (event.currentTarget as HTMLElement | null)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }
+
   private isQuiet(item: PersonOverview): boolean {
     return item.open === 0 && item.done === 0 && item.recent.length === 0 && !item.upNext?.total;
   }
@@ -628,20 +651,24 @@ export class TeamOverviewComponent {
     return this.upNextOpen() && this.focusedUserId() === userId;
   }
 
-  upNextActionLabel(name: string, open: boolean): string {
-    if (!open && !this.canNavigate()) return $localize`:Tooltip, open the Up next panel:Open Up next`;
-    if (this.solo()) {
-      return open
-        ? $localize`:Button on My overview closing the Up next panel:Close your Up next`
-        : $localize`:Button on My overview opening the Up next panel to change it:Edit your Up next`;
-    }
-    return open
-      ? $localize`:Button closing the Up next panel for one teammate:Close Up next for ${name}:person:`
+  upNextActionLabel(name: string): string {
+    if (!this.canNavigate()) return $localize`:Tooltip, open the Up next panel:Open Up next`;
+    return this.solo()
+      ? $localize`:Button on My overview opening the Up next panel to change it:Edit your Up next`
       : $localize`:Button opening the Up next panel to change one teammate's queue:Edit Up next for ${name}:person:`;
   }
 
   cardsGroupLabel(name: string): string {
     return $localize`:Group of one teammate's card counts:${name}:person:’s cards`;
+  }
+
+  /**
+   * Whether the header can claim "No activity in 7 days". A Done 7d credited from a hands-off
+   * completion (see activity) is deliberately not the person's own activity, but saying "no
+   * activity" right above "Done 7d 1" reads as a contradiction, so the line is left out instead.
+   */
+  showLastActive(item: PersonOverview): boolean {
+    return !!item.lastActiveAt || item.done === 0 || (this.activityLoading() && this.events().length === 0);
   }
 
   lastActiveLabel(item: PersonOverview): string {
@@ -662,13 +689,16 @@ export class TeamOverviewComponent {
    */
   private row(card: WireCardSummary, nowMs: number, note: string | null = null, options: { withDue?: boolean } = {}): OverviewRow {
     const board = this.boardsById().get(card.boardId);
+    const list = this.listsById().get(card.listId);
     const withDue = options.withDue ?? true;
     return {
       card,
       boardName: board?.name ?? "",
-      boardIconClass: `ti ti-${board?.icon ?? "layout-kanban"}`,
-      boardIconColor: board?.iconColor ? `var(--color-${board.iconColor})` : null,
-      listName: this.listsById().get(card.listId)?.name ?? "",
+      boardIcon: board?.icon ?? null,
+      boardColor: board?.iconColor ?? null,
+      listName: list?.name ?? "",
+      listIconClass: `ti ti-${list?.icon || "list"}`,
+      listColor: list?.color ? `var(--color-${list.color})` : null,
       time: this.boardsById().get(card.boardId)?.inProgressEnabled === false ? null : timeInProgressChip(card, nowMs, this.alertDaysFor(card), this.timeZoneByWorkspace().get(card.workspaceId)),
       due: withDue && card.dueDateLocalDate
         ? { text: formatDueDate(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone) ?? "", tone: dueTone(card) }

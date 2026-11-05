@@ -703,27 +703,49 @@ void test("every MCP tool declares structured output and explicit safety annotat
     assert.equal(typeof tool.annotations?.readOnlyHint, "boolean", `${name} readOnlyHint`);
     assert.equal(typeof tool.annotations?.destructiveHint, "boolean", `${name} destructiveHint`);
     assert.equal(typeof tool.annotations?.idempotentHint, "boolean", `${name} idempotentHint`);
-    assert.equal(tool.annotations?.openWorldHint, ["automations.create", "automations.update", "automations.set_enabled"].includes(name), `${name} external workflow destinations`);
+    const repeatableWrites = ["automations.delete", "cards.delete_attachment", "cards.set_watching", "checklists.delete_item", "checklists.update", "comments.delete", "comments.set_reaction", "priorities.move", "priorities.remove", "separators.delete", "separators.move"];
+    assert.equal(tool.annotations?.idempotentHint, tool.annotations?.readOnlyHint === true || repeatableWrites.includes(name), `${name} safe repeat guarantee`);
+    const privateWrites = ["workspaces.create", "boards.create_standalone", "cards.create_upload_link", "cards.set_watching", "scratchpad.capture", "scratchpad.update"];
+    const external = name === "search.docs" || (tool.annotations?.readOnlyHint === false && !privateWrites.includes(name));
+    assert.equal(tool.annotations?.openWorldHint, external, `${name} external delivery destinations`);
+    if (external && tool.annotations?.readOnlyHint === false) assert.equal(tool.annotations.destructiveHint, true, `${name} irreversible outbound deliveries`);
   }
+  // Repeating these calls advances timestamps/positions, rearms a reminder, or emits again.
+  for (const name of [
+    "automations.set_enabled",
+    "automations.update",
+    "cards.set_assignees",
+    "cards.set_cover",
+    "cards.set_labels",
+    "cards.set_reminder",
+    "checklists.move",
+    "checklists.move_item",
+    "comments.update",
+    "notes.move",
+    "notes.update",
+    "runs.update",
+    "scratchpad.update",
+    "separators.update",
+  ]) assert.equal(tools[name]?.annotations?.idempotentHint, false, `${name} changes on repeat`);
   assert.equal(tools["comments.delete"]?.annotations?.destructiveHint, true);
   assert.equal(tools["cards.bulk_archive"]?.annotations?.destructiveHint, true);
   assert.equal(tools["cards.bulk_duplicate"]?.annotations?.idempotentHint, false);
   assert.equal(tools["cards.update"]?.annotations?.destructiveHint, true);
-  assert.equal(tools["cards.duplicate"]?.annotations?.destructiveHint, false);
-  assert.equal(tools["notes.duplicate"]?.annotations?.destructiveHint, false);
-  assert.equal(tools["notes.add_attachment"]?.annotations?.destructiveHint, false);
+  assert.equal(tools["cards.duplicate"]?.annotations?.destructiveHint, true);
+  assert.equal(tools["notes.duplicate"]?.annotations?.destructiveHint, true);
+  assert.equal(tools["notes.add_attachment"]?.annotations?.destructiveHint, true);
   assert.equal(tools["notes.add_link"]?.annotations?.idempotentHint, false);
   assert.equal(tools["notes.move"]?.annotations?.destructiveHint, true);
   assert.equal("kanera_delete_note" in tools, false);
-  assert.equal(tools["checklists.bulk_update_items"]?.annotations?.idempotentHint, true);
+  assert.equal(tools["checklists.bulk_update_items"]?.annotations?.idempotentHint, false);
   assert.equal(tools["cards.add_attachment"]?.annotations?.idempotentHint, false);
   assert.equal(tools["cards.delete_attachment"]?.annotations?.destructiveHint, true);
   assert.equal(tools["work.query_cards"]?.annotations?.readOnlyHint, true);
   assert.equal(tools["priorities.list"]?.annotations?.readOnlyHint, true);
-  assert.equal(tools["priorities.add"]?.annotations?.destructiveHint, false);
+  assert.equal(tools["priorities.add"]?.annotations?.destructiveHint, true);
   assert.equal(tools["priorities.add"]?.annotations?.idempotentHint, false);
   assert.equal(tools["priorities.remove"]?.annotations?.destructiveHint, true);
-  assert.equal(tools["separators.create"]?.annotations?.destructiveHint, false);
+  assert.equal(tools["separators.create"]?.annotations?.destructiveHint, true);
   assert.equal(tools["separators.create"]?.annotations?.idempotentHint, false);
   assert.equal(tools["separators.move"]?.annotations?.destructiveHint, true);
   assert.equal(tools["separators.delete"]?.annotations?.destructiveHint, true);
@@ -732,14 +754,14 @@ void test("every MCP tool declares structured output and explicit safety annotat
   assert.equal(tools["automations.create"]?.annotations?.destructiveHint, true);
   assert.equal(tools["automations.create"]?.annotations?.idempotentHint, false);
   assert.equal(tools["automations.update"]?.annotations?.destructiveHint, true);
-  assert.equal(tools["automations.set_enabled"]?.annotations?.idempotentHint, true);
+  assert.equal(tools["automations.set_enabled"]?.annotations?.idempotentHint, false);
   assert.equal(tools["automations.delete"]?.annotations?.destructiveHint, true);
   assert.equal(tools["workspaces.list_templates"]?.annotations?.readOnlyHint, true);
   assert.equal(tools["workspaces.create"]?.annotations?.destructiveHint, false);
   assert.equal(tools["workspaces.create"]?.annotations?.idempotentHint, false);
   assert.equal(tools["boards.create_standalone"]?.annotations?.destructiveHint, false);
   assert.equal(tools["boards.create_standalone"]?.annotations?.idempotentHint, false);
-  assert.equal(tools["boards.create"]?.annotations?.destructiveHint, false);
+  assert.equal(tools["boards.create"]?.annotations?.destructiveHint, true);
   assert.equal(tools["boards.create"]?.annotations?.idempotentHint, false);
 
   const originalFetch = globalThis.fetch;
@@ -777,7 +799,7 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     for (const tool of tools) {
       assert.deepEqual(tool._meta?.securitySchemes, [{
         type: "oauth2",
-        scopes: tool.annotations?.readOnlyHint ? ["kanera:read"] : ["kanera:read", "kanera:write"],
+        scopes: tool.annotations?.readOnlyHint && !["automations.list", "automations.list_executions"].includes(tool.name) ? ["kanera:read"] : ["kanera:read", "kanera:write"],
       }], `${tool.name} advertises its OAuth policy over the wire`);
       const missing = missingParameterDescriptions(tool.inputSchema as Record<string, unknown>);
       assert.deepEqual(missing, [], `${tool.name} describes every accepted input: ${missing.join(", ")}`);
@@ -867,8 +889,9 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
     // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
-    assert.ok(schemaCatalogLength <= 204_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 213_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    // Replay keys for the additional effectful writes add ~2.4k; preserve 2.5k of measured growth.
+    assert.ok(schemaCatalogLength <= 207_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 216_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8.5k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.
@@ -1140,9 +1163,9 @@ void test("tools/list offers a read-only credential only read tools and keeps th
     await client.connect(clientTransport);
     const { tools } = await client.listTools();
     const listed = new Set(tools.map((tool) => tool.name));
-    const expected = Object.entries(full).filter(([, tool]) => tool.annotations?.readOnlyHint === true).map(([name]) => name);
+    const expected = Object.entries(full).filter(([name, tool]) => tool.annotations?.readOnlyHint === true && !["automations.list", "automations.list_executions"].includes(name)).map(([name]) => name);
     assert.deepEqual([...listed].sort(), expected.sort());
-    for (const write of ["cards.update", "cards.create", "comments.add", "priorities.add"]) assert.ok(!listed.has(write), write);
+    for (const write of ["cards.update", "cards.create", "comments.add", "priorities.add", "automations.list", "automations.list_executions"]) assert.ok(!listed.has(write), write);
     assert.match(client.getInstructions() ?? "", /read-only, so only read tools are listed/u);
     await assert.rejects(client.callTool({ name: "cards.update", arguments: { cardId: C, changes: { title: "x" } } }), /Tool cards.update not found/u);
   } finally {

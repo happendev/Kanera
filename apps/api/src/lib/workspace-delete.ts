@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { clearNotificationsForScope } from "./notifications.js";
 import { boardMembers, boardMirrors, boards, cards, clientMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray, notExists, or } from "drizzle-orm";
@@ -64,10 +65,23 @@ export async function deleteWorkspaceCascade(params: { workspaceId: string; clie
     );
   }
   await emitToWorkspace(params.workspaceId, "workspace:deleted", { workspaceId: params.workspaceId });
-  await db.transaction(async (tx) => {
-    await clearNotificationsForScope(tx, { workspaceId: params.workspaceId });
-    await tx.delete(workspaces).where(eq(workspaces.id, params.workspaceId));
-  });
+  // Cascading outbox deletion can deadlock with a dispatcher updating the same rows. PostgreSQL
+  // rolls back the victim transaction, including notification-deletion events. Retry only that
+  // transaction: lifecycle broadcasts and file cleanup above must not run again.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await db.transaction(async (tx) => {
+        await clearNotificationsForScope(tx, { workspaceId: params.workspaceId });
+        await tx.delete(workspaces).where(eq(workspaces.id, params.workspaceId));
+      });
+      break;
+    } catch (error) {
+      // Drizzle wraps the PostgreSQL error in cause; other failures must still surface immediately.
+      const cause = error instanceof Error ? error.cause ?? error : error;
+      if (attempt >= 2 || !cause || typeof cause !== "object" || !("code" in cause) || cause.code !== "40P01") throw error;
+      await delay(25 * (attempt + 1));
+    }
+  }
   await deleteNoteFiles(noteFiles);
 
   // Deleting a workspace can free the same guest and board capacity as deleting boards one by one.

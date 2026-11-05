@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UnsavedWorkService } from "./unsaved-work.service";
 
 describe("UnsavedWorkService", () => {
+  // A spyOn call reuses an existing spy, including calls made by an earlier test or spec file.
+  beforeEach(() => vi.restoreAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
   it("uses the native beforeunload safeguard while work is dirty", () => {
     const service = new UnsavedWorkService();
     const source = Symbol("editor");

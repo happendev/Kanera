@@ -1,4 +1,6 @@
 @use "../../../shared/card-key" as key;
+@use "../../../shared/chip";
+@use "../../../shared/list-chip";
 
 // Every responsive decision below is made against the width of this one panel, not the viewport. A
 // day is full-bleed in the list layout but a third of the stream in the grid layout, so the same
@@ -43,7 +45,9 @@
 // just the date text. Its own fixed label track keeps the date starting at the same offset every day.
 .wd-day-toggle {
   display: grid;
-  grid-template-columns: 16px 5.5rem minmax(0, 1fr);
+  // The label track is a floor, not a fixed width: the dates start at one offset on every day, and
+  // a longer localized weekday widens its own day instead of clipping.
+  grid-template-columns: 16px minmax(5.5rem, max-content) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   height: auto;
@@ -87,10 +91,12 @@
   font-size: 15px;
 }
 
+// The day's one date (with the long form beside it only for Today / Yesterday), so it is set at the
+// row text's size: at --text-xs it was the smallest text in a panel it heads.
 .wd-day-label {
   flex: none;
-  font-size: var(--text-xs);
-  font-weight: 700;
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 .wd-day-date {
@@ -124,38 +130,59 @@
   text-align: right;
 }
 
+// Neutral ink, one tier for every metric: the icon says which metric, the number and (where it fits)
+// the words say how many. Per-type hues on 15px glyphs were a code readers had to learn, and the
+// faded zeros sat well below AA.
 .wd-count {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  position: relative;
   gap: 3px;
+  color: var(--text-3);
   line-height: 1;
+  white-space: nowrap;
 
-  // A zero still occupies its slot to hold the column, but recedes so busy days carry the eye.
+  // A zero still occupies its slot to hold the column, and recedes a full ink tier rather than
+  // fading, so it stays legible text.
   &.is-zero {
-    opacity: 0.35;
+    color: var(--text-muted);
   }
 
   i {
+    color: var(--text-muted);
     font-size: var(--text-base);
     line-height: 1;
   }
+}
 
-  // Same per-type hues the rows and chips use, so a colour means one thing everywhere in the view.
-  &.wd-count--created {
-    color: color-mix(in srgb, var(--color-blue) 70%, var(--text-muted));
+// The count's full phrase, visually hidden by default (see the template). Clipped rather than
+// display: none so screen readers still read it and the tooltip sees it as truncated.
+.wd-count-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+// Labelled counts, where the header has room: the phrase replaces the bare number. Self-describing,
+// they no longer rely on sitting in a column, so zeros drop out instead of reading "0 cards
+// completed" three times over the day's one real number. Only the wide header has the room; the mid
+// widths keep the aligned number columns and the phone band icon + number.
+@mixin labelled-counts {
+  .wd-count-num,
+  .wd-count.is-zero {
+    display: none;
   }
 
-  &.wd-count--moved {
-    color: color-mix(in srgb, var(--color-violet) 70%, var(--text-muted));
-  }
-
-  &.wd-count--completed {
-    color: color-mix(in srgb, var(--color-green) 70%, var(--text-muted));
-  }
-
-  &.wd-count--checklistItemCompleted {
-    color: color-mix(in srgb, var(--accent) 70%, var(--text-muted));
+  .wd-count-text {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
   }
 }
 
@@ -381,111 +408,114 @@
   }
 }
 
-// Labels and milestone chips share one wrapping run, so the flex gap has to own all the spacing:
-// k-card-labels' own bottom margin (built for kanban cards) would push the label row off the rhythm
-// of the chip rows that wrap beneath it, and its taller chips would sit proud of them.
+// Two lines under the title, each one wrapping run: the day's milestones, then the card's facts.
+// The flex gap owns all the spacing: k-card-labels' own bottom margin (built for kanban cards) would
+// push the facts line off the rhythm, and its taller chips would sit proud of the timer beside them.
 .wd-meta {
   --label-bar-gap: 0;
   --label-chip-height: 20px;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
+  max-width: 100%;
 }
 
-.wd-milestones {
+.wd-milestones,
+.wd-facts {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 6px;
   min-width: 0;
+  max-width: 100%;
 }
 
+// What happened, as plain record: the shared chip shape on a neutral fill, the type's hue on the
+// glyph only (the same hue as the row icon and the day header's count). Coloured washes here
+// competed with the label pills and the running timer, and three blues on one line said nothing.
 .wd-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  line-height: 18px;
+  @include chip.chip;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  background: var(--surface-2);
+  color: var(--text-3);
 
-  i {
-    font-size: var(--text-sm);
-    line-height: 1;
-  }
-
-  &.wd-chip--created {
-    background: color-mix(in srgb, var(--color-blue) 14%, transparent);
-    color: color-mix(in srgb, var(--color-blue) 80%, var(--text));
-  }
-
-  &.wd-chip--moved {
-    // The move chip holds a list-name breadcrumb, so it stays neutral and lets the names carry colour.
-    gap: 3px;
-    padding: 1px 4px;
-    background: transparent;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-
-  &.wd-chip--completed {
-    background: color-mix(in srgb, var(--color-green) 16%, transparent);
-    color: color-mix(in srgb, var(--color-green) 80%, var(--text));
-  }
-
-  &.wd-chip--checklistItemCompleted {
-    // Percentage as well as the cap: on a narrow row 320px is wider than the meta line itself.
-    max-width: min(320px, 100%);
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-    color: color-mix(in srgb, var(--accent) 85%, var(--text));
-
-    // Long item text truncates rather than pushing the row's trailing column off-screen.
+  > span {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
-  // Tracked time in progress: neutral once stopped, the tile's accent while the clock runs.
-  &.wd-chip--time {
-    background: var(--surface-2);
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-    box-shadow: inset 0 0 0 1px var(--border);
+  &.wd-chip--created > i {
+    color: var(--color-blue);
+  }
 
-    &.is-running {
-      background: color-mix(in srgb, var(--accent) 9%, transparent);
+  // Item text truncates (the tooltip names every item) rather than pushing the row's trailing column
+  // off-screen. Percentage as well as the cap: on a narrow row 320px is wider than the line itself.
+  &.wd-chip--checklistItemCompleted {
+    max-width: min(320px, 100%);
+
+    > i {
       color: var(--accent);
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
     }
   }
 }
 
-.wd-list-name {
+// The lists a card travelled through, each named with the list-chip every surface uses for a list,
+// joined by plain arrows. Wraps between chips, never inside one: a name broken over two lines reads
+// as two lists.
+.wd-path {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 3px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+// An arrow and the chip it points to: one unbreakable unit, so the run wraps before an arrow and
+// never after it. min-width: 0 lets a long list name ellipsize inside its chip instead.
+.wd-path-step {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  // A list name broken across two lines inside its pill reads as two lists; the run wraps between
-  // pills instead.
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
   white-space: nowrap;
-  padding: 1px 5px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text);
-  font-weight: 600;
+}
 
-  i {
-    flex: none;
-    font-size: var(--text-sm);
-    line-height: 1;
-  }
+.wd-list-name {
+  @include list-chip.list-chip;
+}
+
+.wd-path-arrow {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 .wd-path-ellipsis {
   color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+// Tracked time in progress: the shared state chip, toned as on the board tile. Plain once stopped
+// (a record, not a live signal), accent while the clock runs, neutral while it is paused out of
+// working hours.
+.wd-chip--time {
+  @include chip.chip;
+  @include chip.chip-tone(plain);
+
+  &.is-running {
+    @include chip.chip-tone(accent);
+  }
+
+  &.is-paused {
+    @include chip.chip-tone(neutral);
+  }
 }
 
 .wd-trailing {
@@ -540,6 +570,20 @@
 // has above ~780px (an iPad landscape board beside the sidebar is ~730px and clipped "202(").
 // Hidden outright rather than ellipsized, since "Saturday, 3 Octo…" reads as a rendering bug next to
 // a label that already says the day.
+// Wide panels have room for every count's phrase beside the label, the contributor stack and the
+// copy button (all four, in the longer languages, need about 860px of header), so the counts read as
+// words: "1 card completed  1 move" rather than four glyphs to decode. A flex run rather than the
+// count grid, since labelled counts with the zeros dropped have no columns to keep.
+@container wd-day (min-width: 880px) {
+  .wd-day-counts {
+    display: flex;
+    justify-content: flex-end;
+    gap: 14px;
+  }
+
+  @include labelled-counts;
+}
+
 @container wd-day (max-width: 780px) {
   .wd-day-toggle {
     grid-template-columns: 16px minmax(0, 1fr);
@@ -571,7 +615,7 @@
   .wd-row {
     grid-template-columns: 3.5rem 28px minmax(0, 1fr) auto;
     column-gap: 8px;
-    row-gap: 6px;
+    row-gap: var(--space-1);
   }
 
   // `display: contents` hoists the title line and the chip run into the row's own grid, which is what
@@ -581,12 +625,13 @@
     display: contents;
   }
 
+  // The leading cells span both lines so their height does not push metadata away from a short title.
   .wd-time {
-    grid-area: 1 / 1 / 2 / 2;
+    grid-area: 1 / 1 / 3 / 2;
   }
 
   .wd-icon {
-    grid-area: 1 / 2 / 2 / 3;
+    grid-area: 1 / 2 / 3 / 3;
   }
 
   // Inline flow, not a wrapping flex row. Flex breaks lines on whole items, which at these widths
@@ -636,26 +681,6 @@
     max-width: 100%;
   }
 
-  .wd-meta,
-  .wd-milestones,
-  .wd-chip {
-    max-width: 100%;
-  }
-
-  .wd-chip--moved {
-    flex-wrap: wrap;
-  }
-
-  // Truncating these only made sense while they sat on a single fixed-width line.
-  .wd-list-name,
-  .wd-chip--checklistItemCompleted {
-    overflow: visible;
-    max-width: 100%;
-    min-width: 0;
-    text-overflow: clip;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
 }
 
 // Once the header cannot hold the label, the counts, the contributor stack and the copy button on one
@@ -690,7 +715,7 @@
     flex-wrap: wrap;
     grid-area: 2 / 1 / 3 / 4;
     gap: 4px 12px;
-    padding: 7px 10px;
+    padding: 6px 10px;
     border-top: 1px solid var(--border);
   }
 
@@ -703,6 +728,15 @@
 
   .wd-count {
     justify-content: flex-start;
+  }
+
+  // Icon and number, not the phrases the wide header uses: at a phone's ~330px band "1 checklist
+  // item ticked" and "1 card created" wrapped a typical day onto a second line and grew the sticky
+  // header to ~76px. The phrase stays in the DOM, visually hidden, as each count's accessible name and
+  // its tooltip (see the template). Zeros drop out as they do in the labelled layouts: the band has
+  // no columns to hold, and a row of "0"s beside the day's one real number is noise.
+  .wd-count.is-zero {
+    display: none;
   }
 }
 
@@ -729,11 +763,10 @@
   // The trailing stack folds the chip run into a ragged two-word column at this size. It takes its own
   // line here, still right-justified so the block keeps its bottom edge.
   //
-  // The leading tracks also shrink to what they hold. At full width a 3.5rem track keeps timestamps
-  // in a comfortable column, but on a ~310px panel it, the icon and the gaps were spending a third of
-  // the row on a five-character time — every pixel taken off them goes to the title.
+  // Size the time track to its text: a fixed short track overlaps the icon in locales with AM/PM.
+  // The smaller icon and gaps leave the rest of the phone-width panel for the title.
   .wd-row {
-    grid-template-columns: 2.4rem 24px minmax(0, 1fr);
+    grid-template-columns: max-content 24px minmax(0, 1fr);
     column-gap: 6px;
     row-gap: 4px;
   }

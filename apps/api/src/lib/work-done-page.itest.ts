@@ -33,7 +33,9 @@ void test("bounded history matches full history across day, run, cursor and visi
     { title: "Hidden", position: "3" }, { title: "Archived", position: "4", archivedAt: new Date() },
   ].map((card) => ({ ...card, boardId: board!.id, listId: list!.id, createdById: actor!.id }))).returning();
   await db.insert(cardAssignees).values({ cardId: moving!.id, userId: viewer!.id });
-  const day = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
+  // Keep these records separate from the fixed November DST fixtures below; a rolling date
+  // overlaps them each November and changes the expected number of move runs.
+  const day = "2026-10-15";
   const at = (time: string) => new Date(`${day}T${time}Z`);
   const event = (cardId: string, action: string, time: string, payload: object = {}) => ({
     boardId: board!.id, workspaceId: workspace!.id, actorId: actor!.id,

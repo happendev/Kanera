@@ -1,3 +1,5 @@
+@use "../../shared/card-key" as key;
+
 :host {
   display: flex;
   flex-direction: column;
@@ -110,6 +112,26 @@
   }
 }
 
+// Mirrors the tile's .card-key-row: key and board on one line above the title.
+.card-drag-preview-key-row {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  margin-bottom: 5px;
+
+  .card-drag-preview-key {
+    margin-bottom: 0;
+  }
+
+  .card-drag-preview-board-badge {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin: 0;
+  }
+}
+
 .card-drag-preview-cover .card-drag-preview-board-badge {
   position: absolute;
   top: 8px;
@@ -128,22 +150,22 @@
   white-space: nowrap;
 }
 
+// Under the title, spaced as on the tile (card.component.scss k-card-labels).
 k-card-labels.card-drag-preview-labels {
   display: block;
-  --label-bar-gap: 5px;
+  --label-bar-margin-top: 6px;
+  --label-bar-gap: 0;
 }
 
+// The tile's key, lifted: same mixin and the same deliberate 10px / 70% as .card-key in
+// card.component.scss, so the key does not change size or tone the moment a drag starts.
 .card-drag-preview-key {
+  @include key.card-key;
   display: block;
-  flex: 0 0 auto;
-  margin-bottom: 3px;
-  color: var(--text-muted);
+  flex: none;
+  margin-bottom: 5px;
   font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-  font-variant-numeric: tabular-nums;
   line-height: 1.3;
-  white-space: nowrap;
   opacity: 0.7;
 }
 
@@ -281,32 +303,19 @@ h3 {
     i {
       color: var(--list-color);
     }
-
-    .card-count {
-      background: color-mix(in srgb, var(--list-color) 22%, transparent);
-      border-color: color-mix(in srgb, var(--list-color) 45%, transparent);
-      color: var(--list-color);
-    }
   }
 }
 
+// Plain muted figure after the name rather than a 20px ring before it: the ring forced the number
+// down to 9px to fit, and leading with it read "1 Wishlist" before the list's name. Matches
+// .gc-count in the grouped column so switching the grouping axis keeps the header.
 .card-count {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-size: 9px;
-  font-weight: 600;
   color: var(--text-muted);
-  line-height: 1;
+  font-size: var(--text-sm);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  box-sizing: border-box;
+  line-height: 1;
 }
 
 // ─── List menu ────────────────────────────────────────────────────────────────
@@ -347,8 +356,8 @@ h3 {
   z-index: var(--z-panel, 300);
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
   min-width: 160px;
   // A max-width is required now, not cosmetic. While the menu was `position: absolute` it shrank to fit
   // inside .list-header's box, so ~250px was an implicit ceiling; as a `fixed` panel the available width
@@ -371,49 +380,29 @@ h3 {
   bottom: var(--ap-bottom, auto);
 }
 
-.menu-item {
-  width: 100%;
-  justify-content: flex-start;
-  height: 32px;
-  padding: 0 8px;
-  font-size: var(--text-md);
-  color: var(--text);
-  border-radius: var(--radius-sm);
-  gap: 8px;
+// Rows, hover, danger and separator all come from the global .k-menu-item / .k-menu-separator, so
+// this menu matches the card menu that opens beside it. Only what is particular to it lives here.
+.list-menu-dropdown,
+.menu-sub-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 
-  i {
-    font-size: 15px;
-    color: var(--text-muted);
+  > .k-menu-item,
+  > .menu-sub > .k-menu-item {
+    flex: none;
   }
+}
 
-  &.menu-item-danger {
-    color: var(--danger);
-
-    i {
-      color: var(--danger);
-    }
-
-    &:hover {
-      background: var(--danger-soft);
-    }
-
-    &:active:not(:disabled) {
-      background: color-mix(in srgb, var(--danger) 16%, transparent);
-    }
-  }
+// The row that owns the open "Move all cards to" submenu stays lit while the pointer is in it.
+.k-menu-item.is-active {
+  background: var(--surface-hover);
 }
 
 // `.menu-sub` needs no rule of its own: it was `position: relative` only to position the submenu, and
 // that is kAnchoredPanel's job now. The wrapper element stays in the template because it keeps the
 // submenu a DOM descendant of the menu panel, which is how PanelStackService derives the two as
 // nested layers and spares the menu when the submenu opens.
-
-.menu-chev {
-  margin-left: auto;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
 
 // A nested layer inside .list-menu-dropdown, so it deliberately shares --z-panel rather than sitting a
 // token above it: a child of a stacking context already paints above that context's siblings.
@@ -424,8 +413,8 @@ h3 {
   z-index: var(--z-panel, 300);
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
   min-width: 160px;
   max-width: 260px;
   max-height: var(--ap-max-height, 240px);
@@ -436,12 +425,6 @@ h3 {
 
 .menu-sub-panel.is-positioned {
   visibility: visible;
-}
-
-.menu-sep {
-  height: 1px;
-  background: var(--border);
-  margin: 3px 0;
 }
 
 .menu-confirm {
@@ -732,11 +715,20 @@ h3 {
   justify-content: flex-start;
 }
 
+// A secondary action at the end of every list: shown permanently, the glyph read as a resize handle
+// in each lane's corner. Fine pointers get it when they reach the footer (or tab into it), the way
+// the list menu waits for the header; the list menu's "Add separator" stays the discoverable path.
 .add-separator-btn {
   flex: 0 0 30px;
   width: 30px;
   padding: 0;
   justify-content: center;
+  opacity: 0;
+
+  .list-add-actions:hover &,
+  .list-add-actions:focus-within & {
+    opacity: 1;
+  }
 
   i {
     font-size: 15px;
@@ -744,19 +736,30 @@ h3 {
 
 }
 
+// Coarse pointers: nothing waits for hover, and every list control takes the 44px floor. The footer
+// buttons grow for real (the footer has room); the menu button keeps its 28px box because it overlays
+// the list title, and grows an invisible hit area instead, as card activity's compact actions do.
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
   .list-menu-btn {
+    position: relative;
     opacity: 1;
     pointer-events: auto;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: -8px;
+    }
   }
-}
 
-// ─── Mobile touch target fixes ────────────────────────────────────────────────
+  .add-card-btn {
+    height: 44px;
+  }
 
-@media (max-width: 640px) {
-  .list-menu-btn {
-    width: 28px;
-    height: 28px;
+  .add-separator-btn {
+    flex-basis: 44px;
+    width: 44px;
+    opacity: 1;
   }
 }
 

@@ -62,7 +62,13 @@ export async function expectBoardLoaded(page: Page, boardName: string) {
 }
 
 export async function openBoard(page: Page, boardName: string) {
-  await page.locator("a.board-link").filter({ hasText: boardName }).first().click();
+  const link = page.locator("a.board-link").filter({ hasText: boardName }).first();
+  // Phones have no sidebar rail: the page header's menu button opens the navigation drawer first.
+  if (!(await link.isVisible())) {
+    const menu = page.locator(".ph-menu").filter({ visible: true }).first();
+    if (await menu.count()) await menu.click();
+  }
+  await link.click();
   await expectBoardLoaded(page, boardName);
 }
 

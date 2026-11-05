@@ -161,7 +161,7 @@ export class AnchoredPanelDirective implements AfterViewInit, OnChanges, OnDestr
     const anchor = this.resolveAnchor();
     if (!anchor) return;
 
-    const box = positionAnchoredPanel(this.hostRef.nativeElement, anchor, this.resolvePlacement());
+    const box = positionAnchoredPanel(this.hostRef.nativeElement, anchor, matchWideTrayTrigger(this.resolvePlacement(), anchor));
     this.observeAnchor();
     this.config?.onPlaced?.(box);
     this.apPlaced.emit(box);
@@ -209,6 +209,39 @@ export class AnchoredPanelDirective implements AfterViewInit, OnChanges, OnDestr
     if (next) this.resizeObserver.observe(next);
     this.observedAnchor = next;
   }
+}
+
+/** Below this a trigger is a toolbar-sized button, not a full-width tray row. */
+const WIDE_TRIGGER_MIN = 300;
+
+/**
+ * On a phone the page toolbar's controls fold into a tray where every trigger is a full-width row.
+ * A popover keeping its desktop width there opened narrower than, and offset from, its trigger, so
+ * the two halves of the button poked out behind it. Inside that tray, a fixed-width panel takes the
+ * tray's outer width and edges instead: matching the trigger alone still left the tray's own padding
+ * and border showing as rails either side. Scoped to the tray on purpose: elsewhere a wide anchor (a
+ * form field, a panel's wrapper) is not a row the popover belongs to, and a panel sized to its
+ * content should stay so.
+ */
+function matchWideTrayTrigger(placement: AnchoredPanelPlacement, anchor: AnchorTarget): AnchoredPanelPlacement {
+  if (!(anchor instanceof HTMLElement) || placement.side === "right") return placement;
+  const tray = anchor.closest<HTMLElement>(".pt-controls.is-open");
+  if (!tray) return placement;
+  const rect = anchor.getBoundingClientRect();
+  const anchorWidth = rect.right - rect.left;
+  if (anchorWidth < WIDE_TRIGGER_MIN) return placement;
+  const trayRect = tray.getBoundingClientRect();
+  const width = Math.round(trayRect.right - trayRect.left);
+  if (typeof placement.width === "number" && placement.width >= width) return placement;
+  // Where placement would put the panel's left edge, so the offset lands it on the tray's.
+  const align = placement.align ?? "start";
+  const preferredLeft = align === "end"
+    ? rect.right - width
+    : align === "center" ? rect.left + anchorWidth / 2 - width / 2 : rect.left;
+  const viewportWidth = placement.viewport?.width ?? window.innerWidth;
+  // The tray sits closer to the screen edge than the default 12px margin; let the panel follow it.
+  const margin = Math.max(0, Math.min(placement.margin ?? 12, trayRect.left, viewportWidth - trayRect.right));
+  return { ...placement, width, margin, crossOffset: Math.round(trayRect.left - preferredLeft) };
 }
 
 /**

@@ -456,6 +456,7 @@ export class CardDetailComponent {
     attachment.id,
     {
       isImage: this.isImageMime(attachment.mimeType),
+      isSvg: attachment.mimeType === "image/svg+xml",
       isVideo: this.isVideoMime(attachment.mimeType),
       isAudio: this.isAudioMime(attachment.mimeType),
       isPdf: attachmentPreviewType(attachment.mimeType, attachment.fileName) === "pdf",
@@ -463,7 +464,10 @@ export class CardDetailComponent {
       isText: attachmentPreviewType(attachment.mimeType, attachment.fileName) === "text",
       thumbnailUrl: this.attachmentThumbUrl(attachment),
       iconClass: attachmentIconClass(attachment.mimeType, attachment.fileName),
-      subtitle: $localize`:Attachment details line - uploader, upload time and file size:${attachment.uploadedByName}:person: • ${this.formatFeedTime(attachment.createdAt)}:time: • ${this.formatBytes(attachment.byteSize)}:size:`,
+      // Split back into its parts (every locale keeps the " • " separator) so each renders unbroken
+      // and a wrapping phone line breaks between parts, carrying the bullet onto the next line. A
+      // translation without the separator stays one part, which is the old single-run behaviour.
+      subtitleParts: $localize`:Attachment details line - uploader, upload time and file size:${attachment.uploadedByName}:person: • ${this.formatFeedTime(attachment.createdAt)}:time: • ${this.formatBytes(attachment.byteSize)}:size:`.split(" • "),
     },
   ])));
 
@@ -2630,10 +2634,11 @@ export class CardDetailComponent {
   }
 
   formatBytes(n: number): string {
-    // One decimal for KB and MB ("1.5 MB", "1,5 MB"), in the viewer's number format.
-    if (n < 1024) return `${BYTES_FORMAT.format(n)} B`;
-    if (n < 1024 * 1024) return `${SIZE_FORMAT.format(n / 1024)} KB`;
-    return `${SIZE_FORMAT.format(n / 1024 / 1024)} MB`;
+    // One decimal for KB and MB ("1.5 MB", "1,5 MB"), in the viewer's number format. A no-break space
+    // keeps the unit with its number when the attachment subtitle wraps on a phone ("679 / B").
+    if (n < 1024) return `${BYTES_FORMAT.format(n)}\u00a0B`;
+    if (n < 1024 * 1024) return `${SIZE_FORMAT.format(n / 1024)}\u00a0KB`;
+    return `${SIZE_FORMAT.format(n / 1024 / 1024)}\u00a0MB`;
   }
 
   /** A date custom field holds a YYYY-MM-DD day; show it in the viewer's date format. */

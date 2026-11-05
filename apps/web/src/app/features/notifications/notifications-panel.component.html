@@ -45,13 +45,23 @@
       <div class="filter-selects">
         <label class="filter-select-wrap" kTooltip="Group notifications" i18n-kTooltip="Tooltip on the notification grouping menu">
           <i aria-hidden="true" class="ti ti-category"></i>
-          <span class="filter-short-label" aria-hidden="true" i18n="Grouping menu|Short name of the notification grouping menu on phones">Group</span>
+          <!-- Phones name the active grouping rather than the menu itself, so which grouping is on stays
+               visible. The words are the app's existing plain nouns, reused so no new copy is needed. -->
+          <span class="filter-short-label" aria-hidden="true">
+            @switch (groupBy()) {
+            @case ('board') { <ng-container i18n="Short name of the notification board filter on phones">Board</ng-container> }
+            @case ('user') { <ng-container i18n="Column heading">User</ng-container> }
+            @case ('organisation') { <ng-container i18n="Settings tab group heading">Organisation</ng-container> }
+            @default { <ng-container i18n="Custom field type">Date</ng-container> }
+            }
+          </span>
           <select class="filter-select" [value]="groupBy()" aria-label="Group notifications" i18n-aria-label="Label for the notification grouping menu" (change)="setGroupBy($any($event.target).value)">
             <option value="day" [selected]="groupBy() === 'day'" i18n="Notification grouping option">Group by day</option>
             <option value="board" [selected]="groupBy() === 'board'" i18n="Notification grouping option">Group by board</option>
             <option value="user" [selected]="groupBy() === 'user'" i18n="Notification grouping option">Group by user</option>
             <option value="organisation" [selected]="groupBy() === 'organisation'" i18n="Notification grouping option">Group by organisation</option>
           </select>
+          <i aria-hidden="true" class="ti ti-chevron-down filter-chevron"></i>
         </label>
         <label class="filter-select-wrap" kTooltip="Filter by board" i18n-kTooltip="Tooltip on the notification board filter">
           <i aria-hidden="true" class="ti ti-layout-kanban"></i>
@@ -67,6 +77,7 @@
             <option [value]="b.boardId" [selected]="boardFilter() === b.boardId">{{ b.boardName }}</option>
             }
           </select>
+          <i aria-hidden="true" class="ti ti-chevron-down filter-chevron"></i>
         </label>
         <label class="filter-select-wrap" kTooltip="Filter by user" i18n-kTooltip="Tooltip on the notification user filter">
           <i aria-hidden="true" class="ti ti-user"></i>
@@ -82,6 +93,7 @@
             <option [value]="u.userId" [selected]="userFilter() === u.userId">{{ u.displayName }}</option>
             }
           </select>
+          <i aria-hidden="true" class="ti ti-chevron-down filter-chevron"></i>
         </label>
       </div>
       <k-search-field
@@ -140,14 +152,21 @@
             } @else if (groupBy() === 'user' && group.actorId) {
             <k-avatar [url]="group.avatarUrl" [name]="group.label" [size]="20" [userId]="group.actorId" [workspaceId]="group.workspaceId" [showPresence]="true" />
             } @else if (groupBy() === 'user' && group.key === 'system') {
-            <k-system-avatar [size]="20" />
-            } @else {
-            <i [class]="group.icon" [style.color]="group.iconColor ? 'var(--color-' + group.iconColor + ')' : null"></i>
+            <k-system-avatar [size]="20" framed />
+            } @else if (groupBy() === 'board' && group.boardIcon) {
+            <!-- The board's own tile, as everywhere a board is named; a bare glyph in the raw palette
+                 colour fell short of contrast in light. -->
+            <k-board-icon [icon]="group.boardIcon" [color]="group.iconColor" [size]="18" />
+            } @else if (group.icon) {
+            <i aria-hidden="true" [class]="group.icon"></i>
             }
             <span>{{ group.label }}</span>
           </span>
           <span class="notif-group-controls">
+            <!-- A single item is its own count. -->
+            @if (group.count > 1) {
             <span class="notif-group-count" [attr.aria-label]="groupCountLabel(group.count)">{{ group.count }}</span>
+            }
             <i class="ti ti-chevron-down notif-group-chevron" aria-hidden="true"></i>
           </span>
         </button>
@@ -159,9 +178,7 @@
            collapses a burst of unread updates on the same card into one thing to read. -->
       @for (entry of group.entries; track entry.key) {
       @if (entry.notification; as n) {
-      <!-- --board-color feeds the .board-link chip's tint; there is no left strip on the card. -->
-      <li class="notif-item" [class.is-read]="n.readAt" [style.--board-color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"
-        (contextmenu)="openCardActions($event, n)">
+      <li class="notif-item" [class.is-read]="n.readAt" (contextmenu)="openCardActions($event, n)">
         <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="openNotificationLabel(n)"></a>
         <div class="notif-actor" [class.notif-actor--overdue]="n.reason === 'overdue'" [class.notif-actor--reminder]="n.reason === 'reminder'">
           @if (n.reason === 'overdue') {
@@ -169,11 +186,18 @@
           } @else if (n.reason === 'reminder') {
           <i aria-hidden="true" class="ti ti-alarm"></i>
           } @else if (n.activity?.actorKind === 'system') {
-          <k-system-avatar [size]="32" />
+          <k-system-avatar [size]="32" framed />
           } @else {
           <k-avatar [url]="n.actorAvatarUrl ?? null" [name]="n.actorName ?? ''" [size]="32" [userId]="n.activity?.actorId ?? null" [workspaceId]="n.workspaceId" [showPresence]="n.activity?.actorKind === 'user'" />
           }
         </div>
+        <!-- Touch only: under the avatar, in the column that is otherwise empty below it, so the context
+             line keeps the row's width and the 44px target meets no other control. -->
+        @if (canShowCardActions(n)) {
+        <button type="button" class="notif-actions-btn notif-actions-btn--rail" [class.is-active]="actionsMenuNotificationId() === n.id" (click)="openCardActionsFromButton($event, n)" aria-label="Card actions" i18n-aria-label kTooltip="Card actions" i18n-kTooltip>
+          <i aria-hidden="true" class="ti ti-dots"></i>
+        </button>
+        }
         <div class="notif-body">
           @if (showOrganisationContext()) {
           <div class="notif-organisation">
@@ -185,38 +209,36 @@
             <span>{{ n.orgName }}</span>
           </div>
           }
-          <!-- Top-left, above the breadcrumb, the action line and the card title — the same place the
-               board card tile puts it, so the reference is in one predictable spot across surfaces. -->
-          @if (showCardKeys() && n.cardKey) { <span class="notif-card-key">{{ n.cardKey }}</span> }
+          <!-- One context line: card key, then the app's board-and-list convention (shared/priority-queue),
+               the board as its icon tile plus muted text and the list as the list chip. The key leads it
+               rather than taking a line of its own, so each row reads context, event, title. Grouped by
+               board, the band above already names the board, so the row keeps the key and the list. -->
+          @if ((showCardKeys() && n.cardKey) || groupBy() !== 'board' || n.listName) {
           <div class="notif-breadcrumb">
-            <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, n)" (auxclick)="openBoardInNewTab($event, n)" [attr.aria-label]="openBoardLabel(n.boardName)">
-              <i aria-hidden="true" [class]="'ti ti-' + (n.boardIcon || 'layout-kanban')" [style.color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"></i>
+            @if (showCardKeys() && n.cardKey) { <span class="notif-card-key">{{ n.cardKey }}</span> }
+            @if (groupBy() !== 'board') {
+            <button type="button" class="board-link" (click)="openBoard($event, n)" (auxclick)="openBoardInNewTab($event, n)" [attr.aria-label]="openBoardLabel(n.boardName)">
+              <k-board-icon [icon]="n.boardIcon" [color]="n.boardIconColor" [size]="16" />
               <span>{{ n.boardName }}</span>
             </button>
+            }
             @if (n.listName) {
-            <!-- Board and list share one inline row, so the hierarchy needs an explicit separator. -->
-            <i class="ti ti-chevron-right sep-chevron" aria-hidden="true"></i>
-            <div class="breadcrumb-row">
-              <i aria-hidden="true" [class]="'ti ti-' + (n.listIcon || 'layout-list')" [style.color]="n.listColor ? 'var(--color-' + n.listColor + ')' : null"></i>
-              <span [style.color]="n.listColor ? 'var(--color-' + n.listColor + ')' : null">{{ n.listName }}</span>
-            </div>
+            <span class="notif-list-chip" [style.--list-color]="n.listColor ? 'var(--color-' + n.listColor + ')' : null">
+              <i aria-hidden="true" [class]="'ti ti-' + (n.listIcon || 'layout-list')"></i>
+              <span>{{ n.listName }}</span>
+            </span>
             }
           </div>
+          }
           @if (n.reason === 'overdue') {
           <div class="notif-overdue-badge" i18n="Notification badge">Card is overdue</div>
           } @else if (n.reason === 'reminder') {
           <div class="notif-reminder-badge" i18n="Notification badge: a reminder you set has fired">Your reminder</div>
           } @else {
+          <!-- One inline sentence that wraps word by word: &ngsp; keeps the spaces Angular would
+               otherwise strip between the parts. -->
           <div class="notif-action">
-            <i [class]="changeSummary(n).icon"></i>
-            <span class="actor-name">{{ n.actorName }}</span>
-            @if (n.activity?.actorKind === 'agent') {
-            <span class="via-agent" [kTooltip]="agentTooltip(n.activity.agentName, n.actorName)"><i aria-hidden="true" class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ n.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>
-            }
-            <span class="action-text">{{ changeSummary(n).text }}</span>
-            @if (changeSummary(n).value) {
-            <span class="action-value">{{ changeSummary(n).value }}</span>
-            }
+            <i aria-hidden="true" [class]="changeSummary(n).icon"></i>&ngsp;<span class="actor-name">{{ n.actorName }}</span>&ngsp;@if (n.activity?.actorKind === 'agent') {<span class="via-agent" [kTooltip]="agentTooltip(n.activity.agentName, n.actorName)"><i aria-hidden="true" class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ n.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>&ngsp;}<span class="action-text">{{ changeSummary(n).text }}</span>@if (changeSummary(n).value) {&ngsp;<span class="action-value">{{ changeSummary(n).value }}</span>}
           </div>
           }
           @if (n.cardTitle) {
@@ -247,7 +269,17 @@
           }
         </div>
         <div class="notif-aside">
-          <span class="notif-time">{{ relativeTime(n.createdAt) }}</span>
+          <!-- The actions button is the visible way to the menu the row's right-click opens (touch has no
+               contextmenu). With a mouse it takes the timestamp's place on hover, so it costs the context
+               line no width. Touch gets the copy under the avatar instead (CSS shows one or the other). -->
+          <span class="notif-time-slot">
+            <span class="notif-time">{{ rowTime(n.createdAt) }}</span>
+            @if (canShowCardActions(n)) {
+            <button type="button" class="notif-actions-btn notif-actions-btn--slot" [class.is-active]="actionsMenuNotificationId() === n.id" (click)="openCardActionsFromButton($event, n)" aria-label="Card actions" i18n-aria-label kTooltip="Card actions" i18n-kTooltip>
+              <i aria-hidden="true" class="ti ti-dots"></i>
+            </button>
+            }
+          </span>
           @if (canThumbsUp(n)) {
           <button type="button" class="notif-thumbs" [class.reaction-chip]="n.viewerThumbsUp" [class.is-active]="n.viewerThumbsUp" [class.reaction-add]="!n.viewerThumbsUp" (click)="toggleThumbsUp($event, n)" [attr.aria-label]="thumbsUpLabel(n)" [attr.aria-pressed]="n.viewerThumbsUp" [disabled]="!online()"
             [kTooltip]="online() ? thumbsUpLabel(n) : offlineTitle">
@@ -268,9 +300,7 @@
            updates are listed beneath it. The header and entry anatomy deliberately mirrors the row
            branch above — attachment and comment rendering in particular must stay identical, so
            change both branches together. -->
-      <li class="notif-cluster notif-item"
-        [style.--board-color]="cluster.head.boardIconColor ? 'var(--color-' + cluster.head.boardIconColor + ')' : null"
-        (contextmenu)="openCardActions($event, cluster.head)">
+      <li class="notif-cluster notif-item" (contextmenu)="openCardActions($event, cluster.head)">
         <a class="notif-card-link" [href]="notificationUrl(cluster.head)" (click)="openCluster(cluster, $event)" (auxclick)="openClusterInNewTab($event, cluster)"
           [attr.aria-label]="openClusterLabel(cluster)"></a>
         <!-- No actor column on the header, unlike a plain row: every entry below already names and
@@ -288,20 +318,27 @@
               <span>{{ cluster.head.orgName }}</span>
             </div>
             }
-            @if (showCardKeys() && cluster.head.cardKey) { <span class="notif-card-key">{{ cluster.head.cardKey }}</span> }
+            <!-- One context line: card key, then the app's board-and-list convention (shared/priority-queue),
+                 the board as its icon tile plus muted text and the list as the list chip. The key leads it
+                 rather than taking a line of its own, so each row reads context, event, title. Grouped by
+                 board, the band above already names the board, so the row keeps the key and the list. -->
+            @if ((showCardKeys() && cluster.head.cardKey) || groupBy() !== 'board' || cluster.head.listName) {
             <div class="notif-breadcrumb">
-              <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, cluster.head)" (auxclick)="openBoardInNewTab($event, cluster.head)" [attr.aria-label]="openBoardLabel(cluster.head.boardName)">
-                <i aria-hidden="true" [class]="'ti ti-' + (cluster.head.boardIcon || 'layout-kanban')" [style.color]="cluster.head.boardIconColor ? 'var(--color-' + cluster.head.boardIconColor + ')' : null"></i>
+              @if (showCardKeys() && cluster.head.cardKey) { <span class="notif-card-key">{{ cluster.head.cardKey }}</span> }
+              @if (groupBy() !== 'board') {
+              <button type="button" class="board-link" (click)="openBoard($event, cluster.head)" (auxclick)="openBoardInNewTab($event, cluster.head)" [attr.aria-label]="openBoardLabel(cluster.head.boardName)">
+                <k-board-icon [icon]="cluster.head.boardIcon" [color]="cluster.head.boardIconColor" [size]="16" />
                 <span>{{ cluster.head.boardName }}</span>
               </button>
+              }
               @if (cluster.head.listName) {
-              <i class="ti ti-chevron-right sep-chevron" aria-hidden="true"></i>
-              <div class="breadcrumb-row">
-                <i aria-hidden="true" [class]="'ti ti-' + (cluster.head.listIcon || 'layout-list')" [style.color]="cluster.head.listColor ? 'var(--color-' + cluster.head.listColor + ')' : null"></i>
-                <span [style.color]="cluster.head.listColor ? 'var(--color-' + cluster.head.listColor + ')' : null">{{ cluster.head.listName }}</span>
-              </div>
+              <span class="notif-list-chip" [style.--list-color]="cluster.head.listColor ? 'var(--color-' + cluster.head.listColor + ')' : null">
+                <i aria-hidden="true" [class]="'ti ti-' + (cluster.head.listIcon || 'layout-list')"></i>
+                <span>{{ cluster.head.listName }}</span>
+              </span>
               }
             </div>
+            }
             @if (cluster.head.cardTitle) {
             <div class="notif-card">
               <span class="card-title">{{ cluster.head.cardTitle }}</span>
@@ -312,6 +349,13 @@
             <!-- No count badge: the entries are all listed directly below, so a number over them
                  restates what the reader can already see. The read button's label still says how
                  many it will clear. -->
+            <!-- The row's actions button, see the plain row above. A block has no timestamp of its own, so
+                 with a mouse it simply appears on hover. -->
+            @if (canShowCardActions(cluster.head)) {
+            <button type="button" class="notif-actions-btn" [class.is-active]="actionsMenuNotificationId() === cluster.head.id" (click)="openCardActionsFromButton($event, cluster.head)" aria-label="Card actions" i18n-aria-label kTooltip="Card actions" i18n-kTooltip>
+              <i aria-hidden="true" class="ti ti-dots"></i>
+            </button>
+            }
             <button type="button" class="read-dot" (click)="markClusterRead($event, cluster)" [attr.aria-label]="markClusterReadLabel(cluster)" [disabled]="!online()"
               [kTooltip]="online() ? markClusterReadLabel(cluster) : offlineTitle"></button>
           </div>
@@ -326,7 +370,7 @@
               } @else if (item.notification.reason === 'reminder') {
               <i aria-hidden="true" class="ti ti-alarm"></i>
               } @else if (item.notification.activity?.actorKind === 'system') {
-              <k-system-avatar [size]="20" />
+              <k-system-avatar [size]="20" framed />
               } @else {
               <k-avatar [url]="item.notification.actorAvatarUrl ?? null" [name]="item.notification.actorName ?? ''" [size]="20" [userId]="item.notification.activity?.actorId ?? null" [workspaceId]="item.notification.workspaceId"
                 [showPresence]="item.notification.activity?.actorKind === 'user'" />
@@ -337,15 +381,7 @@
                    words both overdue kinds, and the row branch's standalone badge would out-shout
                    its siblings inside a block. -->
               <div class="notif-action">
-                <i [class]="item.summary.icon"></i>
-                @if (item.notification.actorName) { <span class="actor-name">{{ item.notification.actorName }}</span> }
-                @if (item.notification.activity?.actorKind === 'agent') {
-                <span class="via-agent" [kTooltip]="agentTooltip(item.notification.activity.agentName, item.notification.actorName)"><i aria-hidden="true" class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ item.notification.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>
-                }
-                <span class="action-text">{{ item.summary.text }}</span>
-                @if (item.summary.value) {
-                <span class="action-value">{{ item.summary.value }}</span>
-                }
+                <i aria-hidden="true" [class]="item.summary.icon"></i>&ngsp;@if (item.notification.actorName) {<span class="actor-name">{{ item.notification.actorName }}</span>&ngsp;}@if (item.notification.activity?.actorKind === 'agent') {<span class="via-agent" [kTooltip]="agentTooltip(item.notification.activity.agentName, item.notification.actorName)"><i aria-hidden="true" class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ item.notification.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>&ngsp;}<span class="action-text">{{ item.summary.text }}</span>@if (item.summary.value) {&ngsp;<span class="action-value">{{ item.summary.value }}</span>}
               </div>
               @if (item.notification.commentBody) {
               <div class="notif-comment-body">
@@ -373,7 +409,7 @@
                  header's single dot is the only control. A dot per entry both implied the entries
                  could diverge and stacked four competing accent marks down the block. -->
             <div class="notif-entry-aside">
-              <span class="notif-time">{{ relativeTime(item.notification.createdAt) }}</span>
+              <span class="notif-time">{{ rowTime(item.notification.createdAt) }}</span>
               @if (canThumbsUp(item.notification)) {
               <button type="button" class="notif-thumbs" [class.reaction-chip]="item.notification.viewerThumbsUp" [class.is-active]="item.notification.viewerThumbsUp" [class.reaction-add]="!item.notification.viewerThumbsUp" (click)="toggleThumbsUp($event, item.notification)" [attr.aria-label]="thumbsUpLabel(item.notification)"
                 [attr.aria-pressed]="item.notification.viewerThumbsUp" [disabled]="!online()" [kTooltip]="online() ? thumbsUpLabel(item.notification) : offlineTitle">

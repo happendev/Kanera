@@ -137,7 +137,7 @@ services:
       retries: 10
 
   valkey:
-    image: valkey/valkey:9.1.2-alpine
+    image: valkey/valkey:9.1.3-alpine
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
@@ -539,7 +539,7 @@ services:
   # ---------------------------------------------------------------------------
 
   prometheus:
-    image: prom/prometheus:v3.15.0
+    image: prom/prometheus:v3.15.1
     restart: unless-stopped
     profiles: ["monitoring"]
     # Runs as root so it can both write the scrape token file and own the TSDB volume without a
@@ -583,7 +583,10 @@ services:
       - api
 
   grafana:
-    image: grafana/grafana:13.2.3
+    build:
+      context: .
+      dockerfile: docker/monitoring/grafana/Dockerfile
+      pull: true
     restart: unless-stopped
     profiles: ["monitoring"]
     entrypoint:
@@ -616,8 +619,6 @@ services:
       # Set when serving Grafana under a subpath; for a dedicated subdomain leave default.
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-}
     volumes:
-      - ./docker/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro,Z
-      - ./docker/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro,Z
       - kanera_grafana_data:/var/lib/grafana
     expose:
       - "3000"
@@ -631,7 +632,7 @@ services:
       - loki
 
   loki:
-    image: grafana/loki:3.7.8
+    image: grafana/loki:3.7.9
     restart: unless-stopped
     profiles: ["monitoring"]
     command: ["-config.file=/etc/loki/local-config.yaml"]
@@ -642,7 +643,7 @@ services:
       - "3100"
 
   alloy:
-    image: grafana/alloy:v1.21.0
+    image: grafana/alloy:v1.21.3
     restart: unless-stopped
     profiles: ["monitoring"]
     command:
@@ -763,7 +764,7 @@ services:
       - "9100"
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.94.0
+    image: oliver006/redis_exporter:v1.97.0
     restart: unless-stopped
     profiles: ["monitoring"]
     environment:

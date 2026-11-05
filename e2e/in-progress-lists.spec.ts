@@ -229,7 +229,8 @@ test("organisation master switch and board opt-out pause clocks and hide progres
     await expect(page.locator('k-board-table-view [data-col="inProgress"]')).toHaveCount(0);
     await settings.screenshot({ animations: "disabled", path: test.info().outputPath("board-progress-settings-desktop.png") });
     await settings.setViewportSize({ width: 390, height: 844 });
-    await expect(settings.locator(".sidebar")).toHaveCSS("width", "52px");
+    // Phones have no rail: the closed nav drawer is off-canvas, so the page takes the full width.
+    await expect(settings.locator(".sidebar")).toBeHidden();
     await settings.screenshot({ animations: "disabled", path: test.info().outputPath("board-progress-settings-phone.png") });
     await boardToggle.check();
     await expect(page.locator('k-board-table-view [data-col="inProgress"] .tv-time-in-progress')).toBeVisible();
@@ -285,7 +286,8 @@ test("standalone boards can opt out from General settings", async ({ page, signI
     await expect(toggle).not.toBeChecked();
     await page.screenshot({ animations: "disabled", path: test.info().outputPath("standalone-progress-desktop.png") });
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator(".sidebar")).toHaveCSS("width", "52px");
+    // Phones have no rail: the closed nav drawer is off-canvas, so the page takes the full width.
+    await expect(page.locator(".sidebar")).toBeHidden();
     await toggle.scrollIntoViewIfNeeded();
     await page.screenshot({ animations: "disabled", path: test.info().outputPath("standalone-progress-phone.png") });
     await toggle.check();

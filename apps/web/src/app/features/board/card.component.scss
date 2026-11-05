@@ -1,11 +1,13 @@
-@use "../../shared/rank-pill" as rank;
 @use "../../shared/card-key" as key;
 @use "../../shared/tick-draw" as tick;
+@use "../../shared/chip";
 
+// --border-raised, not --border: on dark --border sits 1.1:1 off the tile's own --surface-2 fill and
+// the edge vanished. Resting colour only (see styles.scss); hover never changes it.
 :host {
   display: block;
   background: var(--card-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-raised);
   border-radius: var(--radius);
   padding: 6px 10px 8px;
   cursor: pointer;
@@ -49,13 +51,13 @@
   // no blanket opacity — individual elements are muted instead
 }
 
-// Opens the tile on its own top-left line. Quiet at rest so the labels and title lead; lifted to
-// full tone on hover, for when you actually want to read or quote the reference. 10px rather than
-// the mixin's --text-xs: on a tile the key is a whisper above the title, not a cell of its own.
+// Opens the tile's key row. Quiet at rest so the title leads; lifted to full tone on hover, for when
+// you actually want to read or quote the reference. 10px rather than the mixin's --text-xs: on a
+// tile the key is a whisper above the title, not a cell of its own.
 .card-key {
   @include key.card-key;
   display: block;
-  margin-bottom: 3px;
+  flex: none;
   font-size: 10px;
   line-height: 1.3;
   opacity: 0.7;
@@ -66,32 +68,32 @@
   opacity: 1;
 }
 
+// Cross-board tiles (My Cards, Team Cards) say which board a card lives on. The board's tinted
+// k-board-icon tile carries the identity, so the name needs no frame of its own: a bordered box here
+// was one more tier of chips stacked above the title. It always takes its own line under the key,
+// rank and inactivity glyph (see the template comment), covered tile or not, and gets the tile's
+// whole width before it ellipsizes; the full name is in the tooltip. max-width: max-content keeps a
+// short name from growing into a wide, empty click target.
 .card-board-badge {
-  display: inline-flex;
+  display: flex;
+  order: 2;
+  flex: 0 1 auto;
   align-items: center;
-  gap: 4px;
-  margin: 2px 0 4px;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  font-size: var(--text-sm);
-  color: var(--text-3);
+  gap: 5px;
+  min-width: 0;
   max-width: 100%;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--text-3);
 
   &.is-clickable {
     cursor: pointer;
   }
 
-  &.is-clickable:hover {
+  &.is-clickable:hover .card-board-name {
     color: var(--text);
-    border-color: var(--border-strong);
-    background: var(--surface-2);
-  }
-
-  i {
-    font-size: var(--text-sm);
-    line-height: 1;
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .card-board-name {
@@ -101,13 +103,13 @@
   }
 }
 
-// When the badge is rendered inside a cover image, pin it to the top-left.
-.card-cover .card-board-badge {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  margin: 0;
-  z-index: 1;
+// The zero-height break that puts the board on that line of its own, only when something shares the
+// row with it: alone it would add an empty first line.
+.card-key-row:has(> .card-board-badge):has(> .card-key, > .card-priority-indicator, > .card-attention, > .card-unread-dot)::after {
+  content: "";
+  order: 1;
+  flex-basis: 100%;
+  height: 0;
 }
 
 .card-actions-btn {
@@ -210,60 +212,74 @@
   }
 }
 
-// Key + queue rank on one line. The wrapper takes over the key's old bottom margin so the pill
-// does not stretch the tile's top rhythm.
+// Key, board and queue rank on one line above the title. The bottom margin plus the title's own
+// half-leading gives the title a clear ~8px from the metadata above it.
 .card-key-row {
   display: flex;
-  gap: 5px;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   align-items: center;
-  margin-bottom: 3px;
+  min-width: 0;
+  margin-bottom: 5px;
+}
 
-  .card-key {
-    margin-bottom: 0;
+// The hover affordances (actions dots, "+ Up next") float over the top-right corner, which on a
+// cover-less tile (:first-child, the cover being the first child otherwise) is this row's right
+// end. Reserve their width only while they are actually painted and there is something at that
+// end to cover, so the inactivity glyph sits flush right at rest and slides clear, still readable
+// and reachable, when the controls appear. "+ Up next" stays visible on coarse pointers, so there
+// it always reserves; the dots never show on touch, so touch reserves nothing for them. The board
+// line under it ellipsizes a little further while reserved rather than wrapping, so a hover never
+// grows the tile under the pointer.
+.card-key-row:first-child:has(.card-attention, .card-unread-dot, .card-board-badge) {
+  padding-right: var(--card-key-row-reserve, 0px);
+
+  @media (pointer: coarse) {
+    &.reserve-priority-add {
+      --card-key-row-reserve: 28px;
+    }
   }
 }
 
-// Always one labelled unit: the rank keeps its meaning when keys are hidden, while cards that show
-// keys read as two neighbouring metadata facts rather than merging the key into the status chip.
+@media (hover: hover) {
+  :host(:hover),
+  :host(:focus-within) {
+    .card-key-row:first-child:has(.card-attention, .card-unread-dot, .card-board-badge) {
+      &.reserve-actions,
+      &.reserve-priority-add {
+        --card-key-row-reserve: 28px;
+      }
+
+      &.reserve-actions.reserve-priority-add {
+        --card-key-row-reserve: 56px;
+      }
+    }
+  }
+}
+
+// The card's place in the focused person's Up next queue: the shared accent chip (the in-progress
+// timer's tone, the same kind of "where does this stand" fact), label then number. Exempt from the
+// key's resting fade: the rank is a signal, not identification chrome. Always labelled, so the rank
+// keeps its meaning when keys are hidden.
 .card-priority-indicator {
-  display: inline-flex;
-  flex: none;
+  @include chip.chip;
+  @include chip.chip-tone(accent);
   gap: 4px;
-  align-items: center;
-  width: fit-content;
-  padding: 2px 3px 2px 7px;
-  background: color-mix(in srgb, var(--accent) 7%, var(--card-bg));
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  border-radius: 999px;
+  padding-inline: 6px;
 }
 
 .card-priority-label {
-  color: var(--text-muted);
-  font-size: 9px;
-  font-weight: 650;
-  line-height: 1;
-  white-space: nowrap;
+  color: var(--text-3);
+  font-weight: 500;
 }
 
-// The card's rank in the focused person's Up next queue, beside the key: both are "which card"
-// metadata. Accent-tinted so the number reads from across a column, and exempt from the key's
-// resting fade — the rank is a signal, not identification chrome. The tint deepens toward rank #1
-// via --rank-heat (shared/_rank-pill.scss).
+// Rank heat (shared/priority-rank.ts, 1 at #1 fading to 0 by #5) lives on the number's ink alone:
+// the head of the queue reads in full accent, deeper ranks settle toward the label's --text-3. The
+// shared _rank-pill fill would put a second, nested chip inside this one.
 .card-priority-rank {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 999px;
-  font-size: 10px;
+  color: color-mix(in srgb, var(--accent) calc(55% + var(--rank-heat, 0) * 45%), var(--text-3));
   font-weight: 650;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
-
-  @include rank.rank-heat(var(--card-bg));
 }
 
 :host:hover {
@@ -328,7 +344,7 @@
 // drawer), the green tint is redundant — fall back to the neutral card look.
 :host.no-complete-accent.is-completed-card {
   background: var(--card-bg);
-  border-color: var(--border);
+  border-color: var(--border-raised);
 }
 
 :host.no-complete-accent.is-completed-card:hover {
@@ -401,6 +417,11 @@
 
 .card-cover {
   position: relative;
+  // The reserved geometry arrives as custom properties (card.component.ts): the image's own ratio,
+  // or the fixed legacy height. Properties rather than inline aspect-ratio/height, so the phone rule
+  // below can swap in its stable frame without !important.
+  aspect-ratio: var(--cover-ratio, auto);
+  height: var(--cover-height, auto);
   margin: -6px -10px 8px;
   // A definite width prevents max-height from feeding back through aspect-ratio and shrinking
   // portrait/4:3 covers horizontally. The negative margins extend this across the card padding;
@@ -410,16 +431,51 @@
   border-top-left-radius: var(--radius);
   border-top-right-radius: var(--radius);
   min-height: 72px;
-  max-height: 160px;
+  // 128px, not 160px: a lane with two covered tiles in view sliced the second one at the fold. Still
+  // a CSS cap on the reserved geometry (the fallback height in card.component.ts matches it).
+  max-height: 128px;
+  // A cover whose own ground is white (a screenshot, a document) otherwise runs straight into the
+  // tile surface with no edge. The hairline marks where the image ends; the backing shows while it
+  // loads and behind transparent images. Border-box, so the reserved height above is unchanged.
+  // --border, not the in-sheet --divider: on light that was a shade off the card and a white
+  // screenshot still blended into the body below it.
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
 
   img {
     object-fit: cover;
+    // Dark themes dim the image a step: a light screenshot is the brightest thing on a dark board
+    // and glared as a white slab over the tile. Keyed off the light themes so the pre-boot dark
+    // :root dims too.
+    filter: brightness(0.9);
+
+    :host-context([data-theme="light"]) &,
+    :host-context([data-theme="paper"]) & {
+      filter: none;
+    }
+  }
+
+  // On a phone a lane shows one or two tiles per screen, and a 160px cover pushed the title below
+  // the fold of the tile while its content stayed too small to read. A 112px cap fixed that but cut
+  // a 4:3 screenshot to its middle 60%. One stable 16:9 frame instead (about 136px on a phone lane):
+  // still CSS-only reserved geometry, nothing measures the DOM, and every tile's cover is the same
+  // shape. Anchored to the top because covers are mostly screenshots and documents, whose heading
+  // is what identifies them; a centred crop kept an arbitrary middle slice.
+  @media (max-width: 480px) {
+    aspect-ratio: 16 / 9;
+    height: auto;
+    max-height: none;
+
+    img {
+      object-position: center top;
+    }
   }
 }
 
 // Block flow, not flex: the leading marks sit inline with the title's first line so a wrapped title
 // returns to the tile's left edge instead of hanging indented past every mark.
 .card-body {
+  position: relative;
   font-size: var(--text-md);
   line-height: 1.5;
   color: var(--text);
@@ -428,14 +484,29 @@
 
 // Unread mark: a bare dot at any count (see unread-mark.ts). Fixed size whatever the card's activity
 // does, so a tile never reflows as notifications arrive; the count is in the tooltip and aria-label.
+// The last item of the key row, at the tile's top-right corner beside the inactivity glyph: status
+// marks gather there, and the title keeps a clean leading edge. The 17px box matches .card-attention
+// so the two centre on one line; only the 7px dot inside it is painted.
 .card-unread-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--accent);
-  margin-right: 5px;
-  vertical-align: 2px;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  margin-left: auto;
+  width: 17px;
+  height: 17px;
+
+  &::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+}
+
+// With the inactivity glyph present, that glyph takes the push to the row's end and the dot follows it.
+.card-attention + .card-unread-dot {
+  margin-left: 0;
 }
 
 // "Agent working" chip. The flash is the only motion on a tile and is what says "live right now"
@@ -471,22 +542,31 @@
   .card-agent-run { animation: none; }
 }
 
+// Inactivity ("no activity for N days"): the last item of the key row, pushed to its right end.
+// A bare muted glyph, no tile behind it: with a fill it read as a stray chip at the corner. The 17px
+// box stays so it centres on one line with the unread dot.
 .card-attention {
   display: inline-grid;
+  flex: none;
   place-items: center;
-  margin-right: 5px;
-  vertical-align: 0;
+  margin-left: auto;
   width: 17px;
   height: 17px;
-  border-radius: 5px;
+  color: var(--text-muted);
 
   i { font-size: var(--text-sm); }
-  color: var(--text-muted);
-  background: var(--surface-2);
 }
 
 .card-title-text {
   min-width: 0;
+}
+
+// Labels sit under the title. The bar's own bottom margin (built for a bar above the title) goes;
+// the footer's margin-top spaces what follows. The gap above lives inside the bar, which only
+// renders with labels, so a label-less tile keeps no dead space.
+k-card-labels {
+  --label-bar-margin-top: 6px;
+  --label-bar-gap: 0;
 }
 
 // Unread titles carry the weight, the way an unread row does in a mail client. This is the neutral
@@ -518,21 +598,51 @@
 // A badge is the field's *value* with its icon; the field name is a tooltip. Showing icon, name,
 // separator and value gave every field its own full-width row and made a populated lane fit two
 // cards. Badges now flow inline with the due date and indicators, one metadata row that wraps only
-// when it must.
+// when it must. Neutral metadata is bare icon + text on the tertiary tier, never a framed box: a
+// bordered chip per fact stacked into tiers of boxes that out-shouted the title. Frames are kept
+// for the states that need action (overdue, due soon, Blocked, a running timer).
+//
+// The badges are the footer's second tier, under the schedule and activity facts. Same size as
+// them (the footer's --text-sm; at --text-xs on --text-muted they were too faint to scan) at regular
+// weight on --text-3, where the schedule facts keep 500, so a branch name or a client still steps
+// back from a due date. Field names, and a value cut short, are in the tooltip.
+//
+// Each badge is its own flex item in the footer's flow, so the indicators can lead a fields line
+// and the assignees can close the last one. No middle-dot separators: in a wrapping flow a dot
+// would open any wrapped line, and a wrapper box able to hide it stops the indicators and avatars
+// from sharing its lines, which makes tiles taller. Each value leads with its field's icon, which
+// already separates it.
 .cf-badge {
   display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: 3px;
-  max-width: 100%;
+  // A long value (a branch, a client's full name) ellipsizes at about two thirds of the footer, so
+  // the next value can share its line instead of every long value taking a row of its own.
+  max-width: 64%;
   min-width: 0;
-  padding: 1px 6px 1px 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--list-bg);
-  font-size: var(--text-xs);
+  color: var(--text-3);
   line-height: 1.5;
   overflow: hidden;
   white-space: nowrap;
+
+  // 8px between neighbouring values (the footer's 6px gap plus this), against 6px between the count
+  // indicators: separate facts with icons that look alike need the wider gutter to stay apart. A
+  // trailing margin, so a value that wraps to the start of a line is not indented.
+  &:not(.cf-badge--wide) {
+    margin-inline-end: 2px;
+  }
+}
+
+// A long text value (a branch, a reference; isWideBadge in card.component.ts) on a line of its own,
+// so it never shares one with an unrelated short value: beside a branch cut at two thirds, "3" read
+// as part of it. badgeFields() puts these last, after a break (.cf-wide-break) when short values
+// precede them, so the assignees can still close the line: the value takes what they leave and
+// ellipsizes there. The 96px basis is the least it shares a line with (the counts, when it is the
+// only field) before wrapping to a line of its own.
+.cf-badge--wide {
+  flex: 1 1 96px;
+  max-width: 100%;
 }
 
 .cf-label,
@@ -542,7 +652,7 @@
 
 .cf-badge>.ti {
   color: var(--text-muted);
-  font-size: var(--text-base);
+  font-size: 1em;
   flex-shrink: 0;
 }
 
@@ -555,9 +665,10 @@
   color: var(--border-strong);
 }
 
+// Field values: regular weight, where the schedule facts above keep 500.
 .cf-value {
-  color: var(--text);
-  font-weight: 500;
+  color: var(--text-3);
+  font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
@@ -571,7 +682,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
-    color: var(--text);
+    color: var(--text-3);
+    font-weight: 400;
   }
 
   >.ti {
@@ -580,7 +692,7 @@
 }
 
 .cf-badge>.ti.cf-value {
-  color: var(--text);
+  color: var(--text-muted);
   flex: 0 0 auto;
   overflow: visible;
 }
@@ -597,186 +709,141 @@
   }
 
   i {
-    font-size: var(--text-base);
+    font-size: var(--text-sm);
     line-height: 1;
   }
 }
 
-// Select options on the card front use the label chip's wash recipe (tinted fill, deepened ink)
-// rather than a solid fill: a saturated pill inside the badge frame read as a second, louder
-// container. The badge itself drops its own frame for select fields so the chips are the badge.
+// Select options read like every other badge: field icon, then the value as text. A pill per option
+// put a second badge shape (999px capsule beside a bare icon) on a row of square ones. A coloured
+// option keeps its identity through the label chip's deepened ink alone, which the theme tokens tune
+// for legibility on both grounds; several options separate with a comma, as a value list would.
 .cf-badge--chips {
-  padding-inline: 0;
-  border-color: transparent;
-  background: transparent;
-  gap: 4px;
+  gap: 3px;
 }
 
 .cf-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 7px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  line-height: 16px;
-  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-shrink: 0;
+  font-weight: 400;
 
+  // 500, not the 600 it had: the hue alone marks the option, and at 600 a coloured value out-weighed
+  // the due date on the tier above it.
   &.has-color {
     color: color-mix(in srgb, var(--option-color) var(--label-chip-ink-weight), var(--label-chip-ink-base));
-    background: color-mix(in srgb, var(--option-color) var(--label-chip-bg-weight), transparent);
-    border-color: color-mix(in srgb, var(--option-color) 19%, transparent);
+    font-weight: 500;
+  }
+
+  &:not(:last-child)::after {
+    content: ",";
+    color: var(--text-3);
+    font-weight: 400;
   }
 }
 
-// Shares the .cf-badge recipe (size, padding, full-ink value, muted icon) because it sits on the same
-// metadata row; a muted, larger due chip beside full-ink field badges read as two unrelated systems.
-// Waiting on another open card. Same footprint as the due-date chip it sits beside, in the overdue
-// treatment: both say "this can't move yet", and a chip of its own would read as a label.
+// Waiting on another open card: the shared danger chip (shared/_chip.scss), the same shape the due
+// chip beside it takes when overdue. Both say "this can't move yet", and a chip of its own would
+// read as a label.
 .card-blocked {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-  padding: 1px 6px 1px 4px;
-  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--danger);
-  background: var(--danger-soft);
-
-  i {
-    font-size: var(--text-base);
-    line-height: 1;
-    position: relative;
-    top: -0.5px;
-  }
+  @include chip.chip;
+  @include chip.chip-tone(danger);
 }
 
+// Every due date keeps the same chip metrics; urgency changes its colour, never its size or shape.
 .card-due {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--text);
-  background: var(--list-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 1px 6px 1px 4px;
-  line-height: 1.5;
-  flex-shrink: 0;
-
-  i {
-    color: var(--text-muted);
-    font-size: var(--text-base);
-    line-height: 1;
-    position: relative;
-    top: -0.5px;
-  }
-
-  // Risk states colour the whole chip, icon included, so the signal is not diluted by a grey icon.
-  &.overdue i, &.due-soon i { color: inherit; }
-
-  &.overdue {
-    color: var(--danger);
-    background: var(--danger-soft);
-    border-color: color-mix(in srgb, var(--danger) 25%, transparent);
-  }
-
-  &.due-soon {
-    color: var(--color-amber);
-    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
-    border-color: color-mix(in srgb, var(--color-amber) 30%, transparent);
-  }
+  @include chip.due-chip;
 }
 
-// Time in progress shares the due chip's shape so the two read as one row of "when" facts, but wears
-// the accent: it describes work that is moving, not a deadline.
+// Time in progress: the shared chip in the accent, since it describes work that is moving, not a
+// deadline.
 .card-time-in-progress {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
-  border-radius: var(--radius-sm);
-  padding: 1px 6px 1px 4px;
-  line-height: 1.5;
-  flex-shrink: 0;
+  @include chip.chip;
+  @include chip.chip-tone(accent);
 
-  i {
-    font-size: var(--text-base);
-    line-height: 1;
-    position: relative;
-    top: -0.5px;
-  }
-
-  // Running outside working hours: still in progress (the accent outline stays) but not counting,
-  // so the text quiets. An alert below still wins, since the card is still stuck.
+  // Running outside working hours: still in progress but not counting, so the text quiets. An
+  // alert below still wins, since the card is still stuck.
   &.is-paused {
-    color: var(--text-muted);
-    background: color-mix(in srgb, var(--accent) 4%, transparent);
+    @include chip.chip-tone(neutral);
   }
 
   // Open work past its workspace's in-progress alert: the amber of a due-soon date, not the red of
   // overdue. It is a prompt to ask about the card, not a missed commitment.
   &.is-alert {
-    color: var(--color-amber);
-    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
-    border-color: color-mix(in srgb, var(--color-amber) 32%, transparent);
+    @include chip.chip-tone(warning);
   }
 
+  // Finished: a record, not a live signal, so it drops to plain metadata like a neutral due date.
   &.is-done {
-    color: var(--text-muted);
-    background: var(--list-bg);
-    border-color: var(--border);
+    @include chip.chip-tone(plain);
   }
 }
 
+// Facts under the title, one wrapping flow (see the template comment for the two groups). The clear
+// gap above it separates "what is this" from "what about it". Spacing groups the facts in a fixed
+// order: state (blocked, due, timer), then counts (description, checklist, comments, attachments),
+// then custom fields. 6px between facts of a group, 12px where a group starts mid-line: one even
+// 8px gap ran every fact together, so the eye could not tell where the counts ended and the fields
+// began. Every fact inherits the row's size, so neutral text and the filled risk chips share a
+// baseline.
 .card-footer {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  margin-top: 6px;
-  gap: 6px;
-}
+  --footer-group-gap: 6px; // added to the 6px column gap: 12px between groups
+  --footer-row-gap: 4px;
 
-.card-footer-left {
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  min-width: 0;
-  flex: 1;
-}
-
-.card-indicators {
-  display: flex;
   align-items: center;
-  gap: 4px;
+  column-gap: 6px;
+  margin-top: calc(8px - var(--footer-row-gap));
+  font-size: var(--text-sm);
 }
 
+// Put row spacing on the facts, so a zero-height forced break does not add a gap on both sides.
+// Subtract the first row's margin from the footer's top spacing to keep its distance from the title.
+.card-footer > :not(.card-footer-break, .card-indicators),
+.card-indicators > * {
+  margin-top: var(--footer-row-gap);
+}
+
+// Group starts. Only when an earlier group shares the line: the counts after a state fact, and the
+// first field when the counts lead the fields line (with a state fact the break below starts the
+// fields on a line of their own instead). A margin indents a fact that wraps to the start of a
+// line, which is why the break, not a margin, separates the state line from the fields; the counts
+// follow at most three short state facts, so they rarely wrap.
+.card-footer > :is(.card-blocked, .card-due, .card-time-in-progress) ~ .card-indicators > :first-child,
+.card-indicators:has(> *) + .cf-badge {
+  margin-left: var(--footer-group-gap);
+}
+
+// Contents, not a box: each indicator is its own flex item, so the indicators share the footer's
+// single gap and can wrap one by one instead of as a block that jumps to the next line whole.
+.card-indicators {
+  display: contents;
+}
+
+// End the line without adding height: the following facts supply the same spacing as a normal wrap.
+.card-footer-break {
+  flex-basis: 100%;
+  height: 0;
+}
+
+// Icons on --text-muted, values (the counts) on --text-3: the same two tiers as the field badges and
+// the neutral due date, so the whole footer is one quiet register under the title.
 .card-indicator {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  color: var(--text-3);
+  color: var(--text-muted);
+  font-weight: 500;
 
   i {
     font-size: var(--text-base);
   }
+}
+
+.card-indicator-count {
+  color: var(--text-3);
+  line-height: 1;
 }
 
 .card-checklist-toggle {
@@ -803,6 +870,11 @@
 .card-watch-indicator,
 .card-reminder-indicator {
   color: var(--accent);
+
+  // A complete checklist wears this accent whole, count included.
+  .card-indicator-count {
+    color: inherit;
+  }
 }
 
 .card-watcher-wrap {
@@ -810,9 +882,12 @@
   display: inline-flex;
 }
 
+// An inset pill inside the tile's padding, not a full-bleed strip on its bottom edge: flush with the
+// edge it stacked on the unread and selection rings as one thick double bar.
 .checklist-progress-bar {
-  margin: 4px -10px -8px;
+  margin-top: 8px;
   height: 3px;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 18%, var(--border));
   overflow: hidden;
 }
@@ -1038,16 +1113,13 @@
   }
 }
 
-.card-indicator-count {
-  font-size: var(--text-xs);
-  line-height: 1;
-}
-
+// Closes the footer's last line on the right; wraps to its own right-aligned line only when the
+// line is full.
 .assignee-stack {
   display: flex;
   justify-content: flex-end;
-  padding-left: 6px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .assignee-avatar {
@@ -1083,6 +1155,8 @@
   &.assignee-overflow {
     background: var(--surface-hover);
     color: var(--text-muted);
+    // Off-scale on purpose: two digits ("+12") must fit inside the 20px compact avatar's 16px of
+    // content, which --text-xs does not.
     font-size: 10px;
     letter-spacing: -0.5px;
   }
@@ -1094,11 +1168,12 @@
 // populated lane fit two cards.
 :host-context(.compact-cards) {
   .cf-badge,
-  .card-indicators {
+  .card-indicators,
+  .card-footer-break {
     display: none;
   }
 
-  .card-footer:not(:has(.card-due, .card-time-in-progress, .assignee-stack)) {
+  .card-footer:not(:has(.card-blocked, .card-due, .card-time-in-progress, .assignee-stack)) {
     display: none;
   }
 }
@@ -1122,8 +1197,8 @@
     width: calc(100% + 16px);
   }
 
-  .card-key {
-    margin-bottom: 2px;
+  .card-key-row {
+    margin-bottom: 3px;
   }
 
   .card-body {
@@ -1132,32 +1207,24 @@
   }
 
   k-card-labels {
-    --label-bar-gap: 3px;
+    --label-bar-margin-top: 4px;
     --label-bar-row-gap: 2px;
     --label-chip-height: 18px;
-    --label-chip-font-size: 10px;
   }
 
-  .cf-badge,
-  .card-blocked,
-  .card-due,
-  .card-time-in-progress {
-    padding-top: 0;
-    padding-bottom: 0;
+  .cf-badge {
     line-height: 1.45;
   }
 
-  .cf-chip {
-    line-height: 15px;
-  }
-
   .card-footer {
-    margin-top: 4px;
-    gap: 5px;
+    --footer-row-gap: 3px;
+
+    margin-top: calc(6px - var(--footer-row-gap));
+    font-size: var(--text-xs);
   }
 
-  .card-footer-left {
-    gap: 5px;
+  .checklist-progress-bar {
+    margin-top: 6px;
   }
 
   .assignee-avatar {
