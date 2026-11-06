@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { seedActivityTime, seedCalendar, seedNotificationTime } from "./seed-calendar.js";
+import { seedActivityTime, seedHistoryTime, seedCalendar, seedNotificationTime } from "./seed-calendar.js";
 
 // Pure calendar failures: weekend resets stamping work on Sunday, moving future plans back to
 // Friday, DST changing the London cut-off, and weekend projection reversing event order.
@@ -48,4 +48,15 @@ test("notification history uses prior working days, distinct times and London da
   assert.equal(seedNotificationTime("2026-10-25", { workingDaysAgo: 1, hour: 12, minute: 9 }).toISOString(), "2026-10-23T11:09:00.000Z");
   assert.equal(seedNotificationTime("2026-10-26", { workingDaysAgo: 2, hour: 12, minute: 9 }).toISOString(), "2026-10-22T11:09:00.000Z");
   assert.equal(seedNotificationTime("2026-03-30", { workingDaysAgo: 1, hour: 12, minute: 9 }).toISOString(), "2026-03-27T12:09:00.000Z");
+});
+
+// The reset clock and arithmetic used to collapse unrelated Friday/weekend work at 17:00.
+test("historical offsets carry through working hours without collapsing timestamps", () => {
+  const start = new Date("2026-10-23T15:30:00Z"); // Friday 16:30 BST
+  const times = [10, 20, 40, 70, 140].map((minutes) => seedHistoryTime(start, minutes));
+  assert.equal(new Set(times.map((time) => time.toISOString())).size, times.length);
+  assert.deepEqual(times, [...times].sort((a, b) => a.getTime() - b.getTime()));
+  assert.equal(times[2]!.toISOString(), "2026-10-26T09:10:00.000Z");
+  assert.equal(seedHistoryTime(new Date("2026-10-25T10:23:00Z")).toISOString(), "2026-10-23T09:23:00.000Z");
+  assert.equal(seedHistoryTime(new Date("2026-10-26T09:10:00Z"), -40).toISOString(), "2026-10-23T15:30:00.000Z");
 });

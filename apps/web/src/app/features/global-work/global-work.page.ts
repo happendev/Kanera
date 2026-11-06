@@ -1673,6 +1673,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly dockCanEdit = computed(() => this.state.interactionReady() && (this.overviewDock()
     ? this.state.teamPrioritiesCachedAt() === null
     : this.isSelfUpNextTarget() ? this.myPriorities.canEdit() : this.state.prioritiesCachedAt() === null));
+  readonly overviewQueueDraggableCardIds = computed<ReadonlySet<string>>(() => {
+    const queue = this.dockPriorities();
+    if (!this.upNextOpen() || !this.dockCanEdit() || !queue?.canReorder
+      || queue.totalCount >= MAX_UP_NEXT_ENTRIES) return new Set();
+    return new Set(this.dockAddableCards().map((card) => card.id));
+  });
   readonly dockOfflineMessage = computed(() => {
     if (!this.overviewDock() && this.isSelfUpNextTarget()) return this.myPriorities.offlineMessage();
     const time = this.overviewDock() ? this.state.teamPrioritiesCachedAt() : this.state.prioritiesCachedAt();

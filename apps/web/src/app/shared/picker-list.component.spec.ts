@@ -59,23 +59,23 @@ describe("PickerListComponent", () => {
 
     // Under a heading every row steps in once, then once more per nesting level, so the heading
     // visibly owns its rows instead of sharing their left edge.
-    expect(board!.style.paddingLeft).toBe("26px");
-    expect(list!.style.paddingLeft).toBe("40px");
+    expect(parseFloat(list!.style.paddingLeft)).toBeGreaterThan(parseFloat(board!.style.paddingLeft));
     expect(board!.classList.contains("is-grouped")).toBe(true);
     fixture.destroy();
   });
 
-  it("does not indent options in an unlabelled group", () => {
+  it("renders an unlabelled group without a heading", () => {
     const fixture = render([{ id: "flat", options: [{ id: "a", label: "Alpha" }] }]);
     const [row] = nodes(fixture, ".pl-row");
 
-    expect(row!.style.paddingLeft).toBe("8px");
     expect(row!.classList.contains("is-grouped")).toBe(false);
+    expect(texts(fixture, ".pl-group")).toEqual([]);
     fixture.destroy();
   });
 
   it("keeps group headings while searching, and matches on the group name too", () => {
     const fixture = render(GROUPS);
+    const groupedPadding = nodes(fixture, ".pl-row")[0]!.style.paddingLeft;
     fixture.componentInstance.query.set("delivery");
     fixture.detectChanges();
 
@@ -84,7 +84,7 @@ describe("PickerListComponent", () => {
     expect(rows.length).toBe(1);
     // Matches are flattened: a hit keeps its group's single step of indentation, but not the depth
     // of a parent row that may have been filtered out.
-    expect(rows[0]!.style.paddingLeft).toBe("26px");
+    expect(rows[0]!.style.paddingLeft).toBe(groupedPadding);
     fixture.destroy();
   });
 

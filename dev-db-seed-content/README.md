@@ -113,6 +113,8 @@ assignment. The comment and card changes share the second previous working day, 
 London clock times. Overdue notices belong to the previous working day. Other fixture history
 stays read, so the opening inbox is useful without a burst of new actions or “just now” timestamps.
 The dates follow the seed reference date automatically, including weekend and daylight-saving resets.
+The Campaign change matches the card's **Autumn launch** field. Overdue tasks exist before
+their deadlines, and their notices follow those deadlines.
 
 ## Demonstrating Timeline and dependencies
 
@@ -207,10 +209,15 @@ separate automation rehearsal. No hardcoded live UUID is used.
 - Launch Checklist's five open cards belong to Marcus. Its mirror configuration is
   retained and the real worker reconciles ownership from the source; no mirror is
   severed to suppress duplicate-looking work.
-- Fresh resets do not manufacture successful agent runs or unread inbox entries.
+- Historical offsets replay within eight-hour working days and carry into the next working
+  day instead of collapsing evening/weekend events at 17:00. The final planning pass has
+  individually dated moves on the previous working day; its five new tasks have separate
+  creation times three working days earlier.
+- Fresh resets do not manufacture successful agent runs.
   Ordinary historical human activity is synthetic fixture content. Genuine Claude
   records are not available in the local source and are never claimed to be imported.
-  Create fresh activity and notifications through real application actions.
+  The dated sample inbox references actual seeded comments and card changes. Create agent
+  activity through real application actions.
 
 The complete declared offset tables live in `apps/api/src/scripts/seed-calendar.ts`.
 Marketing delivery and reporting specifications live in `seed-demo-enhancements.ts`.
@@ -246,6 +253,10 @@ After reseeding, open **Autumn Campaign Launch → Work done**, or choose that b
 **Team Cards → Work done → All boards**. Use the previous calendar week’s Monday–Friday
 relative to the seed date (UTC). A reset on October 22, 2026 gives **October 12–16, 2026**.
 The range stays fixed until the next seed/reset; it does not advance as you browse.
+
+The five delivery-week sign-offs use distinct London times (13:47, 15:26, 14:38,
+16:09 and 12:52), after their workflow moves. They stay the same across daylight-saving
+changes instead of inheriting the seed's 09:13 base clock.
 
 That board has two visible rows per weekday: one completion plus a checklist tick on
 Monday, Tuesday and Thursday, or a card move on Wednesday and Friday. The rest of the

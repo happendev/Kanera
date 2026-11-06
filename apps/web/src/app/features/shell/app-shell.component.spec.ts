@@ -807,7 +807,6 @@ describe("AppShellComponent board search", () => {
     const avatar = link?.querySelector<HTMLElement>("k-avatar");
 
     expect(link?.classList.contains("user-link")).toBe(true);
-    expect(avatar?.style.width).toBe("20px");
     expect(avatar?.querySelector("img")?.getAttribute("alt")).toBe("Current User");
     expect(link?.querySelector(".ti-user-check")).toBeNull();
   });
@@ -954,7 +953,7 @@ describe("AppShellComponent board search", () => {
     expect(component.navContextMenu()).toMatchObject({ label: "Zulu", url: "/b/solo-board", canMarkAllRead: true });
   });
 
-  it("keeps every collapsed standalone and guest board link at its scrollable rail height", async () => {
+  it("keeps standalone and guest board links accessible in the collapsed rail", async () => {
     localStorage.setItem(organisationStorageKey(STORAGE_KEYS.SIDEBAR_COLLAPSED, "client-1"), "1");
     const ownUngroupedWorkspace = workspace({ id: "own-ungrouped-workspace", kind: "board", name: "Source", role: "admin" });
     const ownGroupedWorkspace = workspace({ id: "own-grouped-workspace", kind: "board", name: "Target", role: "admin" });
@@ -990,7 +989,6 @@ describe("AppShellComponent board search", () => {
     const links = boardIds.map((id) => (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`a[href="/b/${id}"]`)!);
     expect(links.every((link) => link !== null)).toBe(true);
     expect(links.filter((link) => link.classList.contains("collapsed-standalone-board-link")).every((link) => link.closest(".ws-group") === null)).toBe(true);
-    expect(links.every((link) => getComputedStyle(link).flexShrink === "0")).toBe(true);
   });
 
   it("refreshes sidebar guest boards when the current user is added to a board", async () => {

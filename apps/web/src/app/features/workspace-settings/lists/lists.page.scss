@@ -20,17 +20,22 @@
     font-size: var(--text-md);
   }
 
+  // --surface-hover, not --surface-2: the toggle sits on a --surface-2 row, so that hover was invisible.
   &:hover:not(:disabled) {
     color: var(--text);
-    background: var(--surface-2);
+    background: var(--surface-hover);
   }
 
-  // Listed with its hover so the pressed state survives the pointer still resting on it.
+  // Listed with its hover so the pressed state survives the pointer still resting on it. The selection
+  // recipe (styles.scss .k-tile): accent wash and edge with a neutral label, accent on the icon only.
+  // Accent label text on its own wash fell to ~4:1 for the darker light-theme accents.
   &.is-on,
   &.is-on:hover:not(:disabled) {
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--text);
+    background: var(--accent-soft);
     border-style: solid;
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    border-color: var(--accent);
+
+    i { color: var(--accent); }
   }
 }

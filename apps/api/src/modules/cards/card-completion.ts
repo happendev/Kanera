@@ -39,39 +39,45 @@ export async function setListCardsCompletion({ auth, ctx, boardId, listId, compl
 
   if (targetCards.length === 0) return [];
 
-  const completedAt = completed ? new Date() : null;
+  const at = new Date();
   return db.transaction(async (tx) => {
     // Lock the batch and its dependents before the first per-card write (see lockCardsForWrite).
     await lockCompletionBatch(tx, ctx.workspaceId, targetCards.map((row) => row.card.id), completed);
     const rows: CardCompletionWrite[] = [];
     for (const row of targetCards) {
-      rows.push(await applyCardCompletion(tx, {
-        card: row.card,
+      const write = await applyCardCompletion(tx, {
+        cardId: row.card.id,
         completed,
-        completedAt,
+        at,
         workspaceId: ctx.workspaceId,
         clientId: ctx.clientId,
         actorId: auth.sub,
-      }));
+      });
+      if (write) rows.push(write);
     }
     return rows;
   });
 }
 
-/** Completes or reopens one card; the caller has already returned early when it is in that state. */
+/**
+ * Completes or reopens one card; the caller has already returned early when it is in that state.
+ * `write` is null when a concurrent change got there first, and `card` is then the row as it now is.
+ */
 export async function setCardCompletion({ auth, card, ctx, completed }: {
   auth: AuthClaims;
   card: typeof cards.$inferSelect;
   ctx: CardAccessContext;
   completed: boolean;
-}): Promise<CardCompletionWrite> {
-  const completedAt = completed ? new Date() : null;
-  return db.transaction((tx) => applyCardCompletion(tx, {
-    card,
+}): Promise<{ write: CardCompletionWrite | null; card: typeof cards.$inferSelect }> {
+  const write = await db.transaction((tx) => applyCardCompletion(tx, {
+    cardId: card.id,
     completed,
-    completedAt,
+    at: new Date(),
     workspaceId: ctx.workspaceId,
     clientId: ctx.clientId,
     actorId: auth.sub,
   }));
+  if (write) return { write, card: write.finalCard };
+  const [current] = await db.select().from(cards).where(eq(cards.id, card.id)).limit(1);
+  return { write: null, card: current ?? card };
 }

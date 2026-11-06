@@ -458,7 +458,7 @@ export interface PickerGroup {
       /* Pressure, not decoration: an overdue row has to be visible while scanning a long picker,
          which is the whole reason a due date is in this list at all. */
       &.is-danger { color: var(--danger); }
-      &.is-warning { color: var(--color-amber); }
+      &.is-warning { color: var(--warning); }
     }
 
     /* The same chip a due date wears on an Up next row and a board tile, at the same 10px/600 — a
@@ -468,8 +468,9 @@ export interface PickerGroup {
       padding: 3px 7px;
       font-size: 10px;
       font-weight: 600;
-      background: var(--surface-2);
-      border: 1px solid var(--overlay-separator);
+      /* Outlined, not filled: --surface-2 sits below the dark overlay fill and read as a hole. */
+      background: transparent;
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-sm);
 
       &.is-danger {

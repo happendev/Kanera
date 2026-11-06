@@ -71,14 +71,15 @@ export function cardUpdateRoutes(app: FastifyInstance) {
     if (body.completed === Boolean(current.completedAt)) {
       return toWireCard(current, req.auth.cid);
     }
-    const write = await setCardCompletion({ auth: req.auth, card: current, ctx, completed: body.completed });
+    const { write, card } = await setCardCompletion({ auth: req.auth, card: current, ctx, completed: body.completed });
+    if (!write) return toWireCard(card, req.auth.cid);
     await emitCardCompletion([write], { clientId: req.auth.cid, completed: body.completed, mailer: app.mailer, log: req.log });
     if (body.completed) await evaluateWorkspaceAnalyticsMilestones({
       workspaceId: ctx.workspaceId,
       actorId: req.auth.sub,
       supportSession: req.auth.authKind === "support" || req.auth.authKind === "apiKey",
     });
-    return toWireCard(write.finalCard, req.auth.cid);
+    return toWireCard(card, req.auth.cid);
   });
 
   app.patch("/cards/:id/archive", async (req) => {
@@ -89,7 +90,7 @@ export function cardUpdateRoutes(app: FastifyInstance) {
       return toWireCard(card, req.auth.cid);
     }
     const result = await archiveCard({ auth: req.auth, card, ctx, archived: body.archived });
-    return emitArchivedCard(result, { auth: req.auth, mailer: app.mailer, log: req.log });
+    return emitArchivedCard(result, { card, auth: req.auth, mailer: app.mailer, log: req.log });
   });
 
   app.put("/cards/:id/labels", async (req) => {

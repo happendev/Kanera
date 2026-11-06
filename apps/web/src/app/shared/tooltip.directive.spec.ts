@@ -3,7 +3,7 @@ import { OverlayContainer } from "@angular/cdk/overlay";
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TooltipDirective, resetTooltipWarmWindow } from "./tooltip.directive";
+import { TooltipDirective, resetTooltipTiming } from "./tooltip.directive";
 
 @Component({
   standalone: true,
@@ -48,13 +48,13 @@ function tooltipElement(): HTMLElement | null {
 describe("TooltipDirective", () => {
   beforeEach(() => {
     // Directive modules are shared across spec files; the first test must start cold too.
-    resetTooltipWarmWindow();
+    resetTooltipTiming();
   });
 
   afterEach(() => {
     // Teardown can warm the hover window; destroy fixtures before resetting it and restoring timers.
     TestBed.resetTestingModule();
-    resetTooltipWarmWindow();
+    resetTooltipTiming();
     vi.useRealTimers();
     document.body.classList.remove("is-checklist-dragging");
   });

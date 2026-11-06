@@ -238,7 +238,7 @@
           <!-- One inline sentence that wraps word by word: &ngsp; keeps the spaces Angular would
                otherwise strip between the parts. -->
           <div class="notif-action">
-            <i aria-hidden="true" [class]="changeSummary(n).icon"></i>&ngsp;<span class="actor-name">{{ n.actorName }}</span>&ngsp;@if (n.activity?.actorKind === 'agent') {<span class="via-agent" [kTooltip]="agentTooltip(n.activity.agentName, n.actorName)"><i aria-hidden="true" class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ n.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>&ngsp;}<span class="action-text">{{ changeSummary(n).text }}</span>@if (changeSummary(n).value) {&ngsp;<span class="action-value">{{ changeSummary(n).value }}</span>}
+            <i aria-hidden="true" [class]="entry.summary.icon"></i>&ngsp;<span class="actor-name">{{ n.actorName }}</span>&ngsp;@if (n.activity?.actorKind === 'agent') {<span class="via-agent" [kTooltip]="agentTooltip(n.activity.agentName, n.actorName)"><i aria-hidden="true" class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ n.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>&ngsp;}<span class="action-text">{{ entry.summary.text }}</span>@if (entry.summary.value) {&ngsp;<span class="action-value">{{ entry.summary.value }}</span>}
           </div>
           }
           @if (n.cardTitle) {

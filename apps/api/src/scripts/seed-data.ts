@@ -1,5 +1,5 @@
 import { autumnLaunchSequence, enhanceDemoSeed } from "./seed-demo-enhancements.js";
-import { seedActivityTime, seedCalendar, seedNotificationTime, type SeedNotificationTime } from "./seed-calendar.js";
+import { seedHistoryTime, seedCalendar, seedNotificationTime, type SeedNotificationTime } from "./seed-calendar.js";
 import type { ColorToken } from "@kanera/shared/colors";
 import { workingMs } from "@kanera/shared/time-in-progress";
 import { addWorkingDays, dateKeyOf, dayNumber, nextWorkingDayOnOrAfter, lastWorkingDayOnOrBefore } from "@kanera/shared/schedule";
@@ -1545,7 +1545,7 @@ function buildMarketingWorkspace(reference: Date): SeedWorkspace {
           createdBy: "ben",
           createdDaysAgo: 1,
           labels: ["Campaign", "Analytics"],
-          fieldValues: { Campaign: "Commercial" },
+          fieldValues: { Campaign: "Autumn launch" },
           comments: [{
             author: "ben",
             hoursAfterCreation: 20,
@@ -1561,7 +1561,7 @@ function buildMarketingWorkspace(reference: Date): SeedWorkspace {
               actor: "ben",
               recipient: "amelia",
               action: "customFieldValue:set",
-              payload: { fieldName: "Campaign", toValue: "Commercial" },
+              payload: { fieldName: "Campaign", fromValue: null, toValue: "Autumn launch" },
               hoursAfterCreation: 19.75,
               notificationTime: { workingDaysAgo: 2, hour: 11, minute: 53 },
             },
@@ -4021,7 +4021,7 @@ function calendarDays(value: Date, days: number): Date {
 }
 
 function addDays(value: Date, days: number): Date {
-  return seedActivityTime(calendarDays(value, days));
+  return seedHistoryTime(calendarDays(value, days));
 }
 
 function seedDueDate(baseDate: Date, dueOffsetDays: number): Date {
@@ -4031,19 +4031,14 @@ function seedDueDate(baseDate: Date, dueOffsetDays: number): Date {
 }
 
 function addHours(value: Date, hours: number): Date {
-  const approximateTime = value.getTime() + hours * 60 * 60 * 1000;
   const salt = Math.abs(Math.trunc(value.getTime() / 60_000) + Math.round(hours * 100));
-  const minuteJitter = 3 + salt % 23;
-  const secondJitter = 7 + salt * 7 % 47;
-  const result = new Date(approximateTime + minuteJitter * 60_000 + secondJitter * 1000);
-  if (result.getUTCMinutes() === 0) result.setUTCMinutes(7);
-  return seedActivityTime(result);
+  // The authored offsets describe fractions of a calendar day; replay them within
+  // eight working hours, carrying overflow rather than losing it at the daily cut-off.
+  return seedHistoryTime(value, hours * 20 + 3 + salt % 23 + (7 + salt * 7 % 47) / 60);
 }
 
 function addMinutes(value: Date, minutes: number): Date {
-  const result = new Date(value.getTime() + minutes * 60 * 1000);
-  if (result.getUTCMinutes() === 0) result.setUTCMinutes(7);
-  return seedActivityTime(result);
+  return seedHistoryTime(value, minutes);
 }
 
 function formatLocalDate(value: Date): string {
@@ -4174,7 +4169,7 @@ async function insertSeedMovementHistory(input: {
   const arrivalAt = completedAt
     ? addHours(completedAt, -3)
     : addHours(cardCreatedAt, 3 * (movementPath.length - 1) + 3);
-  const spanMs = arrivalAt.getTime() - cardCreatedAt.getTime();
+  const spanMinutes = workingMs(cardCreatedAt.getTime(), arrivalAt.getTime(), input.timeZone) / 60_000;
   const steps = movementPath.length - 1;
   let enteredAt = cardCreatedAt;
   // Time already spent in in-progress lists this card has since left, banked as the
@@ -4188,11 +4183,10 @@ async function insertSeedMovementHistory(input: {
     const fromList = listByName.get(movementPath[step]!)!;
     const toList = listByName.get(movementPath[step + 1]!)!;
     const movedAt = input.showcaseDay
-      // Leave more than the 23-minute seed jitter between steps so the audit path stays ordered.
-      ? addHours(input.showcaseDay, 1 + step / 2)
+      // Explicit working-minute slots keep the showcase path ordered before its completion.
+      ? addMinutes(input.showcaseDay, 60 + step * 30)
       : addMinutes(
-        new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1))),
-        0,
+        cardCreatedAt, Math.round((spanMinutes * (step + 1)) / (steps + 1)),
       );
     await insertSeedActivity(tx, {
       boardId: input.boardId,
@@ -5131,6 +5125,8 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         const nextListCount = guestCardCountsByList.get(cardSeed.list) ?? 0;
         guestCardCountsByList.set(cardSeed.list, nextListCount + 1);
         const cardCreatedAt = addHours(guestBoardCreatedAt, 2 + cardIndex);
+        const completedAt = cardSeed.list === "Done"
+          ? seedNotificationTime(calendar.instant, { workingDaysAgo: 1, hour: 15, minute: 29 }) : null;
         const [card] = await tx
           .insert(cards)
           .values({
@@ -5140,9 +5136,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             title: cardSeed.title,
             description: cardSeed.description,
             position: positionForIndex(nextListCount),
-            ...seedCardSchedule({ baseDate, seed: cardSeed, cardIndex, createdAt: cardCreatedAt, completedAt: cardSeed.list === "Done" ? addDays(baseDate, -1) : null, timezone: GUEST_USER_SEED.timezone }),
+            ...seedCardSchedule({ baseDate, seed: cardSeed, cardIndex, createdAt: cardCreatedAt, completedAt, timezone: GUEST_USER_SEED.timezone }),
             createdById: guestUser!.id,
-            completedAt: cardSeed.list === "Done" ? addDays(baseDate, -1) : null,
+            completedAt,
             coverAttachmentId: null,
             createdAt: cardCreatedAt,
             updatedAt: cardCreatedAt,
@@ -5287,7 +5283,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           if (!listRow) throw new Error(`Missing list '${cardSeed.list}' in standalone board '${standaloneName}'.`);
           const listPosition = standaloneCardCountsByList.get(cardSeed.list) ?? 0;
           standaloneCardCountsByList.set(cardSeed.list, listPosition + 1);
-          const completedAt = cardSeed.completedDaysAgo === undefined ? null : addHours(addDays(baseDate, -cardSeed.completedDaysAgo), 16);
+          const completedAt = cardSeed.completedDaysAgo === undefined ? null : seedNotificationTime(calendar.instant, { workingDaysAgo: cardSeed.completedDaysAgo, hour: 15, minute: 11 + cardIndex % 41 });
           // Replayed boards start completed cards three weeks back, so the progress stage spans a
           // weekday (see the regular workspaces below); others keep the one-day lead.
           const cardCreatedAt = cardSeed.createdAt ?? (completedAt
@@ -5993,6 +5989,12 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           // other fixtures grow. Other boards retain their broad historical activity.
           const demoMonday = calendarDays(baseDate, -((baseDate.getUTCDay() + 6) % 7) - 7);
           const isWorkDoneShowcase = boardSeed.key === "autumn-campaign-launch";
+          // Authored sign-offs have distinct London clock times, independent of the shared
+          // seed base clock and DST. Each follows the showcase's final move (at most 12:43).
+          const showcaseCompletionTimes = [
+            { hour: 13, minute: 47 }, { hour: 15, minute: 26 }, { hour: 14, minute: 38 },
+            { hour: 16, minute: 9 }, { hour: 12, minute: 52 },
+          ];
           let showcaseCompletedIndex = 0;
           let showcaseChecklistIndex = 0;
           let showcaseMovedIndex = 0;
@@ -6029,16 +6031,23 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             const completedAt = completedDaysAgo === undefined
               ? null
               : completedDaysAgo === 0 ? calendar.activityInstant
-              : showcaseDay ? addHours(showcaseDay, 6) : addHours(addDays(baseDate, -completedDaysAgo), 16);
+              : showcaseDay ? seedNotificationTime(showcaseDay, {
+                workingDaysAgo: 0, ...showcaseCompletionTimes[(showcaseCompletedIndex - 1) % 5]!,
+              }) : seedNotificationTime(calendar.instant, { workingDaysAgo: completedDaysAgo, hour: 15, minute: 11 + cardIndex % 41 });
             // Three weeks keeps the replayed progress stage across a weekday, even
             // when the evenly spaced moves would otherwise land entirely on a weekend.
-            const cardCreatedAt = isWorkDoneShowcase
+            const historicalCreatedAt = isWorkDoneShowcase
               ? addDays(demoMonday, -7 - cardIndex % 5)
               : completedAt
               ? addDays(completedAt, -21)
               : cardSeed.createdDaysAgo === undefined
                 ? addHours(addDays(boardCreatedAt, cardIndex), cardIndex % 5)
                 : addHours(addDays(baseDate, -cardSeed.createdDaysAgo), boardIndex + 1);
+            // An overdue task must already exist before its deadline, including Monday resets
+            // where subtracting calendar days otherwise creates it on the preceding Friday.
+            const cardCreatedAt = !completedAt && cardSeed.dueOffsetDays !== undefined && cardSeed.dueOffsetDays < 0
+              ? new Date(Math.min(historicalCreatedAt.getTime(), addDays(seedDueDate(baseDate, cardSeed.dueOffsetDays), -1).getTime()))
+              : historicalCreatedAt;
             const [card] = await tx
               .insert(cards)
               .values({
@@ -6146,9 +6155,11 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             }
 
             if (!completedAt && cardSeed.dueOffsetDays !== undefined && cardSeed.dueOffsetDays < 0) {
-              // Apply the clock offset before weekend projection: Sunday's overnight reminder
-              // belongs to Monday, rather than being pulled back to Friday before adding hours.
-              const overdueCreatedAt = addHours(calendarDays(baseDate, cardSeed.dueOffsetDays), 18);
+              // The inbox checks are historical and happen after the authored overdue deadline.
+              // Adding 18 hours to a morning base crossed midnight and collapsed at the cut-off.
+              const overdueCreatedAt = seedNotificationTime(calendar.instant, {
+                workingDaysAgo: 1, hour: 9, minute: 17 + cardIndex,
+              });
               await tx.insert(activityEvents).values({
                 boardId: board!.id,
                 workspaceId: workspace!.id,

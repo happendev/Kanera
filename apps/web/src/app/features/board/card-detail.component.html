@@ -107,18 +107,22 @@
         <ul class="agent-run-list">
           @for (run of liveAgentRuns(); track run.id) {
           <li class="agent-run" [attr.data-status]="run.status">
-            <span class="agent-run-status" [kTooltip]="agentRunStatusLabel(run)">
-              <i aria-hidden="true" [class]="'ti ti-' + agentRunStatusIcon(run)"></i>
-            </span>
-            <div class="agent-run-main">
-              <div class="agent-run-head">
-                <span class="agent-run-title">{{ run.title }}</span>
-                <span class="agent-run-meta">{{ run.agentName }} · {{ agentRunStatusLabel(run) }} · {{ formatFeedTime(run.heartbeatAt) }}</span>
-              </div>
-              @if (run.summary) {
-              <p class="agent-run-summary">{{ run.summary }}</p>
+            <!-- Who and what state come first, as chips, so the title can take the full width
+                 instead of fighting a wrapped meta line for space. -->
+            <div class="agent-run-head">
+              <span class="agent-run-status">
+                <i aria-hidden="true" [class]="'ti ti-' + agentRunStatusIcon(run)"></i>{{ agentRunStatusLabel(run) }}
+              </span>
+              <span class="agent-run-agent"><i aria-hidden="true" class="ti ti-sparkles"></i>{{ run.agentName }}</span>
+              <span class="agent-run-time" [kTooltip]="agentRunStartedLabel(run)">{{ formatFeedTime(run.heartbeatAt) }}</span>
+              @if (run.externalUrl) {
+              <a class="agent-run-link" [href]="run.externalUrl" target="_blank" rel="noopener noreferrer" kTooltip="Open run" i18n-kTooltip="Tooltip on a link to where an AI agent run can be watched (a pull request, a session log)" aria-label="Open run" i18n-aria-label="Accessible name of a link to where an AI agent run can be watched (a pull request, a session log)"><i aria-hidden="true" class="ti ti-external-link"></i></a>
               }
             </div>
+            <p class="agent-run-title">{{ run.title }}</p>
+            @if (run.summary) {
+            <p class="agent-run-summary">{{ run.summary }}</p>
+            }
           </li>
           }
         </ul>

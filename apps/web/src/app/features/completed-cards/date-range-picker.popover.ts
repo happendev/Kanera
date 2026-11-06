@@ -68,7 +68,7 @@ function compareDateValue(a: string, b: string): number {
 
       <div class="drp-presets">
         @for (preset of presets; track preset.preset) {
-        <button type="button" [class.is-active]="activeShortcut() === preset.preset" (click)="selectPreset(preset.preset)">
+        <button type="button" class="k-tile" [class.is-selected]="activeShortcut() === preset.preset" (click)="selectPreset(preset.preset)">
           {{ preset.label }}
         </button>
         }
@@ -76,7 +76,7 @@ function compareDateValue(a: string, b: string): number {
 
       <div class="drp-shortcuts">
         @for (shortcut of shortcuts; track shortcut.days) {
-        <button type="button" [class.is-active]="activeShortcut() === shortcut.days" (click)="selectLastDays(shortcut.days)">
+        <button type="button" class="k-tile" [class.is-selected]="activeShortcut() === shortcut.days" (click)="selectLastDays(shortcut.days)">
           {{ shortcut.label }}
         </button>
         }
@@ -238,36 +238,17 @@ function compareDateValue(a: string, b: string): number {
       text-wrap: balance;
     }
 
-    /* Quiet chips: a hairline edge so every shortcut reads as a control (borderless, the named periods
-       looked like plain text), but no fill, so nine of them do not outweigh the calendar. The chip
-       matching the current range takes the single-select recipe: the accent wash and weight 600,
-       ink unchanged. */
+    /* Outlined, unfilled option tiles (.k-tile in styles.scss), so nine of them do not outweigh the
+       calendar; the chip matching the current range takes the tile's selection recipe. */
     .drp-shortcuts,
     .drp-presets {
       button {
         height: 28px;
         padding: 0 6px;
-        border: 1px solid var(--overlay-separator);
-        border-radius: var(--radius-sm);
-        background: transparent;
-        color: var(--text);
-        cursor: pointer;
         font-size: var(--text-sm);
         font-weight: 500;
-        transition: background-color var(--motion-fast), color var(--motion-fast);
 
-        &:hover:not(:disabled) {
-          background: var(--surface-hover);
-          color: var(--text);
-        }
-
-        &.is-active,
-        &.is-active:hover:not(:disabled) {
-          border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-          background: var(--accent-soft);
-          color: var(--text);
-          font-weight: 600;
-        }
+        &.is-selected { font-weight: 600; }
       }
     }
 
@@ -317,7 +298,7 @@ function compareDateValue(a: string, b: string): number {
 
       /* Today is the one cell with an outline, so it still reads inside the band. */
       &.is-today {
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 65%, var(--border));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 65%, var(--overlay-border));
         color: var(--accent);
       }
 

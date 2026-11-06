@@ -139,7 +139,7 @@ const de: ServerMessages = {
       preheader: ({ actor, card, board }) => `${actor} hat die Abhängigkeiten von „${card}“ in ${board} geändert.`,
       heading: "Kartenabhängigkeit hinzugefügt",
       introBlockedBy: ({ firstName, actor, card, board, other }) => `Hallo ${firstName}, ${actor} hat „${card}“ in ${board} als blockiert durch ${other} markiert. Sie bleibt blockiert, bis diese Karte erledigt ist.`,
-      introBlocking: ({ firstName, actor, card, board, other }) => `Hallo ${firstName}, ${actor} hat „${card}“ in ${board} als blockierend für ${other} markiert. Diese Karte wartet, bis „${card}“ erledigt ist.`,
+      introBlocking: ({ firstName, actor, card, board, other }) => `Hallo ${firstName}, ${actor} hat „${card}“ in ${board} als blockierend für ${other} markiert. ${other} wartet daher, bis „${card}“ erledigt ist.`,
     },
     cardUnblocked: {
       subject: ({ card }) => `${card} kann starten`,
@@ -465,7 +465,7 @@ const de: ServerMessages = {
       upgrade: ({ quota }) => `Mit einem Upgrade auf Kanera Pro steigt dein Speicher auf ${quota}.`,
       noUpgrade: "Falls du mehr Platz brauchst, als dein Tarif bietet, antworte auf diese E-Mail und wir helfen dir.",
       button: "Speicher bereinigen",
-      footer: "Du erhältst diese E-Mail, weil du Inhaber oder Admin dieser Organisation bist. Wir senden sie jedes Mal einmal, wenn die Nutzung sich dem Limit nähert.",
+      footer: "Du erhältst diese E-Mail, weil du Inhaber oder Admin dieser Organisation bist. Wir senden sie einmal, sobald sich die Nutzung dem Limit nähert.",
     },
     lifecycle: {
       footerNote: "Du kannst Einstiegs- und Kontotipps unter Einstellungen → Benachrichtigungen abschalten.",

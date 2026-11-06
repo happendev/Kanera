@@ -40,6 +40,24 @@ const childScript = String.raw`
   const { pool } = await import("./src/db.ts");
   const { closeServiceResources } = await import("./src/lib/close-service-resources.ts");
   const { installGracefulShutdown } = await import("./src/lib/graceful-shutdown.ts");
+  // Exercise an idle pool before worker schedulers can borrow the released client.
+  if (process.env.SHUTDOWN_FAILURE === "postgres") {
+    const client = await pool.connect();
+    const { rows: [{ pid }] } = await client.query("select pg_backend_pid() as pid");
+    client.release();
+    const failed = once(pool, "error");
+    // Listen without consuming the event for the application: an absent production listener
+    // must still fail this test, even though once() itself would prevent an uncaught event.
+    assert.ok(pool.listenerCount("error") > 1, "pool must handle idle errors itself");
+    const killer = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await killer.connect();
+    await killer.query("select pg_terminate_backend($1)", [pid]);
+    await failed;
+    await killer.end();
+    await pool.query("select 1");
+    console.log("IDLE_POOL_RECOVERED");
+  }
+
   const builders = {
     api: ["./src/server.ts", "buildServer"],
     worker: ["./src/worker-server.ts", "buildWorkerServer"],
@@ -66,22 +84,6 @@ const childScript = String.raw`
     assert.equal(await socket.emitWithAck("workspace:join", workspaces[0].id), true);
   }
 
-  if (process.env.SHUTDOWN_FAILURE === "postgres") {
-    const client = await pool.connect();
-    const { rows: [{ pid }] } = await client.query("select pg_backend_pid() as pid");
-    client.release();
-    const failed = once(pool, "error");
-    // Listen without consuming the event for the application: an absent production listener
-    // must still fail this test, even though once() itself would prevent an uncaught event.
-    assert.ok(pool.listenerCount("error") > 1, "pool must handle idle errors itself");
-    const killer = new pg.Client({ connectionString: process.env.DATABASE_URL });
-    await killer.connect();
-    await killer.query("select pg_terminate_backend($1)", [pid]);
-    await failed;
-    await killer.end();
-    await pool.query("select 1");
-    console.log("IDLE_POOL_RECOVERED");
-  }
 
   console.log("SHUTDOWN_READY");
   process.stdin.once("data", () => {

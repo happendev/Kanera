@@ -8,7 +8,7 @@ import {
   signal,
 } from "@angular/core";
 import { CARD_LABEL_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
-import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
+import { ANCHORED_HOST_STYLES, PANEL_INPUT_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { ListboxNav } from "../../shared/listbox-nav";
 import { MatchHighlightComponent } from "../../shared/match-highlight.component";
@@ -39,7 +39,7 @@ const CREATE_KEY = "__create__";
         <span class="lp-title" i18n="Label picker heading">Labels</span>
       </div>
       <input
-        class="lp-search"
+        class="ap-input lp-search"
         type="text"
         placeholder="Search labels…"
         i18n-placeholder
@@ -101,11 +101,12 @@ const CREATE_KEY = "__create__";
   `,
   styles: [
     ANCHORED_HOST_STYLES,
+    PANEL_INPUT_STYLES,
     `
     .lp-panel {
       background: var(--surface-overlay);
       border: 1px solid var(--overlay-border);
-      border-radius: var(--radius-lg);
+      border-radius: var(--radius-md);
       box-shadow: var(--shadow-pop);
       padding: 10px;
       width: 100%;
@@ -127,20 +128,10 @@ const CREATE_KEY = "__create__";
       color: var(--text);
     }
 
-    .lp-search {
-      /* The shared field fill: --surface-2 is the row-selected wash, so a search box painted with
-         it read as a selected row rather than a field in light mode. */
-      background: var(--input-bg);
-      /* The input border tier: on dark overlays --border is nearly the value of --surface-2 and
-         the field lost its edge. */
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      color: var(--text);
-      padding: 6px 8px;
-      font-size: var(--text-base);
-      outline: none;
-      &:focus { border-color: var(--accent, var(--text)); }
-    }
+    /* The shared picker field (.ap-input): every popover search is one size and one edge, so the
+       label, member and option pickers no longer drift apart. flex: none keeps a long list from
+       squeezing it. */
+    .lp-search { flex: none; }
 
     .lp-list {
       display: flex;
@@ -178,7 +169,7 @@ const CREATE_KEY = "__create__";
       width: 100%;
       transition: background-color 0.12s;
       &:hover { background: var(--surface-hover); }
-      &.is-selected { background: var(--surface-2); }
+      &.is-selected { background: var(--overlay-selected, var(--accent-soft)); }
       /* Keyboard row (the pointer moves it too): hover wash plus an inset ring so it stays visible
          on an already-tinted selected row. A ring, never an edge stripe. */
       &.is-active {
@@ -221,10 +212,6 @@ const CREATE_KEY = "__create__";
         height: auto;
         min-height: 44px;
       }
-
-      /* The search field matches the rows under it rather than the 36px global input; the element
-         selector is needed to outrank that global input rule. */
-      input.lp-search { flex: none; height: 44px; }
     }
 
     .lp-check {

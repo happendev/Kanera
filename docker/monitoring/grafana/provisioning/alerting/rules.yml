@@ -90,16 +90,12 @@ groups:
               conditions:
                 - evaluator: { type: gt, params: [0] }
 
-      # App services use Prometheus DNS service discovery (one target per replica). A naive
-      # `min(up{job=~"kanera-.*"})` is broken for partial replica loss: when a replica dies, DNS drops
-      # its target, that `up` series goes stale/absent, and min() over the survivors returns 1 — so it
-      # only ever catches a whole job vanishing, never N->N-1. Instead, compare the current healthy
-      # replica count per job against its recent peak: any shortfall (one replica gone, or the whole
-      # job gone) yields a positive "missing" count. The `or (... * 0)` term supplies 0 for a job whose
-      # targets have all disappeared (so the subtraction still produces a series and fires). A long full
-      # outage eventually decays the peak to no data -> NoData -> noDataState=Alerting still pages.
-      # Caveat: an intentional scale-down looks like a shortfall until the 1h peak window rolls forward;
-      # that self-resolves and is preferable to silently missing a dead replica.
+      # Compare against Compose's desired counts, never a historical peak: overlapping old/new
+      # targets during deployment can briefly inflate that peak and page for an hour afterward.
+      # Grafana does not expand env vars inside query models, so its entrypoint renders the two
+      # placeholders from the same API_REPLICAS/PUBLIC_API_REPLICAS values Compose uses to scale.
+      # Explicit zero fallbacks preserve each job when all of its DNS targets disappear. The worker
+      # is deliberately a singleton because its schedulers are not safe to run in parallel.
       - uid: kanera-target-down
         title: App replica down or missing
         condition: C
@@ -109,17 +105,26 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Fewer healthy replicas than recently expected for a Kanera service (a process is down, crashed, or unreachable)"
+          summary: "Fewer healthy replicas than configured for a Kanera service (a process is down, crashed, or unreachable)"
         data:
           - refId: A
-            relativeTimeRange: { from: 3600, to: 0 }
+            relativeTimeRange: { from: 300, to: 0 }
             datasourceUid: prometheus
             model:
               refId: A
               instant: true
               expr: |
-                max_over_time(count by (job) (up{job=~"kanera-.*"} == 1)[1h:1m])
-                - (count by (job) (up{job=~"kanera-.*"} == 1) or (max_over_time(count by (job) (up{job=~"kanera-.*"} == 1)[1h:1m]) * 0))
+                (
+                  label_replace(vector(__API_REPLICAS__), "job", "kanera-api", "", "")
+                  or label_replace(vector(__PUBLIC_API_REPLICAS__), "job", "kanera-public-api", "", "")
+                  or label_replace(vector(1), "job", "kanera-worker", "", "")
+                )
+                - (
+                  count by (job) (up{job=~"kanera-.*"} == 1)
+                  or label_replace(vector(0), "job", "kanera-api", "", "")
+                  or label_replace(vector(0), "job", "kanera-public-api", "", "")
+                  or label_replace(vector(0), "job", "kanera-worker", "", "")
+                )
           - refId: C
             datasourceUid: __expr__
             model:

@@ -34,7 +34,7 @@ import {
 type BoardAccessContext = Awaited<ReturnType<typeof assertBoardAccess>>;
 type Card = typeof cards.$inferSelect;
 
-/** Completes or reopens the given cards, which must all be changing state. */
+/** Completes or reopens the given cards; any that stopped changing state before the lock are left out. */
 export async function setBulkCardCompletion({
   auth,
   ctx,
@@ -46,20 +46,21 @@ export async function setBulkCardCompletion({
   cards: Card[];
   completed: boolean;
 }): Promise<CardCompletionWrite[]> {
-  const completedAt = completed ? new Date() : null;
+  const at = new Date();
   return db.transaction(async (tx) => {
     // Lock the batch and its dependents before the first per-card write (see lockCardsForWrite).
     await lockCompletionBatch(tx, ctx.workspaceId, changingCards.map((card) => card.id), completed);
     const rows: CardCompletionWrite[] = [];
     for (const current of changingCards) {
-      rows.push(await applyCardCompletion(tx, {
-        card: current,
+      const write = await applyCardCompletion(tx, {
+        cardId: current.id,
         completed,
-        completedAt,
+        at,
         workspaceId: ctx.workspaceId,
         clientId: ctx.clientId,
         actorId: auth.sub,
-      }));
+      });
+      if (write) rows.push(write);
     }
     return rows;
   });

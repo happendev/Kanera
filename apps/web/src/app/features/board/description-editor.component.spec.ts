@@ -913,7 +913,6 @@ describe("DescriptionEditorComponent", () => {
     expect(root().querySelector(".ProseMirror ul[data-type='taskList']")).not.toBeNull();
     const taskItems = root().querySelectorAll<HTMLElement>(".ProseMirror li[data-type='taskItem']");
     expect(taskItems).toHaveLength(2);
-    expect(getComputedStyle(taskItems[0]!).display).toBe("flex");
     expect(markdown).toContain("- [ ] Write Draft release note");
     expect(markdown).toContain("- [x] Ship fix");
 

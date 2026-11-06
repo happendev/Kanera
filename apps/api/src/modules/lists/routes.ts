@@ -1,26 +1,25 @@
 import { env } from "../../env.js";
-import { EMPTY_EFFECTS, runCardUnblockedAutomations } from "../../lib/automations.js";
+import { runCardUnblockedAutomations } from "../../lib/automations.js";
 import { recordBlockersCleared, notifyDependencyHandoffs } from "../../lib/dependency-notifications.js";
 import { dto } from "@kanera/shared";
 import { inProgressClockOf, type InProgressClock } from "@kanera/shared/events";
 import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import type { DeletionImpactResponse } from "@kanera/shared/dto";
 import { cards, lists } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess, assignedCardVisibility } from "../../lib/access.js";
 import { recordActivity, recordCoalescedActivity } from "../../lib/activity.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { emitAutomationEffects, runCardMoveAutomations, type AutomationEffects } from "../../lib/automations.js";
-import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
+import { applyCardArchiveTransition, emitCardArchiveTransition } from "../../lib/card-archive.js";
 import { badRequest, notFound } from "../../lib/errors.js";
-import { clearNotificationsForCards, emitDeletedNotifications } from "../../lib/notifications.js";
 import { between, workspaceNeighbourPositions } from "../../lib/position.js";
 import { rebalanceLists } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { emitToBoard, emitToWorkspace } from "../../realtime/emit.js";
-import { captureBlockedDependents, emitBlockedByCountChanged, emitDependentsChanged, emitRelationNeighboursChanged, lockWorkspaceRelations, relationNeighbourIds } from "../../lib/card-relations.js";
+import { captureBlockedDependents, emitBlockedByCountChanged, emitRelationNeighboursChanged, lockWorkspaceRelations, relationNeighbourIds } from "../../lib/card-relations.js";
 import { requestScheduleRecheckForCards } from "../../lib/schedule-events.js";
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
@@ -311,12 +310,14 @@ export async function listRoutes(app: FastifyInstance) {
     // whole-list archive must honor that just like the single-card archive does via
     // assertCardAccess. The workspace-admin path (no boardId) is never restricted.
     let assignedItemsOnly = false;
+    let clientId: string;
     if (body.boardId) {
       const access = await assertBoardAccess(req.auth, body.boardId, "editor");
       if (access.workspaceId !== current.workspaceId) throw badRequest("board not in same workspace");
       assignedItemsOnly = access.assignedItemsOnly;
+      clientId = access.clientId;
     } else {
-      await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
+      clientId = (await assertWorkspaceAccess(req.auth, current.workspaceId, "admin")).clientId;
     }
 
     // A board-scoped list action must not archive cards belonging to sibling boards that share
@@ -328,58 +329,35 @@ export async function listRoutes(app: FastifyInstance) {
       body.boardId ? eq(cards.boardId, body.boardId) : undefined,
       assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined,
     );
-    const archivedAt = new Date();
-    const { updatedCards, deletedNotifications, handoffs, effects } = await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       // Moves also take the graph lock. Select after acquiring it, then archive that exact set, so
       // a blocker arriving while this request waits cannot be archived without its handoff.
       await lockWorkspaceRelations(tx, current.workspaceId);
       const listCards = await tx.select({ id: cards.id }).from(cards).where(archiveFilter);
-      if (listCards.length === 0) return { updatedCards: [], deletedNotifications: [], handoffs: [], effects: EMPTY_EFFECTS };
-      const cardIds = listCards.map((card) => card.id);
-      const before = await captureBlockedDependents(tx, current.workspaceId, cardIds);
-      const updated = await tx
-        .update(cards)
-        .set({ archivedAt, updatedAt: archivedAt })
-        .where(inArray(cards.id, cardIds))
-        .returning();
-      await requestScheduleRecheckForCards(tx, cardIds);
-
-      await recordActivity(tx, {
+      // The same transition as the single-card and selection routes, so each card's history reads
+      // "archived" whichever control archived it.
+      const transition = await applyCardArchiveTransition(tx, {
+        cardIds: listCards.map((card) => card.id),
+        archived: true,
+        workspaceId: current.workspaceId,
+        clientId,
+        actorId: req.auth.sub,
+        bulk: true,
+      });
+      // The list keeps its own summary of the sweep alongside the per-card rows.
+      if (transition.rows.length > 0) await recordActivity(tx, {
         boardId: body.boardId ?? null,
         workspaceId: current.workspaceId,
         actorId: req.auth.sub,
         entityType: "list",
         entityId: id,
         action: "updated",
-        payload: { cardsArchived: updated.length },
+        payload: { cardsArchived: transition.rows.length },
       });
-      const deletedNotifications = await clearNotificationsForCards(tx, updated.map((card) => card.id));
-      const handoffs = await recordBlockersCleared(tx, { before, actorId: req.auth.sub });
-      const effects = await runCardUnblockedAutomations(tx, { handoffs, workspaceId: current.workspaceId, clientId: req.auth.cid, triggerActorId: req.auth.sub });
-      return { updatedCards: updated, deletedNotifications, handoffs, effects };
+      return transition;
     });
-    emitDeletedNotifications(deletedNotifications);
-
-    const byBoard = new Map<string, typeof updatedCards>();
-    for (const c of updatedCards) {
-      const arr = byBoard.get(c.boardId) ?? [];
-      arr.push(c);
-      byBoard.set(c.boardId, arr);
-    }
-    for (const [boardId, boardCards] of byBoard) {
-      for (const card of boardCards) {
-        await emitToBoard(boardId, "card:updated", { boardId, card });
-      }
-    }
-    await emitDependentsChanged(updatedCards.map((card) => card.id), req.auth.cid);
-    await notifyDependencyHandoffs({ handoffs, mailer: app.mailer, webOrigin: env.WEB_ORIGIN })
-      .catch((err: unknown) => req.log.warn({ err }, "failed to send blockers-cleared notifications"));
-    await emitAutomationEffects(effects);
-    // Archiving removes cards from "Up next" queues without touching their rows, so the queue
-    // audiences must be pinged separately from the board rooms above.
-    await invalidateQueuesForCards(updatedCards.map((card) => card.id));
-
-    return { archived: updatedCards.length };
+    await emitCardArchiveTransition(result, { clientId: req.auth.cid, mailer: app.mailer, log: req.log });
+    return { archived: result.rows.length };
   });
 
   app.post("/lists/:id/move", async (req) => {

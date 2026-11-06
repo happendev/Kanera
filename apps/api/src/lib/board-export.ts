@@ -127,6 +127,9 @@ export async function buildBoardExportArchive(boardId: string, clientId: string,
       })
       .from(workspaceMembers)
       .innerJoin(users, eq(users.id, workspaceMembers.userId))
+      // Export permission is board-scoped, including for guests: never export unrelated
+      // workspace directory entries through this alternate representation.
+      .innerJoin(boardMembers, and(eq(boardMembers.userId, workspaceMembers.userId), eq(boardMembers.boardId, boardId)))
       .where(eq(workspaceMembers.workspaceId, board.workspaceId)),
   ]);
 

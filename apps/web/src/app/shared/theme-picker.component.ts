@@ -71,21 +71,22 @@ const THEME_OPTIONS: readonly { value: Theme; label: string; icon: string }[] = 
         align-items: stretch;
         gap: 0;
         padding: 0;
-        border: 1px solid var(--border);
+        /* --border-strong, not the page hairline: --border sits ~1.2:1 off --surface on the dark
+           themes, so unselected themes had no visible edge. The density choices below match. */
+        border: 1px solid var(--border-strong);
         border-radius: var(--radius);
         background: var(--surface);
         color: var(--text-muted);
         overflow: hidden;
         cursor: pointer;
-        transition: border-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
+        transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
       }
 
       /* :not(:disabled) for specificity against the global button:hover rule, which would flood the
          tile with the accent fill. */
       .tp-option:hover:not(:disabled) {
-        background: var(--surface);
+        background: var(--surface-2);
         color: var(--text);
-        border-color: var(--border-strong);
       }
 
       .tp-option.active,

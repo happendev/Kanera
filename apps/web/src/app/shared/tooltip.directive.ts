@@ -16,9 +16,10 @@ const SHOW_DELAY_MS = 300;
 const WARM_WINDOW_MS = 450;
 let lastHiddenAt = 0;
 
-/** Test seam: the warm window is module state and would otherwise leak between specs. */
-export function resetTooltipWarmWindow(): void {
+/** Test seam: hover/touch timestamps are module state and must not leak across specs or fake clocks. */
+export function resetTooltipTiming(): void {
   lastHiddenAt = 0;
+  lastTouchAt = 0;
 }
 /**
  * A tap is not a hover. Mobile browsers synthesise `mouseenter` and move focus on every tap, so

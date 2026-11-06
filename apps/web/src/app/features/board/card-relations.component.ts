@@ -214,17 +214,26 @@ const SEARCH_DEBOUNCE_MS = 200;
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 0 4px 0 10px;
-      border: 1px solid var(--border);
+      padding: 0 4px 0 9px;
+      /* The shared picker field recipe (.ap-input in anchored-panel.ts), drawn on the wrapper because
+         the search icon sits inside the box: same fill, edge and quiet focus as the label and member
+         searches. --border vanished on the dark overlay. */
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-sm);
-      background: var(--surface);
+      background: var(--input-bg);
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
-    .cr-search:focus-within { border-color: var(--accent); }
-    .cr-search > i { color: var(--muted); font-size: var(--text-md); }
+    .cr-search:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+    }
+    .cr-search > i { color: var(--text-muted); font-size: var(--text-md); }
     .cr-search input.cr-search-input {
       flex: 1;
       min-width: 0;
-      height: 34px;
+      /* 32px inside the wrapper's 1px edge: 34px overall, like .ap-input. */
+      height: 32px;
+      font-size: var(--text-base);
       border: 0;
       padding: 0;
       background: transparent;
@@ -382,6 +391,8 @@ const SEARCH_DEBOUNCE_MS = 200;
       .cr-remove { opacity: 1; }
       .cr-icon-btn { width: 44px; height: 44px; }
       .cr-link { min-height: 44px; }
+      /* 44px overall, matching .ap-input on touch. */
+      .cr-search input.cr-search-input { height: 42px; }
       /* Kept at 36px so the heading row does not grow; an invisible halo makes the 44px target.
          It is alone at the end of the heading, so nothing neighbours it. */
       .cr-add-btn { height: 36px; position: relative; }

@@ -112,10 +112,10 @@ import { PickerListComponent, type PickerGroup } from "./picker-list.component";
       flex-direction: column;
       gap: 8px;
       padding: 8px;
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
+      border: 1px solid var(--overlay-border);
+      border-radius: var(--radius-md);
       background: var(--surface-overlay);
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow-pop);
       overflow: hidden;
     }
   `,

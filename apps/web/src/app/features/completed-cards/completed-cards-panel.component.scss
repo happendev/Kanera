@@ -137,10 +137,10 @@
 .completed-export-menu {
   width: var(--ap-width, 140px);
   padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius-md);
   background: var(--surface-overlay);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--shadow-pop);
 }
 
 .completed-export-item {
@@ -180,12 +180,15 @@
     min-width: 0;
   }
 
+  // The three filters (search, period, list) share the app field recipe: --border-strong edge on the
+  // themed field fill. They used to mix --surface, --surface-2 and the --border hairline, so on dark
+  // the period button read as a hole in the strip and every edge sat ~1.2:1.
   select {
     width: 100%;
     height: 32px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
-    background-color: var(--surface-2);
+    background-color: var(--select-bg);
     color: var(--text);
     font: inherit;
     font-size: var(--text-sm);
@@ -206,10 +209,10 @@
       outline-offset: -1px;
     }
 
+    // Neutral emphasis, like the period button below: a stronger edge, not the workspace accent.
     &.is-active {
-      border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-      background-color: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
-      color: var(--accent);
+      border-color: var(--text-muted);
+      color: var(--text);
     }
   }
 }
@@ -236,9 +239,9 @@
   width: 100%;
   height: 32px;
   padding: 0 32px 0 30px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--input-bg);
   color: var(--text);
   font: inherit;
   font-size: var(--text-sm);
@@ -273,7 +276,7 @@
   cursor: pointer;
 
   &:hover {
-    background: var(--surface-2);
+    background: var(--surface-hover);
     color: var(--text);
   }
 }
@@ -298,7 +301,7 @@
   }
 
   &:has(select.is-active)>i {
-    color: var(--accent);
+    color: var(--text);
   }
 }
 
@@ -309,9 +312,9 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background-color: var(--surface);
+  background-color: var(--select-bg);
   color: var(--text);
   font: inherit;
   font-size: var(--text-sm);
@@ -346,8 +349,9 @@
   // card colour and made this control look like a destructive primary action.
   &.is-open,
   &.has-range {
-    border-color: var(--border-strong);
-    background-color: var(--surface-2);
+    // --text-muted, not --border-strong: the resting edge is already --border-strong, so a narrowed
+    // period has to step up to read as set. Matches the list select beside it.
+    border-color: var(--text-muted);
     font-weight: 600;
 
     i {

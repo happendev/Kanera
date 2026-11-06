@@ -1099,17 +1099,7 @@ k-card-labels {
   color: var(--text-muted);
 
   i {
-    flex: 0 0 auto;
-    margin-top: 1px;
     font-size: var(--text-md);
-    line-height: 1;
-    animation: checklist-loading-spin 0.8s linear infinite;
-  }
-}
-
-@keyframes checklist-loading-spin {
-  to {
-    transform: rotate(360deg);
   }
 }
 

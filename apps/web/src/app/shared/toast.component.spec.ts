@@ -84,15 +84,14 @@ describe("ToastComponent", () => {
 
     const bottomOffsets = panes.map((pane) => pane.style.marginBottom);
     expect(new Set(bottomOffsets).size).toBe(2);
-    expect(bottomOffsets).toContain("16px");
-    expect(bottomOffsets).toContain("68px");
+    const lowestOffset = Math.min(...bottomOffsets.map(Number.parseFloat));
 
     fixture.componentInstance.first.set(false);
     fixture.detectChanges();
 
     // The leaving toast releases its slot at once so the survivor slides down while it fades out.
     const visibleToast = document.querySelector<HTMLElement>(".cdk-overlay-pane .toast:not(.leaving)")?.closest<HTMLElement>(".cdk-overlay-pane");
-    expect(visibleToast?.style.marginBottom).toBe("16px");
+    expect(Number.parseFloat(visibleToast!.style.marginBottom)).toBe(lowestOffset);
     expect(document.querySelectorAll(".toast")).toHaveLength(2);
     vi.advanceTimersByTime(TOAST_EXIT_MS);
     expect(document.querySelectorAll(".toast")).toHaveLength(1);

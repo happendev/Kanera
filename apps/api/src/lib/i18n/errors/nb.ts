@@ -1,7 +1,7 @@
 import type { ErrorCatalog } from "./source.js";
 
 export const nb: ErrorCatalog = {
-  "external reference already exists": "den eksterne referansen finnes allerede",
+  "external reference already exists": "Den eksterne referansen finnes allerede",
   "AI agent access is turned off for this organisation": "Tilgang for KI-agenter er deaktivert for denne organisasjonen",
   "Additional notification destinations are not available on your plan. Upgrade to configure ntfy, Gotify, or a personal webhook.": "Flere varslingsmål er ikke tilgjengelige med abonnementet ditt. Oppgrader for å konfigurere ntfy, Gotify eller en personlig webhook.",
   "All purchased seats are in use. Buy more seats to add this person.": "Alle kjøpte lisenser er i bruk. Kjøp flere for å legge til denne personen.",
@@ -164,7 +164,7 @@ export const nb: ErrorCatalog = {
   "import columns cannot be changed now": "Importkolonner kan ikke endres nå",
   "import is not ready to commit": "Importen er ikke klar til å fullføres",
   "import not found": "Importen ble ikke funnet",
-  "imports cannot create a second board in a standalone board": "Importer kan ikke opprette en andre tavle i en selvstendig tavle",
+  "imports cannot create a second board in a standalone board": "Importer kan ikke opprette en annen tavle i en selvstendig tavle",
   "inline media from integrations must be uploaded to Kanera before embedding": "Innebygde medier fra integrasjoner må lastes opp til Kanera før de bygges inn",
   "invalid Discord webhook url": "Ugyldig Discord-webhookadresse",
   "invalid MCP service credential": "Ugyldig MCP-tjenestelegitimasjon",
@@ -329,7 +329,7 @@ export const nb: ErrorCatalog = {
   "the scratchpad needs a personal API key or OAuth connection": "Kladden krever en personlig API-nøkkel eller OAuth-tilkobling",
   "this GitHub installation is not accessible to the authorizing GitHub user": "Denne GitHub-installasjonen er ikke tilgjengelig for GitHub-brukeren som godkjenner tilkoblingen",
   "this board mirror already exists": "Denne tavlespeilingen finnes allerede",
-  "this guest must subscribe to an assigned card": "Denne gjesten må abonnere på et tilordnet kort",
+  "this guest must subscribe to an assigned card": "Denne gjesten må følge et tilordnet kort",
   "this invitation was sent to a different email address": "Denne invitasjonen ble sendt til en annen e-postadresse",
   "time in progress is disabled for this workspace":
     "Tid i arbeid er deaktivert for dette arbeidsområdet",
@@ -352,7 +352,7 @@ export const nb: ErrorCatalog = {
   "unsupported OAuth resource": "OAuth-ressursen støttes ikke",
   "unsupported OAuth scope": "OAuth-omfanget støttes ikke",
   "unsupported delivery mode": "Leveringsmåten støttes ikke",
-  "unsupported file type": "filtype som ikke støttes",
+  "unsupported file type": "Filtypen støttes ikke",
   "unsupported file type; pass a supported mimeType or a file name with a supported extension": "Filtypen støttes ikke; angi en støttet mimeType eller et filnavn med en støttet filtype",
   "unsupported grant_type": "grant_type støttes ikke",
   "upload a CSV file": "Last opp en CSV-fil",
@@ -453,6 +453,6 @@ export const nb: ErrorCatalog = {
   "a card cannot be related to itself": "Et kort kan ikke relateres til seg selv",
   "a completed card cannot block another card": "Et fullført kort kan ikke blokkere et annet kort",
   "cards must be in the same workspace to be related": "Kortene må være i samme arbeidsområde for å kunne relateres",
-  "relation not found": "Fant ikke relasjonen",
-  "this relation would create a blocking cycle": "Denne relasjonen ville skapt en blokkeringssyklus",
+  "relation not found": "Relasjonen ble ikke funnet",
+  "this relation would create a blocking cycle": "Denne relasjonen ville skape en blokkeringssyklus",
 };

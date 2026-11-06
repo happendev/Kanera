@@ -136,7 +136,9 @@ k-support-session-banner {
   padding: 5px 12px;
   font-size: var(--text-xs);
   font-weight: 500;
-  color: var(--color-amber);
+  // Text takes --warning (theme-tuned); --color-amber is one fill hue for every theme and read ~1.7:1
+  // on light. The wash and rule keep the hue.
+  color: var(--warning);
   background: color-mix(in srgb, var(--color-amber) 10%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--color-amber) 20%, transparent);
   flex-shrink: 0;
@@ -1135,8 +1137,8 @@ k-support-session-banner {
   width: var(--ap-width, min(320px, calc(100vw - 24px)));
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
   padding: 6px;
   display: flex;
   flex-direction: column;
