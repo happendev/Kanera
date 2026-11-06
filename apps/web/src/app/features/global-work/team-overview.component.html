@@ -58,7 +58,11 @@
   </nav>
 }
 
-<div class="overview-grid" [class.is-focused]="focusedOverview()">
+<!-- Overview rows are copy sources: queueing never changes their assignment or workflow list. -->
+<div class="overview-grid" [class.is-focused]="focusedOverview()"
+  cdkDropList cdkDropListSortingDisabled
+  [cdkDropListConnectedTo]="queueDropTargets()"
+>
   @if (!focusedOverview() && unownedRows(); as unowned) {
     <!-- Every other panel is a person; in-progress work with no assignee would otherwise vanish. -->
     <section class="person unowned" aria-label="In progress with no assignee" i18n-aria-label>
@@ -385,55 +389,17 @@
       </div>
     }
   }
-</div>
-
-@if (quietPeople().length) {
-  <section class="quiet">
-    <button type="button" class="quiet-toggle" [attr.aria-expanded]="showQuiet()" (click)="showQuiet.set(!showQuiet())">
-      <i aria-hidden="true" class="ti ti-chevron-down section-chevron" [class.is-collapsed]="!showQuiet()"></i>
-      <span i18n="Team overview row collapsing teammates with nothing to show">{quietPeople().length, plural, one {{{ quietPeople().length }} teammate has no open cards or recent activity} other {{{ quietPeople().length }} teammates have no open cards or recent activity}}</span>
-      <span class="quiet-avatars" aria-hidden="true">
-        @for (item of quietPeople().slice(0, 8); track item.person.userId) {
-          <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="20" [userId]="item.person.userId" />
-        }
-      </span>
-    </button>
-    @if (showQuiet()) {
-      <ul class="quiet-list">
-        @for (item of quietPeople(); track item.person.userId) {
-          <li>
-            <button type="button" class="quiet-person" [disabled]="!canNavigate()" (click)="personFocused.emit(item.person.userId)">
-              <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="20" [userId]="item.person.userId" />
-              <span>{{ item.person.displayName }}</span>
-            </button>
-          </li>
-        }
-      </ul>
-    }
-  </section>
-}
-
-<!-- The way into curating this person's queue: the page docks it beside the overview. Only where the
-     viewer may write to it (a workspace admin can curate a teammate's queue even when every card in
-     it is hidden from them); once docked, the dock's own header closes it. -->
-<ng-template #upNextEditTpl let-upNext let-person="person">
-  @if (upNext.canEdit) {
-    <button
-      type="button"
-      class="section-action"
-      [attr.aria-label]="upNextActionLabel(person.displayName)"
-      [kTooltip]="upNextActionLabel(person.displayName)"
-      (click)="upNextToggled.emit(person.userId)"
-    >
-      <i aria-hidden="true" class="ti ti-pencil"></i>
-    </button>
-  }
-</ng-template>
-
+<!-- Keep this template inside the source drop list so its rows inherit the CDK container. -->
 <ng-template #rowTpl let-row>
   <button
     type="button"
     class="row"
+    cdkDrag
+    [cdkDragData]="{ kind: 'card', card: row.card }"
+    [cdkDragDisabled]="!queueDraggableCardIds().has(row.card.id)"
+    [cdkDragStartDelay]="dragStartDelay"
+    (cdkDragStarted)="cardDrag.start('overview-queue-source')"
+    (cdkDragEnded)="cardDrag.end()"
     [class.is-selected]="row.card.id === selectedCardId()"
     (click)="cardOpened.emit(row.card)"
   >
@@ -480,4 +446,49 @@
       </span>
     </span>
   </button>
+</ng-template>
+
+</div>
+
+@if (quietPeople().length) {
+  <section class="quiet">
+    <button type="button" class="quiet-toggle" [attr.aria-expanded]="showQuiet()" (click)="showQuiet.set(!showQuiet())">
+      <i aria-hidden="true" class="ti ti-chevron-down section-chevron" [class.is-collapsed]="!showQuiet()"></i>
+      <span i18n="Team overview row collapsing teammates with nothing to show">{quietPeople().length, plural, one {{{ quietPeople().length }} teammate has no open cards or recent activity} other {{{ quietPeople().length }} teammates have no open cards or recent activity}}</span>
+      <span class="quiet-avatars" aria-hidden="true">
+        @for (item of quietPeople().slice(0, 8); track item.person.userId) {
+          <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="20" [userId]="item.person.userId" />
+        }
+      </span>
+    </button>
+    @if (showQuiet()) {
+      <ul class="quiet-list">
+        @for (item of quietPeople(); track item.person.userId) {
+          <li>
+            <button type="button" class="quiet-person" [disabled]="!canNavigate()" (click)="personFocused.emit(item.person.userId)">
+              <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="20" [userId]="item.person.userId" />
+              <span>{{ item.person.displayName }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+}
+
+<!-- The way into curating this person's queue: the page docks it beside the overview. Only where the
+     viewer may write to it (a workspace admin can curate a teammate's queue even when every card in
+     it is hidden from them); once docked, the dock's own header closes it. -->
+<ng-template #upNextEditTpl let-upNext let-person="person">
+  @if (upNext.canEdit) {
+    <button
+      type="button"
+      class="section-action"
+      [attr.aria-label]="upNextActionLabel(person.displayName)"
+      [kTooltip]="upNextActionLabel(person.displayName)"
+      (click)="upNextToggled.emit(person.userId)"
+    >
+      <i aria-hidden="true" class="ti ti-pencil"></i>
+    </button>
+  }
 </ng-template>

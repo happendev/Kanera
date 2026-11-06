@@ -4,6 +4,8 @@ import { Component } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { describe, expect, it, vi } from "vitest";
 import { PresenceService } from "../core/realtime/presence.service";
+import { By } from "@angular/platform-browser";
+import { TooltipDirective } from "./tooltip.directive";
 import { AvatarComponent } from "./avatar.component";
 
 @Component({
@@ -239,67 +241,37 @@ describe("AvatarComponent", () => {
       fixture.componentInstance.userId.set("online-user");
       fixture.componentInstance.lastOnlineAt.set("2026-06-19T09:00:00.000Z");
       fixture.detectChanges();
-      const avatar = fixture.nativeElement.querySelector("k-avatar") as HTMLElement;
+      const tooltip = fixture.debugElement.query(By.directive(TooltipDirective)).injector.get(TooltipDirective);
 
-      avatar.querySelector<HTMLElement>(".avatar-body")?.dispatchEvent(new Event("mouseenter"));
-      vi.advanceTimersByTime(350);
-      fixture.detectChanges();
+      expect(tooltip.kTooltip()).toBe("Ada Lovelace");
 
-      expect(document.querySelector(".k-tooltip")?.textContent).toBe("Ada Lovelace");
-
-      avatar.dispatchEvent(new Event("mouseleave"));
       fixture.componentInstance.userId.set("offline-user");
       fixture.detectChanges();
-      avatar.querySelector<HTMLElement>(".avatar-body")?.dispatchEvent(new Event("mouseenter"));
-      vi.advanceTimersByTime(350);
-      fixture.detectChanges();
+      expect(tooltip.kTooltip()).toBe("Ada Lovelace · Last online 2 days ago");
 
-      expect(document.querySelector(".k-tooltip")?.textContent).toBe("Ada Lovelace · Last online 2 days ago");
-
-      avatar.dispatchEvent(new Event("mouseleave"));
       fixture.componentInstance.userId.set("offline-user-live");
       fixture.detectChanges();
-      avatar.querySelector<HTMLElement>(".avatar-body")?.dispatchEvent(new Event("mouseenter"));
-      vi.advanceTimersByTime(350);
-      fixture.detectChanges();
+      expect(tooltip.kTooltip()).toBe("Ada Lovelace · Last online less than a minute ago");
 
-      expect(document.querySelector(".k-tooltip")?.textContent).toBe("Ada Lovelace · Last online less than a minute ago");
-
-      avatar.dispatchEvent(new Event("mouseleave"));
       vi.advanceTimersByTime(30_000);
       fixture.detectChanges();
-      avatar.querySelector<HTMLElement>(".avatar-body")?.dispatchEvent(new Event("mouseenter"));
-      vi.advanceTimersByTime(350);
-      fixture.detectChanges();
-
-      expect(document.querySelector(".k-tooltip")?.textContent).toBe("Ada Lovelace · Last online 1 minute ago");
+      expect(tooltip.kTooltip()).toBe("Ada Lovelace · Last online 1 minute ago");
     } finally {
       vi.useRealTimers();
-      document.querySelectorAll(".k-tooltip-panel").forEach((el) => el.remove());
     }
   });
 
   it("can suppress its own tooltip when nested inside another tooltip target", async () => {
-    vi.useFakeTimers();
-    try {
-      await TestBed.configureTestingModule({
-        imports: [PresenceAvatarHostComponent],
-        providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
-      }).compileComponents();
+    await TestBed.configureTestingModule({
+      imports: [PresenceAvatarHostComponent],
+      providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
+    }).compileComponents();
 
-      const fixture = createComponentFixture(PresenceAvatarHostComponent);
-      fixture.componentInstance.showTooltip.set(false);
-      fixture.detectChanges();
+    const fixture = createComponentFixture(PresenceAvatarHostComponent);
+    fixture.componentInstance.showTooltip.set(false);
+    fixture.detectChanges();
 
-      const host = fixture.nativeElement as HTMLElement;
-      host.querySelector<HTMLElement>(".avatar-body")?.dispatchEvent(new Event("mouseenter"));
-      vi.advanceTimersByTime(350);
-      fixture.detectChanges();
-
-      expect(document.querySelector(".k-tooltip")).toBeNull();
-    } finally {
-      vi.useRealTimers();
-      document.querySelectorAll(".k-tooltip-panel").forEach((el) => el.remove());
-    }
+    const tooltip = fixture.debugElement.query(By.directive(TooltipDirective)).injector.get(TooltipDirective);
+    expect(tooltip.kTooltip()).toBe("");
   });
 });

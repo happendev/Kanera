@@ -81,7 +81,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [rich-card-create](rich-card-create.spec.ts) | SDK/MCP/CLI single/bulk creation preserving typed fields and external identities, idempotency, atomic validation, and live rendering. |
 | [shared-fields](shared-fields.spec.ts) | Shared field renames, transfer/filter persistence, no-op saves, and fractional values surviving creation/reload. |
 | [storage-cleanup](storage-cleanup.spec.ts) | Storage filtering, selection/deletion, live attachment removal for another viewer, and phone layout. |
-| [team-overview](team-overview.spec.ts) | Correct activity/assignment attribution, counts, drill-downs, guest visibility, focused-person queues, ranking, and live cross-session updates. |
+| [team-overview](team-overview.spec.ts) | Correct activity/assignment attribution, counts, drill-downs, guest visibility, focused-person queues, dragging assigned/in-progress overview cards into personal and teammate queues, ranking, and live cross-session updates. |
 | [time-tracking](time-tracking.spec.ts) | Working-hour totals, overnight/weekend pauses and resumption, banked stints, short-total suppression, table aggregates, and Work done. |
 | [timeline](timeline.spec.ts) | Date/dependency editing, cross-board updates, filters, conflicts/critical paths, observer/touch access, and bounded rendering for large boards. |
 | [timeline-notifications](timeline-notifications.spec.ts) | Progress-limit settings syncing live and worker-generated scheduling conflicts notifying the right person once. |

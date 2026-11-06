@@ -468,6 +468,13 @@ test("the chart zooms around the pointer with ctrl+wheel and the buttons, and pa
     await page.mouse.wheel(0, -300);
     await page.keyboard.up("Control");
     await expect.poll(async () => (await target.boundingBox())!.width).toBeGreaterThan(before.width * 1.5);
+    // The threshold above is crossed mid-animation on slower runners. Measure the final wheel
+    // zoom before comparing the button's zoom-out ratio against it.
+    await expect.poll(() => target.evaluate(async (element) => {
+      const width = element.getBoundingClientRect().width;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      return element.getBoundingClientRect().width === width;
+    })).toBe(true);
     const zoomed = (await target.boundingBox())!;
     expect(Math.abs(zoomed.x - before.x)).toBeLessThan(4);
     expect(await pageScale()).toBe(scaleBefore);

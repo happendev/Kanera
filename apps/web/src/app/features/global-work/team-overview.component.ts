@@ -1,3 +1,4 @@
+import { CdkDrag, CdkDropList } from "@angular/cdk/drag-drop";
 import { NgTemplateOutlet } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from "@angular/core";
 import type {
@@ -27,6 +28,8 @@ import { priorityRankHeat } from "../../shared/priority-rank";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { dueDateTimestamp, formatDueDate, isDueSoon, isOverdue } from "../board/due-date.util";
 import { isInProgressTooLong, timeInProgressChip, type TimeInProgressChip } from "../board/time-in-progress.util";
+import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
+import { CARD_DRAG_START_DELAY } from "../board/card-drag-scroll";
 import { blockedChipLabel } from "../board/card-relations.util";
 
 /** The per-person sections a viewer can fold. Folding one folds it in every panel at once. */
@@ -152,12 +155,17 @@ type Touch = { at: string; verb: TouchVerb };
 @Component({
   selector: "k-team-overview",
   standalone: true,
-  imports: [AvatarComponent, BoardIconComponent, NgTemplateOutlet, TooltipDirective],
+  imports: [CdkDrag, CdkDropList, AvatarComponent, BoardIconComponent, NgTemplateOutlet, TooltipDirective],
   templateUrl: "./team-overview.component.html",
   styleUrl: "./team-overview.component.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TeamOverviewComponent {
+  protected readonly cardDrag = inject(CardDragCoordinator);
+  protected readonly dragStartDelay = CARD_DRAG_START_DELAY;
+  readonly queueDropTargets = input<string[]>([]);
+  readonly queueDraggableCardIds = input<ReadonlySet<string>>(new Set());
+
   private readonly api = inject(ApiClient);
   private readonly queries = inject(CachedViewService);
   private readonly clock = inject(MinuteClockService);

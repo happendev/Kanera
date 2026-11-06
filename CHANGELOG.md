@@ -6,6 +6,8 @@ All notable changes to Kanera are documented here.
 
 ### Added
 
+- **Up next:** drag cards directly from Assigned or In progress in My Cards and Team Cards overviews into the open queue.
+
 - **Mermaid diagrams:** ```` ```mermaid ```` code blocks are drawn as diagrams in card descriptions, notes and Markdown attachment previews, using the app's theme, accent colours and rounded shapes. Wide diagrams scroll within their frame to keep labels readable; comments keep showing the source.
 - **Mentions tab in notifications:** once someone has @-mentioned you, the notifications drawer gets a **Mentions** tab (with its unread count) listing every comment that mentions you, read or unread. On phones the drawer's Group, Board and User menus now share one row.
 - **Thumbs-up from notifications:** a notification for a comment that @-mentions you has a thumbs-up button beside the read dot, so you can acknowledge it without opening the card. Reacting marks the notification read.

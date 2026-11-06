@@ -383,6 +383,11 @@ RAM** for the stack. Prometheus discovers and scrapes every `api`/`public-api`
 replica automatically via Docker DNS, and also scrapes the monitoring stack
 itself (Grafana, Loki, Alloy, exporters) so its own health is alertable.
 
+The app replica alert compares healthy targets with `API_REPLICAS`, `PUBLIC_API_REPLICAS`,
+and one worker, and fires after a shortfall lasts three minutes. Temporary extra targets during a
+deployment do not raise the expected count. Change replica counts through these Compose variables
+(rather than an ad-hoc `--scale`) so monitoring and the deployment agree.
+
 Grafana packages its provisioning files and bundled dashboards in its image rather than binding
 them from the checkout. Dokploy replaces checkout directories on deployment; an unchanged
 container would otherwise keep deleted directories mounted. Rebuild Grafana when changing
