@@ -48,7 +48,7 @@ export const ptBR: ErrorCatalog = {
   "Gotify requires a server URL and app token":
     "O Gotify exige uma URL de servidor e um token de aplicativo.",
   "Guests are not available on your plan. Upgrade to invite guests.":
-    "Convidados não estão disponíveis no seu plano. Faça upgrade para convidar convidados.",
+    "O acesso de convidados não está disponível no seu plano. Faça upgrade para convidar pessoas externas.",
   "Idempotency-Key must contain 1 to 255 visible ASCII characters":
     "Idempotency-Key deve conter de 1 a 255 caracteres ASCII visíveis.",
   "Idempotency-Key was already used for a different request":
@@ -78,7 +78,7 @@ export const ptBR: ErrorCatalog = {
   "OAuth connection not found":
     "Conexão OAuth não encontrada.",
   "Organisation members are added directly to the board, not invited as guests.":
-    "Membros da organização são adicionados diretamente ao quadro, não convidados como convidados.",
+    "Membros da organização são adicionados diretamente ao quadro, e não convidados como convidados externos.",
   "Seat capacity can only be changed for paid subscriptions":
     "A quantidade de licenças só pode ser alterada em assinaturas pagas.",
   "Signups are currently disabled.":

@@ -14,7 +14,7 @@ export const fr: ErrorCatalog = {
   "Billing cancellation could not be confirmed, so the organisation was not deleted. Please try again.":
     "L'annulation de la facturation n'a pas pu être confirmée, l'organisation n'a donc pas été supprimée. Veuillez réessayer.",
   "Board syncing requires Pro in both participating organisations.":
-    "La synchronisation de tableaux nécessite Pro dans les deux organisations participantes.",
+    "La liaison de tableaux nécessite Pro dans les deux organisations participantes.",
   "CSV did not contain any rows":
     "Le CSV ne contenait aucune ligne.",
   "Device code is invalid or expired":
@@ -48,7 +48,7 @@ export const fr: ErrorCatalog = {
   "Gotify requires a server URL and app token":
     "Gotify nécessite une URL de serveur et un jeton d'application.",
   "Guests are not available on your plan. Upgrade to invite guests.":
-    "Les invités ne sont pas disponibles avec votre forfait. Passez à un forfait supérieur pour inviter des invités.",
+    "Les invités ne sont pas disponibles avec votre forfait. Passez à un forfait supérieur pour pouvoir en inviter.",
   "Idempotency-Key must contain 1 to 255 visible ASCII characters":
     "Idempotency-Key doit contenir de 1 à 255 caractères ASCII visibles.",
   "Idempotency-Key was already used for a different request":
@@ -78,7 +78,7 @@ export const fr: ErrorCatalog = {
   "OAuth connection not found":
     "Connexion OAuth introuvable.",
   "Organisation members are added directly to the board, not invited as guests.":
-    "Les membres de l'organisation sont ajoutés directement au tableau, et non invités en tant qu'invités.",
+    "Les membres de l'organisation sont ajoutés directement au tableau, et non invités comme invités externes.",
   "Seat capacity can only be changed for paid subscriptions":
     "Le nombre de sièges ne peut être modifié que pour les abonnements payants.",
   "Signups are currently disabled.":
@@ -358,7 +358,7 @@ export const fr: ErrorCatalog = {
   "invalid or expired MCP access token":
     "Jeton d'accès MCP invalide ou expiré.",
   "invalid or expired challenge":
-    "Défi invalide ou expiré.",
+    "Demande de vérification invalide ou expirée.",
   "invalid or expired invitation":
     "Invitation invalide ou expirée.",
   "invalid or expired verification code":
@@ -602,7 +602,7 @@ export const fr: ErrorCatalog = {
   "subscription not found":
     "Abonnement introuvable.",
   "superadmin required":
-    "Droits de super-administrateur requis.",
+    "Droits de superadministrateur requis.",
   "support session not found":
     "Session d'assistance introuvable.",
   "switch organisation to access this resource":
@@ -640,7 +640,7 @@ export const fr: ErrorCatalog = {
   "the credential that created this upload link is no longer valid":
     "Les identifiants qui ont créé ce lien d'envoi ne sont plus valides.",
   "the final active superadmin cannot be disabled":
-    "Le dernier super-administrateur actif ne peut pas être désactivé.",
+    "Le dernier superadministrateur actif ne peut pas être désactivé.",
   "the mirror provider namespace is reserved":
     "L'espace de noms du fournisseur de miroirs est réservé.",
   "the notification inbox needs a personal API key or OAuth connection":
@@ -794,7 +794,7 @@ export const fr: ErrorCatalog = {
   "provide dueDateLocalDate when setting dueDateSlot":
     "Indiquez dueDateLocalDate lorsque vous définissez dueDateSlot.",
   "cannot leave as the last owner":
-    "Vous ne pouvez pas partir en tant que dernier propriétaire.",
+    "Vous ne pouvez pas quitter l'organisation en tant que dernier propriétaire.",
   "cannot remove the last owner":
     "Impossible de retirer le dernier propriétaire.",
   "notification destination url must use http(s)":
@@ -874,7 +874,7 @@ export const fr: ErrorCatalog = {
   "cannot delete the last owner of {orgName}":
     "Impossible de supprimer le dernier propriétaire de {orgName}.",
   "cards[{index}]: {message}":
-    "cards[{index}]: {message}",
+    "cards[{index}]\\u00a0: {message}",
   "comments not found on this board: {ids}":
     "Commentaires introuvables sur ce tableau\u00a0: {ids}",
   "could not parse CSV: {reason}":

@@ -268,17 +268,17 @@ export const es: ErrorCatalog = {
   "cursor does not belong to card comments":
     "El cursor no corresponde a los comentarios de la tarjeta.",
   "custom field mapping target not found":
-    "No se encontró el destino de asignación del campo personalizado.",
+    "No se encontró el destino de mapeo del campo personalizado.",
   "custom field names must be unique within a workspace":
     "Los nombres de los campos personalizados deben ser únicos en un espacio de trabajo.",
   "custom field not found":
     "No se encontró el campo personalizado.",
   "custom field trigger field is invalid":
-    "El campo personalizado del activador no es válido.",
+    "El campo personalizado del desencadenante no es válido.",
   "custom field trigger user is not a workspace member":
-    "El usuario del activador del campo personalizado no es miembro del espacio de trabajo.",
+    "El usuario del desencadenante del campo personalizado no es miembro del espacio de trabajo.",
   "custom field trigger value does not match field type":
-    "El valor del activador del campo personalizado no coincide con el tipo de campo.",
+    "El valor del desencadenante del campo personalizado no coincide con el tipo de campo.",
   "delivery not found":
     "No se encontró el envío.",
   "dependencies are disabled for this workspace":
@@ -390,19 +390,19 @@ export const es: ErrorCatalog = {
   "items in nested checklists do not support descriptions":
     "Los elementos de las listas de verificación anidadas no admiten descripciones.",
   "label mapping target not found in workspace":
-    "No se encontró el destino de asignación de la etiqueta en el espacio de trabajo.",
+    "No se encontró el destino de mapeo de la etiqueta en el espacio de trabajo.",
   "label not in workspace":
     "La etiqueta no está en el espacio de trabajo.",
   "limit must be a positive integer":
     "limit debe ser un número entero positivo.",
   "list mapping target not found in workspace":
-    "No se encontró el destino de asignación de la lista en el espacio de trabajo.",
+    "No se encontró el destino de mapeo de la lista en el espacio de trabajo.",
   "list not in workspace":
     "La lista no está en el espacio de trabajo.",
   "listId must identify a list in the monitored workspace":
     "listId debe identificar una lista del espacio de trabajo supervisado.",
   "member mapping target not found in workspace":
-    "No se encontró el destino de asignación del miembro en el espacio de trabajo.",
+    "No se encontró el destino de mapeo del miembro en el espacio de trabajo.",
   "nested checklist items do not support assignees or due dates":
     "Los elementos anidados de la lista no admiten responsables ni fechas de vencimiento.",
   "nested checklist items do not support descriptions":
@@ -462,7 +462,7 @@ export const es: ErrorCatalog = {
   "one or more target lists are not in the target workspace":
     "Una o más listas de destino no están en el espacio de trabajo de destino.",
   "one or more trigger user ids are not assignable workspace members":
-    "Uno o más ID de usuario del activador no son miembros asignables del espacio de trabajo.",
+    "Uno o más ID de usuario del desencadenante no son miembros asignables del espacio de trabajo.",
   "one or more user ids are not assignable members":
     "Uno o más ID de usuario no son miembros asignables.",
   "only an owner can change owner roles":
@@ -682,7 +682,7 @@ export const es: ErrorCatalog = {
   "unknown event":
     "Evento desconocido.",
   "unknown option for custom field trigger":
-    "Opción desconocida para el activador del campo personalizado.",
+    "Opción desconocida para el desencadenante del campo personalizado.",
   "unknown option for set custom field action":
     "Opción desconocida para la acción de establecer el campo personalizado.",
   "unknown option for this field":
@@ -860,9 +860,9 @@ export const es: ErrorCatalog = {
   "automation action list not found: {name}":
     "No se encontró la lista de la acción de automatización: {name}",
   "automation trigger label not found: {name}":
-    "No se encontró la etiqueta del activador de automatización: {name}",
+    "No se encontró la etiqueta del desencadenante de automatización: {name}",
   "automation trigger list not found: {name}":
-    "No se encontró la lista del activador de automatización: {name}",
+    "No se encontró la lista del desencadenante de automatización: {name}",
   "starter card checklist template not found: {name}":
     "No se encontró la plantilla de lista de verificación de la tarjeta inicial: {name}",
   "starter card label not found: {name}":

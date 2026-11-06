@@ -519,7 +519,7 @@ const es: ServerMessages = {
       preheader: ({ cards, source }) => `${cards} tarjetas transferidas desde ${source}.`,
       heading: "Tu importación se completó",
       intro: ({ firstName, source, board }) => `Hola, ${firstName}: tu importación desde ${source} a ${board} ha terminado. Esto es lo que se transfirió:`,
-      sources: { trello: "Trello", kanera: "Exportación de tablero de Kanera", csv: "Archivo CSV" },
+      sources: { trello: "Trello", kanera: "una exportación de tablero de Kanera", csv: "un archivo CSV" },
       rows: { lists: "Listas", cards: "Tarjetas", checklistItems: "Elementos de listas de verificación", comments: "Comentarios", attachments: "Archivos adjuntos" },
       attachmentsSkipped: ({ count }) =>
         `${count === 1 ? "Se omitió 1 archivo adjunto" : `Se omitieron ${count} archivos adjuntos`}, normalmente porque el archivo era demasiado grande o ya no estaba disponible en el origen.`,
@@ -580,7 +580,7 @@ const es: ServerMessages = {
         ],
         linesMyCards: [
           "Mis tarjetas muestra en una sola lista todas las tarjetas que tienes asignadas en todos tus tableros, para que puedas planificar tu día sin abrir cada tablero.",
-          "Añade a A continuación las tarjetas que abordarás primero y mantenlas en orden a medida que cambian las prioridades.",
+          "Añade a Próximas las tarjetas que abordarás primero y mantenlas en orden a medida que cambian las prioridades.",
         ],
         ctaAutomations: "Configurar una automatización",
         ctaMyCards: "Abrir Mis tarjetas",
@@ -655,7 +655,7 @@ const es: ServerMessages = {
     dependency: { title: "Dependencia de tarjeta", blockedBy: ({ actor, card, other }) => `${actor} marcó ${card} como bloqueada por ${other}`, blocking: ({ actor, card, other }) => `${actor} marcó que ${card} bloquea ${other}` },
     unblocked: { title: "Lista para empezar", body: ({ card, other }) => `${card} ya no está bloqueada: ${other} ya no bloquea este trabajo` },
     reblocked: { title: "Bloqueada de nuevo", body: ({ card, other }) => `${card} vuelve a estar bloqueada: ${other} se reabrió` },
-    scheduleConflict: { title: "Conflicto de planificación", body: ({ card, other }) => `${card} está previsto que empiece antes de que termine ${other}` },
+    scheduleConflict: { title: "Conflicto de planificación", body: ({ card, other }) => `${card} está prevista para empezar antes de que termine ${other}` },
     mentioned: { title: "Te mencionaron en un comentario", body: ({ actor, board, card, excerpt }) => `${actor} te mencionó en ${board} / ${card}: ${excerpt}` },
     dueDateChanged: { title: "Fecha de vencimiento cambiada", body: ({ actor, card }) => `${actor} cambió la fecha de vencimiento de ${card}` },
     startDateChanged: { title: "Fecha de inicio cambiada", body: ({ actor, card }) => `${actor} cambió la fecha de inicio de ${card}` },
