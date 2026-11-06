@@ -91,9 +91,9 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
     `
     .bg-panel {
       background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--overlay-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-pop);
       padding: 12px;
       /* Width and the narrow-viewport clamp both come from placement now. */
       width: 100%;

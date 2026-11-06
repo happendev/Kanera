@@ -12,10 +12,9 @@ import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert,
 import { emitRelationNeighboursChanged, lockWorkspaceRelations } from "../../lib/card-relations.js";
 import { badRequest } from "../../lib/errors.js";
 import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
-import { toWireCard } from "../../lib/wire-card.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { assertGlobalWorkSeparatorContext, positionForGlobalWorkLaneInsert } from "../global-work-separators/routes.js";
-import { emitCardActivityFeedItem, emitCoalescedCardActivityFeedItem } from "./route-support.js";
+import { emitCoalescedCardActivityFeedItem } from "./route-support.js";
 
 type CardAccessContext = Awaited<ReturnType<typeof assertCardAccess>>;
 
@@ -78,7 +77,7 @@ export async function moveCard({
   const fromListId = current.listId;
   const prevPosition = current.position;
   const enteringNewList = fromListId !== body.listId;
-  const { position, finalPosition, finalListId, clock, finalClock, rebalancedPositions, laneRebalanced, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
+  const { position, finalPosition, finalListId, clock, finalClock, rebalancedPositions, laneRebalanced, activity, automationEffects, noOp } = await db.transaction(async (tx) => {
     // Graph lock first: automations below may complete or reopen a blocker, and every write that
     // touches the dependency graph takes this lock before any row, so lock order never inverts.
     await lockWorkspaceRelations(tx, ctx.workspaceId);
@@ -135,8 +134,6 @@ export async function moveCard({
         rebalancedPositions: null,
         laneRebalanced: null,
         activity: null,
-        completedCard: null,
-        completionActivity: null,
         automationEffects: { effects: [] },
         noOp: true,
       };
@@ -202,8 +199,6 @@ export async function moveCard({
       rebalancedPositions,
       laneRebalanced,
       activity,
-      completedCard: null,
-      completionActivity: null,
       automationEffects,
       noOp: false,
     };
@@ -222,8 +217,6 @@ export async function moveCard({
     rebalancedPositions,
     laneRebalanced,
     activity,
-    completedCard,
-    completionActivity,
     automationEffects,
     response: { id, listId: finalListId, position: finalPosition, ...finalClock },
   };
@@ -245,8 +238,6 @@ export async function emitCardMoved({ auth, result }: { auth: AuthClaims; result
     rebalancedPositions,
     laneRebalanced,
     activity,
-    completedCard,
-    completionActivity,
     automationEffects,
   } = result;
   if (laneRebalanced) await emitWorkspaceLaneRebalanced(toListId, laneRebalanced);
@@ -268,11 +259,6 @@ export async function emitCardMoved({ auth, result }: { auth: AuthClaims; result
   // Related cards show this card's list in their Dependencies section.
   if (fromListId !== toListId) await emitRelationNeighboursChanged([id]);
   if (activity) await emitCoalescedCardActivityFeedItem(boardId, id, activity);
-  if (completedCard && completionActivity) {
-    const wireCard = toWireCard(completedCard, auth.cid);
-    await emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: wireCard });
-    await emitCardActivityFeedItem(boardId, id, completionActivity, { notify: true });
-  }
   await emitAutomationEffects(automationEffects);
   if (activity) await evaluateWorkspaceAnalyticsMilestones({
     workspaceId,

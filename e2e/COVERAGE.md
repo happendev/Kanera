@@ -28,6 +28,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [card-detail-layout](card-detail-layout.spec.ts) | Reachable drawer/editor controls, overflow, title/close separation and picker placement in desktop panel/modal and phone layouts. |
 | [card-detail-performance](card-detail-performance.spec.ts) | Large-card request/cache budgets, checklist drag indices and responsiveness, 304 revisions, and first-open outbox reconciliation. |
 | [card-follow](card-follow.spec.ts) | Reminder creation, scheduling, firing, clearing, watching, filters, and live drawer, tile, Home, and inbox updates. |
+| [card-lifecycle](card-lifecycle.spec.ts) | Whole-list archive writing each card's translated history, and its Undo restoring the cards live for another member. |
 | [card-links](card-links.spec.ts) | Canonical clipboard links, two-way links and renames, SPA navigation, editor preservation, unlinking, and coalesced refreshes. |
 | [card-move](card-move.spec.ts) | List/board moves converging across Kanban and table with correct transfer activity; rapid single/bulk list reversals remove live and persisted activity/inbox entries while forward moves stay separate. |
 | [checklist-activity](checklist-activity.spec.ts) | Checklist activity coalescing and live row updates while delayed acknowledgements preserve the next draft. |
@@ -75,13 +76,14 @@ concurrent request bursts do not replace deterministic database race tests.
 | [promise-toasts](promise-toasts.spec.ts) | Bulk actions, imports, and exports settling one toast correctly while preserving saved state, dismissal, and supported restore behavior. |
 | [public-api](public-api.spec.ts) | Public API writes reaching open boards through the worker/outbox and producing correctly signed webhook envelopes. |
 | [realtime-compression](realtime-compression.spec.ts) | Configured websocket negotiation and ordered, intact small/large updates through the real outbox/Valkey path. |
+| [reconciliation](reconciliation.spec.ts) | Failed and late card moves on the board and in Global Work never undoing a teammate's newer move, and both converging on a public API edit after a socket outage. |
 | [reconnect](reconnect.spec.ts) | Proven socket outages recovering card and agent-run snapshots; brief foreground returns avoiding redundant requests. |
 | [scratchpad-save-recovery](scratchpad-save-recovery.spec.ts) | Scratchpad foreground/reconnect preservation, idle-session autosave isolation, and note draft ownership across browser tabs. |
 | [scratchpad-idle-recovery](scratchpad-idle-recovery.spec.ts) | Single-tab editor recovery after failed background reads, subsequent overwrite risk, and late acknowledgements preserving closed-dock drafts. |
 | [rich-card-create](rich-card-create.spec.ts) | SDK/MCP/CLI single/bulk creation preserving typed fields and external identities, idempotency, atomic validation, and live rendering. |
 | [shared-fields](shared-fields.spec.ts) | Shared field renames, transfer/filter persistence, no-op saves, and fractional values surviving creation/reload. |
 | [storage-cleanup](storage-cleanup.spec.ts) | Storage filtering, selection/deletion, live attachment removal for another viewer, and phone layout. |
-| [team-overview](team-overview.spec.ts) | Correct activity/assignment attribution, counts, drill-downs, guest visibility, focused-person queues, ranking, and live cross-session updates. |
+| [team-overview](team-overview.spec.ts) | Correct activity/assignment attribution, counts, drill-downs, guest visibility, focused-person queues, dragging assigned/in-progress overview cards into personal and teammate queues, ranking, and live cross-session updates. |
 | [time-tracking](time-tracking.spec.ts) | Working-hour totals, overnight/weekend pauses and resumption, banked stints, short-total suppression, table aggregates, and Work done. |
 | [timeline](timeline.spec.ts) | Date/dependency editing, cross-board updates, filters, conflicts/critical paths, observer/touch access, and bounded rendering for large boards. |
 | [timeline-notifications](timeline-notifications.spec.ts) | Progress-limit settings syncing live and worker-generated scheduling conflicts notifying the right person once. |
@@ -114,3 +116,5 @@ Check their failure-mode comments before removing or replacing tests.
 
 - [Hosted analytics](analytics/attribution.browser.ts), via `pnpm test:analytics`: consent, visitor identity and first-touch signup attribution in a separate production-configured build.
 - [Production bundles](../benchmarks/web/bundle-loading.config.cjs), via `pnpm test:web:bundles`: cache headers, deferred views/icons, service-worker registration and cold offline reload against the seeded local API and Nginx.
+
+- `security-media-export.spec.ts`: guest board exports exclude unrelated workspace members; media renewal enforces revoked board access and resolves cross-organisation guest storage, and preserves personal note/scratchpad privacy.

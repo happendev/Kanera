@@ -109,8 +109,8 @@ k-empty-state.board-empty {
   color: var(--text);
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
 
   // Everything inside sits on --surface-overlay, not on the page. The page tokens (--surface-2,
   // --border) are tuned against --surface and on dark are *darker* than the overlay fill, so tiles
@@ -190,8 +190,9 @@ k-empty-state.board-empty {
   strong { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
   span { overflow: hidden; max-width: 100%; color: var(--text-muted); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
   .needs-attention strong { color: var(--danger); }
-  // Work in progress past the alert: the amber of an alerted clock on the board, not overdue red.
-  .needs-follow-up strong { color: var(--color-amber); }
+  // Work in progress past the alert: amber, not overdue red. --warning, not --color-amber: that is a
+  // fill hue with one value in every theme and fell to ~1.7:1 as text on the light themes.
+  .needs-follow-up strong { color: var(--warning); }
 }
 
 .board-overview-callout {

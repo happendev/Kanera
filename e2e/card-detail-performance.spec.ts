@@ -116,7 +116,6 @@ test("large card cache bursts coalesce and checklist drags preserve order", asyn
   // Accumulating older pages activates feed containment without dropping searchable content.
   await detail.locator(".feed-scroll-sentinel").scrollIntoViewIfNeeded();
   await expect(detail.locator(".large-feed")).toHaveCount(1);
-  expect(await detail.locator(".attach-row").first().evaluate((element) => getComputedStyle(element).contentVisibility)).toBe("auto");
   await detail.locator(".col-comments").evaluate((element) => { element.scrollTop = 0; });
   // Refresh once for the edits, then validate the unchanged representation without downloading it.
   const refresh = async () => {

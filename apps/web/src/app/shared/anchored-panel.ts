@@ -343,7 +343,9 @@ export const PANEL_INPUT_STYLES = `
     min-height: 34px;
     padding: 6px 9px;
     color: var(--text);
-    background: var(--surface-2);
+    /* The app field fill (clear on dark, paper-white on light). --surface-2 sat below the dark
+       overlay fill, so the field read as a hole in the panel. */
+    background: var(--input-bg);
     /* --border is one step off the dark overlay fill and the field's edge disappeared into it. */
     border: 1px solid var(--overlay-border);
     border-radius: var(--radius-sm);

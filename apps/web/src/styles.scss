@@ -194,7 +194,31 @@ k-list.is-drop-target {
 .ti-loader-4,
 .ti-loader-quarter,
 .kanera-spin {
+  // Tabler glyphs are drawn on a 1em square; rotating anything but that exact square (an inline box
+  // sized by line-height, or one stretched by a flex parent) puts the pivot off the glyph's centre
+  // and the icon wobbles. Pin the box to 1em x 1em and pivot on its centre.
   display: inline-block;
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  text-align: center;
+  vertical-align: -0.125em;
+  transform-origin: 50% 50%;
+  animation: kanera-spinner 0.8s linear infinite;
+}
+
+// Ring spinner for loading states without an icon. Global so every component can use it.
+.spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-muted);
+  border-radius: 50%;
+  transform-origin: 50% 50%;
   animation: kanera-spinner 0.8s linear infinite;
 }
 
@@ -204,7 +228,8 @@ k-list.is-drop-target {
   .ti-loader-3,
   .ti-loader-4,
   .ti-loader-quarter,
-  .kanera-spin {
+  .kanera-spin,
+  .spinner {
     animation: none;
   }
 }
@@ -341,6 +366,8 @@ k-list.is-drop-target {
   // Strength of the selected-row wash inside floating chrome; see --overlay-selected below. The page
   // --accent-soft (8%) came out ~1.08:1 against the dark overlay fill and selected rows vanished.
   --overlay-selected-strength: 15%;
+  // Share of the list's own hue in a list chip's text (shared/_list-chip.scss); the rest is --text.
+  --list-chip-hue: 65%;
 
   --border: #253449;
   --border-strong: #364a66;
@@ -777,6 +804,10 @@ k-list.is-drop-target {
   --overlay-separator: var(--border);
   // Light keeps the page wash, which already reads on the near-white overlay.
   --overlay-selected-strength: 8%;
+  // Less hue than dark (65%): warm list colours mixed 65% into the near-black ink stayed too light to
+  // read on their own wash (~3.3:1 for amber on Light and Paper); 45% clears 4.5:1 on both and still
+  // reads as the list's hue.
+  --list-chip-hue: 45%;
 
   --border: #dde2ea;
   --border-strong: #c8d0dc;
@@ -1932,6 +1963,41 @@ k-app-shell {
   color: var(--text-muted);
   font-size: var(--text-xs);
   line-height: 1.35;
+}
+
+// ─── Option tiles ────────────────────────────────────────────────────────────
+// The one look for a choice drawn as a box inside floating chrome: date shortcuts, time slots,
+// reminder presets, period presets. Outlined on the overlay rather than filled: --surface-2 sits
+// *below* --surface-overlay on the dark themes, so filled tiles read as sunken holes, and the page
+// hairline (--border) came out ~1.05:1 against the overlay, so their edges vanished. This matches the
+// outlined controls in the board members menu. Selection follows the menu recipe: the soft accent wash
+// with a neutral label, plus an accent edge because a tile has no trailing check.
+// Components set layout (size, padding, grid) only; colour and state belong here.
+.k-tile {
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+
+  // Restated, not inherited: the global button:hover fills with accent at higher specificity.
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  &.is-selected,
+  &.is-selected:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--overlay-selected, var(--accent-soft));
+    color: var(--text);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
 }
 
 // ─── Scroll cue ──────────────────────────────────────────────────────────────

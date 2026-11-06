@@ -70,7 +70,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       <div class="rp-body">
         <section class="rp-quick" aria-label="Quick picks" i18n-aria-label>
           @for (preset of presets(); track preset.id) {
-          <button type="button" class="rp-preset" (click)="save(preset.at)" [disabled]="saving()">
+          <button type="button" class="rp-preset k-tile" (click)="save(preset.at)" [disabled]="saving()">
             <span class="rp-preset-label">{{ preset.label }}</span>
             <span class="rp-preset-when">{{ format(preset.at) }}</span>
           </button>
@@ -167,10 +167,11 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       display: flex;
       flex-direction: column;
       gap: 10px;
+      /* The shared floating-chrome shell: the same edge, radius and elevation as .k-menu and .ap-panel. */
       background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--overlay-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-pop);
       color: var(--text);
     }
 
@@ -180,7 +181,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       gap: 6px;
       min-width: 0;
       padding-bottom: 8px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--overlay-separator);
 
       > i { color: var(--accent); font-size: var(--text-lg); }
     }
@@ -198,13 +199,15 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       white-space: nowrap;
       padding: 2px 8px;
       border-radius: 999px;
-      background: color-mix(in srgb, var(--accent) 12%, transparent);
-      color: var(--accent);
+      background: var(--overlay-selected, var(--accent-soft));
+      color: var(--text);
       font-size: var(--text-xs);
       font-weight: 600;
 
+      /* Outlined, not filled: --surface-2 sits below the overlay fill on dark and read as a hole. */
       &.is-fired {
-        background: var(--surface-2);
+        background: transparent;
+        box-shadow: inset 0 0 0 1px var(--overlay-border);
         color: var(--text-muted);
       }
     }
@@ -233,18 +236,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       justify-content: center;
       gap: 1px;
       padding: 5px 8px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--surface-2);
-      color: var(--text);
       text-align: left;
-      cursor: pointer;
-      transition: background-color 0.12s, border-color 0.12s;
-
-      &:hover:not(:disabled) {
-        background: var(--surface-hover);
-        border-color: var(--border-strong);
-      }
     }
 
     .rp-preset-label {
@@ -293,10 +285,10 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       cursor: pointer;
       transition: background-color 0.12s, color 0.12s, border-color 0.12s;
 
+      /* --surface-2 sits at or below the overlay fill on dark, so it never read as a hover. */
       &:hover:not(:disabled) {
-        background: var(--surface-2);
+        background: var(--surface-hover);
         color: var(--text);
-        border-color: var(--border);
       }
 
       &:disabled {
@@ -339,14 +331,17 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       transition: background-color 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
 
       &:hover:not(:disabled) {
-        background: var(--surface-2);
-        border-color: var(--border);
+        background: var(--surface-hover);
       }
 
-      &.is-muted { color: color-mix(in srgb, var(--text-muted) 55%, transparent); }
+      /* Days of the neighbouring months are selectable, so they are a tier quieter, not faded out
+         (the old 55% fade fell under 3:1 on the overlay). Matches the period picker. */
+      &.is-muted {
+        color: var(--text-muted);
+      }
 
       &.is-today {
-        border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+        border-color: color-mix(in srgb, var(--accent) 65%, var(--overlay-border));
         color: var(--accent);
       }
 
@@ -384,7 +379,8 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       align-items: center;
       gap: 6px;
       padding: 0 10px;
-      border: 1px solid var(--border);
+      /* The shared panel field (PANEL_INPUT_STYLES): --surface-2 well, overlay edge. */
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-sm);
       background: var(--surface-2);
       color: var(--text-muted);
@@ -426,7 +422,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
       display: flex;
       align-items: center;
       gap: 8px;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--overlay-separator);
       background: var(--surface-overlay);
     }
 

@@ -195,8 +195,8 @@ const BULK_MENU_WIDTH = 232;
     .bcam-picker {
       background: var(--surface-overlay);
       border: 1px solid var(--overlay-border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow-lg);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-pop);
       padding: 4px;
       width: 232px;
       max-height: var(--ap-max-height, 420px);
@@ -334,9 +334,12 @@ const BULK_MENU_WIDTH = 232;
         font-size: var(--text-md);
       }
 
-      &:hover,
+      &:hover {
+        background: var(--surface-hover);
+      }
+
       &.is-selected {
-        background: var(--surface-2);
+        background: var(--overlay-selected, var(--accent-soft));
       }
 
       &:disabled {

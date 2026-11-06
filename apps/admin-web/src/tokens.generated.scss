@@ -36,6 +36,8 @@
   // Strength of the selected-row wash inside floating chrome; see --overlay-selected below. The page
   // --accent-soft (8%) came out ~1.08:1 against the dark overlay fill and selected rows vanished.
   --overlay-selected-strength: 15%;
+  // Share of the list's own hue in a list chip's text (shared/_list-chip.scss); the rest is --text.
+  --list-chip-hue: 65%;
 
   --border: #253449;
   --border-strong: #364a66;

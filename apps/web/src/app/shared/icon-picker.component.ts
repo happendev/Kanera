@@ -125,8 +125,8 @@ const POPULAR_ICONS = [
       width: var(--ap-width, 320px);
       background: var(--surface-overlay);
       border: 1px solid var(--overlay-border);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-pop);
       overflow: hidden;
     }
 
@@ -135,7 +135,7 @@ const POPULAR_ICONS = [
       align-items: center;
       gap: 8px;
       padding: 10px 12px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--overlay-separator);
 
       i {
         font-size: 15px;
@@ -201,7 +201,7 @@ const POPULAR_ICONS = [
       i { font-size: 18px; }
 
       &:hover {
-        background: var(--surface-2);
+        background: var(--surface-hover);
         color: var(--text);
       }
 

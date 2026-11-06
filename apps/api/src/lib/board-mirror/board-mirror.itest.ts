@@ -21,6 +21,7 @@ import {
   eventOutbox,
   externalLinks,
   lists,
+  notifications,
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
@@ -32,6 +33,7 @@ import { MAX_DIRTY_ATTEMPTS } from "./apply.js";
 import { getStorageForClient } from "../storage/index.js";
 import { unsignedMediaUrl } from "../media-keys.js";
 import { signupOwner } from "../../test/api-fixtures.js";
+import { createOverdueNotificationsForCards } from "../overdue-notifications.js";
 
 async function waitForOutboxEvent(boardId: string, eventType: (typeof eventOutbox.$inferSelect)["eventType"]) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -822,4 +824,51 @@ void test("attachment copies read the uploader's tenant storage and park cards w
   await processBoardMirrors();
   const remaining = await db.select().from(boardMirrorDirtyCards).where(and(eq(boardMirrorDirtyCards.mirrorId, mirror.id), eq(boardMirrorDirtyCards.sourceCardId, sourceCard.id)));
   assert.equal(remaining.length, 0, "the re-queued card converges once its source is consistent");
+});
+
+void test("a mirrored completion clears the copy's overdue alert, and reopening the source raises it again", async () => {
+  const app = await buildIntegrationServer();
+  const { user, auth } = await signupOwner(app, { orgName: "Overdue Mirror Org", email: "overdue-mirror@example.com", displayName: "Owner" });
+  const workspace = (await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Overdue delivery" } })).json<{ id: string }>();
+  const [sourceList] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).orderBy(lists.position);
+  const [source, target] = await db.insert(boards).values([
+    { workspaceId: workspace.id, name: "Overdue source", position: "1000.0000000000" },
+    { workspaceId: workspace.id, name: "Overdue target", position: "2000.0000000000" },
+  ]).returning();
+  await db.insert(boardMembers).values([
+    { boardId: source!.id, userId: user.id, role: "editor" },
+    { boardId: target!.id, userId: user.id, role: "editor" },
+  ]);
+  const mirrorResponse = await app.inject({ method: "POST", url: `/boards/${source!.id}/mirrors`, headers: auth, payload: { targetBoardId: target!.id, lists: [{ sourceListId: sourceList!.id }] } });
+  assert.equal(mirrorResponse.statusCode, 201, mirrorResponse.body);
+  const mirror = mirrorResponse.json<{ id: string }>();
+  await processBoardMirrors();
+  const created = await app.inject({ method: "POST", url: `/boards/${source!.id}/lists/${sourceList!.id}/cards`, headers: auth, payload: { title: "Overdue mirrored card" } });
+  assert.equal(created.statusCode, 201, created.body);
+  const sourceCard = created.json<{ id: string }>();
+  await processBoardMirrors();
+  const [link] = await db.select().from(externalLinks).where(and(eq(externalLinks.provider, `mirror:${mirror.id}`), eq(externalLinks.externalId, sourceCard.id)));
+  assert.ok(link, "the source card is mirrored");
+  const copyId = link.entityId;
+
+  // The due date is the destination's own planning facet; an overdue copy alerts its assignee.
+  assert.equal((await app.inject({ method: "PUT", url: `/cards/${copyId}/assignees`, headers: auth, payload: { userIds: [user.id] } })).statusCode, 200);
+  const due = await app.inject({ method: "PATCH", url: `/cards/${copyId}`, headers: auth, payload: { dueDateLocalDate: "2020-01-02", dueDateSlot: null } });
+  assert.equal(due.statusCode, 200, due.body);
+  await createOverdueNotificationsForCards(db, [copyId]);
+  const overdueAlerts = () => db.select({ id: notifications.id }).from(notifications)
+    .where(and(eq(notifications.cardId, copyId), eq(notifications.userId, user.id), eq(notifications.reason, "overdue")));
+  assert.equal((await overdueAlerts()).length, 1, "the overdue copy alerts its assignee");
+
+  const completed = await app.inject({ method: "PATCH", url: `/cards/${sourceCard.id}/completion`, headers: auth, payload: { completed: true } });
+  assert.equal(completed.statusCode, 200, completed.body);
+  await processBoardMirrors();
+  const [completedCopy] = await db.select({ completedAt: cards.completedAt }).from(cards).where(eq(cards.id, copyId));
+  assert.ok(completedCopy?.completedAt, "the copy is completed with its source");
+  assert.equal((await overdueAlerts()).length, 0, "a mirrored completion clears the overdue alert, as a native one does");
+
+  const reopened = await app.inject({ method: "PATCH", url: `/cards/${sourceCard.id}/completion`, headers: auth, payload: { completed: false } });
+  assert.equal(reopened.statusCode, 200, reopened.body);
+  await processBoardMirrors();
+  assert.equal((await overdueAlerts()).length, 1, "reopening the still-overdue copy raises its alert again");
 });

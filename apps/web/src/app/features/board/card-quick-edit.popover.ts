@@ -118,8 +118,8 @@ import { byPosition } from "../../shared/position-sort";
       gap: 10px;
       background: var(--surface-overlay);
       border: 1px solid var(--overlay-border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow-lg);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-pop);
       color: var(--text);
     }
 
@@ -148,7 +148,8 @@ import { byPosition } from "../../shared/position-sort";
 
     .cqe-title-input {
       min-height: 32px;
-      border: 1px solid var(--border);
+      /* The shared panel field (PANEL_INPUT_STYLES): --surface-2 well, overlay edge. */
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-sm);
       background: var(--surface-2);
       color: var(--text);
@@ -205,9 +206,12 @@ import { byPosition } from "../../shared/position-sort";
         font-size: var(--text-md);
       }
 
-      &:hover,
+      &:hover {
+        background: var(--surface-hover);
+      }
+
       &.is-selected {
-        background: var(--surface-2);
+        background: var(--overlay-selected, var(--accent-soft));
       }
     }
 
@@ -232,8 +236,8 @@ import { byPosition } from "../../shared/position-sort";
     .cqe-due-btn {
       height: 32px;
       padding: 0 8px;
-      border: 1px solid var(--border);
-      background: var(--surface-2);
+      border: 1px solid var(--overlay-border);
+      background: transparent;
 
       > i {
         color: var(--text-muted);

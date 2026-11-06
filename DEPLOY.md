@@ -537,6 +537,11 @@ What you get:
     read position doesn't flood Loki with rejected writes. Keep the `kanera_alloy_data`
     volume (don't `down -v` the monitoring stack) so positions survive restarts.
 
+The app replica alert compares healthy targets with `API_REPLICAS`, `PUBLIC_API_REPLICAS`,
+and one worker, and fires after a shortfall lasts three minutes. Temporary extra targets during a
+deployment do not raise the expected count. Change replica counts through these Compose variables
+(rather than an ad-hoc `--scale`) so monitoring and the deployment agree.
+
 > **Disk safety.** Prometheus is bounded by `PROMETHEUS_RETENTION_SIZE` (a real disk
 > cap). Loki's filesystem store has **no** hard size cap — retention deletes by age on
 > a schedule, so a burst can fill the disk before compaction runs

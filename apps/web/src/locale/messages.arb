@@ -10269,6 +10269,20 @@
       "src/app/features/board/card-activity.component.ts"
     ]
   },
+  "7242520604940722562": "archived this card",
+  "@7242520604940722562": {
+    "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "1085215090575319954": "unarchived this card",
+  "@1085215090575319954": {
+    "description": "Card activity after a person's name - the card was brought back from the archive",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
   "1487242934803986521": "{count, plural, other {toggled this card complete # times; left it complete}}",
   "@1487242934803986521": {
     "description": "Card activity after a person's name; several toggles merged into one row",
@@ -11730,6 +11744,13 @@
       "src/app/features/board/card-detail.component.html"
     ]
   },
+  "4664158616510971459": "Open run",
+  "@4664158616510971459": {
+    "description": "Tooltip on a link to where an AI agent run can be watched (a pull request, a session log)",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
   "523158530568802098": "Couldn't load card details.",
   "@523158530568802098": {
     "x-files": [
@@ -12094,6 +12115,13 @@
   "1724877908160976079": "Stalled (no heartbeat)",
   "@1724877908160976079": {
     "description": "AI agent run status - the agent stopped reporting progress",
+    "x-files": [
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "3258835510699925532": "Started {$time}",
+  "@3258835510699925532": {
+    "description": "Tooltip on an AI agent run's last-update time - when the run started",
     "x-files": [
       "src/app/features/board/card-detail.component.ts"
     ]

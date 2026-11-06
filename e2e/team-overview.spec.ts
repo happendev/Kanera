@@ -567,3 +567,62 @@ test("Overview credits an automation's completion to the card's assignees, live"
   await marcusPage.getByRole("searchbox", { name: "Search cards" }).fill(suffix);
   await expect(row(section(personPanel(marcusPage, "Marcus Cole"), "Recently done"), shipped)).toBeVisible();
 });
+
+for (const lens of ["my", "team"] as const) {
+  test(`${lens} overview drags assigned and in-progress cards into Up next`, async ({ page, signIn, apiAs, pageAs, uniqueName }, testInfo) => {
+    const amelia = await apiAs("amelia");
+    const marcus = await apiAs("marcus");
+    await signIn(page, lens === "my" ? "marcus" : "amelia");
+    const board = await scenarioBoard(page, amelia);
+    const marcusId = await userId(marcus);
+    const assigned = uniqueName("E2E drag assigned");
+    const started = uniqueName("E2E drag started");
+    await createCard(amelia, board, assigned, [marcusId]);
+    const startedId = await createCard(amelia, board, started, [marcusId]);
+    await moveToList(amelia, startedId, board.lists.get("In Progress")!);
+
+    const observer = await pageAs("marcus");
+    await observer.getByRole("button", { name: /^Up next/ }).first().click();
+    const liveQueue = observer.locator("k-my-priorities-panel");
+    await page.goto(`/${lens}-cards`);
+    await page.getByRole("button", { name: lens === "my" ? "My overview" : "Team overview", exact: true }).click();
+    const panel = personPanel(page, "Marcus Cole");
+    if (lens === "team") {
+      await panel.getByRole("button", { name: "Edit Up next for Marcus Cole" }).click();
+    } else if (!await page.locator("k-up-next-panel").count()) {
+      await page.locator("k-global-work .up-next-toggle").click();
+    }
+    const dock = page.locator("k-up-next-panel");
+    const queueRows = dock.locator(".panel-row");
+    await expect(dock).toBeVisible();
+
+    for (const [title, sectionName] of [[assigned, "Assigned"], [started, "In progress"]] as const) {
+      const source = row(section(panel, sectionName), title);
+      await expect(source).toBeVisible();
+      await expect(source).not.toHaveClass(/cdk-drag-disabled/);
+      const from = (await source.boundingBox())!;
+      const target = (await dock.locator(".panel-rows").boundingBox())!;
+      await page.mouse.move(from.x + 40, from.y + from.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(from.x + 50, from.y + from.height / 2);
+      await page.mouse.move(target.x + 60, target.y + 8, { steps: 20 });
+      await page.mouse.up();
+      await expect(queueRows.first()).toContainText(title);
+      await expect(liveQueue.locator(".panel-row").first()).toContainText(title);
+      // Queueing copies the card; it neither moves its workflow list nor removes the source row.
+      await expect(source).toBeVisible();
+      await expect(source).toHaveClass(/cdk-drag-disabled/);
+    }
+    await expect(queueRows).toHaveCount(2);
+    await page.screenshot({ path: testInfo.outputPath(`${lens}-overview-drag-desktop.png`), animations: "disabled" });
+    await page.reload();
+    if (lens === "team") {
+      await panel.getByRole("button", { name: "Edit Up next for Marcus Cole" }).click();
+    }
+    await expect(dock.locator(".panel-row").first()).toContainText(started);
+    await expect(dock.locator(".panel-row").nth(1)).toContainText(assigned);
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`${lens}-overview-drag-phone.png`), animations: "disabled" });
+  });
+}

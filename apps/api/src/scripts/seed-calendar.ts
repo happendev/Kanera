@@ -6,6 +6,9 @@ const londonDate = new Intl.DateTimeFormat("en-CA", {
 const londonHour = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/London", hour: "numeric", hourCycle: "h23",
 });
+const londonClock = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+});
 
 /** Backfilled work stops on Friday, rather than appearing as weekend work after a reset.
  * Clamp evenings too so projecting Saturday back to Friday cannot put it before a Friday event.
@@ -67,4 +70,17 @@ export function seedNotificationTime(reference: Date | string, time: SeedNotific
   const at = new Date(`${date}T00:00:00Z`);
   at.setUTCHours(time.hour - offsetHours, time.minute, 0, 0);
   return at;
+}
+
+/** Historical offsets use an eight-hour working day. Carry overflow into working days
+ * instead of clamping every evening action to the same 17:00 timestamp. */
+export function seedHistoryTime(value: Date, minutes = 0): Date {
+  const [hour, minute, second] = londonClock.format(value).split(":").map(Number);
+  let day = lastWorkingDayOnOrBefore(dayNumber(londonDate.format(value)));
+  let elapsed = (hour! - 9) * 60 + minute! + second! / 60 + value.getUTCMilliseconds() / 60_000 + minutes;
+  while (elapsed < 0) { day = addWorkingDays(day, -1); elapsed += 480; }
+  while (elapsed >= 480) { day = addWorkingDays(day, 1); elapsed -= 480; }
+  const date = dateKeyOf(day);
+  const offsetHours = Number(londonHour.format(new Date(`${date}T12:00:00Z`))) - 12;
+  return new Date(new Date(`${date}T09:00:00Z`).getTime() + (elapsed - offsetHours * 60) * 60_000);
 }

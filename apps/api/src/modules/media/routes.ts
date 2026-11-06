@@ -4,6 +4,7 @@ import { getStorageForClient } from "../../lib/storage/index.js";
 import { mediaCacheMaxAge, verifyMediaToken } from "../../lib/media-signing.js";
 import { parseMediaReference, signMediaReference } from "../../lib/media-keys.js";
 import { notFound } from "../../lib/errors.js";
+import { authoriseMedia } from "./authorise-media.js";
 import type { AuthClaims } from "../../auth/plugin.js";
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -42,13 +43,11 @@ async function resignMedia(req: FastifyRequest, reply: FastifyReply) {
   const reference = query.u;
   if (!reference) throw notFound();
   const parsed = parseMediaReference(reference);
-  // Only re-sign media owned by the caller's tenant. Use 404 (not 403) so the
-  // endpoint never discloses whether a foreign tenant or key exists. Cross-org
-  // guest media is the rare exception and is already covered by long validity.
-  if (!parsed || parsed.clientId !== req.auth.cid) throw notFound();
+  if (!parsed) throw notFound();
+  await authoriseMedia(req.auth, parsed);
   // signMediaReference is deterministic within a window, so this returns the
   // same cacheable URL the board/detail views already use — not a per-request one.
-  return reply.send({ url: signMediaReference(reference, req.auth.cid) });
+  return reply.send({ url: signMediaReference(reference, parsed.clientId) });
 }
 
 async function serveMedia(req: FastifyRequest, reply: FastifyReply) {

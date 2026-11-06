@@ -411,6 +411,9 @@ export class CardDetailComponent {
       case "stalled": return $localize`:AI agent run status - the agent stopped reporting progress:Stalled (no heartbeat)`;
     }
   }
+  agentRunStartedLabel(run: WireAgentRun): string {
+    return $localize`:Tooltip on an AI agent run's last-update time - when the run started:Started ${formatDateTime(run.startedAt)}:time:`;
+  }
   agentRunStatusIcon(run: WireAgentRun): string {
     switch (run.status) {
       case "running": return "loader-2";
@@ -696,9 +699,8 @@ export class CardDetailComponent {
     this.moveToListOpen.set(false);
     const card = this.card();
     const position = this.state.positionForCardDrop(card.id, listId, null, undefined);
-    this.state.moveCard(card.id, listId, position);
-    const moved = await this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(`/cards/${card.id}/move`, { listId, beforeCardId: null });
-    this.state.moveCard(moved.id, moved.listId, moved.position, moved);
+    await this.state.sendCardMove(card.id, listId, position, () =>
+      this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(`/cards/${card.id}/move`, { listId, beforeCardId: null }));
   }
 
   toggleActionsMenu() {

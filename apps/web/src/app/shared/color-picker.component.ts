@@ -118,8 +118,8 @@ const COLOR_LABELS: Record<ColorToken, string> = {
       width: var(--ap-width, 258px);
       background: var(--surface-overlay);
       border: 1px solid var(--overlay-border);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-pop);
       padding: 10px;
       overflow: auto;
       overscroll-behavior: contain;
@@ -141,8 +141,8 @@ const COLOR_LABELS: Record<ColorToken, string> = {
       align-items: center;
       justify-content: center;
       transition: box-shadow 0.1s;
-      &.cp-no-color { background: var(--surface-2); border-color: var(--border); color: var(--text-muted); }
-      &:hover { box-shadow: 0 0 0 3px var(--border-strong); }
+      &.cp-no-color { background: transparent; border-color: var(--overlay-border); color: var(--text-muted); }
+      &:hover { box-shadow: 0 0 0 3px var(--overlay-border); }
       &.is-selected { border-color: var(--text); }
     }
   `,

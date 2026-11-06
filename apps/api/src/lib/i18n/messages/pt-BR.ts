@@ -91,9 +91,9 @@ const ptBR: ServerMessages = {
   },
 
   layout: {
-    footerAccount: "Você está recebendo este email porque tem uma conta no Kanera.",
+    footerAccount: "Você está recebendo este e-mail porque tem uma conta no Kanera.",
     footerLifecycle: "Você está recebendo esta dica de introdução e de conta porque é proprietário de uma organização no Kanera.",
-    unsubscribe: "Cancelar a inscrição nestes emails",
+    unsubscribe: "Cancelar a inscrição nestes e-mails",
     fallbackLink: "Se o botão acima não funcionar, copie e cole este link no seu navegador:",
     oneTimeCode: "Código de uso único",
   },
@@ -105,7 +105,7 @@ const ptBR: ServerMessages = {
       heading: "Configure sua conta de administrador",
       intro: ({ firstName }) => `Olá, ${firstName}. Você foi convidado para ser superadministrador do Kanera. Use o botão abaixo para escolher sua senha.`,
       button: "Configurar conta",
-      expiry: ({ duration }) => `Este link de uso único expira em ${duration}. Se você não esperava este email, pode ignorá-lo.`,
+      expiry: ({ duration }) => `Este link de uso único expira em ${duration}. Se você não esperava este e-mail, pode ignorá-lo.`,
     },
     welcome: {
       subject: "Boas-vindas ao Kanera",
@@ -122,14 +122,14 @@ const ptBR: ServerMessages = {
       heading: "Redefina sua senha",
       intro: ({ firstName }) => `Olá, ${firstName}. Recebemos uma solicitação para redefinir a senha da sua conta do Kanera. Clique no botão abaixo para escolher uma nova senha.`,
       button: "Redefinir senha",
-      expiry: ({ duration }) => `Este link expira em ${duration}. Se você não solicitou a redefinição de senha, pode ignorar este email com segurança e sua senha continuará a mesma.`,
+      expiry: ({ duration }) => `Este link expira em ${duration}. Se você não solicitou a redefinição de senha, pode ignorar este e-mail com segurança e sua senha continuará a mesma.`,
     },
     verificationCode: {
-      subject: "Verifique seu email no Kanera",
+      subject: "Verifique seu e-mail no Kanera",
       preheader: ({ code }) => `Seu código de verificação do Kanera é ${code}.`,
-      heading: "Verifique seu email",
-      instruction: "Digite este código para confirmar seu endereço de email e continuar:",
-      expiry: ({ duration }) => `Este código expira em ${duration}. Se você não o solicitou, pode ignorar este email com segurança.`,
+      heading: "Verifique seu e-mail",
+      instruction: "Digite este código para confirmar seu endereço de e-mail e continuar:",
+      expiry: ({ duration }) => `Este código expira em ${duration}. Se você não o solicitou, pode ignorar este e-mail com segurança.`,
     },
     dailyDigest: {
       subject: "Seus itens com entrega no Kanera",
@@ -521,7 +521,7 @@ const ptBR: ServerMessages = {
         `A importação foi concluída com ${plural(count, "aviso", "avisos")}, listados na tela de importação ao final. Alguns detalhes podem não ter sido transferidos exatamente como estavam na origem.`,
       check: "Antes de abandonar a ferramenta antiga, abra o quadro e confira se suas listas e cartões recentes estão corretos.",
       button: "Abrir o quadro",
-      footer: "Você está recebendo este email porque iniciou esta importação.",
+      footer: "Você está recebendo este e-mail porque iniciou esta importação.",
     },
     storageWarning: {
       subject: ({ org }) => `${org} está ficando sem armazenamento`,
@@ -532,9 +532,9 @@ const ptBR: ServerMessages = {
       whenFull: "Quando o espaço acabar, ninguém na organização poderá enviar anexos ou colar imagens até que haja espaço livre.",
       howToFree: "Você mesmo pode liberar espaço em Configurações → Organização → Armazenamento. A lista Limpar arquivos mostra os maiores e mais antigos arquivos da sua organização, incluindo os de cartões arquivados que ninguém mais vê, e permite filtrá-los por tamanho, idade e espaço de trabalho e excluir até 100 de cada vez.",
       upgrade: ({ quota }) => `Fazer upgrade para o Kanera Pro aumenta o limite para ${quota}.`,
-      noUpgrade: "Se você precisar de mais espaço do que seu plano inclui, responda a este email e nós ajudaremos.",
+      noUpgrade: "Se você precisar de mais espaço do que seu plano inclui, responda a este e-mail e nós ajudaremos.",
       button: "Liberar armazenamento",
-      footer: "Você está recebendo este email porque é proprietário ou administrador desta organização. Enviamos este aviso uma vez sempre que o uso se aproxima do limite.",
+      footer: "Você está recebendo este e-mail porque é proprietário ou administrador desta organização. Enviamos este aviso uma vez sempre que o uso se aproxima do limite.",
     },
     lifecycle: {
       footerNote: "Você pode desativar as dicas de introdução e de conta em Configurações, depois Notificações.",
@@ -629,11 +629,11 @@ const ptBR: ServerMessages = {
     },
     smtpTest: {
       subject: "Teste de SMTP do Kanera",
-      preheader: "Suas configurações de SMTP conseguem entregar emails do Kanera.",
+      preheader: "Suas configurações de SMTP conseguem entregar e-mails do Kanera.",
       heading: "Suas configurações de SMTP funcionam",
       intro: ({ email, sentAt }) =>
-        `Este é um email de teste do Kanera enviado para ${email} em ${sentAt}. Se ele chegou à sua caixa de entrada, o envio de emails da sua organização está configurado corretamente.`,
-      renderingNote: "O logotipo acima, o texto do título, o cartão abaixo e o botão devem continuar legíveis neste cliente de email.",
+        `Este é um e-mail de teste do Kanera enviado para ${email} em ${sentAt}. Se ele chegou à sua caixa de entrada, o envio de e-mails da sua organização está configurado corretamente.`,
+      renderingNote: "O logotipo acima, o texto do título, o cartão abaixo e o botão devem continuar legíveis neste cliente de e-mail.",
       renderingCheck: "Verificação de exibição",
       sampleCardTitle: "Exemplo de link de cartão",
       sampleCardSubtitle: "Superfície clara e metadados discretos",

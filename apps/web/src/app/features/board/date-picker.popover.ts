@@ -52,7 +52,7 @@ type CalendarDay = {
       @if (showShortcuts()) {
       <div class="dp-shortcuts">
         @for (sc of shortcuts; track sc.days) {
-          <button type="button" (click)="selectRelative(sc.days)">
+          <button type="button" class="k-tile" (click)="selectRelative(sc.days)">
             <span class="dp-sc-label">{{ sc.label }}</span>
             <span class="dp-sc-date">{{ sc.dateLabel }}</span>
           </button>
@@ -65,6 +65,7 @@ type CalendarDay = {
         @for (option of slotOptions; track option.value) {
           <button
             type="button"
+            class="k-tile"
             [class.is-selected]="draftSlot() === option.value"
             (click)="draftSlot.set(option.value)"
           >
@@ -124,10 +125,11 @@ type CalendarDay = {
       display: flex;
       flex-direction: column;
       gap: 10px;
+      /* The shared floating-chrome shell: the same edge, radius and elevation as .k-menu and .ap-panel. */
       background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--overlay-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-pop);
       color: var(--text);
     }
 
@@ -159,10 +161,10 @@ type CalendarDay = {
       padding: 0;
       transition: background-color 0.12s, color 0.12s, border-color 0.12s;
 
+      /* --surface-2 sits at or below the overlay fill on dark, so it never read as a hover. */
       &:hover {
-        background: var(--surface-2);
+        background: var(--surface-hover);
         color: var(--text);
-        border-color: var(--border);
       }
 
       i {
@@ -183,17 +185,6 @@ type CalendarDay = {
         justify-content: center;
         gap: 1px;
         padding: 0 6px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        background: var(--surface-2);
-        color: var(--text);
-        cursor: pointer;
-        transition: background-color 0.12s, color 0.12s, border-color 0.12s;
-
-        &:hover {
-          background: var(--surface-hover);
-          border-color: var(--border-strong);
-        }
       }
 
       .dp-sc-label {
@@ -223,28 +214,6 @@ type CalendarDay = {
         justify-content: center;
         gap: 2px;
         padding: 6px 4px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        background: var(--surface-2);
-        color: var(--text-muted);
-        cursor: pointer;
-        transition: background-color 0.12s, color 0.12s, border-color 0.12s;
-
-        &:hover {
-          background: var(--surface-hover);
-          color: var(--text);
-          border-color: var(--border-strong);
-        }
-
-        &.is-selected {
-          background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
-          border-color: var(--accent);
-          color: var(--accent);
-
-          .dp-slot-time {
-            color: color-mix(in srgb, var(--accent) 70%, transparent);
-          }
-        }
       }
     }
 
@@ -293,16 +262,17 @@ type CalendarDay = {
       transition: background-color 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
 
       &:hover {
-        background: var(--surface-2);
-        border-color: var(--border);
+        background: var(--surface-hover);
       }
 
+      /* Days of the neighbouring months are selectable, so they are a tier quieter, not faded out
+         (the old 55% fade fell under 3:1 on the overlay). Matches the period picker. */
       &.is-muted {
-        color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+        color: var(--text-muted);
       }
 
       &.is-today {
-        border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+        border-color: color-mix(in srgb, var(--accent) 65%, var(--overlay-border));
         color: var(--accent);
       }
 
@@ -326,7 +296,7 @@ type CalendarDay = {
 
     .dp-foot {
       padding-top: 6px;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--overlay-separator);
       display: flex;
       align-items: center;
       justify-content: space-between;

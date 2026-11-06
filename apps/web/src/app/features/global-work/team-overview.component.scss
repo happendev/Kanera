@@ -894,6 +894,20 @@
     border-top: 1px solid var(--divider);
   }
 
+  &.cdk-drag:not(.cdk-drag-disabled) {
+    cursor: grab;
+  }
+
+  &.cdk-drag-preview {
+    background: var(--surface);
+    border-radius: 8px;
+    box-shadow: var(--shadow-drag);
+  }
+
+  &.cdk-drag-placeholder {
+    opacity: 0.35;
+  }
+
   &:has(.row-rank) {
     grid-template-columns: 22px minmax(0, 1fr);
   }

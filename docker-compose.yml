@@ -601,8 +601,22 @@ services:
           echo 'ALERT_WEBHOOK_URL must be set when the monitoring profile is enabled' >&2
           exit 1
         fi
+        # Query models do not support Grafana's normal environment interpolation. Render only
+        # numeric replica counts, leaving alert annotations and other Grafana templates untouched.
+        for replicas in "$${API_REPLICAS}" "$${PUBLIC_API_REPLICAS}"; do
+          case "$$replicas" in
+            ''|*[!0-9]*) echo 'Replica counts must be non-negative integers' >&2; exit 1 ;;
+          esac
+        done
+        sed -i \
+          -e "s/__API_REPLICAS__/$${API_REPLICAS}/g" \
+          -e "s/__PUBLIC_API_REPLICAS__/$${PUBLIC_API_REPLICAS}/g" \
+          /etc/grafana/provisioning/alerting/rules.yml || exit 1
         exec /run.sh
     environment:
+      # Keep alert expectations aligned with the service scale, including intentional scale-downs.
+      API_REPLICAS: ${API_REPLICAS:-2}
+      PUBLIC_API_REPLICAS: ${PUBLIC_API_REPLICAS:-1}
       # Validate at container start so ordinary Compose commands do not require this profile-only
       # password, while enabling monitoring still fails closed instead of using a known credential.
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}

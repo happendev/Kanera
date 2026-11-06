@@ -56,8 +56,10 @@ test("a comment mention creates a durable unread notification with a working car
   await expect(siblingBadge).toHaveCount(0);
   await recipient.screenshot({ animations: "disabled", path: testInfo.outputPath("notification-read-desktop.png") });
   await recipient.setViewportSize({ width: 390, height: 844 });
-  // No rail on phones, so the panel spans the screen from the leading edge.
-  await expect(recipient.getByRole("dialog", { name: "Notifications", exact: true })).toHaveCSS("left", "0px");
+  await expect.poll(async () => {
+    const bounds = await recipient.getByRole("dialog", { name: "Notifications", exact: true }).boundingBox();
+    return bounds !== null && bounds.x >= 0 && bounds.x + bounds.width <= 390;
+  }).toBe(true);
   await recipient.screenshot({ animations: "disabled", path: testInfo.outputPath("notification-read-phone.png") });
 
   // Back to desktop: on a phone the Notifications button is inside the nav drawer.

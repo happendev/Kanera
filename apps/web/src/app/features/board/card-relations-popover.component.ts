@@ -51,9 +51,9 @@ import { CardRelationsComponent } from "./card-relations.component";
       box-sizing: border-box;
       padding: 10px 12px;
       background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--overlay-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-pop);
     }
     /* No left indent inside the narrow popover; the section heading is the popover's title. */
     k-card-relations { --cr-indent: 0; }

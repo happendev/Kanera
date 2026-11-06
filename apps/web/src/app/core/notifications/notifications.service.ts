@@ -16,10 +16,19 @@ const GENERIC_LOAD_ERROR = $localize`:Notifications load error:Couldn't refresh 
 const ACTIVE_CARD_VIEW_TTL_MS = 15_000;
 const ACTIVE_CARD_VIEW_HEARTBEAT_MS = 5_000;
 const RECONCILE_DEBOUNCE_MS = 150;
+/** Upper bound on waiting for an idle moment before warming the drawer's first page. */
+const FEED_PREFETCH_IDLE_TIMEOUT_MS = 5_000;
 
 function storedNotificationGroupBy(clientId: string | null | undefined): NotificationGroupBy {
   const stored = localStorage.getItem(organisationStorageKey(STORAGE_KEYS.NOTIFICATION_GROUP_BY, clientId));
   return stored === "board" || stored === "user" || stored === "day" || stored === "organisation" ? stored : "day";
+}
+
+function sameWatcherUsers(a: readonly WatcherUser[], b: readonly WatcherUser[]): boolean {
+  return a.length === b.length && a.every((user, index) => {
+    const other = b[index]!;
+    return user.userId === other.userId && user.displayName === other.displayName && user.avatarUrl === other.avatarUrl;
+  });
 }
 
 interface ActiveCardViewEntry {
@@ -131,6 +140,7 @@ export class NotificationsService {
   private reconcileQueued = false;
   private reconcileInFlight: { revision: number; readActiveCards: boolean; promise: Promise<void> } | null = null;
   private feedLoaded = false;
+  private feedPrefetchScheduled = false;
   private userOptionsDirty = false;
   private readonly receivedNotificationIds = new Set<string>();
   private feedRequestVersion = 0;
@@ -166,11 +176,55 @@ export class NotificationsService {
     // attaches realtime so returning online can restore counts, follows and reminders together.
     this.scheduleRecovery();
     this.attachSocket();
+    this.scheduleFeedPrefetch();
+  }
+
+  /**
+   * Warms the unread cache once per session so the drawer's very first open paints rows with its
+   * slide instead of a spinner (later opens reuse the live cache, see openInbox). Idle-time, so it
+   * never competes with the route's own boot requests.
+   */
+  private scheduleFeedPrefetch(): void {
+    if (this.feedPrefetchScheduled || typeof window === "undefined") return;
+    this.feedPrefetchScheduled = true;
+    const session = this.sessionVersion;
+    const run = () => {
+      if (session === this.sessionVersion) void this.prefetchUnreadFeed();
+    };
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(run, { timeout: FEED_PREFETCH_IDLE_TIMEOUT_MS });
+    else setTimeout(run, RECONCILE_DEBOUNCE_MS * 10);
+  }
+
+  /**
+   * Deliberately leaves `feedLoaded` false: that flag makes every reconciliation (each read change
+   * anywhere in the app) refill the feed, a cost only worth paying once the drawer has been used.
+   * Until then the socket handlers keep this cache current and the first open revalidates it.
+   */
+  private async prefetchUnreadFeed(): Promise<void> {
+    if (this.feedLoaded || !this.online() || this.pendingReadChanges > 0) return;
+    // openInbox clears filters and any cache built under them, so a filtered prefetch is wasted.
+    if (this.feedMode() !== "unread" || this.boardFilter() || this.userFilter() || this.searchQuery()) return;
+    const requestVersion = this.feedRequestVersion;
+    try {
+      const [page, userOptions] = await Promise.all([
+        this.fetchNotificationsPage("unread"),
+        this.fetchNotificationUserOptions().catch(() => null),
+      ]);
+      // A real load, filter change, read change, disconnect or sign-out since then owns the feed.
+      if (requestVersion !== this.feedRequestVersion || this.feedLoaded) return;
+      // Keep anything the socket delivered while the request was in flight.
+      const items = this.mergeUniqueById([...this.unreadItems(), ...page.items]).filter((n) => this.isVisibleNotification(n));
+      this.setFeed("unread", items, page.nextCursor);
+      if (userOptions) this.setNotificationUserOptions(userOptions);
+    } catch {
+      // A warm-up only: the first open loads the feed normally.
+    }
   }
 
   teardown(): void {
     this.invalidateNotificationRequests();
     this.feedLoaded = false;
+    this.feedPrefetchScheduled = false;
     this.userOptionsDirty = false;
     this.sessionVersion += 1;
     this.pendingReadChanges = 0;
@@ -344,15 +398,17 @@ export class NotificationsService {
     const mode = this.feedMode();
     const requestVersion = ++this.feedRequestVersion;
     const groupRequestVersion = ++this.groupRequestVersion;
+    // Standalone feed loads need Mentions/Agent tab metadata; reconciliation already fetched it.
+    // Started alongside the page rather than after it, so the tab labels settle in the same round
+    // trip instead of re-rendering the toolbar a second time; refreshCount guards its own staleness.
+    if (refreshFeedCounts) void this.refreshFeedCounts().catch(() => undefined);
     try {
       const [page, groupCounts, userOptions] = await Promise.all([
         this.fetchNotificationsPage(mode),
         this.fetchGroupCounts(mode).catch(() => null),
         refreshUserOptions ? this.fetchNotificationUserOptions().catch(() => null) : Promise.resolve(null),
       ]);
-      // Standalone feed loads need Mentions/Agent tab metadata; reconciliation already fetched it.
       if (requestVersion !== this.feedRequestVersion) return;
-      if (refreshFeedCounts) void this.refreshFeedCounts().catch(() => undefined);
       const visibleItems = page.items.filter((n) => this.isVisibleNotification(n));
       this.setFeed(mode, visibleItems, page.nextCursor);
       if (groupCounts && groupRequestVersion === this.groupRequestVersion) this.setGroupCounts(groupCounts);
@@ -451,7 +507,11 @@ export class NotificationsService {
 
   private setNotificationUserOptions(rows: WatcherUser[]): void {
     if (!Array.isArray(rows)) return;
-    this.notificationUserOptions.set([...rows].sort((a, b) => a.displayName.localeCompare(b.displayName) || a.userId.localeCompare(b.userId)));
+    const next = [...rows].sort((a, b) => a.displayName.localeCompare(b.displayName) || a.userId.localeCompare(b.userId));
+    // Every drawer open revalidates this list and it is almost always unchanged. A new array still
+    // flows into each comment preview's mention members and re-parses its markdown, mid-slide.
+    if (sameWatcherUsers(this.notificationUserOptions(), next)) return;
+    this.notificationUserOptions.set(next);
   }
 
   private upsertNotificationUserOption(notification: NotificationRow): void {
@@ -562,6 +622,8 @@ export class NotificationsService {
   }
 
   async openInbox(): Promise<void> {
+    const wasFiltered = Boolean(this.boardFilter() || this.userFilter() || this.searchQuery());
+    const wasUnreadTab = this.feedMode() === "unread";
     // The global bell represents all unread notifications. A filter from an earlier visit must
     // never make that entry point look empty while the global badge still asks for attention.
     this.boardFilter.set(null);
@@ -570,7 +632,13 @@ export class NotificationsService {
     this.feedMode.set("unread");
     localStorage.removeItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_BOARD_FILTER));
     localStorage.removeItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_USER_FILTER));
-    this.clearFeeds();
+    // Stale-while-revalidate. The socket handlers keep every feed cache live while the drawer is
+    // closed and reconnects refill them, so the unfiltered unread cache can paint with the drawer's
+    // first frame; the load below then corrects it. Clearing it here made every open slide in a
+    // spinner and swap the whole list in mid-animation. A filtered cache holds the wrong rows.
+    if (wasFiltered) this.clearFeeds();
+    // Group totals belong to the tab and filters they were fetched for; rows fall back to their own count.
+    else if (!wasUnreadTab) this.groupCounts.set({});
     await this.loadFirstPage();
   }
 

@@ -1,7 +1,7 @@
 import type { WireAutomation, WireAutomationRunStats, WireCard, WireCardChecklist, WireComment } from "@kanera/shared/events";
 import { inProgressClockOf, SERVER_EVENTS, type InProgressClock } from "@kanera/shared/events";
 import { ACTIVITY_ACTION, automationActions, automationDueDateRuns, automationInactiveRuns, automationStartDateRuns, automationInProgressRuns, automationRunStats, automationRuns, automations, boardMembers, boards, cardAssignees, cardCustomFieldValues, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, comments, customFieldOptions, customFields, lists, users, webhookEndpoints, workspaceMembers, workspaces, type ActivityEvent, type Automation, type AutomationAction, type AutomationRunStats, type AutomationTriggerCustomFieldValue, type Card, type CardCustomFieldValue, type CustomField, type AutomationTriggerType } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Db, type Tx, type TxOnly } from "../db.js";
 import { env } from "../env.js";
@@ -26,6 +26,7 @@ import { startSweepScheduler } from "./sweep-scheduler.js";
 import { absoluteCardUrl } from "./wire-card.js";
 import { customFieldValueEquals, emptyValueColumns, type CustomFieldValueColumns } from "./custom-fields.js";
 import { clearRemindersOnCompletedCards, emitClearedCardReminders, type ClearedCardReminder } from "./card-follow.js";
+import { lockCardsForWrite } from "./card-write-lock.js";
 import { blockedByCounts, captureUnblockedDependents, recordDependencyTransition, captureBlockedDependents, emitDependentsChanged, emitRelationNeighboursChanged, lockWorkspaceRelations } from "./card-relations.js";
 import { notifyDependencyHandoffs, notifyScheduleConflicts, recordBlockersCleared, recordBlockersReopened, type DependencyHandoff, type ScheduleConflictNotice } from "./dependency-notifications.js";
 import { executableAutomationAction, type ExecutableAutomationAction } from "./automation-action.js";
@@ -710,41 +711,123 @@ async function applyDueDateAction(tx: Tx, ctx: AutomationRunContext, action: Exe
   return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, suppressNotificationUserId: ctx.triggerActorId };
 }
 
+export type CompletionTransition<TAudit> = {
+  /** The locked row before the write. */
+  previous: Card;
+  /** The row as this transition wrote it, before any automation it triggered ran. */
+  card: Card;
+  audit: TAudit;
+  clearedReminders: ClearedCardReminder[];
+  handoffs: DependencyHandoff[];
+  /** The dependents' card_unblocked or card_blocked rules. */
+  dependentEffects: AutomationEffects;
+};
+
+/**
+ * Card completion (complete ⇄ reopen): the one in-transaction implementation.
+ *
+ * Every entry point that flips `completedAt` on a live card comes through here: the app and public
+ * API single-card, selection and whole-list routes (`applyCardCompletion` in cards/route-support.ts)
+ * and the `set_completion` action below. It lives beside the automation runners because the two
+ * recurse: a completion runs its dependents' rules, and those rules may complete further cards.
+ * Board mirrors converge completion together with other facets in one write (board-mirror/converge.ts),
+ * and imports create cards already complete; neither is a transition of a live card.
+ *
+ * State: `completedAt` null is open, a timestamp is complete. Completion is independent of list
+ * placement, archival and the in-progress clock; the clock is stopped and resumed by the card SQL
+ * trigger (migration 0092), the progress-time authority, so nothing here writes clock columns.
+ *
+ * Guard: only an active card that is not already in the requested state transitions; anything else
+ * returns null. The row is read after the workspace graph lock, which every completion and archive
+ * writer takes first, so a concurrent transition of this card has either committed or not begun.
+ * Callers still pre-filter for their cheap no-op response; this settles the race.
+ *
+ * Consequences, in order:
+ * 1. the write and a schedule recheck: a complete card leaves the schedule and releases its dependents;
+ * 2. the entry point's audit row, recorded before every row below so feeds read in causal order;
+ * 3. the overdue swing: completing clears overdue notifications, reopening an overdue card re-raises them;
+ * 4. completing clears every reminder on the card, and reopening does not restore them (card-follow.ts);
+ * 5. the dependency handoff: completing clears blockers (handoff row, then card_unblocked rules), and
+ *    reopening re-blocks the dependents that were ready (card_blocked rules with "blocked again").
+ *
+ * Entry points differ only where they must, and supply those parts themselves: the audit row (a
+ * person's coalescable `completion:set` against an automation's system `completed`/`uncompleted`)
+ * and card_marked_complete rules, which only a person's completion fires so automations cannot
+ * recurse into themselves. An automated transition publishes its dependents' effects as automation.
+ */
+export async function applyCompletionTransition<TAudit>(
+  tx: TxOnly,
+  opts: {
+    cardId: string;
+    completed: boolean;
+    workspaceId: string;
+    /** The workspace's organisation: it owns the rules that run and their execution quota. */
+    clientId: string;
+    /** Batches pass one instant so every card in the batch completes at the same time. */
+    at?: Date;
+    triggerActorId: string | null | undefined;
+    /** Who the dependents' handoffs are attributed to; `null` records them as Kanera's. Defaults to the trigger actor. */
+    handoffActorId?: string | null;
+    automated: boolean;
+    recordAudit: (transition: { previous: Card; card: Card; completedAt: Date | null }) => Promise<TAudit>;
+  },
+): Promise<CompletionTransition<TAudit> | null> {
+  const { cardId, completed, workspaceId, clientId } = opts;
+  await lockWorkspaceRelations(tx, workspaceId);
+  const [previous] = await tx.select().from(cards).where(and(eq(cards.id, cardId), eq(cards.workspaceId, workspaceId))).limit(1);
+  if (!previous || previous.archivedAt || Boolean(previous.completedAt) === completed) return null;
+  const before = await captureBlockedDependents(tx, workspaceId, [cardId]);
+  const readyBefore = completed ? [] : await captureUnblockedDependents(tx, workspaceId, [cardId]);
+  // The handoff writes activity on every dependent; hold them with this card in one order.
+  await lockCardsForWrite(tx, [cardId, ...before.map((row) => row.dependentId), ...readyBefore]);
+  const completedAt = completed ? (opts.at ?? new Date()) : null;
+  const [card] = await tx.update(cards).set({ completedAt, updatedAt: new Date() }).where(eq(cards.id, cardId)).returning();
+  await requestScheduleRecheckForCards(tx, [cardId]);
+  const audit = await opts.recordAudit({ previous, card: card!, completedAt });
+  if (completed) await clearOverdueNotificationsForCards(tx, [cardId]);
+  else await createOverdueNotificationsForCards(tx, [cardId]);
+  const clearedReminders = completed ? await clearRemindersOnCompletedCards(tx, [cardId]) : [];
+  const handoffs: DependencyHandoff[] = completed
+    ? await recordBlockersCleared(tx, { before, actorId: opts.handoffActorId === undefined ? opts.triggerActorId ?? null : opts.handoffActorId })
+    : [];
+  const runDependents = async (): Promise<AutomationEffects> => {
+    const actors = { triggerActorId: opts.triggerActorId, handoffActorId: opts.handoffActorId };
+    if (completed) return runCardUnblockedAutomations(tx, { handoffs, workspaceId, clientId, ...actors });
+    const run = await runCardBlockedAutomations(tx, { cardIds: readyBefore, workspaceId, clientId, ...actors, blocker: card! });
+    handoffs.push(...run.handoffs);
+    return run;
+  };
+  const dependentEffects = opts.automated ? await publishAsAutomation(runDependents) : await runDependents();
+  return { previous, card: card!, audit, clearedReminders, handoffs, dependentEffects };
+}
+
 async function applyCompletionAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"set_completion">): Promise<AutomationEffect | null> {
   const { completed } = action.config;
   if (Boolean(ctx.card.completedAt) === completed) return null;
-  const before = await captureBlockedDependents(tx as TxOnly, ctx.workspaceId, [ctx.card.id]);
-  const readyBefore = completed ? [] : await captureUnblockedDependents(tx as TxOnly, ctx.workspaceId, [ctx.card.id]);
-  const completedAt = completed ? new Date() : null;
-  const [card] = await tx.update(cards).set({ completedAt, updatedAt: new Date() }).where(eq(cards.id, ctx.card.id)).returning();
-  ctx.card = card!;
-  // Completing releases the card's dependents on the schedule; reopening holds them up again.
-  await requestScheduleRecheckForCards(tx, [ctx.card.id]);
-  if (completed) await clearOverdueNotificationsForCards(tx, [ctx.card.id]);
-  else await createOverdueNotificationsForCards(tx, [ctx.card.id]);
-  const clearedReminders = completed ? await clearRemindersOnCompletedCards(tx, [ctx.card.id]) : [];
-  const activity = await recordActivity(tx, {
-    boardId: ctx.boardId,
+  // Automated completion has the same consequences as a direct edit; the trigger runner bounds chains.
+  const transition = await applyCompletionTransition(tx as TxOnly, {
+    cardId: ctx.card.id,
+    completed,
     workspaceId: ctx.workspaceId,
-    actorId: null,
-    actorKind: "system",
-    entityType: "card",
-    entityId: ctx.card.id,
-    action: completed ? ACTIVITY_ACTION.COMPLETED : ACTIVITY_ACTION.UNCOMPLETED,
-    payload: { completedAt, automationActionId: action.id },
+    clientId: ctx.clientId,
+    triggerActorId: ctx.triggerActorId,
+    handoffActorId: ctx.handoffActorId,
+    automated: true,
+    recordAudit: ({ completedAt }) => recordActivity(tx, {
+      boardId: ctx.boardId,
+      workspaceId: ctx.workspaceId,
+      actorId: null,
+      actorKind: "system",
+      entityType: "card",
+      entityId: ctx.card.id,
+      action: completed ? ACTIVITY_ACTION.COMPLETED : ACTIVITY_ACTION.UNCOMPLETED,
+      payload: { completedAt, automationActionId: action.id },
+    }),
   });
-  // Automated completion has the same handoff as a direct edit; the trigger runner bounds chains.
-  // Reopening by automation blocks the dependents again, with the same "blocked again" handoff.
-  const handoffs: DependencyHandoff[] = completed
-    ? await recordBlockersCleared(tx as TxOnly, { before, actorId: ctx.handoffActorId === undefined ? ctx.triggerActorId ?? null : ctx.handoffActorId })
-    : [];
-  const dependentEffects = await publishAsAutomation(async () => {
-    if (completed) return runCardUnblockedAutomations(tx, { handoffs, workspaceId: ctx.workspaceId, clientId: ctx.clientId, triggerActorId: ctx.triggerActorId, handoffActorId: ctx.handoffActorId });
-    const run = await runCardBlockedAutomations(tx, { cardIds: readyBefore, workspaceId: ctx.workspaceId, clientId: ctx.clientId, triggerActorId: ctx.triggerActorId, handoffActorId: ctx.handoffActorId, blocker: card! });
-    handoffs.push(...run.handoffs);
-    return run;
-  });
-  return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, dependentEffects, notify: completed, queueLifecycleChanged: true, clearedReminders, completionClientId: ctx.clientId, handoffs, suppressNotificationUserId: ctx.triggerActorId };
+  if (!transition) return null;
+  const { card, audit: activity, dependentEffects, clearedReminders, handoffs } = transition;
+  ctx.card = card;
+  return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card, ctx.clientId), activity, dependentEffects, notify: completed, queueLifecycleChanged: true, clearedReminders, completionClientId: ctx.clientId, handoffs, suppressNotificationUserId: ctx.triggerActorId };
 }
 
 async function applyMoveAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"move_to_list" | "move_to_top" | "move_to_bottom">): Promise<AutomationEffect | null> {

@@ -8,7 +8,7 @@ import type { ColorToken } from "@kanera/shared/colors";
 import { addWorkingDays, dateKeyOf, dayNumber } from "@kanera/shared/schedule";
 import type { TxOnly } from "../db.js";
 import { allocateCardKeys } from "../lib/card-keys.js";
-import { type seedCalendar, MARKETING_DEADLINES, OTHER_DEADLINES } from "./seed-calendar.js";
+import { seedNotificationTime, type seedCalendar, MARKETING_DEADLINES, OTHER_DEADLINES } from "./seed-calendar.js";
 
 // The dated enhancement replaces the launch note, so both versions share its authored diagram.
 export const autumnLaunchSequence = `## Launch sequence
@@ -69,7 +69,11 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
   clientId: string; userIds: ReadonlyMap<string, string>; calendar: ReturnType<typeof seedCalendar>;
 }) {
   const { calendar, userIds } = input;
-  const at = calendar.activityInstant;
+  // Author the final planning pass on prior working days, independent of reset time.
+  // Sharing the reset instant made unrelated people appear to act simultaneously at 17:00.
+  const at = seedNotificationTime(calendar.instant, { workingDaysAgo: 1, hour: 16, minute: 43 });
+  let moveIndex = 0;
+  let creationIndex = 0;
   const boardRows = await tx.select({ board: boards, workspace: workspaces }).from(boards)
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId)).where(eq(workspaces.clientId, input.clientId));
   const marketing = boardRows.find(({ workspace }) => workspace.name === "Marketing & Creative")!.workspace;
@@ -91,6 +95,9 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
   const update = async (number: number, values: Partial<typeof cards.$inferInsert>) => {
     const row = card(number);
     if (values.listId && values.listId !== row.listId) {
+      const minuteOfDay = 10 * 60 + 13 + moveIndex++ * 11;
+      const movedAt = seedNotificationTime(calendar.instant, { workingDaysAgo: 1,
+        hour: Math.floor(minuteOfDay / 60), minute: minuteOfDay % 60 });
       const [owner] = await tx.select().from(cardAssignees).where(eq(cardAssignees.cardId, row.id))
         .orderBy(cardAssignees.assignedAt, cardAssignees.userId).limit(1);
       // These authored moves represent the owner's recent work. Without an audit row the
@@ -100,9 +107,9 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
         actorId: owner?.userId ?? row.createdById, actorKind: "user",
         entityType: "card", entityId: row.id, action: "moved",
         payload: { fromListId: row.listId, toListId: values.listId, prevPosition: row.position, position: row.position },
-        createdAt: at, updatedAt: at,
+        createdAt: movedAt, updatedAt: movedAt,
       });
-      values = { ...values, listEnteredAt: at, updatedAt: at };
+      values = { ...values, listEnteredAt: movedAt, updatedAt: movedAt };
     }
     await tx.update(cards).set(values).where(eq(cards.id, row.id));
     Object.assign(row, values);
@@ -128,17 +135,20 @@ export async function enhanceDemoSeed(tx: TxOnly, input: {
     // Seed identities are allocated by the same workspace counter as application-created cards.
     let row = marketingCards.find((item) => item.title === title);
     if (!row) {
+      const minuteOfDay = 9 * 60 + 23 + creationIndex++ * 37;
+      const createdAt = seedNotificationTime(calendar.instant, { workingDaysAgo: 3,
+        hour: Math.floor(minuteOfDay / 60), minute: minuteOfDay % 60 });
       const [identity] = await allocateCardKeys(tx, marketing.id, 1);
       [row] = await tx.insert(cards).values({ ...identity!, title, description, boardId: boardId(boardName),
         listId: listId(alias === "AUTOMATION" ? "In Progress" : "Ready to Start"), position: "5000",
         dueDateLocalDate: offset === null ? null : calendar.business(offset), dueDateSlot: null,
-        dueDateTimezone: offset === null ? null : "Europe/London", createdById: userIds.get(owner)!, createdAt: at, updatedAt: at,
+        dueDateTimezone: offset === null ? null : "Europe/London", createdById: userIds.get(owner)!, createdAt, updatedAt: createdAt,
       }).returning();
       await tx.insert(activityEvents).values({
         boardId: row!.boardId, workspaceId: row!.workspaceId,
         actorId: userIds.get(owner)!, actorKind: "user",
         entityType: "card", entityId: row!.id, action: "created",
-        payload: { title, listId: row!.listId }, createdAt: at, updatedAt: at,
+        payload: { title, listId: row!.listId }, createdAt, updatedAt: createdAt,
       });
       marketingCards.push(row!);
       byNumber.set(row!.number, row!);

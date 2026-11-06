@@ -2,7 +2,7 @@ import { InjectionToken } from "@angular/core";
 import type { ApiClient } from "../../../core/api/api.client";
 import type { BoardState } from "../board-state";
 import { captureBoardCustomFieldWrite, type SettleCustomFieldWrite } from "../custom-field-write";
-import { resolveInProgressClock, type ReportedInProgressClock } from "../time-in-progress.util";
+import type { ReportedInProgressClock } from "../time-in-progress.util";
 import type { AnyCard } from "./table-view.types";
 
 /**
@@ -39,23 +39,14 @@ export function boardStateCardStore(state: BoardState, api: ApiClient): TableCar
     setCardLabels: (cardId, labelIds) => state.setCardLabels(cardId, labelIds),
     captureCustomFieldWrite: (cardId, fieldId, boardId) => captureBoardCustomFieldWrite(state, cardId, fieldId, boardId),
     moveCardToList: async (cardId, listId) => {
-      const previous = state.cardById(cardId);
-      if (!previous) return;
+      if (!state.cardById(cardId)) return;
       const position = state.positionForCardDrop(cardId, listId, null, undefined);
-      state.moveCard(cardId, listId, position);
-      try {
-        const moved = await api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(
-          `/cards/${cardId}/move`,
-          { listId, beforeCardId: null },
-        );
-        // The server may rebalance the mixed card/separator lane before appending. Settle from its
-        // authoritative result instead of depending on the viewer receiving their own socket echo.
-        state.moveCard(moved.id, moved.listId, moved.position, moved);
-      } catch (error) {
-        // Normalised, so a compact row missing null/zero fields still restores them.
-        state.moveCard(previous.id, previous.listId, previous.position, resolveInProgressClock(previous, previous));
-        throw error;
-      }
+      // The server may rebalance the mixed card/separator lane before appending; sendCardMove
+      // settles from its result rather than depending on the viewer receiving their own echo.
+      await state.sendCardMove(cardId, listId, position, () => api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(
+        `/cards/${cardId}/move`,
+        { listId, beforeCardId: null },
+      ));
     },
   };
 }

@@ -116,7 +116,7 @@ export const ja: ErrorCatalog = {
   "Your payment method needs attention before we can add seats. Update your payment method, then try again.":
     "シートを追加する前に、お支払い方法を確認する必要があります。お支払い方法を更新してから、もう一度お試しください。",
   "a board cannot be both a mirror source and a mirror target":
-    "ボードをミラーの元と先の両方にすることはできません。",
+    "ボードをミラーのコピー元とコピー先の両方にすることはできません。",
   "a board cannot mirror itself":
     "ボードを自分自身にミラーすることはできません。",
   "a checklist changed while preparing the batch; retry with fresh content":
@@ -158,9 +158,9 @@ export const ja: ErrorCatalog = {
   "archived cards are read-only":
     "アーカイブ済みのカードは読み取り専用です。",
   "archived source lists cannot be mirrored":
-    "アーカイブ済みの元リストはミラーできません。",
+    "アーカイブ済みのコピー元リストはミラーできません。",
   "archived target lists cannot be selected":
-    "アーカイブ済みの先リストは選択できません。",
+    "アーカイブ済みのコピー先リストは選択できません。",
   "assignee is not an assignable member":
     "担当者は割り当て可能なメンバーではありません。",
   "attachment storage unavailable":
@@ -458,9 +458,9 @@ export const ja: ErrorCatalog = {
   "one or more set custom field ids are invalid":
     "設定するカスタムフィールドIDに無効なものがあります。",
   "one or more source lists are not in the source workspace":
-    "元のワークスペースにない元リストがあります。",
+    "コピー元のワークスペースにないコピー元リストがあります。",
   "one or more target lists are not in the target workspace":
-    "先のワークスペースにない先リストがあります。",
+    "コピー先のワークスペースにないコピー先リストがあります。",
   "one or more trigger user ids are not assignable workspace members":
     "トリガーのユーザーIDに、割り当て可能なワークスペースメンバーではないものがあります。",
   "one or more user ids are not assignable members":
@@ -582,7 +582,7 @@ export const ja: ErrorCatalog = {
   "smtpConfig required":
     "smtpConfigは必須です。",
   "source lists must be unique":
-    "元リストは重複できません。",
+    "コピー元リストは重複できません。",
   "standalone board configuration must contain exactly one board":
     "独立ボードの構成にはボードを1つだけ含める必要があります。",
   "standalone board import target not found":
@@ -632,7 +632,7 @@ export const ja: ErrorCatalog = {
   "targetListId is required for cross-workspace mirrors":
     "ワークスペースをまたぐミラーにはtargetListIdが必要です。",
   "targetListId must differ from source list":
-    "targetListIdは元のリストとは別のものにしてください。",
+    "targetListIdはコピー元のリストとは別のものにしてください。",
   "telegram requires a bot token and chat id":
     "TelegramにはボットトークンとチャットIDが必要です。",
   "that is already your email address":
@@ -897,5 +897,5 @@ export const ja: ErrorCatalog = {
   "a completed card cannot block another card": "完了したカードは他のカードをブロックできません。",
   "cards must be in the same workspace to be related": "関連付けるカードは同じワークスペースにある必要があります。",
   "relation not found": "関係が見つかりません。",
-  "this relation would create a blocking cycle": "この関係はブロックの循環を作ります。",
+  "this relation would create a blocking cycle": "この関連付けにより、ブロックの循環が発生します。",
 };

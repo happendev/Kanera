@@ -14,7 +14,7 @@ See what is assigned, what changed, what is blocked, and what has been completed
 
 </div>
 
-![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg?v=20261105refresh)
+![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg?v=20261105refresh2)
 
 Kanera coordinates assigned, active, blocked, and completed work across projects, clients, and teams from one fast, polished workspace. It brings boards, structured tasks, dependency maps and timelines, notes, assignments, progress history, automation, and integrations into one focused system—more visibility than a basic Kanban board without the overhead of a heavyweight work suite.
 
@@ -61,7 +61,7 @@ Use Claude, ChatGPT, Codex, Cursor, or another agent you already work with to pi
 
 An agent opens a run before multi-step work and updates it with a short progress note. Everyone viewing the board sees a live chip on the card; it turns amber when the agent is waiting on a person. Open the card to see the agent, its current work, and when it last reported. A pull request or session link can take you straight to the result.
 
-![Kanera card detail showing a live Claude run, an agent-attributed comment, and the All, Comments and Agents activity filters](docs/readme-assets/agent-runs.jpg?v=20261105refresh)
+![Kanera card detail showing a live Claude run, an agent-attributed comment, and the All, Comments and Agents activity filters](docs/readme-assets/agent-runs.jpg?v=20261105refresh2)
 
 When the run ends, its outcome and closing summary stay in the card's activity. Runs that stop reporting are marked stalled after fifteen minutes, so an interrupted agent does not leave work looking active. A blocked run makes the wait visible; the agent should also comment with its question so watchers and assignees are notified.
 
@@ -69,7 +69,7 @@ When the run ends, its outcome and closing summary stay in the card's activity. 
 
 With an OAuth connection, comments and changes show the person the agent acted for plus a **via Claude**, **via Codex**, or other agent badge. That includes browser sign-in through the CLI: name the agent with `kanera auth login --agent "Claude Code"`. Personal API keys attribute actions to their owner without a via badge; workspace and board keys use the key's name.
 
-![Kanera notification drawer on the Agent tab showing a comment on the campaign tracking card attributed to Amelia Hart via Codex](docs/readme-assets/agent-notifications.jpg?v=20261030mentionsagents)
+![Kanera notification drawer on the Agent tab showing a comment on the campaign tracking card attributed to Amelia Hart via Codex](docs/readme-assets/agent-notifications.jpg?v=20261105refresh2)
 
 Your agent's changes can notify you even though it acts on your behalf. The **Agent** tab brings those updates together, and **Work Done** distinguishes agent output from your own actions. Agents still operate within the connected person's current board permissions, and read-only credentials prevent writes at the server.
 
@@ -97,7 +97,7 @@ Read-only credentials are enforced by the server, and self-hosted Kanera exposes
 
 Start with the **Agent Workflow** template: **Backlog → Agent Working → Waiting on Me → Review → Done**. Describe the task on a card, then ask your agent to pick it up. Following Kanera's agent instructions, it moves the card as work starts, needs your input, or finishes. You review the result and decide when it belongs in Done.
 
-![Kanera Agent Workflow board with Backlog, Agent Working, Waiting on Me, Review, and Done lists, including live agent run chips](docs/readme-assets/agent-workflow.jpg?v=20261025noportfolio)
+![Kanera Agent Workflow board with Backlog, Agent Working, Waiting on Me, Review, and Done lists, including live agent run chips](docs/readme-assets/agent-workflow.jpg?v=20261105refresh2)
 
 The workflow combines ordinary cards with **agent runs**. Runs track a working session; card moves remain explicit actions by the agent or a person, so starting or finishing a run does not silently move the card.
 
@@ -107,13 +107,13 @@ The workflow combines ordinary cards with **agent runs**. Runs track a working s
 
 Start with overdue work, items due today, the next seven days, and recent progress in one focused view. Jump back into active boards and scan the week without opening each project separately.
 
-![Kanera Home showing Amelia's focus tiles, recent progress, ranked Up next queue, recent boards, and activity in dark mode](docs/readme-assets/home.jpg?v=20261105refresh)
+![Kanera Home showing Amelia's focus tiles, recent progress, ranked Up next queue, recent boards, and activity in dark mode](docs/readme-assets/home.jpg?v=20261105refresh2)
 
 ### Boards and shared lists keep the workflow visible
 
 Move cards through lists while keeping labels, assignees, due dates, checklist progress, and visual covers in view. Boards in a workspace share the same ordered lists, so stages such as Intake, In progress, Review, and Done remain consistent across related projects.
 
-![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg?v=20261105refresh)
+![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg?v=20261105refresh2)
 
 ### Keyboard shortcuts keep routine actions close
 
@@ -125,7 +125,7 @@ Press `?` to open a shortcut sheet that reflects the current screen. Use two-key
 
 Build one ranked queue from cards assigned to you across every accessible board. Reorder it as priorities change, keep source boards and due dates visible, and see the same order on Home, My Cards, board cards, and Table.
 
-![Kanera My Cards showing a ranked Up next queue beside assigned work](docs/readme-assets/my-cards-up-next.jpg?v=20261105refresh)
+![Kanera My Cards showing a ranked Up next queue beside assigned work](docs/readme-assets/my-cards-up-next.jpg?v=20261105refresh2)
 
 
 
@@ -141,11 +141,11 @@ Export the filtered result to Excel as a multi-sheet workbook containing card ro
 
 Open **Overview** in **Team Cards** to see everyone’s work across boards. One panel per teammate answers "what is each person working on, and what is next?" without opening each board in turn: their In progress cards longest-running first with time in progress, what they recently moved or created themselves, the head of their Up next queue, their other assigned cards by due date, and what they finished this week. Open, In progress, Overdue, and Done counts expand into the full list, in-progress work with no assignee gets its own panel, and folding a section folds it for everyone.
 
-![Kanera Team overview with panels for Ben Ortega, Grace Liu, and Henry Walsh showing their In progress cards with time in progress, recent activity, Up next, and assigned work](docs/readme-assets/team-overview.jpg?v=20261105refresh)
+![Kanera Team overview with panels for Ben Ortega, Grace Liu, and Henry Walsh showing their In progress cards with time in progress, recent activity, Up next, and assigned work](docs/readme-assets/team-overview.jpg?v=20261105refresh2)
 
 Pick one teammate to see just their panel with their Up next queue docked beside it. Reorder their queue, and queue what they should do next from the open cards they have not queued yet, listed soonest due first.
 
-![Kanera Team overview focused on Ben Ortega with his ranked Up next queue and the open cards not yet queued docked beside his panel](docs/readme-assets/team-overview-up-next.jpg?v=20261105refresh)
+![Kanera Team overview focused on Ben Ortega with his ranked Up next queue and the open cards not yet queued docked beside his panel](docs/readme-assets/team-overview-up-next.jpg?v=20261105refresh2)
 
 ### Dependencies show what can move next
 
@@ -205,25 +205,25 @@ Then decide where each notification type reaches you: email, browser push, ntfy,
 
 Descriptions, custom fields, checklists, due dates, comments, attachments, and activity all live in one focused card view.
 
-![Kanera card detail showing custom fields, an assignable checklist, comments, and activity](docs/readme-assets/card-detail.jpg?v=20261105refresh)
+![Kanera card detail showing custom fields, an assignable checklist, comments, and activity](docs/readme-assets/card-detail.jpg?v=20261105refresh2)
 
 ### Team Cards brings assigned work together across boards
 
 See the whole visible team or focus on one teammate without losing each card's board, list, fields, or permissions. Switch between Board, Team overview, Table, Calendar, Dependencies, and Work Done views to review ownership, workload, and execution order across projects.
 
-![Kanera Team Cards focused on Ben Ortega with his ranked Up next queue beside assigned work across accessible boards](docs/readme-assets/team-cards.jpg?v=20261105refresh)
+![Kanera Team Cards focused on Ben Ortega with his ranked Up next queue beside assigned work across accessible boards](docs/readme-assets/team-cards.jpg?v=20261105refresh2)
 
 ### Automations keep routine work moving
 
 Build automations from a **When** trigger and ordered **Do** actions. Triggers can respond when cards enter or leave lists, a custom field changes to a selected value, a due date approaches or arrives, a start date arrives, assignments and labels change, checklists or cards complete, or a card reaches the configured inactivity period. Kanera can then add labels, assign people, apply checklist templates, set due dates and custom fields, move cards, or mark work complete. Automations can belong to one standalone board or run across every board in a workspace.
 
-![Kanera automation builder showing a trigger and ordered card actions](docs/readme-assets/automations.jpg?v=20261105refresh)
+![Kanera automation builder showing a trigger and ordered card actions](docs/readme-assets/automations.jpg?v=20261105refresh2)
 
 ### Work Done shows what actually moved forward
 
 Review a daily history of cards created, moved, and completed, plus finished checklist items. Use it on a board, My Cards, or Team Cards for standups, async updates, progress reviews, and client check-ins.
 
-![Kanera Work Done view showing a daily history of card and checklist progress](docs/readme-assets/work-done.jpg?v=20261105refresh)
+![Kanera Work Done view showing a daily history of card and checklist progress](docs/readme-assets/work-done.jpg?v=20261105refresh2)
 
 ### Fully functional on mobile and installable as a PWA
 

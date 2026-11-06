@@ -133,7 +133,7 @@ import { ToastService } from "../../shared/toast.service";
     ul { columns: 2; margin: 10px 0 0; padding-left: 22px; }
     li { margin: 5px 0; }
     .counts { margin-top: 14px; }
-    .spin { animation: spin 1s linear infinite; }
+    .spin { display: inline-block; width: 1em; height: 1em; line-height: 1; text-align: center; transform-origin: 50% 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (max-width: 800px) {
       .panel-head { flex-direction: column; }

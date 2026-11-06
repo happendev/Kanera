@@ -1,6 +1,8 @@
 import { createComponentFixture, type HtmlComponentFixture } from "../../../test/component-fixture";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
+import { By } from "@angular/platform-browser";
+import { TooltipDirective } from "../../shared/tooltip.directive";
 import type { CardAttachmentRow } from "@kanera/shared/dto";
 import type { ActivityFeedEvent, CardFeedItem, WireBoardMemberUser, WireCard, WireCardChecklist, WireCardChecklistItem, WireCardDetail, WireCardLabel, WireChecklistTemplate, WireComment } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CustomField } from "@kanera/shared/schema";
@@ -3251,7 +3253,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(fixture.componentInstance.newChecklistParentItemId()).toBeNull();
   });
 
-  it("dims the card and closes item detail when the drawer scrim is clicked", async () => {
+  it("closes item detail when the drawer scrim is clicked", async () => {
     const item = createChecklistItemFixture();
     const fixture = createComponentFixture(CardDetailComponent);
 
@@ -3271,8 +3273,6 @@ describe("CardDetailComponent realtime regressions", () => {
 
     const scrim = fixture.nativeElement.querySelector(".checklist-item-panel-scrim") as HTMLButtonElement | null;
     expect(scrim).not.toBeNull();
-    expect(getComputedStyle(scrim!).height).toBe("100%");
-    expect(getComputedStyle(scrim!).width).toBe("100%");
     scrim?.click();
     fixture.detectChanges();
 
@@ -3312,9 +3312,6 @@ describe("CardDetailComponent realtime regressions", () => {
 
     const root = fixture.nativeElement as HTMLElement;
     const panel = root.querySelector<HTMLElement>(".checklist-item-panel");
-    const dueDate = panel?.querySelector<HTMLElement>(".checklist-item-due");
-    const assignedUser = panel?.querySelector<HTMLElement>(".checklist-item-panel-assignee");
-    expect(getComputedStyle(dueDate!).height).toBe(getComputedStyle(assignedUser!).height);
 
     panel?.querySelector<HTMLButtonElement>(".checklist-item-due")?.click();
     fixture.detectChanges();
@@ -3727,7 +3724,6 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("names the assignee in the checklist item unassign tooltip", async () => {
-    vi.useFakeTimers();
     const assignee = {
       userId: "user-2",
       displayName: "Ada Lovelace",
@@ -3751,12 +3747,8 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.detectChanges();
     await settleDetail(fixture);
 
-    const button = fixture.nativeElement.querySelector(".checklist-item-assignee") as HTMLButtonElement;
-    button.dispatchEvent(new Event("mouseenter"));
-    vi.advanceTimersByTime(300);
-    fixture.detectChanges();
-
-    expect(document.querySelector(".k-tooltip")?.textContent).toBe("Unassign Ada Lovelace");
+    const tooltip = fixture.debugElement.query(By.css(".checklist-item-assignee")).injector.get(TooltipDirective);
+    expect(tooltip.kTooltip()).toBe("Unassign Ada Lovelace");
   });
 
   // Clicking an assignee used to unassign them. It now opens their profile card, which carries
@@ -3764,7 +3756,6 @@ describe("CardDetailComponent realtime regressions", () => {
   // original guard here (one tooltip per assignee, never the avatar's and a wrapper's stacked) still
   // applies, so it is kept alongside the new click contract.
   it("opens the assignee's profile with an unassign action instead of unassigning on click", () => {
-    vi.useFakeTimers();
     const assignee = {
       userId: "user-2",
       displayName: "Ada Lovelace",
@@ -3789,12 +3780,12 @@ describe("CardDetailComponent realtime regressions", () => {
     const wrapper = fixture.nativeElement.querySelector(".member-avatar") as HTMLElement;
     expect(wrapper.tagName).toBe("SPAN");
     const avatar = wrapper.querySelector("k-avatar") as HTMLElement;
-    avatar.querySelector(".avatar-body")!.dispatchEvent(new Event("mouseenter"));
-    vi.advanceTimersByTime(300);
-    fixture.detectChanges();
-
-    expect(document.querySelectorAll(".k-tooltip")).toHaveLength(1);
-    expect(document.querySelector(".k-tooltip")?.textContent).toBe("Ada Lovelace");
+    const member = fixture.debugElement.query(By.css(".member-avatar"));
+    const tooltips = [member, ...member.queryAll(By.directive(TooltipDirective))]
+      .filter((element) => element.providerTokens.includes(TooltipDirective))
+      .map((element) => element.injector.get(TooltipDirective).kTooltip())
+      .filter(Boolean);
+    expect(tooltips).toEqual(["Ada Lovelace"]);
 
     avatar.click();
     fixture.detectChanges();

@@ -115,6 +115,67 @@ void test("whole-list archive captures blockers moved into the list while it wai
     assert.equal(response.json<{ archived: number }>().archived, 2);
     const [activity] = await db.select().from(activityEvents).where(and(eq(activityEvents.entityId, workspace.otherListId), eq(activityEvents.action, "updated")));
     assert.deepEqual(activity?.payload, { cardsArchived: 2 });
+    // Each card's own history records the archive, as the single-card and selection routes do.
+    const cardArchives = await db.select({ entityId: activityEvents.entityId }).from(activityEvents)
+      .where(and(inArray(activityEvents.entityId, [blocker.id, initial.id]), eq(activityEvents.action, "archived")));
+    assert.deepEqual(cardArchives.map((row) => row.entityId).sort(), [blocker.id, initial.id].sort());
+  } finally {
+    await app.close();
+  }
+});
+
+// Failure modes: two archive or completion requests for the same card (two people, or a person and
+// an agent) both pass the route's pre-check, so the second rewrites the timestamp and adds a second
+// history row and handoff. E2E cannot hold both requests behind the graph lock at once.
+void test("a card transition that loses the race to the same transition is not applied twice", async () => {
+  const { app, owner, workspace, insertCard } = await seedTwoBoards("relation-transition-race");
+  try {
+    const blocker = await insertCard(workspace.boardId, "Raced blocker");
+    const dependent = await insertCard(workspace.boardId, "Waiting on the raced blocker");
+    assert.equal((await addRelation(app, owner.auth, dependent.id, blocker.id, "blocked_by")).statusCode, 201);
+    const raced = await insertCard(workspace.boardId, "Raced completion");
+    // Coalescing would fold a second completion row into the first; a rule that fires per
+    // completion shows a duplicate transition.
+    const rule = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/automations`, headers: owner.auth,
+      payload: { enabled: true, triggerType: "card_marked_complete", actions: [{ type: "post_comment", config: { template: "Completed once" } }] } });
+    assert.equal(rule.statusCode, 201, rule.body);
+
+    for (const [url, payload, cardId, action] of [
+      [`/cards/${blocker.id}/archive`, { archived: true }, blocker.id, "archived"],
+      [`/cards/${raced.id}/completion`, { completed: true }, raced.id, "completion:set"],
+    ] as const) {
+      let signalLocked!: () => void;
+      let release!: () => void;
+      const locked = new Promise<void>((resolve) => { signalLocked = resolve; });
+      const released = new Promise<void>((resolve) => { release = resolve; });
+      const holder = db.transaction(async (tx) => {
+        await lockWorkspaceRelations(tx, workspace.id);
+        signalLocked();
+        await released;
+      });
+      await locked;
+      const requests = [1, 2].map(() => app.inject({ method: "PATCH", url, headers: owner.auth, payload }));
+      try {
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          const waiting = await pool.query<{ count: number }>("select count(*)::int as count from pg_stat_activity where datname = current_database() and wait_event = 'advisory'");
+          if ((waiting.rows[0]?.count ?? 0) >= 2) break;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      } finally {
+        release();
+        await holder;
+      }
+      const responses = await Promise.all(requests);
+      for (const response of responses) assert.equal(response.statusCode, 200, response.body);
+      const rows = await db.select().from(activityEvents).where(and(eq(activityEvents.entityId, cardId), eq(activityEvents.action, action)));
+      assert.equal(rows.length, 1, `${action} must be recorded once`);
+    }
+    assert.deepEqual((await db.select().from(comments).where(eq(comments.cardId, raced.id))).map((row) => row.body), ["Completed once"]);
+    const handoffs = await db.select().from(activityEvents).where(and(eq(activityEvents.entityId, dependent.id), eq(activityEvents.action, "blockers:cleared")));
+    assert.equal(handoffs.length, 1, "the dependent is handed off once");
+    const [archived] = await db.select().from(cards).where(eq(cards.id, blocker.id));
+    const [archive] = await db.select().from(activityEvents).where(and(eq(activityEvents.entityId, blocker.id), eq(activityEvents.action, "archived")));
+    assert.equal(archived?.archivedAt?.toISOString(), (archive?.payload as { archivedAt: string }).archivedAt, "the loser must not rewrite archivedAt");
   } finally {
     await app.close();
   }
