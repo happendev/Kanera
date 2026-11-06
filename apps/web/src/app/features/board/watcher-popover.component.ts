@@ -50,10 +50,10 @@ import { AvatarComponent } from "../../shared/avatar.component";
       max-height: var(--ap-max-height, 340px);
       overflow-y: auto;
       padding: 10px;
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-lg);
+      border: 1px solid var(--overlay-border);
+      border-radius: var(--radius-md);
       background: var(--surface-overlay);
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow-pop);
     }
 
     .wp-toggle {
@@ -63,9 +63,11 @@ import { AvatarComponent } from "../../shared/avatar.component";
       align-items: center;
       gap: 8px;
       padding: 8px 10px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      background: var(--surface-2);
+      /* Outlined like the board members menu's controls: --surface-2 sits below the dark overlay
+         fill and --border vanished against it. */
+      border: 1px solid var(--overlay-border);
+      border-radius: var(--radius-sm);
+      background: transparent;
       color: var(--text);
       font: inherit;
       font-size: var(--text-base);
@@ -75,7 +77,6 @@ import { AvatarComponent } from "../../shared/avatar.component";
 
     .wp-toggle:hover:not(:disabled) {
       background: var(--surface-hover);
-      border-color: var(--border-strong);
     }
 
     .wp-toggle:disabled {
@@ -106,7 +107,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
     }
 
     .wp-row:hover {
-      background: var(--surface-2);
+      background: var(--surface-hover);
     }
 
     .wp-name {

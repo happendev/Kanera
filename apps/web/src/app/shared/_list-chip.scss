@@ -12,7 +12,10 @@
   max-width: 100%;
   padding: 0 8px;
   background: color-mix(in srgb, var(--list-color, var(--text-muted)) 15%, transparent);
-  color: color-mix(in srgb, var(--list-color, var(--text-muted)) 65%, var(--text));
+  // The hue share is per theme family (--list-chip-hue in styles.scss): 65% toward the light dark-theme
+  // ink, but on the light themes 65% of a warm hue (amber, yellow) left too little near-black in the mix
+  // and the name fell to ~3.3:1 on its wash.
+  color: color-mix(in srgb, var(--list-color, var(--text-muted)) var(--list-chip-hue, 65%), var(--text));
   border-radius: var(--radius-sm);
   // The shared chip radius and metrics (shared/_chip.scss): 20px tall, --text-xs at 500, so a list
   // chip, a label and a state chip sitting side by side line up as one system. Height

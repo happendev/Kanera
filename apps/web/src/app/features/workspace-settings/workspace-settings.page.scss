@@ -152,9 +152,11 @@
     width: 84px;
     height: 34px;
     padding: 0 10px;
-    border: 1px solid var(--border);
+    // The app field recipe (styles.scss input): --border-strong edge on the themed field fill. The
+    // page hairline left these day counts fainter than the text fields in the same form.
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius);
-    background: var(--surface);
+    background: var(--input-bg);
     color: var(--text);
     font: inherit;
   }

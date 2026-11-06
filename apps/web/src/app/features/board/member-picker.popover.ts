@@ -10,7 +10,7 @@ import {
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { appLocale } from "../../core/i18n/locale";
 import { AvatarComponent } from "../../shared/avatar.component";
-import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
+import { ANCHORED_HOST_STYLES, PANEL_INPUT_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { ListboxNav } from "../../shared/listbox-nav";
 import { MatchHighlightComponent } from "../../shared/match-highlight.component";
@@ -30,7 +30,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
         <span class="mp-title" i18n="Member picker heading">Assigned Members</span>
       </div>
       <input
-        class="mp-search"
+        class="ap-input mp-search"
         type="text"
         placeholder="Search members…"
         i18n-placeholder
@@ -80,12 +80,13 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
   `,
   styles: [
     ANCHORED_HOST_STYLES,
+    PANEL_INPUT_STYLES,
     `
     .mp-panel {
       background: var(--surface-overlay);
       /* Picker elevation role (apps/web/AGENTS.md), shared with the label and select pickers. */
       border: 1px solid var(--overlay-border);
-      border-radius: var(--radius-lg);
+      border-radius: var(--radius-md);
       box-shadow: var(--shadow-pop);
       padding: 10px;
       width: 100%;
@@ -108,18 +109,10 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
       color: var(--text);
     }
 
-    .mp-search {
-      /* Field fill and border tier, as in the label picker: --surface-2 is the selected-row wash,
-         and on dark overlays --border all but vanishes. */
-      background: var(--input-bg);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      color: var(--text);
-      padding: 6px 8px;
-      font-size: var(--text-base);
-      outline: none;
-      &:focus { border-color: var(--accent, var(--text)); }
-    }
+    /* The shared picker field (.ap-input): every popover search is one size and one edge, so the
+       label, member and option pickers no longer drift apart. flex: none keeps a long list from
+       squeezing it. */
+    .mp-search { flex: none; }
 
     .mp-list {
       display: flex;
@@ -153,7 +146,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
       width: 100%;
       transition: background-color 0.12s;
       &:hover { background: var(--surface-hover); }
-      &.is-selected { background: var(--surface-2); }
+      &.is-selected { background: var(--overlay-selected, var(--accent-soft)); }
       /* Keyboard row (the pointer moves it too): hover wash plus an inset ring so it stays visible
          on an already-tinted selected row. A ring, never an edge stripe. */
       &.is-active {
@@ -168,10 +161,6 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
         height: auto;
         min-height: 44px;
       }
-
-      /* The search field matches the rows under it rather than the 36px global input; the element
-         selector is needed to outrank that global input rule. */
-      input.mp-search { flex: none; height: 44px; }
     }
 
     .mp-avatar {
@@ -209,7 +198,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
       gap: 8px;
       width: 100%;
       padding: 7px 8px;
-      border: 1px solid var(--border);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-sm);
       background: transparent;
       color: var(--text-muted);
@@ -217,7 +206,7 @@ const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
       font-size: var(--text-base);
       text-align: left;
       &:hover {
-        background: var(--surface-2);
+        background: var(--surface-hover);
         color: var(--text);
       }
     }

@@ -2080,10 +2080,10 @@
   flex-direction: column;
   gap: 8px;
   padding: 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius-md);
   background: var(--surface-overlay);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-pop);
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -2506,8 +2506,8 @@ button.checklist-hide-toggle {
   overflow-y: auto;
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
   padding: 4px;
   display: flex;
   flex-direction: column;
@@ -2916,8 +2916,8 @@ button.checklist-hide-toggle {
   width: var(--ap-width, 220px);
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
   padding: 4px;
   display: flex;
   flex-direction: column;

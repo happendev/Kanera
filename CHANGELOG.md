@@ -37,6 +37,7 @@ All notable changes to Kanera are documented here.
 - **Kanera's own messages:** notifications and card activity from Kanera itself (time-in-progress alerts, automations, scheduling conflicts) now show the Kanera logo mark instead of a generic avatar.
 
 ### Fixed
+- **Pickers and menus are easier to read:** the date, reminder and period pickers, label, member and watcher popovers, and other menus now share one look in every theme. Shortcut and time buttons no longer fade into the panel on Dark and Carbon, and list names, "too long" counts and other amber warnings are readable on Light and Paper.
 - **Offline notes:** reopening a previously viewed workspace note while offline now shows its contents instead of “No note selected”. The note updates automatically when you're back online.
 - Rapidly reversing a list move now removes its activity and inbox notification. Forward moves remain separate, and every move still runs its events and automations. Applies to individual and bulk moves.
 - Deleting a standalone board removes it from the sidebar straight away instead of leaving a dead link until the page is reloaded.

@@ -22,8 +22,8 @@
   color: var(--text);
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border, var(--border-strong));
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
   outline: none;
   animation: up-enter var(--motion-base, 180ms) cubic-bezier(0.16, 1, 0.3, 1);
 

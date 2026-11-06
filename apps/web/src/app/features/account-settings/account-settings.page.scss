@@ -607,7 +607,9 @@
   padding: 8px 12px;
   // The global button reset sets nowrap; the second line has to wrap at phone width.
   white-space: normal;
-  border: 1px solid var(--border);
+  // --border-strong, not the page hairline: --border sits ~1.2:1 off --surface on the dark themes, so
+  // the unselected choice read as loose text rather than a card. Matches k-theme-picker above it.
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text-muted);
@@ -1114,10 +1116,10 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius-md);
   background: var(--surface-overlay);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
+  box-shadow: var(--shadow-pop);
   overflow: auto;
   overscroll-behavior: contain;
 

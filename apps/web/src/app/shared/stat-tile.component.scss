@@ -148,14 +148,15 @@
     }
   }
 
-  // Needs attention but has not slipped yet (at risk, aging): the amber the board uses for it.
+  // Needs attention but has not slipped yet (at risk, aging): the amber the board uses for it, as the
+  // theme-tuned --warning text token (--color-amber is a fill hue and unreadable as text on light).
   &.warning {
     .stat-tile-label i {
-      color: var(--color-amber);
+      color: var(--warning);
     }
 
     strong {
-      color: var(--color-amber);
+      color: var(--warning);
     }
   }
 

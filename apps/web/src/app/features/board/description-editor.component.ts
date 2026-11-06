@@ -778,10 +778,10 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       width: var(--ap-width, 240px);
       box-sizing: border-box;
       overflow: auto;
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-md, 8px);
       background: var(--surface-overlay);
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow-pop);
       padding: 4px;
       overscroll-behavior: contain;
     }
@@ -789,10 +789,10 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
     .de-emoji-popover {
       width: var(--ap-width, 282px);
       overflow: hidden;
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-md, 8px);
       background: var(--surface-overlay);
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow-pop);
       padding: 6px;
     }
 
@@ -850,7 +850,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       width: max-content;
       max-width: min(520px, calc(100vw - 12px));
       overflow: hidden;
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-md, 8px);
       background: var(--surface-overlay);
       box-shadow: 0 14px 36px rgba(15, 23, 42, 0.18);
@@ -945,8 +945,8 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
     /* Scoped under the popover so it beats the global button:hover primary rule
        (ViewEncapsulation.None — see the mention-option note below). */
     .de-emoji-popover .de-emoji-close:hover {
-      background: var(--surface-2);
-      border-color: var(--border);
+      background: var(--surface-hover);
+      border-color: transparent;
       color: var(--text);
     }
 
@@ -956,7 +956,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       gap: 2px;
       padding-bottom: 6px;
       margin-bottom: 4px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--overlay-separator);
     }
 
     .de-emoji-tab {
@@ -979,8 +979,8 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
     }
 
     .de-emoji-popover .de-emoji-tab:hover:not(:disabled) {
-      background: var(--surface-2);
-      border-color: var(--border);
+      background: var(--surface-hover);
+      border-color: transparent;
       filter: grayscale(1) opacity(0.75);
     }
 
@@ -1016,8 +1016,8 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
 
     .de-emoji-popover .de-emoji-option:hover,
     .de-emoji-popover .de-emoji-option.is-active {
-      background: var(--surface-2);
-      border-color: var(--border);
+      background: var(--surface-hover);
+      border-color: transparent;
     }
 
     .de-emoji-char {
@@ -1053,10 +1053,11 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
        unscoped: a bare .de-mention-option:hover (0,2,0) loses to the global
        button:hover:not(:disabled) primary-button rule (0,2,1) and the item would
        flash the accent color. Scope under the popover to win, matching the neutral
-       surface-2 hover used by the other popovers (move-list menu, pickers). */
+       --surface-hover row used by .k-menu and the pickers (--surface-2 sits below the dark overlay
+       fill, so it never read as a hover). */
     .de-mention-popover .de-mention-option:hover,
     .de-mention-popover .de-mention-option.is-active {
-      background: var(--surface-2);
+      background: var(--surface-hover);
     }
 
     .de-mention-avatar {
