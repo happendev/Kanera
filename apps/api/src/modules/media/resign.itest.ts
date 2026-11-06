@@ -1,6 +1,7 @@
 import "../../test/setup.integration.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
-import { clients } from "@kanera/shared/schema";
+import { clients, users } from "@kanera/shared/schema";
+import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
@@ -19,10 +20,10 @@ void test("/media/resign returns a fresh, verifiable URL for the caller's own me
   const { client, user } = await seedClient("Acme", "a@example.com");
   const token = app.jwt.sign({ sub: user.id, cid: client.id, role: "member" });
 
-  // A stale signed reference for this tenant's media (token/expiry irrelevant —
-  // resign re-signs from the path alone).
-  const key = "cards/card-1/image.jpg";
-  const stale = `/api/media/${client.id}/cards/card-1/image.jpg?t=stale&e=1`;
+  // The old signature may expire; renewal authorises the current published profile image.
+  const key = `avatars/${user.id}/image.jpg`;
+  await db.update(users).set({ avatarUrl: `/api/media/${client.id}/${key}` }).where(eq(users.id, user.id));
+  const stale = `/api/media/${client.id}/${key}?t=stale&e=1`;
 
   const res = await app.inject({
     method: "GET",
@@ -33,7 +34,7 @@ void test("/media/resign returns a fresh, verifiable URL for the caller's own me
 
   const { url } = res.json<{ url: string }>();
   const parsed = new URL(url);
-  assert.equal(parsed.pathname, `/api/media/${client.id}/cards/card-1/image.jpg`);
+  assert.equal(parsed.pathname, `/api/media/${client.id}/${key}`);
   assert.equal(verifyMediaToken({
     clientId: client.id,
     key,

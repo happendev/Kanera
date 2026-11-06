@@ -114,3 +114,5 @@ Check their failure-mode comments before removing or replacing tests.
 
 - [Hosted analytics](analytics/attribution.browser.ts), via `pnpm test:analytics`: consent, visitor identity and first-touch signup attribution in a separate production-configured build.
 - [Production bundles](../benchmarks/web/bundle-loading.config.cjs), via `pnpm test:web:bundles`: cache headers, deferred views/icons, service-worker registration and cold offline reload against the seeded local API and Nginx.
+
+- `security-media-export.spec.ts`: guest board exports exclude unrelated workspace members; media renewal enforces revoked board access and resolves cross-organisation guest storage, and preserves personal note/scratchpad privacy.
