@@ -4,10 +4,10 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess } from "../../lib/access.js";
+import { archiveCards, emitCardArchiveTransition } from "../../lib/card-archive.js";
 import { badRequest } from "../../lib/errors.js";
 import { toWireCard } from "../../lib/wire-card.js";
 import { emitBulkCardDueDates, patchBulkCardAssignees, patchBulkCardLabels, setBulkCardCompletion, setBulkCardDueDates } from "./bulk-card-attributes.js";
-import { archiveBulkCards, emitBulkCardArchive } from "./bulk-card-archive.js";
 import { emitBulkCardCustomField, loadBulkCustomField, setBulkCardCustomField } from "./bulk-card-custom-fields.js";
 import { emitBulkCardMoves, moveBulkCards } from "./bulk-card-move.js";
 import { loadBulkBoardCards, activeBulkCards, emitCardLabels, emitCardAssignees, emitCardCompletion } from "./route-support.js";
@@ -98,10 +98,17 @@ export function cardBulkRoutes(app: FastifyInstance) {
     const targetCards = loaded.filter((card) => !card.archivedAt);
     if (targetCards.length === 0) return { archived: 0, cards: [], skippedCardIds: [] };
 
-    const result = await archiveBulkCards({ auth: req.auth, ctx, boardId, cards: targetCards });
+    const result = await archiveCards({
+      cardIds: targetCards.map((card) => card.id),
+      archived: true,
+      workspaceId: ctx.workspaceId,
+      clientId: ctx.clientId,
+      actorId: req.auth.sub,
+      bulk: true,
+    });
 
-    await emitBulkCardArchive(result, { boardId, auth: req.auth, mailer: app.mailer, log: req.log });
-    return { archived: result.rows.length, cards: result.rows.map(({ card }) => toWireCard(card, req.auth.cid)), skippedCardIds: [] };
+    const cards = await emitCardArchiveTransition(result, { clientId: req.auth.cid, mailer: app.mailer, log: req.log });
+    return { archived: cards.length, cards, skippedCardIds: [] };
   });
 
   // Bulk-set one custom field across many cards. Mirrors the single-card PUT/DELETE path:

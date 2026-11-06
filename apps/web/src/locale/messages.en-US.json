@@ -1436,6 +1436,8 @@
     "5643415254203706517": "moved from {$fromList} {$arrow} {$toList}",
     "7100566997169864762": "moved to {$list}",
     "1384749900489453331": "moved this card",
+    "7242520604940722562": "archived this card",
+    "1085215090575319954": "unarchived this card",
     "1487242934803986521": "{count, plural, other {toggled this card complete # times; left it complete}}",
     "2167833382723517201": "{count, plural, other {toggled this card complete # times; left it incomplete}}",
     "5311628575658011916": "This card is marked as {$overdue}",

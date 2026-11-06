@@ -24,6 +24,7 @@ import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { DEFAULT_IN_PROGRESS_ALERT_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { createSortedLaneProjection } from "./lane-projection";
+import { holdsPlacement, settleOptimisticWrite } from "./optimistic-write";
 import { byPosition } from "../../shared/position-sort";
 
 export type AnyList = List | WireList;
@@ -845,6 +846,30 @@ export class BoardState {
       cs.map((c) => (c.id === cardId ? { ...c, listId, position, updatedAt, ...reported } as AnyCard : c)),
     );
     this.bumpCardMutationSeq();
+  }
+
+  /**
+   * Shows a card move at once, sends it, and settles it through `settleOptimisticWrite`: neither a
+   * late response nor a failure may undo a newer move of the same card that realtime delivered
+   * meanwhile. Every board surface that moves one card (drop, table status, card detail) uses this.
+   */
+  async sendCardMove(
+    cardId: string,
+    listId: string,
+    position: string,
+    request: () => Promise<{ id: string; listId: string; position: string } & ReportedInProgressClock>,
+  ): Promise<void> {
+    const previous = this.cardById(cardId);
+    if (!previous) return;
+    this.moveCard(cardId, listId, position);
+    const optimistic = { listId, position };
+    await settleOptimisticWrite({
+      showing: () => holdsPlacement(this.cardById(cardId), optimistic),
+      request,
+      settle: (moved) => this.moveCard(moved.id, moved.listId, moved.position, moved),
+      // Normalised, so a compact card missing null/zero clock fields still restores them.
+      rollback: () => this.moveCard(previous.id, previous.listId, previous.position, resolveInProgressClock(previous, previous)),
+    });
   }
 
   isListInProgress(listId: string): boolean {

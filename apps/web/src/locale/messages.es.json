@@ -1436,6 +1436,8 @@
     "5643415254203706517": "movió de {$fromList} {$arrow} {$toList}",
     "7100566997169864762": "movió a {$list}",
     "1384749900489453331": "movió esta tarjeta",
+    "7242520604940722562": "archivó esta tarjeta",
+    "1085215090575319954": "desarchivó esta tarjeta",
     "1487242934803986521": "{count, plural, one {cambió # vez el estado de completada de esta tarjeta; la dejó completada} other {cambió # veces el estado de completada de esta tarjeta; la dejó completada}}",
     "2167833382723517201": "{count, plural, one {cambió # vez el estado de completada de esta tarjeta; la dejó sin completar} other {cambió # veces el estado de completada de esta tarjeta; la dejó sin completar}}",
     "5311628575658011916": "Esta tarjeta está marcada como {$overdue}",

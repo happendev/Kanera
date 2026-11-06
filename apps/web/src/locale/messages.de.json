@@ -1436,6 +1436,8 @@
     "5643415254203706517": "hat verschoben: {$fromList} {$arrow} {$toList}",
     "7100566997169864762": "hat nach {$list} verschoben",
     "1384749900489453331": "hat diese Karte verschoben",
+    "7242520604940722562": "hat diese Karte archiviert",
+    "1085215090575319954": "hat diese Karte wiederhergestellt",
     "1487242934803986521": "{count, plural, one {hat den Erledigt-Status dieser Karte # Mal umgeschaltet; jetzt erledigt} other {hat den Erledigt-Status dieser Karte # Mal umgeschaltet; jetzt erledigt}}",
     "2167833382723517201": "{count, plural, one {hat den Erledigt-Status dieser Karte # Mal umgeschaltet; jetzt nicht erledigt} other {hat den Erledigt-Status dieser Karte # Mal umgeschaltet; jetzt nicht erledigt}}",
     "5311628575658011916": "Diese Karte ist als {$overdue} markiert",

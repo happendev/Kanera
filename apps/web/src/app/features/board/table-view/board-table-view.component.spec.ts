@@ -93,13 +93,18 @@ describe("BoardTableViewComponent", () => {
     delete: vi.fn(),
     createCard: vi.fn(),
   };
+  // Moves land in this map so the real BoardState.sendCardMove can see its optimistic placement.
+  const movedCards = new Map<string, AnyCard>();
   const state = {
     inProgressEnabled: vi.fn(() => true),
     timelineEnabled: vi.fn(() => true),
     updateCard: vi.fn(),
-    cardById: vi.fn((id: string) => card(id)),
+    cardById: vi.fn((id: string) => movedCards.get(id) ?? card(id)),
     positionForCardDrop: vi.fn(() => "2000.0000000000"),
-    moveCard: vi.fn(),
+    moveCard: vi.fn((id: string, listId: string, position: string) => {
+      movedCards.set(id, { ...(movedCards.get(id) ?? card(id)), listId, position });
+    }),
+    sendCardMove: vi.fn((...args: Parameters<BoardState["sendCardMove"]>) => BoardState.prototype.sendCardMove.apply(state, args)),
     setCardAssignees: vi.fn(),
     setCardLabels: vi.fn(),
     board: vi.fn(() => null),
@@ -115,6 +120,7 @@ describe("BoardTableViewComponent", () => {
   beforeEach(() => {
     localStorage.clear();
     unreadCounts = {};
+    movedCards.clear();
     vi.clearAllMocks();
     api.post.mockResolvedValue({});
     api.put.mockResolvedValue({});

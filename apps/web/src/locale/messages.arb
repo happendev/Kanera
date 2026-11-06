@@ -10269,6 +10269,20 @@
       "src/app/features/board/card-activity.component.ts"
     ]
   },
+  "7242520604940722562": "archived this card",
+  "@7242520604940722562": {
+    "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "1085215090575319954": "unarchived this card",
+  "@1085215090575319954": {
+    "description": "Card activity after a person's name - the card was brought back from the archive",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
   "1487242934803986521": "{count, plural, other {toggled this card complete # times; left it complete}}",
   "@1487242934803986521": {
     "description": "Card activity after a person's name; several toggles merged into one row",

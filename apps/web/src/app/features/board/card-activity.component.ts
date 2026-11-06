@@ -1029,6 +1029,11 @@ export class CardActivityComponent {
         return ` ${MARKED_COMPLETE()}`;
       case "uncompleted":
         return ` ${MARKED_INCOMPLETE()}`;
+      // Written by every archive path: one card, a selection, a whole list, and board mirrors.
+      case "archived":
+        return ` ${$localize`:Card activity after a person's name:archived this card`}`;
+      case "unarchived":
+        return ` ${$localize`:Card activity after a person's name - the card was brought back from the archive:unarchived this card`}`;
       case "completion:set":
         if (count > 1) {
           return p["toValue"] === true

@@ -8,7 +8,7 @@ import { FitLabelsDirective } from "../../shared/fit-labels.directive";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireAgentRun, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
-import { expandCardCustomFieldValue, expandCardSummary, inProgressClockOf, SERVER_EVENTS } from "@kanera/shared/events";
+import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
 import type { ReportedInProgressClock } from "./time-in-progress.util";
 import type { BoardExportArchive, DependencyGraphCard, DependencyGraphEdge, DependencyGraphResponse, WorkDoneEventType } from "@kanera/shared/dto";
 import type { Board, BoardRole, BoardSeparator, Card, CardCustomFieldValue, CardLabel, CustomField, List } from "@kanera/shared/schema";
@@ -2438,17 +2438,12 @@ export class BoardPage implements OnDestroy {
     await this.trackDropWrite(async () => {
       // Place each card against the preceding card's confirmed position. Preparing
       // the whole selection up front makes later server positions reshuffle the group.
+      // A failure stops the batch: earlier writes are durable, later cards have not moved, and
+      // sendCardMove restores only the failed card (unless a newer move of it has landed).
       let next = p;
       for (const card of cards) {
-        try {
-          await this.prepareDroppedCard({ ...next, cardId: card.id })();
-          next = { cardId: card.id, toListId: p.toListId, afterItem: { type: "card", id: card.id } };
-        } catch (error) {
-          // Earlier writes are durable and later cards have not moved. Restore only
-          // this card's position, preserving unrelated realtime updates.
-          this.state.moveCard(card.id, card.listId, card.position, inProgressClockOf(card));
-          throw error;
-        }
+        await this.sendDroppedCard({ ...next, cardId: card.id });
+        next = { cardId: card.id, toListId: p.toListId, afterItem: { type: "card", id: card.id } };
       }
     });
     if (cards.length > 1) {
@@ -2467,25 +2462,20 @@ export class BoardPage implements OnDestroy {
     }
   }
 
-  private prepareDroppedCard(p: CardDropPayload): () => Promise<void> {
+  private async sendDroppedCard(p: CardDropPayload): Promise<void> {
     const card = this.state.cardById(p.cardId);
-    if (!card) return async () => {};
+    if (!card) return;
     const beforeAnchor = p.beforeItem ?? (p.beforeCardId !== undefined && p.beforeCardId !== null ? { type: "card" as const, id: p.beforeCardId } : p.beforeCardId);
     const afterAnchor = p.afterItem ?? (p.afterCardId !== undefined && p.afterCardId !== null ? { type: "card" as const, id: p.afterCardId } : p.afterCardId);
     const beforeItem = beforeAnchor ? this.itemForAnchor(beforeAnchor) : beforeAnchor;
     const afterItem = afterAnchor ? this.itemForAnchor(afterAnchor) : afterAnchor;
     const optimisticPosition = this.state.positionForItemDrop({ kind: "card", card }, p.toListId, beforeItem, afterItem);
-
-    this.state.moveCard(p.cardId, p.toListId, optimisticPosition);
-
-    return async () => {
-      const moved = await this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(`/cards/${p.cardId}/move`, {
+    await this.state.sendCardMove(p.cardId, p.toListId, optimisticPosition, () =>
+      this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(`/cards/${p.cardId}/move`, {
         listId: p.toListId,
         ...(p.beforeItem !== undefined ? { beforeItem: p.beforeItem } : p.beforeCardId !== undefined ? { beforeCardId: p.beforeCardId } : {}),
         ...(p.afterItem !== undefined ? { afterItem: p.afterItem } : p.afterCardId !== undefined ? { afterCardId: p.afterCardId } : {}),
-      });
-      this.state.moveCard(moved.id, moved.listId, moved.position, moved);
-    };
+      }));
   }
 
   async onSeparatorDrop(p: SeparatorDropPayload) {

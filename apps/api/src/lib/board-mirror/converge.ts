@@ -37,7 +37,8 @@ import { deleteExternalLinks, findExternalLink, findExternalLinks, listExternalL
 import { withSignedMedia } from "../media-keys.js";
 import { cardAttachmentUrlMap, rewriteCopiedMediaUrls } from "../copied-media-urls.js";
 import { replaceCardMentions } from "../mentions.js";
-import { clearNotificationsForCards, clearNotificationsForComments, emitDeletedNotifications, type DeletedNotificationRef } from "../notifications.js";
+import { clearNotificationsForCards, clearNotificationsForComments, clearOverdueNotificationsForCards, emitDeletedNotifications, type DeletedNotificationRef } from "../notifications.js";
+import { createOverdueNotificationsForCards } from "../overdue-notifications.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { getStorageForClient, isStorageObjectMissing } from "../storage/index.js";
 import {
@@ -486,6 +487,10 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
     if (description !== target.description) await replaceCardMentions({ tx, boardId: mirror.targetBoardId, cardId: target.id, source: "description", markdown: description });
     // A mirrored completion completes the destination card too, so its reminders go like a native one's.
     const clearedReminders = source.completedAt && !target.completedAt ? await clearRemindersOnCompletedCards(tx, [target.id]) : [];
+    // ...and so do its overdue alerts, as in applyCompletionTransition: completing clears them, and
+    // reopening raises them again if the copy is still overdue (the helper skips archived cards).
+    if (source.completedAt && !target.completedAt) await clearOverdueNotificationsForCards(tx, [target.id]);
+    else if (!source.completedAt && target.completedAt) await createOverdueNotificationsForCards(tx, [target.id]);
     // The mirror creator is durable attribution for the sync, not the person who completed or
     // reopened the source card, so handoffs are recorded as Kanera's: with the creator as actor
     // they would be suppressed as a self-notification and the creator, often an assignee of the

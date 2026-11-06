@@ -601,8 +601,8 @@ export class ListComponent implements OnDestroy {
     this.clearing.set(true);
     try {
       // The list route only returns a count, so remember which cards were visible here: Undo
-      // unarchives exactly those through the board's bulk endpoint rather than every archived card
-      // in the list (sibling boards share workspace lists).
+      // unarchives exactly those rather than every archived card in the list (sibling boards share
+      // workspace lists). Bulk archive accepts only archived:true, so Undo restores card by card.
       const boardId = this.boardId();
       const cardIds = this.cards().filter((card) => !card.archivedAt).map((card) => card.id);
       const listName = this.list().name;
@@ -613,8 +613,9 @@ export class ListComponent implements OnDestroy {
         message: $localize`Cards in ${listName}:list: archived.`,
         icon: "archive",
         undo: async () => {
-          if (cardIds.length === 0) return;
-          await this.api.patch(`/boards/${boardId}/cards/bulk/archive`, { cardIds, archived: false });
+          for (const cardId of cardIds) {
+            this.state.updateCard(await this.api.patch<WireCard>(`/cards/${cardId}/archive`, { archived: false }));
+          }
         },
       });
     } finally {

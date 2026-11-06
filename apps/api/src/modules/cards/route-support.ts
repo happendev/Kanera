@@ -2,7 +2,7 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import { ACTIVITY_ACTION, cardAssignees, cardChecklists, cardLabelAssignments, cards, users, type ActivityEvent } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
-import { db, type Db, type Tx, type TxOnly } from "../../db.js";
+import { db, type Tx, type TxOnly } from "../../db.js";
 import { lockCardsForWrite } from "../../lib/card-write-lock.js";
 import { env } from "../../env.js";
 import type { Mailer } from "../../lib/mailer.js";
@@ -15,12 +15,11 @@ import {
   type CoalescedActivityResult,
 } from "../../lib/activity.js";
 import { enqueueCardAssignedEmails } from "../../lib/assignee-email-notifications.js";
-import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runCardBlockedAutomations, runCardUnblockedAutomations, runChecklistCompletionAutomations, type AutomationEffects } from "../../lib/automations.js";
+import { applyCompletionTransition, EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runChecklistCompletionAutomations, type AutomationEffects } from "../../lib/automations.js";
 import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { positionForLaneInsert } from "../../lib/board-lane.js";
 import { badRequest, notFound } from "../../lib/errors.js";
-import { clearOverdueNotificationsForCards, syncDirectNotificationForActivity } from "../../lib/notifications.js";
-import { createOverdueNotificationsForCards } from "../../lib/overdue-notifications.js";
+import { syncDirectNotificationForActivity } from "../../lib/notifications.js";
 import {
   checklistValidationError,
   collectAssignees,
@@ -32,11 +31,10 @@ import {
 } from "./checklist-tree.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { toWireCard } from "../../lib/wire-card.js";
-import { requestScheduleRecheckForCards } from "../../lib/schedule-events.js";
 import { ensureBoardMembershipForUsers } from "../../lib/card-assignment.js";
-import { clearRemindersOnCompletedCards, emitClearedCardReminders, type ClearedCardReminder } from "../../lib/card-follow.js";
+import { emitClearedCardReminders, type ClearedCardReminder } from "../../lib/card-follow.js";
 import { captureUnblockedDependents, captureBlockedDependents, emitDependentsChanged, emitRelationNeighboursChanged } from "../../lib/card-relations.js";
-import { notifyDependencyHandoffs, recordBlockersCleared, type DependencyHandoff } from "../../lib/dependency-notifications.js";
+import { notifyDependencyHandoffs, type DependencyHandoff } from "../../lib/dependency-notifications.js";
 import type { AuthClaims } from "../../auth/plugin.js";
 
 const CARD_ASSIGNEE_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
@@ -363,19 +361,6 @@ export type CardCompletionWrite = {
   handoffs: DependencyHandoff[];
 };
 
-/**
- * Flip one card's completion inside a transaction, with the full side-effect tail.
- *
- * Three routes complete cards — one card, a selection, or a whole list — and every one of them
- * owes the same four things: the write, a coalescable `completion:set` audit row, the overdue
- * notification swing, and the `card_marked_complete` automations. Keeping that tail in one place
- * is not cosmetic; the whole-list route previously recorded a different action, so the same user
- * action rendered two ways in the feed depending on which control performed it.
- *
- * `fromValue` comes from the caller's pre-write row, so a burst of toggles inside the coalesce
- * window collapses to a single "A -> C" entry and a round-trip back to the original value hides
- * itself from the feed.
- */
 /** Bulk completion repeats applyCardCompletion per card; its per-card locks must not interleave. */
 export async function lockCompletionBatch(tx: TxOnly, workspaceId: string, cardIds: string[], completed: boolean): Promise<void> {
   const blocked = await captureBlockedDependents(tx, workspaceId, cardIds);
@@ -383,77 +368,66 @@ export async function lockCompletionBatch(tx: TxOnly, workspaceId: string, cardI
   await lockCardsForWrite(tx, [...cardIds, ...blocked.map((row) => row.dependentId), ...ready]);
 }
 
+/**
+ * A person's (or their credential's) completion of one card: the shared completion transition
+ * (`applyCompletionTransition` in lib/automations.ts) plus the two parts that belong to people.
+ *
+ * Three routes complete cards (one card, a selection, or a whole list) and every one of them comes
+ * through here, so the same action reads the same in the feed whichever control performed it. The
+ * audit row is a coalescable `completion:set` whose `fromValue` is the locked pre-write row: a burst
+ * of toggles inside the window collapses to one "A -> C" entry, and a round trip hides itself. Only
+ * a person's completion fires `card_marked_complete` rules.
+ *
+ * Returns null when the card was no longer changing state once locked (see the transition's guard).
+ */
 export async function applyCardCompletion(
-  tx: Parameters<Parameters<Db["transaction"]>[0]>[0],
+  tx: TxOnly,
   opts: {
-    card: Pick<typeof cards.$inferSelect, "id" | "boardId" | "completedAt">;
+    cardId: string;
     completed: boolean;
-    completedAt: Date | null;
+    at: Date;
     workspaceId: string;
     clientId: string;
     actorId: string;
   },
-): Promise<CardCompletionWrite> {
-  const { card: current, completed, completedAt } = opts;
-  const before = await captureBlockedDependents(tx, opts.workspaceId, [current.id]);
-  const readyBefore = completed ? [] : await captureUnblockedDependents(tx, opts.workspaceId, [current.id]);
-  // The handoff below writes activity on every dependent; hold them with this card in one order.
-  await lockCardsForWrite(tx, [current.id, ...before.map((row) => row.dependentId), ...readyBefore]);
-  const [card] = await tx
-    .update(cards)
-    .set({ completedAt, updatedAt: new Date() })
-    .where(eq(cards.id, current.id))
-    .returning();
-  // A completed card leaves the schedule and releases its dependents; reopening holds them again.
-  await requestScheduleRecheckForCards(tx, [current.id]);
-  const activity = await recordCoalescedActivity(tx, {
-    boardId: current.boardId,
-    workspaceId: opts.workspaceId,
-    actorId: opts.actorId,
-    entityType: "card",
-    entityId: current.id,
-    action: ACTIVITY_ACTION.COMPLETION_SET,
-    coalesceKey: "card:completion",
-    windowMs: 60_000,
-    fromValue: Boolean(current.completedAt),
-    toValue: completed,
-    payload: { completedAt, fromValue: Boolean(current.completedAt), toValue: completed },
+): Promise<CardCompletionWrite | null> {
+  const { cardId, completed, workspaceId, clientId, actorId } = opts;
+  const transition = await applyCompletionTransition(tx, {
+    cardId,
+    completed,
+    workspaceId,
+    clientId,
+    at: opts.at,
+    triggerActorId: actorId,
+    automated: false,
+    recordAudit: ({ previous, completedAt }) => recordCoalescedActivity(tx, {
+      boardId: previous.boardId,
+      workspaceId,
+      actorId,
+      entityType: "card",
+      entityId: cardId,
+      action: ACTIVITY_ACTION.COMPLETION_SET,
+      coalesceKey: "card:completion",
+      windowMs: 60_000,
+      fromValue: Boolean(previous.completedAt),
+      toValue: completed,
+      payload: { completedAt, fromValue: Boolean(previous.completedAt), toValue: completed },
+    }),
   });
-  if (completed) await clearOverdueNotificationsForCards(tx, [current.id]);
-  else await createOverdueNotificationsForCards(tx, [current.id]);
-  const clearedReminders = completed ? await clearRemindersOnCompletedCards(tx, [current.id]) : [];
-  // Completing this card may clear the last blocker of cards that wait on it. The handoff is
-  // recorded first so the dependent's feed reads "unblocked" before any automation it triggers.
-  // Reopening it blocks those cards again; that handoff is recorded by the blocked runner.
-  const handoffs: DependencyHandoff[] = completed
-    ? await recordBlockersCleared(tx, { before, actorId: opts.actorId })
-    : [];
-  let unblockedEffects: AutomationEffects;
-  if (completed) {
-    unblockedEffects = await runCardUnblockedAutomations(tx, { handoffs, workspaceId: opts.workspaceId, clientId: opts.clientId, triggerActorId: opts.actorId });
-  } else {
-    const run = await runCardBlockedAutomations(tx, { cardIds: readyBefore, workspaceId: opts.workspaceId, clientId: opts.clientId, triggerActorId: opts.actorId, blocker: card! });
-    handoffs.push(...run.handoffs);
-    unblockedEffects = run;
-  }
+  if (!transition) return null;
+  const { card, audit: activity, clearedReminders, handoffs, dependentEffects } = transition;
   const markedCompleteEffects = completed
-    ? await runCardMarkedCompleteAutomations(tx, {
-      cardId: current.id,
-      boardId: current.boardId,
-      workspaceId: opts.workspaceId,
-      clientId: opts.clientId,
-      triggerActorId: opts.actorId,
-    })
-    : { effects: [] };
-  const automationEffects: AutomationEffects = { effects: [...markedCompleteEffects.effects, ...unblockedEffects.effects] };
+    ? await runCardMarkedCompleteAutomations(tx, { cardId, boardId: card.boardId, workspaceId, clientId, triggerActorId: actorId })
+    : EMPTY_EFFECTS;
+  const automationEffects: AutomationEffects = { effects: [...markedCompleteEffects.effects, ...dependentEffects.effects] };
   // Automations can mutate the card further (move it, complete a parent), so the response must
   // report the row as it stands after they ran. Only re-read when something actually fired: a
   // workspace with no completion automations is the common case, and a whole-list completion
   // would otherwise pay one extra point query per card for a row it already holds.
   const [finalCard] = automationEffects.effects.length > 0
-    ? await tx.select().from(cards).where(eq(cards.id, current.id)).limit(1)
+    ? await tx.select().from(cards).where(eq(cards.id, cardId)).limit(1)
     : [card];
-  return { card: card!, finalCard: finalCard ?? card!, activity, automationEffects, clearedReminders, handoffs };
+  return { card, finalCard: finalCard ?? card, activity, automationEffects, clearedReminders, handoffs };
 }
 
 /** Post-commit fanout for `applyCardCompletion`, including the queue audiences board rooms miss. */

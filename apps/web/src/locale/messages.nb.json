@@ -1436,6 +1436,8 @@
     "5643415254203706517": "flyttet fra {$fromList} {$arrow} {$toList}",
     "7100566997169864762": "flyttet til {$list}",
     "1384749900489453331": "flyttet dette kortet",
+    "7242520604940722562": "arkiverte dette kortet",
+    "1085215090575319954": "hentet dette kortet fra arkivet",
     "1487242934803986521": "{count, plural, other {vekslet dette kortet fullstendig # ganger; forlot den komplett}}",
     "2167833382723517201": "{count, plural, other {vekslet dette kortet fullstendig # ganger; forlot det ufullstendig}}",
     "5311628575658011916": "Dette kortet er merket som {$overdue}",

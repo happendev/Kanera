@@ -1436,6 +1436,8 @@
     "5643415254203706517": "a déplacé de {$fromList} {$arrow} {$toList}",
     "7100566997169864762": "a déplacé vers {$list}",
     "1384749900489453331": "a déplacé cette carte",
+    "7242520604940722562": "a archivé cette carte",
+    "1085215090575319954": "a désarchivé cette carte",
     "1487242934803986521": "{count, plural, one {a basculé l'état terminé de cette carte # fois et l'a laissée terminée} other {a basculé l'état terminé de cette carte # fois et l'a laissée terminée}}",
     "2167833382723517201": "{count, plural, one {a basculé l'état terminé de cette carte # fois et l'a laissée non terminée} other {a basculé l'état terminé de cette carte # fois et l'a laissée non terminée}}",
     "5311628575658011916": "Cette carte est marquée {$overdue}",

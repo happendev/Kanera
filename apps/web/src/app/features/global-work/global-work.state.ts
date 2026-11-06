@@ -27,6 +27,7 @@ import { SocketService, type AppSocket } from "../../core/realtime/socket.servic
 import type { SettleCustomFieldWrite } from "../board/custom-field-write";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
 import { CardMotionService } from "../board/card-motion.service";
+import { holdsPlacement, settleOptimisticWrite } from "../board/optimistic-write";
 import { optimisticPriorityPosition, reorderedQueueItems } from "../../shared/priority-queue/priority-queue-math";
 import {
   DEFAULT_COMPLETION,
@@ -841,37 +842,25 @@ export class GlobalWorkState {
     anchor: Parameters<GlobalWorkState["moveCard"]>[2],
   ): Promise<void> {
     const ids = new Set(cardIds);
-    const originals = new Map(this.response().cards.filter((card) => ids.has(card.id)).map((card) => [card.id, card]));
+    const present = new Set(this.response().cards.filter((card) => ids.has(card.id)).map((card) => card.id));
     let next = anchor;
-    // Derive each next position from the preceding confirmed move. Preparing all
-    // positions in advance makes the visible group reshuffle as responses settle.
-    for (const id of cardIds.filter((id) => originals.has(id))) {
-      try {
-        await this.prepareCardMove(id, listId, next)();
-        next = { afterItem: { type: "card", id } };
-      } catch (error) {
-        // Never replace the whole response: completed moves and unrelated realtime
-        // updates remain valid even when a later request in this batch fails.
-        this.response.update((response) => ({
-          ...response,
-          cards: response.cards.map((card) => {
-            const original = card.id === id ? originals.get(id) : undefined;
-            return original ? { ...card, listId: original.listId, position: original.position, ...(compactInProgressClock(resolveInProgressClock(original, original)) as Partial<WorkRow>) } : card;
-          }),
-        }));
-        throw error;
-      }
+    // Derive each next position from the preceding confirmed move. Preparing all positions in
+    // advance makes the visible group reshuffle as responses settle. A failure stops the batch:
+    // earlier moves are durable, and later cards have not moved.
+    for (const id of cardIds.filter((id) => present.has(id))) {
+      await this.sendCardMove(id, listId, next);
+      next = { afterItem: { type: "card", id } };
     }
   }
 
-  private prepareCardMove(
+  private async sendCardMove(
     cardId: string,
     listId: string,
     anchor: Parameters<GlobalWorkState["moveCard"]>[2],
-  ): () => Promise<void> {
+  ): Promise<void> {
     const snapshot = this.response();
     const moving = snapshot.cards.find((card) => card.id === cardId);
-    if (!moving) return async () => {};
+    if (!moving) return;
     const lane = [
       ...snapshot.cards
         .filter((card) => card.id !== cardId && card.listId === listId)
@@ -909,16 +898,21 @@ export class GlobalWorkState {
       ),
     }));
     const globalWorkUserId = this.focusedTargetUserId();
-    return async () => {
-      const moved = await this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(
+    const optimistic = { listId, position: optimisticPosition };
+    // The board settles single-card moves the same way (BoardState.sendCardMove). Both settle and
+    // rollback patch this one row, never the whole response, so other moves in the batch and
+    // unrelated realtime updates stay as they are.
+    await settleOptimisticWrite({
+      showing: () => holdsPlacement(this.response().cards.find((card) => card.id === cardId), optimistic),
+      request: () => this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(
         `/cards/${cardId}/move`,
         {
           listId,
           ...itemAnchor,
           ...(globalWorkUserId ? { globalWorkUserId } : {}),
         },
-      );
-      this.response.update((response) => ({
+      ),
+      settle: (moved) => this.response.update((response) => ({
         ...response,
         cards: response.cards.map((card) =>
           card.id === moved.id
@@ -930,8 +924,14 @@ export class GlobalWorkState {
               }
             : card
         ),
-      }));
-    };
+      })),
+      rollback: () => this.response.update((response) => ({
+        ...response,
+        cards: response.cards.map((card) => card.id === cardId
+          ? { ...card, listId: moving.listId, position: moving.position, ...(compactInProgressClock(resolveInProgressClock(moving, moving)) as Partial<WorkRow>) }
+          : card),
+      })),
+    });
   }
 
   /**

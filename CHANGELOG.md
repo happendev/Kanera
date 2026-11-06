@@ -38,6 +38,10 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 - **Pickers and menus are easier to read:** the date, reminder and period pickers, label, member and watcher popovers, and other menus now share one look in every theme. Shortcut and time buttons no longer fade into the panel on Dark and Carbon, and list names, "too long" counts and other amber warnings are readable on Light and Paper.
+- **Archive all cards:** Undo now restores the archived cards instead of failing, and each card's activity records the archive, as it does when cards are archived one at a time or from a selection.
+- **Moving cards:** a move that fails, or whose confirmation arrives late, no longer puts the card back over a teammate's newer move, on boards and in My Cards and Team Cards. A move from card detail that fails now returns the card to its list instead of leaving it where it was dropped.
+- **Board mirrors:** completing a mirrored card clears the copy's overdue alert, and reopening it raises the alert again if the copy is still overdue, as for any other card.
+- **Card activity:** archive and unarchive entries are shown in your language instead of untranslated English.
 - **Offline notes:** reopening a previously viewed workspace note while offline now shows its contents instead of “No note selected”. The note updates automatically when you're back online.
 - Rapidly reversing a list move now removes its activity and inbox notification. Forward moves remain separate, and every move still runs its events and automations. Applies to individual and bulk moves.
 - Deleting a standalone board removes it from the sidebar straight away instead of leaving a dead link until the page is reloaded.
