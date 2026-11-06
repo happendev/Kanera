@@ -10,6 +10,9 @@ import { SocketService } from "../realtime/socket.service";
 import { MentionSoundService } from "./mention-sound.service";
 import { NotificationsService } from "./notifications.service";
 
+/** Past the idle prefetch's fallback timer (jsdom has no requestIdleCallback). */
+const FEED_PREFETCH_WAIT_MS = 2_000;
+
 class SocketStub {
   readonly on = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
     const handlers = this.handlers.get(event) ?? new Set<(...args: unknown[]) => void>();
@@ -177,6 +180,24 @@ describe("NotificationsService", () => {
     expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25");
   });
 
+  // The drawer paints whatever the cache holds on its first frame, before the reload lands.
+  it("reopens on the cached unread feed while revalidating, but never on a filtered one", async () => {
+    const pending = deferred<NotificationsPage>();
+    api.get.mockImplementation((path: string) => path.startsWith("/notifications/unread?") ? pending.promise : Promise.resolve([]));
+
+    seedFeed(service, [notification({ id: "cached" })]);
+    const reopen = service.openInbox();
+    expect(service.items().map((n) => n.id)).toEqual(["cached"]);
+    pending.resolve(page([notification({ id: "fresh" })]));
+    await reopen;
+    expect(service.items().map((n) => n.id)).toEqual(["fresh"]);
+
+    service.boardFilter.set("board-2");
+    seedFeed(service, [notification({ id: "board-2-only" })]);
+    void service.openInbox();
+    expect(service.items()).toEqual([]);
+  });
+
   it("ignores count responses overtaken by another refresh or a read-all event", async () => {
     service.initialise();
     await Promise.resolve();
@@ -279,6 +300,41 @@ describe("NotificationsService", () => {
 
   // These races need deliberately held HTTP responses and explicit signal scheduling. A browser
   // reconnect test cannot reliably position the online effect inside an in-flight recovery batch.
+  // The prefetch must not set feedLoaded, or every read change anywhere would refetch the feed
+  // for a user who never opens the drawer. Nothing user-visible distinguishes the two in E2E.
+  it("warms the unread feed once at idle without opting reconciliation into feed reloads", async () => {
+    vi.useFakeTimers();
+    try {
+      service.initialise();
+      TestBed.tick();
+      await vi.advanceTimersByTimeAsync(FEED_PREFETCH_WAIT_MS);
+      const unreadPageRequests = () => api.get.mock.calls.filter(([path]) => String(path).startsWith("/notifications/unread?"));
+      expect(unreadPageRequests()).toHaveLength(1);
+      expect(service.items().map((n) => n.id)).toEqual(["notification-1"]);
+
+      await service.markRead("notification-1");
+      await vi.advanceTimersByTimeAsync(FEED_PREFETCH_WAIT_MS);
+      expect(unreadPageRequests()).toHaveLength(1);
+    } finally {
+      service.teardown();
+      vi.useRealTimers();
+    }
+  });
+
+  it("skips the idle prefetch when a remembered filter would make it the wrong feed", async () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem(organisationStorageKey(STORAGE_KEYS.NOTIFICATION_BOARD_FILTER, "client-1"), "board-2");
+      service.initialise();
+      TestBed.tick();
+      await vi.advanceTimersByTimeAsync(FEED_PREFETCH_WAIT_MS);
+      expect(api.get.mock.calls.filter(([path]) => String(path).startsWith("/notifications/unread?"))).toHaveLength(0);
+    } finally {
+      service.teardown();
+      vi.useRealTimers();
+    }
+  });
+
   it("shares initial recovery with the first socket connection", async () => {
     vi.useFakeTimers();
     try {

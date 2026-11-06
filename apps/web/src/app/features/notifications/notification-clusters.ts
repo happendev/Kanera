@@ -38,7 +38,7 @@ export interface NotificationCluster {
  * discriminant narrowing inside Angular control-flow blocks.
  */
 export type NotificationFeedEntry =
-  | { kind: "row"; key: string; notification: NotificationRow; cluster?: undefined }
+  | { kind: "row"; key: string; notification: NotificationRow; summary: ActivityChangeSummary; cluster?: undefined }
   | { kind: "cluster"; key: string; cluster: NotificationCluster; notification?: undefined };
 
 /** Rows sharing one card on one local day, in the stream position of their newest member. */
@@ -87,12 +87,13 @@ export function buildFeedEntries(
     // A bucket that ended up with a single member degrades back to a plain row.
     bucket.key && bucket.rows.length > 1
       ? clusterEntry(bucket.key, bucket.rows, summarise)
-      : rowEntry(bucket.rows[0]!),
+      : rowEntry(bucket.rows[0]!, summarise),
   );
 }
 
-function rowEntry(notification: NotificationRow): NotificationFeedEntry {
-  return { kind: "row", key: `row:${notification.id}`, notification };
+/** Summarised up front for the same reason as a block's entries (see `NotificationClusterEntry.summary`). */
+function rowEntry(notification: NotificationRow, summarise: (row: NotificationRow) => ActivityChangeSummary): NotificationFeedEntry {
+  return { kind: "row", key: `row:${notification.id}`, notification, summary: summarise(notification) };
 }
 
 function clusterEntry(
