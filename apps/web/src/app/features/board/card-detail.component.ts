@@ -411,6 +411,9 @@ export class CardDetailComponent {
       case "stalled": return $localize`:AI agent run status - the agent stopped reporting progress:Stalled (no heartbeat)`;
     }
   }
+  agentRunStartedLabel(run: WireAgentRun): string {
+    return $localize`:Tooltip on an AI agent run's last-update time - when the run started:Started ${formatDateTime(run.startedAt)}:time:`;
+  }
   agentRunStatusIcon(run: WireAgentRun): string {
     switch (run.status) {
       case "running": return "loader-2";

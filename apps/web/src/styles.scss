@@ -194,7 +194,31 @@ k-list.is-drop-target {
 .ti-loader-4,
 .ti-loader-quarter,
 .kanera-spin {
+  // Tabler glyphs are drawn on a 1em square; rotating anything but that exact square (an inline box
+  // sized by line-height, or one stretched by a flex parent) puts the pivot off the glyph's centre
+  // and the icon wobbles. Pin the box to 1em x 1em and pivot on its centre.
   display: inline-block;
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  text-align: center;
+  vertical-align: -0.125em;
+  transform-origin: 50% 50%;
+  animation: kanera-spinner 0.8s linear infinite;
+}
+
+// Ring spinner for loading states without an icon. Global so every component can use it.
+.spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-muted);
+  border-radius: 50%;
+  transform-origin: 50% 50%;
   animation: kanera-spinner 0.8s linear infinite;
 }
 
@@ -204,7 +228,8 @@ k-list.is-drop-target {
   .ti-loader-3,
   .ti-loader-4,
   .ti-loader-quarter,
-  .kanera-spin {
+  .kanera-spin,
+  .spinner {
     animation: none;
   }
 }
