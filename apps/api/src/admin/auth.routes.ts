@@ -40,6 +40,12 @@ export interface AdminAuthRouteDeps {
   loginLimit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
   mfaLimit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
   mfaEnrollmentLimit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  // Failed-refresh throttle: `check` rejects an IP that has presented too many bad cookies, `record`
+  // counts one more. Only rejected cookies count, so multi-tab bursts of valid refreshes never 429.
+  refreshFailureLimit: {
+    check: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    record: (req: FastifyRequest) => Promise<void>;
+  };
 }
 
 export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRouteDeps) {
@@ -153,12 +159,19 @@ export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRoute
     const raw = req.cookies[ADMIN_REFRESH_COOKIE];
     if (!raw) throw unauthorized();
 
+    // A presented cookie costs a lookup and bypasses the login throttle, so bogus cookies are
+    // throttled separately per IP. A 429 is not a 401: the admin web keeps its session on it.
+    await deps.refreshFailureLimit.check(req, reply);
     const refresh = await rotateAdminRefresh(raw);
     if (refresh.status === "reused") {
       req.log.warn({ adminUserId: refresh.adminUserId }, "detected admin refresh token reuse; revoked active tokens");
+      await deps.refreshFailureLimit.record(req);
       throw unauthorized();
     }
-    if (refresh.status === "invalid") throw unauthorized();
+    if (refresh.status === "invalid") {
+      await deps.refreshFailureLimit.record(req);
+      throw unauthorized();
+    }
 
     const [admin] = await db
       .select({

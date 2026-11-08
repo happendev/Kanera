@@ -7,6 +7,7 @@ import { db } from "../../db.js";
 import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { requestLocale } from "../../lib/i18n/request-locale.js";
 import { badRequest, notFound } from "../../lib/errors.js";
+import { enforcePushSubscriptionRefreshRateLimit } from "../../lib/lookup-rate-limit.js";
 import {
   countUnreadNotifications,
   inboxVisibleNotificationCondition,
@@ -275,7 +276,8 @@ export async function notificationsRoutes(app: FastifyInstance) {
  * when the browser rotates a push subscription (pushsubscriptionchange event).
  */
 export async function pushPublicRoutes(app: FastifyInstance) {
-  app.post("/notifications/push/subscription-refresh", async (req, reply) => {
+  // Throttled per IP before any database access; see enforcePushSubscriptionRefreshRateLimit.
+  app.post("/notifications/push/subscription-refresh", { preHandler: enforcePushSubscriptionRefreshRateLimit }, async (req, reply) => {
     const body = dto.pushSubscriptionRefreshBody.parse(req.body);
     const updated = await refreshPushSubscription({
       oldEndpoint: body.oldEndpoint,
