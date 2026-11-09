@@ -32,7 +32,7 @@
     }
     <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" [class.is-active]="prioritiesOpen()" (click)="togglePanel('priorities')" [attr.aria-label]="upNextLabel()" [attr.aria-expanded]="prioritiesOpen()" [kTooltip]="upNextTooltip()">
       <i aria-hidden="true" class="ti ti-list-numbers"></i>
-      @if (myPriorities.totalCount() > 0) { <span class="utility-badge" [class.is-danger]="myPriorities.overdueCount() > 0">{{ myPriorities.totalCount() > 99 ? '99+' : myPriorities.totalCount() }}</span> }
+      @if (myPriorities.totalCount() > 0) { <span class="utility-badge">{{ myPriorities.totalCount() > 99 ? '99+' : myPriorities.totalCount() }}</span> }
     </button>
     <button type="button" class="utility-btn" [class.has-badge]="notifications.unreadCount() > 0" [class.is-alert]="notifications.unreadCount() > 0" [class.is-active]="notificationsOpen()" (click)="togglePanel('notifications')" [attr.aria-label]="notificationsLabel()" [attr.aria-expanded]="notificationsOpen()" kTooltip="Notifications · N" i18n-kTooltip="Tooltip: notifications button; N is its keyboard shortcut">
       <i aria-hidden="true" [class]="notifications.unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
