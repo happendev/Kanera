@@ -3,6 +3,7 @@
   "name": "app.kanera/mcp",
   "title": "Kanera",
   "description": "Manage Kanera workspaces, boards, cards, checklists, comments, notes, automations, and reports.",
+  "websiteUrl": "https://www.kanera.app",
   "version": "4.2.0",
   "icons": [
     {

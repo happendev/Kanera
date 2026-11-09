@@ -1542,6 +1542,28 @@ void test("subscription rotation requires the old push auth secret and updates t
   assert.equal(subscription?.keyAuth, "new-auth");
 });
 
+void test("subscription rotation is throttled per IP before the subscription lookup", async () => {
+  const f = await seed();
+  await ensureSystemWebPushConfig();
+  const payload = {
+    oldEndpoint: "https://push.example.test/subscriptions/unknown",
+    oldAuth: "unknown-auth",
+    endpoint: "https://push.example.test/subscriptions/unknown-new",
+    keys: { p256dh: "new-p256dh", auth: "new-auth" },
+  };
+  const remoteAddress = "198.51.100.70";
+  for (let attempt = 1; attempt <= 30; attempt += 1) {
+    const missed = await f.app.inject({ method: "POST", url: "/notifications/push/subscription-refresh", remoteAddress, payload });
+    assert.equal(missed.statusCode, 404, `attempt ${attempt}: ${missed.body}`);
+  }
+  const limited = await f.app.inject({ method: "POST", url: "/notifications/push/subscription-refresh", remoteAddress, payload });
+  assert.equal(limited.statusCode, 429);
+  assert.ok(limited.headers["retry-after"]);
+  // Buckets are per IP, so another client is unaffected.
+  const other = await f.app.inject({ method: "POST", url: "/notifications/push/subscription-refresh", remoteAddress: "198.51.100.71", payload });
+  assert.equal(other.statusCode, 404);
+});
+
 void test("push test sends the authenticated user's active subscriptions", async () => {
   const f = await seed();
   await enableOrgPush(f.owner.clientId);
