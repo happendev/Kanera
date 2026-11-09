@@ -159,6 +159,26 @@ void test("POST /admin/auth/refresh rotates the token and detects reuse of the o
   assert.equal(reuse.statusCode, 401);
 });
 
+void test("POST /admin/auth/refresh throttles rejected cookies per IP separately from login", async () => {
+  const app = await buildAdminIntegrationServer();
+  await createAdmin("throttle@test.local", "correct-password");
+  const remoteAddress = "198.51.100.50";
+  const { refreshCookie } = await loginAdmin(app, "throttle@test.local", "correct-password", remoteAddress);
+
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    const rejected = await app.inject({ method: "POST", url: "/admin/auth/refresh", remoteAddress, headers: { cookie: `kanera_admin_rt=bogus-${attempt}` } });
+    assert.equal(rejected.statusCode, 401, `attempt ${attempt}: ${rejected.body}`);
+  }
+  const limited = await app.inject({ method: "POST", url: "/admin/auth/refresh", remoteAddress, headers: { cookie: "kanera_admin_rt=bogus-21" } });
+  assert.equal(limited.statusCode, 429);
+  // Login keeps its own bucket, so a throttled refresh IP can still sign in.
+  const login = await app.inject({ method: "POST", url: "/admin/auth/login", remoteAddress, payload: { email: "throttle@test.local", password: "correct-password" } });
+  assert.equal(login.statusCode, 200, login.body);
+  // The real cookie still works from an unthrottled IP.
+  const elsewhere = await app.inject({ method: "POST", url: "/admin/auth/refresh", remoteAddress: "198.51.100.51", headers: { cookie: `kanera_admin_rt=${refreshCookie}` } });
+  assert.equal(elsewhere.statusCode, 200, elsewhere.body);
+});
+
 void test("POST /admin/auth/refresh accepts immediate reuse of a just-rotated token", async () => {
   const app = await buildAdminIntegrationServer();
   await createAdmin("grace@test.local", "correct-password");

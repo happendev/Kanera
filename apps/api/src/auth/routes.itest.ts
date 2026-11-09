@@ -396,6 +396,33 @@ void test("POST /auth/refresh rotates a valid refresh token and sets a replaceme
   assert.equal(activeRows.filter((row) => row.revokedAt === null).length, 1);
 });
 
+void test("POST /auth/refresh throttles rejected cookies per IP without counting successful refreshes", async () => {
+  const { app, refreshCookie } = await signupAndCookie();
+  const remoteAddress = "198.51.100.40";
+
+  // Well over the failure limit of successful rotations from one IP, as a many-tab browser produces.
+  let cookie = refreshCookie;
+  for (let attempt = 1; attempt <= 35; attempt += 1) {
+    const refreshed = await app.inject({ method: "POST", url: "/auth/refresh", remoteAddress, cookies: { kanera_rt: cookie } });
+    assert.equal(refreshed.statusCode, 200, `attempt ${attempt}: ${refreshed.body}`);
+    cookie = refreshed.cookies.find((c) => c.name === "kanera_rt")?.value ?? cookie;
+  }
+
+  for (let attempt = 1; attempt <= 30; attempt += 1) {
+    const rejected = await app.inject({ method: "POST", url: "/auth/refresh", remoteAddress, cookies: { kanera_rt: `bogus-${attempt}` } });
+    assert.equal(rejected.statusCode, 401, `attempt ${attempt}: ${rejected.body}`);
+  }
+  const limited = await app.inject({ method: "POST", url: "/auth/refresh", remoteAddress, cookies: { kanera_rt: "bogus-31" } });
+  assert.equal(limited.statusCode, 429);
+  assert.ok(limited.headers["retry-after"]);
+  // A missing cookie is answered before any lookup and is neither counted nor throttled.
+  const missing = await app.inject({ method: "POST", url: "/auth/refresh", remoteAddress: "198.51.100.41" });
+  assert.equal(missing.statusCode, 401);
+  // The valid session from another IP is untouched.
+  const elsewhere = await app.inject({ method: "POST", url: "/auth/refresh", remoteAddress: "198.51.100.41", cookies: { kanera_rt: cookie } });
+  assert.equal(elsewhere.statusCode, 200, elsewhere.body);
+});
+
 void test("POST /auth/refresh accepts immediate reuse of a just-rotated token without revoking the active session", async () => {
   const { app, refreshCookie, userId } = await signupAndCookie();
 

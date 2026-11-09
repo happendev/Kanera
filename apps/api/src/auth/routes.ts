@@ -134,6 +134,10 @@ async function emitProfileUpdated(userId: string, clientId: string, displayName:
 // the third leg.
 const EMAIL_VERIFICATION_EXPIRY_MINUTES = 15;
 const MAX_VERIFICATION_ATTEMPTS = 5;
+// Rejected refresh cookies one IP may present per window before /auth/refresh answers 429. Generous
+// enough that an office NAT whose users' cookies expire in the same minute is never caught.
+const REFRESH_FAILURE_LIMIT = 30;
+const REFRESH_FAILURE_WINDOW_MS = 60_000;
 const PASSWORD_RESET_RECIPIENT_LIMIT = 3;
 const PASSWORD_RESET_RECIPIENT_WINDOW_MS = 60 * 60_000;
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -179,6 +183,23 @@ export async function authRoutes(app: FastifyInstance) {
       applyRateLimitHeaders(reply, result);
       if (!result.allowed) throw tooManyRequests();
     };
+  }
+
+  // /auth/refresh is unauthenticated (the cookie is the credential) and a presented cookie costs a
+  // refresh_tokens lookup, so bogus cookies could drive database traffic without ever touching the
+  // login throttle. Only rejected cookies count, so ordinary multi-tab and reconnect bursts, which
+  // all succeed, never trip it. Missing cookies short-circuit before the lookup and are not counted.
+  const refreshFailurePolicy: RateLimitPolicy = { limit: REFRESH_FAILURE_LIMIT, windowMs: REFRESH_FAILURE_WINDOW_MS };
+  const refreshFailureKey = (req: FastifyRequest) => `refresh-failed:${clientIpForRequest(req)}`;
+  async function rejectIfRefreshFailuresExceeded(req: FastifyRequest, reply: FastifyReply) {
+    if (!authRateLimiter) return;
+    const result = await authRateLimiter.wouldLimit(refreshFailureKey(req), refreshFailurePolicy);
+    applyRateLimitHeaders(reply, result);
+    if (!result.allowed) throw tooManyRequests();
+  }
+  async function recordRefreshFailure(req: FastifyRequest) {
+    if (!authRateLimiter) return;
+    await authRateLimiter.penalty(refreshFailureKey(req), refreshFailurePolicy);
   }
 
   app.get("/auth/config", async (): Promise<dto.AuthConfigResponse> => {
@@ -907,13 +928,16 @@ export async function authRoutes(app: FastifyInstance) {
       throw unauthorized();
     }
 
+    await rejectIfRefreshFailuresExceeded(req, reply);
     const refresh = await rotateRefresh(raw);
     if (refresh.status === "reused") {
       req.log.warn({ userId: refresh.userId, refreshCookiePresent: true, refreshStatus: refresh.status }, "detected refresh token reuse; revoked active refresh tokens");
+      await recordRefreshFailure(req);
       throw unauthorized();
     }
     if (refresh.status === "invalid") {
       req.log.warn({ refreshCookiePresent: true, refreshStatus: refresh.status }, "refresh token rejected");
+      await recordRefreshFailure(req);
       throw unauthorized();
     }
     // Rotation succeeds independently of which tab-local organisation was requested. Persist the

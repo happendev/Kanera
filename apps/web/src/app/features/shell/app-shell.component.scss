@@ -758,17 +758,15 @@ k-support-session-banner {
 }
 
 // The sidebar's one count badge: board rows and the utility buttons wear the same neutral capsule,
-// so a number reads the same wherever it sits. Shape, size, fill and ring never vary. Two
-// distinctions remain, each because it means something different:
-// - Unread (a board's unread cards, the bell) against a plain total (Up next): the same capsule, the
-//   number in full ink rather than --text-3. Only the ink, not a dark fill: a filled unread capsule
-//   beside an outlined total read as two badge styles, and the unread state already has its loud
-//   channels in the ringing bell glyph and the board row's stronger, heavier name.
-// - Overdue on Up next: --danger, the one count that says "something is already late".
+// so a number reads the same wherever it sits. Two distinctions remain, each because it means
+// something different:
+// - Unread board cards against a plain total (Up next): the same capsule, the number in full ink
+//   rather than --text-3; the board row's stronger, heavier name carries the rest.
+// - The bell's unread count is the exception: it fills with the accent (see .utility-badge.is-unread).
 // Each count's meaning is in its button's or row's accessible name ("Notifications (1 unread)"),
 // and a board row's count also explains itself in a tooltip.
 //
-// Not the accent: a board re-tints the page with its own accent (accent-scope.ts) but the shell sits
+// Otherwise not the accent: a board re-tints the page with its own accent (accent-scope.ts) but the shell sits
 // outside that scope, so accent badges put the app's teal beside a blue board — two accents in one
 // viewport. Board rows used to fill theirs with the board's own colour, which said nothing the
 // board's glyph had not already said.
@@ -919,8 +917,8 @@ k-support-session-banner {
     color: var(--nav-text-strong);
   }
 
-  // Unread is carried by the ringing glyph and the badge, both neutral (see nav-count). An accent
-  // ring is how an open panel (.is-active) looks, so a bell with news must not wear one.
+  // Unread is carried by the ringing glyph and the accent-filled badge. An accent ring is how an
+  // open panel (.is-active) looks, so a bell with news must not wear one.
   &.is-alert {
     color: var(--nav-text-strong);
 
@@ -945,11 +943,6 @@ k-support-session-banner {
   }
 }
 
-// Up next carries due pressure on its badge: red says "something queued is already late", which is
-// the one fact worth surfacing before the drawer is opened. Deliberately not the accent, which in the
-// sidebar means unread. The ink follows the accent badge's rule: dark mode's danger red is light, so
-// the readable ink on it is dark, and hard-coded white washed out.
-//
 // On the glyph's top-right corner, the conventional place for a count on an icon button, so the three
 // buttons are three centred glyphs whether or not they hold a count (a count beside the glyph pushed
 // the glyph off-centre in two of three). Anchored to the button's centre rather than its edge, so it
@@ -967,12 +960,13 @@ k-support-session-banner {
   box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--surface);
   pointer-events: none;
 
+  // The bell's count is the one badge that fills with the accent. Its ink-only unread state matched
+  // the neutral board counts so closely that a pending notification went unnoticed. The accent is
+  // spent here, on the shell's single inbox, and nowhere else in the sidebar: board rows keep the
+  // neutral capsule, as does Up next, whose count is a queue rather than news (overdue is in its
+  // tooltip and accessible name, not a colour).
   &.is-unread {
-    @include nav-count-unread;
-  }
-
-  &.is-danger {
-    background: var(--danger);
+    background: var(--accent);
     box-shadow: 0 0 0 2px var(--surface);
     color: var(--accent-fg);
   }
@@ -1865,11 +1859,10 @@ k-support-session-banner {
   }
 }
 
-// Halos in the unread fill (see nav-count): an accent halo was the teal the badge gave up. The badge
-// keeps its 1px outline and 2px surface ring throughout; the halo grows outside them.
+// The accent halo grows outside the badge's 2px surface ring, which holds throughout.
 @keyframes utility-badge-breathe {
-  0%, 100% { box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--surface), 0 0 0 2px color-mix(in srgb, var(--text-muted) 0%, transparent); }
-  45% { box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--text-muted) 24%, transparent); }
+  0%, 100% { box-shadow: 0 0 0 2px var(--surface), 0 0 0 2px color-mix(in srgb, var(--accent) 0%, transparent); }
+  45% { box-shadow: 0 0 0 2px var(--surface), 0 0 0 5px color-mix(in srgb, var(--accent) 35%, transparent); }
 }
 
 @media (prefers-reduced-motion: reduce) {

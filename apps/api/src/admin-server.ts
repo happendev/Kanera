@@ -38,6 +38,8 @@ const REQUEST_ID_HEADER = "x-request-id";
 const DEFAULT_BODY_LIMIT_BYTES = 1024 * 1024;
 const DEFAULT_LOG_LEVEL = env.NODE_ENV === "development" ? "debug" : "info";
 
+const ADMIN_REFRESH_FAILURE_LIMIT = 20;
+
 export interface BuildAdminServerOptions {
   logger?: FastifyServerOptions["logger"];
   slowRequestLogMs?: number;
@@ -75,7 +77,7 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
     requestIdHeader: REQUEST_ID_HEADER,
   });
 
-  // Keyed by IP, used only to throttle unauthenticated login. Fails open on a Valkey outage (see limiter).
+  // Keyed by IP; throttles unauthenticated login, invite lookups and rejected refresh cookies.
   const loginRateLimiter = new FixedWindowRateLimiter();
   app.addHook("onClose", async () => loginRateLimiter.close());
 
@@ -140,11 +142,28 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
     if (!result.allowed) throw tooManyRequests();
   };
 
-  // Auth routes own their per-route preHandlers (login/MFA are rate-limited; refresh/logout are cookie-based).
+  // Rejected admin refresh cookies per IP per window. Looser than the login policy because a stale
+  // cookie after a database reset is re-presented on every reload until the admin signs in again.
+  const refreshFailurePolicy = { limit: ADMIN_REFRESH_FAILURE_LIMIT, windowMs: env.ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS };
+  const refreshFailureKey = (req: Parameters<typeof clientIpForRequest>[0]) => `admin-refresh-failed:${clientIpForRequest(req)}`;
+  const refreshFailureLimit = {
+    check: async (req: Parameters<typeof clientIpForRequest>[0], reply: FastifyReply) => {
+      const result = await loginRateLimiter.wouldLimit(refreshFailureKey(req), refreshFailurePolicy);
+      applyRateLimitHeaders(reply, result);
+      if (!result.allowed) throw tooManyRequests();
+    },
+    record: async (req: Parameters<typeof clientIpForRequest>[0]) => {
+      await loginRateLimiter.penalty(refreshFailureKey(req), refreshFailurePolicy);
+    },
+  };
+
+  // Auth routes own their per-route preHandlers (login/MFA are rate-limited; refresh counts only
+  // rejected cookies; logout is cookie-based).
   await app.register(async (a) => adminAuthRoutes(a, {
     loginLimit: adminAuthLimit("login"),
     mfaLimit: adminAuthLimit("mfa"),
     mfaEnrollmentLimit: adminAuthLimit("mfa-enroll"),
+    refreshFailureLimit,
   }), { prefix: "/admin" });
   await app.register(async (a) => adminInvitePublicRoutes(a, { inviteLimit }), { prefix: "/admin" });
 
