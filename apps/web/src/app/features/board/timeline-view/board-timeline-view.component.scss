@@ -363,6 +363,28 @@
 
 .tl-key { @include key.card-key; }
 
+// One-line rows: the key follows the title and is the part that gives way, so the title keeps the
+// line (a 12-character key took ~40% of the default pane and cut titles at ~18 characters).
+.tl-name-line > .tl-key {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Two-line rows: the key opens the second line, ahead of the label chips.
+.tl-meta-line {
+  align-self: flex-start;
+  width: max-content;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+
+  > .tl-key { line-height: 16px; }
+}
+
 // Label chips on their own line under the title, scaled to the key's size so they read as metadata
 // and never as controls. Names are never truncated: the bar keeps its natural width (measured by the
 // component, which widens the pane to fit the widest row), and a fourth label onwards folds into +N.
@@ -381,6 +403,7 @@
 }
 
 .tl-title {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -468,8 +491,18 @@
   &.is-draggable { cursor: grab; }
   &.is-dragging { opacity: .85; box-shadow: var(--shadow-drag); z-index: 2; }
   &.is-rescheduling { opacity: .6; pointer-events: none; }
+  // Overdue is a ring, never a fill change: the full danger border plus a soft outer ring, which
+  // the old 60% border-only mix lacked on dark, where it sank into the list-hued fill. Declared before
+  // selection so a selected bar still shows the accent ring.
+  &.is-overdue {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 45%, transparent);
+
+    &:hover:not(:disabled) {
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 45%, transparent), var(--shadow-card-hover);
+    }
+  }
   &.is-selected { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
-  &.is-overdue { border-color: color-mix(in srgb, var(--danger) 60%, var(--border)); }
   &.is-completed {
     background: var(--success-soft);
     border-color: color-mix(in srgb, var(--success) 45%, var(--border));

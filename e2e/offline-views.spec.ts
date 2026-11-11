@@ -87,10 +87,10 @@ for (const scope of ["board", "my-cards", "team-cards"] as const) {
         } finally { db.close(); }
       }, dependent.title)).toBe(true);
       await select("Dependencies view");
-      const connector = map.locator(`.dm-wire-hit[aria-label="${blocker.key} blocks ${dependent.key}"]`);
+      // Keyboard: the connector's unlink button is reachable by focus and removes on Enter.
+      const connector = map.getByRole("button", { name: `Remove dependency - ${blocker.key} blocks ${dependent.key}`, exact: true });
       await connector.focus();
       await page.keyboard.press("Enter");
-      await map.getByRole("button", { name: "Remove", exact: true }).click();
       await expect(connector).toHaveCount(0);
       await page.keyboard.press("ControlOrMeta+z");
       await expect(connector).toHaveCount(1);

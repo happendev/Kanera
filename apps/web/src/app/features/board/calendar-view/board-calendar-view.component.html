@@ -5,33 +5,55 @@
   [class.is-compact]="layout() === 'compact'"
   [class.is-phone]="layout() === 'phone'"
 >
-  @if (navigation() === "paged") {
+  <!-- A stacked calendar (My Cards, Team Cards) scrolls through months and takes its range from the
+       page, so its toolbar carries only the Slim cards toggle. -->
   <div class="calendar-toolbar" (click)="$event.stopPropagation()">
+    @if (navigation() === "paged") {
     <div class="calendar-toolbar-left">
       <button type="button" class="k-toolbar-icon-btn" (click)="previous()" aria-label="Previous" i18n-aria-label="Button - go to the previous month or week" kTooltip="Previous" i18n-kTooltip="Button - go to the previous month or week">
         <i aria-hidden="true" class="ti ti-chevron-left"></i>
       </button>
+      <!-- Icon-only on the phone layout, with the Month/Week switch, so the nav and the month title
+           share one row instead of the switch wrapping onto its own. -->
+      @if (layout() === "phone") {
+      <button type="button" class="k-toolbar-icon-btn" (click)="today()" [attr.aria-label]="todayButtonLabel" [kTooltip]="todayButtonLabel">
+        <i aria-hidden="true" class="ti ti-calendar-event"></i>
+      </button>
+      } @else {
       <button type="button" class="k-toolbar-btn" (click)="today()">
         <i aria-hidden="true" class="ti ti-calendar-event"></i>
         <span i18n="Button - jump the calendar to today">Today</span>
       </button>
+      }
       <button type="button" class="k-toolbar-icon-btn" (click)="next()" aria-label="Next" i18n-aria-label="Button - go to the next month or week" kTooltip="Next" i18n-kTooltip="Button - go to the next month or week">
         <i aria-hidden="true" class="ti ti-chevron-right"></i>
       </button>
       <span class="cal-toolbar-title">{{ title() }}</span>
     </div>
+    }
     <div class="calendar-toolbar-right">
+      @if (layout() === "phone") {
+      <button type="button" class="k-toolbar-icon-btn" [class.is-set]="slim()" [attr.aria-pressed]="slim()" (click)="toggleSlim()" [attr.aria-label]="slimLabel" kTooltip="Show only each card's key and title" i18n-kTooltip>
+        <i class="ti ti-baseline-density-small" aria-hidden="true"></i>
+      </button>
+      } @else {
+      <button type="button" class="k-toolbar-btn" [class.is-set]="slim()" [attr.aria-pressed]="slim()" (click)="toggleSlim()" kTooltip="Show only each card's key and title" i18n-kTooltip>
+        <i class="ti ti-baseline-density-small" aria-hidden="true"></i>
+        <span i18n="Calendar view toggle - smaller tiles with only the key and title">Slim cards</span>
+      </button>
+      }
+      @if (navigation() === "paged") {
       <k-segmented
         [options]="modeOptions"
         [value]="mode()"
-        [showLabels]="true"
+        [showLabels]="layout() !== 'phone'"
         ariaLabel="Calendar range"
         i18n-ariaLabel="Label for the month/week switch"
         (valueChange)="setMode($any($event))"
       />
+      }
     </div>
   </div>
-  }
 
 
   <!-- One drop-list group across every month panel, so a stacked calendar can carry a card from one
@@ -200,7 +222,6 @@
             >
               <ng-container [ngTemplateOutlet]="tileContent" [ngTemplateOutletContext]="{ $implicit: card }" />
             </button>
-            <ng-container [ngTemplateOutlet]="actionsMenu" [ngTemplateOutletContext]="{ $implicit: card }" />
             }
             @if (hiddenCardCount(day)) {
             <!-- A compact month cell keeps its row short; the rest of the day opens in place. -->
@@ -282,7 +303,6 @@
       >
         <ng-container [ngTemplateOutlet]="tileContent" [ngTemplateOutletContext]="{ $implicit: card }" />
       </button>
-      <ng-container [ngTemplateOutlet]="actionsMenu" [ngTemplateOutletContext]="{ $implicit: card }" />
       }
     </div>
     }
@@ -290,81 +310,104 @@
 </ng-template>
 
 <ng-template #tileContent let-card>
-  @if (labelsForCard(card.id).length) {
-  <!-- The assignees share the label row's right end instead of a column beside the text: the title
-       and its time/key line get the tile's full width, so they wrap rather than clip. -->
-  <span class="cal-card-top">
-    <!-- Named chips, not colour bars: a colour alone means nothing to anyone who has not learned
-         the board's palette, and the tile has room for the words. A compact column keeps one and folds the rest into "+N". -->
-    <k-card-labels class="cal-label-row" [labels]="labelsForCard(card.id)" [limit]="layout() === 'compact' ? 1 : 3" [showOverflow]="true" />
-    <ng-container [ngTemplateOutlet]="tileAssignees" [ngTemplateOutletContext]="{ $implicit: card }" />
-  </span>
-  }
-
-  <!-- The approved global-work tile: title first, then its context line. Without a label row the
-       assignees sit top right beside the title instead. -->
-  <span class="cal-card-body">
-    <span class="cal-card-text">
-      <span class="cal-card-title">
-        @if (card.completedAt) {
-          <!-- Same green tick a completed k-card carries, so "done" reads the same everywhere. -->
-          <i aria-hidden="true" class="ti ti-circle-check cal-complete-icon" kTooltip="Completed" i18n-kTooltip="Tooltip on the tick shown beside a completed card's title"></i>
-        } @else if (listFor(card); as list) {
-          <!-- The list's own icon in its colour, the same mark the lane header and table status cell
-               carry, so a tile says where the card stands without a chip of its own. -->
-          <i aria-hidden="true" class="cal-list-icon" [class]="'ti ti-' + (list.icon || 'list') + ' cal-list-icon'" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null" [kTooltip]="list.name"></i>
-        }
-        <span class="cal-card-title-text">{{ card.title }}</span>
-      </span>
-      <!-- The key shares the context row with time and board instead of taking a row of its own:
-           day cells are the tightest surface in the app and the key is the least-read item in them. -->
-      <span class="cal-context-row">
-        @if (showCardKeys()) { <span class="cal-card-key">{{ card.key }}</span> }
-        @if (slotTime(card); as time) {
-        <span class="cal-time" [class.is-overdue]="isOverdue(card)">{{ time }}</span>
-        }
-        @if (boardSummaryFor(card); as board) {
-        <span class="cal-board" [kTooltip]="board.name">
-          <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
-          <span class="cal-board-name">{{ board.name }}</span>
-        </span>
-        }
-      </span>
-
-      @if (hasMetaContent(card)) {
-      <span class="cal-meta-row">
-        @if (summary(card).hasDescription) {
-        <span class="cal-indicator" kTooltip="Has description" i18n-kTooltip="Tooltip - the card has a description"><i aria-hidden="true" class="ti ti-align-left"></i></span>
-        }
-        @if (summary(card).checklistTotalCount) {
-        <span
-          class="cal-indicator cal-checklist"
-          [class.is-complete]="summary(card).checklistDoneCount === summary(card).checklistTotalCount"
-          [kTooltip]="checklistTooltip(card)"
-        >
-          <i aria-hidden="true" class="ti ti-checkbox"></i>
-          <span class="cal-indicator-count">{{ summary(card).checklistDoneCount }}/{{ summary(card).checklistTotalCount }}</span>
-        </span>
-        }
-        @if (summary(card).attachmentCount) {
-        <span class="cal-indicator" [kTooltip]="attachmentsTooltip(card)">
-          <i aria-hidden="true" class="ti ti-paperclip"></i>
-          <span class="cal-indicator-count">{{ summary(card).attachmentCount }}</span>
-        </span>
-        }
-      </span>
-      }
-    </span>
-
-    @if (!labelsForCard(card.id).length) {
+  <!-- The board tile's order (card.component.html): the "which card is this" key row on top, then
+       the title, its labels, and one wrapping row of state facts. The assignees close the key row on
+       the right, so the title and the facts get the tile's full width and wrap rather than clip. -->
+  @if (showCardKeys() || (!slim() && assigneesForCard(card.id).length)) {
+  <span class="cal-key-row">
+    @if (showCardKeys()) { <span class="cal-card-key">{{ card.key }}</span> }
+    @if (!slim()) {
     <ng-container [ngTemplateOutlet]="tileAssignees" [ngTemplateOutletContext]="{ $implicit: card }" />
     }
   </span>
+  }
+
+  <span class="cal-card-title">
+    @if (card.completedAt) {
+      <!-- Same green tick a completed k-card carries, so "done" reads the same everywhere. -->
+      <i aria-hidden="true" class="ti ti-circle-check cal-complete-icon" kTooltip="Completed" i18n-kTooltip="Tooltip on the tick shown beside a completed card's title"></i>
+    }
+    <span class="cal-card-title-text">{{ card.title }}</span>
+  </span>
+
+  <!-- Slim cards stop at the key and title. -->
+  @if (!slim()) {
+  @if (labelsForCard(card.id).length) {
+  <!-- Named chips, not colour bars: a colour alone means nothing to anyone who has not learned
+       the board's palette, and the tile has room for the words. A compact column keeps one and folds the rest into "+N". -->
+  <k-card-labels class="cal-label-row" [labels]="labelsForCard(card.id)" [limit]="layout() === 'compact' ? 1 : 3" [showOverflow]="true" />
+  }
+
+  @if (hasFacts(card)) {
+  <!-- The board tile's footer facts, in the shared chips (shared/_chip.scss): Blocked first, then the
+       due time, which turns into the danger / warning chip as the deadline nears, then where the card
+       stands. The date itself is the day cell, so an all-day card that is overdue says so in words. -->
+  <span class="cal-context-row">
+    @if (blockedLabel(card); as label) {
+    <span class="cal-blocked" [kTooltip]="label" [attr.aria-label]="label">
+      <i class="ti ti-lock" aria-hidden="true"></i>
+      <span class="cal-chip-text" i18n="card state|Tile chip - the card waits on another open card">Blocked</span>
+    </span>
+    }
+    @if (slotTime(card); as time) {
+    <span class="cal-time" [class.overdue]="isOverdue(card)" [class.due-soon]="isDueSoon(card)">
+      <i aria-hidden="true" class="ti ti-clock"></i>
+      {{ time }}
+    </span>
+    } @else if (isOverdue(card)) {
+    <span class="cal-time overdue" kTooltip="Overdue" i18n-kTooltip="Calendar tile chip - an all-day card past its due date">
+      <i aria-hidden="true" class="ti ti-alert-circle"></i>
+      <span class="cal-chip-text" i18n="Calendar tile chip - an all-day card past its due date">Overdue</span>
+    </span>
+    }
+    @if (!card.completedAt) {
+    @if (listFor(card); as list) {
+    <!-- The shared list chip, in the list's own hue and icon, the same mark the table's status cell
+         and card activity carry. A narrow month column keeps the icon and drops the name (tooltip). -->
+    <span class="cal-list" [style.--list-color]="list.color ? 'var(--color-' + list.color + ')' : null" [kTooltip]="list.name">
+      <i aria-hidden="true" [class]="'ti ti-' + (list.icon || 'list')"></i>
+      <span>{{ list.name }}</span>
+    </span>
+    }
+    }
+    @if (boardSummaryFor(card); as board) {
+    <span class="cal-board" [kTooltip]="board.name">
+      <i aria-hidden="true" [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+      <span class="cal-board-name">{{ board.name }}</span>
+    </span>
+    }
+  </span>
+  }
+
+  @if (hasMetaContent(card)) {
+  <span class="cal-meta-row">
+    @if (summary(card).hasDescription) {
+    <span class="cal-indicator" kTooltip="Has description" i18n-kTooltip="Tooltip - the card has a description"><i aria-hidden="true" class="ti ti-align-left"></i></span>
+    }
+    @if (summary(card).checklistTotalCount) {
+    <span
+      class="cal-indicator cal-checklist"
+      [class.is-complete]="summary(card).checklistDoneCount === summary(card).checklistTotalCount"
+      [kTooltip]="checklistTooltip(card)"
+    >
+      <i aria-hidden="true" class="ti ti-checkbox"></i>
+      <span class="cal-indicator-count">{{ summary(card).checklistDoneCount }}/{{ summary(card).checklistTotalCount }}</span>
+    </span>
+    }
+    @if (summary(card).attachmentCount) {
+    <span class="cal-indicator" [kTooltip]="attachmentsTooltip(card)">
+      <i aria-hidden="true" class="ti ti-paperclip"></i>
+      <span class="cal-indicator-count">{{ summary(card).attachmentCount }}</span>
+    </span>
+    }
+  </span>
+  }
 
   @if (summary(card).checklistTotalCount) {
   <span class="cal-progress" [kTooltip]="checklistProgressTooltip(card)">
     <span class="cal-progress-fill" [style.width.%]="(summary(card).checklistDoneCount ?? 0) / (summary(card).checklistTotalCount ?? 1) * 100"></span>
   </span>
+  }
   }
 </ng-template>
 
@@ -383,24 +426,24 @@
   }
 </ng-template>
 
-<ng-template #actionsMenu let-card>
-  @if (activeActionsCardId() === card.id) {
-  <k-card-actions-menu
-    [cardId]="card.id"
-    [cardKey]="card.key"
-    [organisationKey]="card.organisationKey"
-    [boardId]="card.boardId"
-    [workspaceId]="workspaceIdFor(card)"
-    [sourceListId]="card.listId"
-    [sourceLists]="lists()"
-    [title]="card.title"
-    [dueDateLocalDate]="card.dueDateLocalDate"
-    [dueDateSlot]="card.dueDateSlot"
-    [dueDateTimezone]="card.dueDateTimezone"
-    [completedAt]="card.completedAt"
-    [archivedAt]="card.archivedAt"
-    [anchorPoint]="actionsMenuPoint()"
-    (close)="closeActionsMenu()"
-  />
-  }
-</ng-template>
+<!-- One menu at the view's root, not beside its tile: day cells and agenda sections stack in document
+     order, so a menu mounted inside one was painted over by the next day. -->
+@if (activeActionsCard(); as card) {
+<k-card-actions-menu
+  [cardId]="card.id"
+  [cardKey]="card.key"
+  [organisationKey]="card.organisationKey"
+  [boardId]="card.boardId"
+  [workspaceId]="workspaceIdFor(card)"
+  [sourceListId]="card.listId"
+  [sourceLists]="lists()"
+  [title]="card.title"
+  [dueDateLocalDate]="card.dueDateLocalDate"
+  [dueDateSlot]="card.dueDateSlot"
+  [dueDateTimezone]="card.dueDateTimezone"
+  [completedAt]="card.completedAt"
+  [archivedAt]="card.archivedAt"
+  [anchorPoint]="actionsMenuPoint()"
+  (close)="closeActionsMenu()"
+/>
+}

@@ -8,6 +8,7 @@ All notable changes to Kanera are documented here.
 
 - **Undo comment deletes:** deleting a comment shows a **Comment deleted** toast with **Undo**; the comment is only removed for everyone once the toast closes.
 - **Up next:** drag cards directly from Assigned or In progress in My Cards and Team Cards overviews into the open queue.
+- **Unlink on the Dependencies map:** hover a connector or either of its cards and an unlink button appears on the line; one click removes the dependency, with **Undo** in the toast. Clicking a connector and pressing Delete works too, the buttons are reachable with Tab, and on touch screens they're always shown.
 
 - **Mermaid diagrams:** ```` ```mermaid ```` code blocks are drawn as diagrams in card descriptions, notes and Markdown attachment previews, using the app's theme, accent colours and rounded shapes. Wide diagrams scroll within their frame to keep labels readable; comments keep showing the source.
 - **Mentions tab in notifications:** once someone has @-mentioned you, the notifications drawer gets a **Mentions** tab (with its unread count) listing every comment that mentions you, read or unread. On phones the drawer's Group, Board and User menus now share one row.
@@ -30,7 +31,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
-- **Interface refresh:** a cleaner, more consistent look across boards, tables, Home, My Cards and Team Cards, notifications, menus, the new card dialog and card detail, with clearer light and dark themes. Phones get the full screen width, with navigation behind a menu button, and larger touch targets.
+- **Interface refresh:** a cleaner, more consistent look across boards, tables, Calendar, Timeline and Dependencies, Home, My Cards and Team Cards, notifications, menus, the new card dialog and card detail, with clearer light and dark themes. Phones get the full screen width, with navigation behind a menu button, and larger touch targets.
 - **Faster card details:** sections render independently, large collections defer offscreen rendering, and realtime bursts share one offline-cache write. Detail/feed loads are cancellable and deduplicated, unchanged reconnects use conditional requests, and per-card revisions preserve live edits without retrying the initial detail load.
 
 - **Onboarding templates:** lists now start with colors suited to their workflow stages, carried through to workspace and standalone boards.

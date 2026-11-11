@@ -151,7 +151,8 @@ test("the dependencies map adds and removes dependencies in place, with critical
     await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 8 });
     await expect(mapTile(page, last.title)).toHaveClass(/is-link-over/);
     await page.mouse.up();
-    const connector = map.locator(`.dm-wire-hit[aria-label="${first.key} blocks ${last.key}"]`);
+    // Every connector the viewer may remove carries its own unlink button, named after both cards.
+    const connector = map.getByRole("button", { name: `Remove dependency - ${first.key} blocks ${last.key}`, exact: true });
     await expect(connector).toHaveCount(1);
     await expect(mapTile(viewer, last.title)).toHaveAttribute("aria-label", new RegExp(`Waiting on (${other.key}, ${first.key}|${first.key}, ${other.key})`));
 
@@ -173,10 +174,13 @@ test("the dependencies map adds and removes dependencies in place, with critical
     await expect(mapTile(page, last.title)).toHaveClass(/is-critical/);
     await map.getByRole("button", { name: "Critical path" }).click();
 
-    // Removing it from its connector reaches the other viewer, and Undo puts it back.
-    await connector.focus();
-    await page.keyboard.press("Enter");
-    await map.getByRole("button", { name: "Remove", exact: true }).click();
+    // The unlink button stays out of the way until either card is hovered; one click removes the
+    // dependency without opening a card, reaches the other viewer, and Undo puts it back.
+    await page.mouse.move(0, 0);
+    await expect(connector).toHaveCSS("opacity", "0");
+    await mapTile(page, last.title).hover();
+    await expect(connector).toHaveCSS("opacity", "1");
+    await connector.click();
     await expect(connector).toHaveCount(0);
     await expect(mapTile(viewer, last.title)).not.toHaveAttribute("aria-label", new RegExp(first.key));
     const toast = page.getByRole("status").filter({ hasText: `${last.key} no longer waits on ${first.key}` });
@@ -188,7 +192,7 @@ test("the dependencies map adds and removes dependencies in place, with critical
     // right, and an undated card stays in the first column.
     expect((await api.patch(`/api/cards/${first.id}`, { data: { dueDateLocalDate: "2099-06-19", dueDateSlot: "anyTime" } })).ok()).toBe(true);
     expect((await api.patch(`/api/cards/${last.id}`, { data: { dueDateLocalDate: "2099-06-02", dueDateSlot: "anyTime" } })).ok()).toBe(true);
-    await page.getByRole("group", { name: "Dependencies layout", exact: true }).getByRole("button", { name: "Timeline", exact: true }).click();
+    await page.getByRole("group", { name: "Dependencies layout", exact: true }).getByRole("button", { name: "By week", exact: true }).click();
     await expect(chain.locator(".dm-step-label").first()).toHaveText("No due date");
     // One calendar for every chain: each lane has the same week headings in the same places, and
     // the empty weeks between the two dated chains collapse behind a dashed marker.
@@ -255,10 +259,18 @@ test("dependency layouts keep titles, badges and touch controls usable across sc
 
       for (const width of [1024, 1440, 768, 640, 390, 320]) {
         await page.setViewportSize({ width, height: width < 700 ? 844 : 900 });
-        for (const layout of ["Steps", "Map", "Timeline"]) {
+        for (const layout of ["Steps", "Map", "By week"]) {
           await page.getByRole("group", { name: "Dependencies layout", exact: true }).getByRole("button", { name: layout, exact: true }).tap();
-          const layoutClass = { Steps: "list", Map: "map", Timeline: "timeline" }[layout];
+          const layoutClass = { Steps: "list", Map: "map", "By week": "timeline" }[layout];
           await expect(map.locator(".dm-chains")).toHaveClass(new RegExp(`is-${layoutClass}`));
+          if (layout !== "Steps") {
+            // Touch has no hover, so the unlink button is always out, with a 44px target.
+            const unlink = chain.getByRole("button", { name: `Remove dependency - ${first.key} blocks ${last.key}`, exact: true });
+            await expect(unlink).toHaveCSS("opacity", "1");
+            const target = await unlink.evaluate((el) => { const before = getComputedStyle(el, "::before"); return { width: parseFloat(before.width), height: parseFloat(before.height) }; });
+            expect(target.width, `${surface} ${width}px: unlink touch target`).toBeGreaterThanOrEqual(44);
+            expect(target.height, `${surface} ${width}px: unlink touch target`).toBeGreaterThanOrEqual(44);
+          }
           if (layout === "Steps") {
             const title = chain.locator(".dm-row-main").first();
             await expect.poll(async () => (await title.boundingBox())!.width, { message: `${surface} ${width}px: readable Steps title` }).toBeGreaterThanOrEqual(width >= 768 ? 200 : 100);

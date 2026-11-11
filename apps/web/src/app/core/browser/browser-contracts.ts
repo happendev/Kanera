@@ -69,7 +69,7 @@ export type StorageKey =
   | `kanera.notes.tab:${string}:${string}`
   | `kanera.onboarding.skipped:${string}:${string}`
   | `kanera.scratchpad.active:${string}:${string}`
-  | `kanera.view.${"aggregates" | "aggregateSplit" | "background" | "collapsedSections" | "columnOrder" | "columnWidths" | "columns" | "compactCards" | "completed" | "definition" | "filters" | "groupBy" | "dependencyMap" | "timeline" | "hideGuests" | "mode" | "sort" | "upNextSeen"}:${string}`;
+  | `kanera.view.${"aggregates" | "aggregateSplit" | "background" | "calendarSlim" | "collapsedSections" | "columnOrder" | "columnWidths" | "columns" | "compactCards" | "completed" | "definition" | "filters" | "groupBy" | "dependencyMap" | "timeline" | "hideGuests" | "mode" | "sort" | "upNextSeen"}:${string}`;
 
 export function organisationStorageKey(key: StorageKey, clientId: string | null | undefined): string {
   return `${key}:${clientId ?? "anonymous"}`;
@@ -107,7 +107,7 @@ export function scratchpadActiveNoteKey(userId: string, clientId: string): Stora
 }
 
 export function viewPreferenceKey(
-  preference: "aggregates" | "aggregateSplit" | "background" | "collapsedSections" | "columnOrder" | "columnWidths" | "columns" | "compactCards" | "completed" | "definition" | "filters" | "groupBy" | "dependencyMap" | "timeline" | "hideGuests" | "mode" | "sort" | "upNextSeen",
+  preference: "aggregates" | "aggregateSplit" | "background" | "calendarSlim" | "collapsedSections" | "columnOrder" | "columnWidths" | "columns" | "compactCards" | "completed" | "definition" | "filters" | "groupBy" | "dependencyMap" | "timeline" | "hideGuests" | "mode" | "sort" | "upNextSeen",
   scope: string,
 ): StorageKey {
   return `${STORAGE_KEYS.VIEW_PREFIX}.${preference}:${scope}`;

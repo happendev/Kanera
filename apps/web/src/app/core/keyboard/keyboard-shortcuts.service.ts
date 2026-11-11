@@ -99,6 +99,8 @@ export function formatShortcut(keys: ShortcutKeys): string[][] {
         case "alt": return IS_APPLE ? "⌥" : "Alt";
         case "escape": return "Esc";
         case "enter": return "Enter";
+        case "delete": return IS_APPLE ? "⌦" : "Delete";
+        case "backspace": return IS_APPLE ? "⌫" : "Backspace";
         case "arrowup": return "↑";
         case "arrowdown": return "↓";
         case "arrowleft": return "←";

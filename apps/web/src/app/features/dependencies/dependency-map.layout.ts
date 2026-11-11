@@ -13,10 +13,12 @@ import { dueDateTimestamp } from "../board/due-date.util";
  * on a layout pass and the same data always draws the same map.
  */
 
-export const TILE_WIDTH = 252;
+// 232 + 48: two two-step chains (the common shape) fit side by side in a 1440px window with the
+// sidebar open, where 252 + 56 left a lone chain and half the map empty beside it.
+export const TILE_WIDTH = 232;
 /** The height of a tile with nothing beyond its key, title, people and date. */
 export const TILE_HEIGHT = 96;
-export const WAVE_GAP = 56;
+export const WAVE_GAP = 48;
 const ROW_GAP = 14;
 export const MAP_PADDING = 16;
 
@@ -82,6 +84,11 @@ export interface MapEdge {
   cleared: boolean;
   atRisk: AtRiskReason | null;
   path: string;
+  /**
+   * Where the connector's unlink button sits: on the curve in the last gap before the right-hand
+   * card, so it never lands on a tile and stays clear of the left card's link handle.
+   */
+  unlinkAt: { x: number; y: number };
 }
 
 export interface MapChain {
@@ -427,7 +434,7 @@ function buildChain(
     reversed: edge.kind === "blocks" && left !== from,
     cleared: edge.kind === "blocks" && from.status === "done",
     atRisk: edge.kind === "blocks" ? edgeRisk(from.id, to.id) : null,
-    path: connectorPath(left, right, lanes.get(edge.id)),
+    ...connectorGeometry(left, right, lanes.get(edge.id)),
   }));
 
   const counts = { blocked: 0, ready: 0, starter: 0, atRisk: 0, done: 0 };
@@ -522,12 +529,6 @@ export function chainHeaderHeight(width: number): number {
 export const STEP_LABEL_HEIGHT = 22;
 const CHAIN_GAP = 12;
 const CHAIN_BORDER = 1;
-/**
- * One packing column per step: a chain of n steps spans n columns, and a span is exactly wide
- * enough for its tiles because the gap between steps covers the box's padding, borders and the gap
- * between boxes.
- */
-const STEP_PITCH = TILE_WIDTH + WAVE_GAP;
 /** Room under a chain wider than its box, so a classic scrollbar does not cover its last row. */
 const SCROLLBAR_ALLOWANCE = 12;
 
@@ -539,37 +540,62 @@ export interface ChainPlacement {
 }
 
 /**
- * Places chain boxes for the map layout: each takes the highest free spot across the columns it
- * spans, leftmost first, in the order given. Wrapping boxes in a flex row left a gap under every
+ * Places chain boxes for the map layout: each takes the highest free spot wide enough for its own
+ * canvas, leftmost first, in the order given. Wrapping boxes in a flex row left a gap under every
  * short chain as tall as the row's tallest one; this packs the next chain into that gap instead,
  * while the most urgent chains still come first. Positions are computed, not measured, so a chain
  * never jumps after it renders.
+ *
+ * Boxes are sized to their canvas, not to whole step columns, so two short chains share a row
+ * whenever their tiles fit side by side. A box that nothing still to come could sit beside (not even
+ * the narrowest chain after it) stretches to the map's right edge, or to the box beside it, so a lone
+ * or row-ending chain fills the width instead of leaving the rest of the panel empty; its last step
+ * band runs on to the box's edge. A chain wider than the map takes the full width and scrolls.
  */
-export function packChains(chains: readonly Pick<MapChain, "waves" | "width" | "height">[], containerWidth: number): {
+export function packChains(chains: readonly Pick<MapChain, "width" | "height">[], containerWidth: number): {
   placements: ChainPlacement[];
   height: number;
 } {
-  const columns = Math.max(1, Math.floor((containerWidth + CHAIN_GAP) / STEP_PITCH));
-  const bottoms = new Array<number>(columns).fill(0);
-  const placements = chains.map((chain) => {
-    const span = Math.min(chain.waves, columns);
-    // A single column takes the full width: on a phone there is nothing to share the row with.
-    const width = columns === 1 ? Math.max(0, containerWidth) : span * STEP_PITCH - CHAIN_GAP;
-    const scrolls = chain.width + CHAIN_BORDER * 2 > width;
-    const height = CHAIN_BORDER * 2 + chainHeaderHeight(width) + STEP_LABEL_HEIGHT + chain.height + (scrolls ? SCROLLBAR_ALLOWANCE : 0);
-    let column = 0;
+  const mapWidth = Math.max(0, containerWidth);
+  const natural = (chain: Pick<MapChain, "width">) => chain.width + CHAIN_BORDER * 2;
+  // The narrowest box still to come after each chain: whether anything could yet sit beside it.
+  const narrowestAfter = chains.map((_, index) => Math.min(Infinity, ...chains.slice(index + 1).map(natural)));
+  const boxHeight = (chain: Pick<MapChain, "width" | "height">, width: number) =>
+    CHAIN_BORDER * 2 + chainHeaderHeight(width) + STEP_LABEL_HEIGHT + chain.height + (natural(chain) > width ? SCROLLBAR_ALLOWANCE : 0);
+  // Two boxes clash when their spans, each padded by the gap, overlap on that axis.
+  const clashes = (a0: number, a1: number, b0: number, b1: number) => a0 < b1 + CHAIN_GAP && b0 < a1 + CHAIN_GAP;
+  const placed: ChainPlacement[] = [];
+  for (const [index, chain] of chains.entries()) {
+    const own = Math.min(natural(chain), mapWidth);
+    const height = boxHeight(chain, own);
+    // Every spot worth trying starts at the map's left edge or one gap right of a placed box.
+    const starts = [...new Set([0, ...placed.map((box) => box.x + box.width + CHAIN_GAP)])]
+      .filter((start) => start + own <= mapWidth)
+      .sort((a, b) => a - b);
+    let x = 0;
     let y = Infinity;
-    for (let start = 0; start + span <= columns; start += 1) {
-      const top = Math.max(...bottoms.slice(start, start + span));
+    for (const start of starts) {
+      const top = placed
+        .filter((box) => clashes(start, start + own, box.x, box.x + box.width))
+        .reduce((lowest, box) => Math.max(lowest, box.y + box.height + CHAIN_GAP), 0);
       if (top < y) {
         y = top;
-        column = start;
+        x = start;
       }
     }
-    for (let index = column; index < column + span; index += 1) bottoms[index] = y + height + CHAIN_GAP;
-    return { x: column * STEP_PITCH, y, width, height };
-  });
-  return { placements, height: Math.max(0, Math.max(...bottoms) - CHAIN_GAP) };
+    if (!Number.isFinite(y)) y = 0;
+    let width = own;
+    if (x + own + CHAIN_GAP + narrowestAfter[index]! > mapWidth) {
+      // Height only shrinks as a box widens (the header unfolds, the scrollbar room goes), so the
+      // unstretched height is a safe test for which neighbours it could run into.
+      const limit = placed
+        .filter((box) => box.x >= x + own && clashes(y, y + height, box.y, box.y + box.height))
+        .reduce((edge, box) => Math.min(edge, box.x - CHAIN_GAP), mapWidth);
+      width = Math.max(own, limit - x);
+    }
+    placed.push({ x, y, width, height: boxHeight(chain, width) });
+  }
+  return { placements: placed, height: Math.max(0, ...placed.map((box) => box.y + box.height)) };
 }
 
 /**
@@ -639,23 +665,35 @@ function placeRows(columns: LayoutItem[][], links: Links): void {
 
 const middle = (item: LayoutItem) => item.y + item.height / 2;
 
+/** How far along the last gap's curve the unlink button sits: past the middle, toward the arrow. */
+const UNLINK_T = 0.62;
+
 /**
  * A connector from the right edge of one tile to the left edge of another: curves across each gap
  * between steps and runs straight through the lane it holds in every step it skips. Two tiles of
  * one step get an arc instead. Always drawn left to right; a reversed edge puts its arrow at the start.
  */
-function connectorPath(from: LayoutItem, to: LayoutItem, lane: readonly LayoutItem[] = []): string {
+function connectorGeometry(from: LayoutItem, to: LayoutItem, lane: readonly LayoutItem[] = []): Pick<MapEdge, "path" | "unlinkAt"> {
   if (to.x <= from.x) {
     const x = from.x + TILE_WIDTH;
     const bulge = WAVE_GAP * 0.6;
-    return `M ${x} ${middle(from)} C ${x + bulge} ${middle(from)}, ${x + bulge} ${middle(to)}, ${x} ${middle(to)}`;
+    return {
+      path: `M ${x} ${middle(from)} C ${x + bulge} ${middle(from)}, ${x + bulge} ${middle(to)}, ${x} ${middle(to)}`,
+      // The arc's apex, halfway between the two tiles.
+      unlinkAt: { x: Math.round(x + bulge * 0.75), y: Math.round((middle(from) + middle(to)) / 2) },
+    };
   }
   let x = from.x + TILE_WIDTH;
   let y = middle(from);
   let path = `M ${x} ${y}`;
+  let unlinkAt = { x, y };
   const cross = (toX: number, toY: number) => {
     const dx = Math.max(24, (toX - x) / 2);
     path += ` C ${x + dx} ${y}, ${toX - dx} ${toY}, ${toX} ${toY}`;
+    unlinkAt = {
+      x: Math.round(cubic(x, x + dx, toX - dx, toX, UNLINK_T)),
+      y: Math.round(cubic(y, y, toY, toY, UNLINK_T)),
+    };
     x = toX;
     y = toY;
   };
@@ -665,7 +703,12 @@ function connectorPath(from: LayoutItem, to: LayoutItem, lane: readonly LayoutIt
     path += ` L ${x} ${y}`;
   }
   cross(to.x, middle(to));
-  return path;
+  return { path, unlinkAt };
+}
+
+function cubic(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const u = 1 - t;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
 }
 
 const STATUS_ORDER: Record<DependencyStatus, number> = { starter: 0, blocked: 1, ready: 2, open: 3, done: 4 };

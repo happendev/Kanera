@@ -149,20 +149,33 @@
           <button type="button" class="tl-name tl-card-name" (click)="openCard(row.card.id); $event.stopPropagation()" (auxclick)="openCardInNewTab(row.card, $event)" (contextmenu)="onCardContextMenu(row.card, $event)" [attr.aria-label]="barLabel(row)" [kTooltip]="datesText(barFor(row))">
             @if (row.card.completedAt) {
             <i class="ti ti-circle-check tl-done-icon" aria-hidden="true"></i>
-            } @else if (listFor(row.card); as list) {
+            } @else if (groupBy() !== 'list') {
+            <!-- Grouped by list, the group heading already carries the list's icon and hue. -->
+            @if (listFor(row.card); as list) {
             <i class="ti tl-list-icon" [class]="'ti ti-' + (list.icon || 'list') + ' tl-list-icon'" [style.color]="listColor(row.card)" [kTooltip]="list.name" aria-hidden="true"></i>
             }
+            }
             <span class="tl-name-text">
+              <!-- The title owns the first line. With two-line rows the key opens the second, before
+                   the labels, like the board tile's quiet key row; on one-line rows it follows the
+                   title and gives way first, so a long key never truncates the title. -->
               <span class="tl-name-line">
+                <span class="tl-title">{{ row.card.title }}</span>
+                @if (showCardKeys() && !hasLabelChips()) {
+                <span class="tl-key">{{ row.card.key }}</span>
+                }
+              </span>
+              @if (hasLabelChips() && (showCardKeys() || labelsFor(row.card.id).length)) {
+              <span class="tl-meta-line">
                 @if (showCardKeys()) {
                 <span class="tl-key">{{ row.card.key }}</span>
                 }
-                <span class="tl-title">{{ row.card.title }}</span>
+                @if (labelsFor(row.card.id).length) {
+                <!-- Labels are otherwise invisible on the chart unless grouped by label, yet a "Bug" label is
+                     often why a chain is held up. Presentational: the row's button owns the click. -->
+                <k-card-labels class="tl-labels" [labels]="labelsFor(row.card.id)" [limit]="3" [showOverflow]="true" [interactive]="false" />
+                }
               </span>
-              @if (showLabelChips() && labelsFor(row.card.id).length) {
-              <!-- Labels are otherwise invisible on the chart unless grouped by label, yet a "Bug" label is
-                   often why a chain is held up. Presentational: the row's button owns the click. -->
-              <k-card-labels class="tl-labels" [labels]="labelsFor(row.card.id)" [limit]="3" [showOverflow]="true" [interactive]="false" />
               }
             </span>
             @if (assigneesFor(row.card.id).length && !narrow()) {
@@ -247,25 +260,6 @@
             <span class="tl-lane-empty" i18n="Timeline lane text for an unscheduled card the viewer cannot edit">Not scheduled</span>
             }
           </div>
-          @if (activeActionsCardId() === row.card.id) {
-          <k-card-actions-menu
-            [cardId]="row.card.id"
-            [cardKey]="row.card.key"
-            [organisationKey]="row.card.organisationKey"
-            [boardId]="row.card.boardId"
-            [workspaceId]="workspaceIdFor(row.card)"
-            [sourceListId]="row.card.listId"
-            [sourceLists]="lists()"
-            [title]="row.card.title"
-            [dueDateLocalDate]="row.card.dueDateLocalDate"
-            [dueDateSlot]="row.card.dueDateSlot"
-            [dueDateTimezone]="row.card.dueDateTimezone"
-            [completedAt]="row.card.completedAt"
-            [archivedAt]="row.card.archivedAt"
-            [anchorPoint]="actionsMenuPoint()"
-            (close)="closeActionsMenu()"
-          />
-          }
         </div>
         }
         }
@@ -300,5 +294,26 @@
       </div>
     </div>
   </div>
+  }
+  <!-- One menu at the view's root, not inside its row: rows carry a z-index (above the bands), which
+       capped a menu mounted in a row at that row's layer, so later rows and bars painted over it. -->
+  @if (activeActionsCard(); as menuCard) {
+  <k-card-actions-menu
+    [cardId]="menuCard.id"
+    [cardKey]="menuCard.key"
+    [organisationKey]="menuCard.organisationKey"
+    [boardId]="menuCard.boardId"
+    [workspaceId]="workspaceIdFor(menuCard)"
+    [sourceListId]="menuCard.listId"
+    [sourceLists]="lists()"
+    [title]="menuCard.title"
+    [dueDateLocalDate]="menuCard.dueDateLocalDate"
+    [dueDateSlot]="menuCard.dueDateSlot"
+    [dueDateTimezone]="menuCard.dueDateTimezone"
+    [completedAt]="menuCard.completedAt"
+    [archivedAt]="menuCard.archivedAt"
+    [anchorPoint]="actionsMenuPoint()"
+    (close)="closeActionsMenu()"
+  />
   }
 </section>

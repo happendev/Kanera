@@ -16,24 +16,29 @@
   </div>
   }
 
-  <div class="dm-controls">
+  <!-- On a phone (compactControls) the scope switch and the toggles go icon-only and share one row;
+       the toggles keep their names as aria-labels, the visible words being the only name otherwise. -->
+  <div class="dm-controls" [class.is-compact]="compactControls()">
     @if (offersWorkspace()) {
-    <k-segmented [options]="scopeOptions" [value]="scopeMode()" [showLabels]="true" ariaLabel="Dependencies scope" i18n-ariaLabel (valueChange)="setScope($event)" />
+    <k-segmented [options]="scopeOptions" [value]="scopeMode()" [showLabels]="!compactControls()" ariaLabel="Dependencies scope" i18n-ariaLabel (valueChange)="setScope($event)" />
     }
-    <button type="button" class="dm-toggle" [class.is-on]="density() === 'slim'" [attr.aria-pressed]="density() === 'slim'" (click)="toggleSlim()"
-      kTooltip="Show only each card's key and title" i18n-kTooltip>
+    <button type="button" class="k-toolbar-btn dm-toggle" [class.is-set]="density() === 'slim'" [attr.aria-pressed]="density() === 'slim'" (click)="toggleSlim()"
+      kTooltip="Show only each card's key and title" i18n-kTooltip
+      [attr.aria-label]="compactControls() ? slimLabel : null">
       <i class="ti ti-baseline-density-small" aria-hidden="true"></i>
-      &ngsp;<ng-container i18n="Dependencies view toggle: smaller cards without labels, fields, people or dates">Slim cards</ng-container>
+      <span i18n="Dependencies view toggle: smaller cards without labels, fields, people or dates">Slim cards</span>
     </button>
-    <button type="button" class="dm-toggle" [class.is-on]="showRelated()" [attr.aria-pressed]="showRelated()" (click)="toggleRelated()"
-      kTooltip="Also show cards linked with “relates to”" i18n-kTooltip>
+    <button type="button" class="k-toolbar-btn dm-toggle" [class.is-set]="showRelated()" [attr.aria-pressed]="showRelated()" (click)="toggleRelated()"
+      kTooltip="Also show cards linked with “relates to”" i18n-kTooltip
+      [attr.aria-label]="compactControls() ? relatedLabel : null">
       <i class="ti ti-link" aria-hidden="true"></i>
-      &ngsp;<ng-container i18n="Dependencies view toggle: also draw relates-to links">Related</ng-container>
+      <span i18n="Dependencies view toggle: also draw relates-to links">Related</span>
     </button>
-    <button type="button" class="dm-toggle" [class.is-on]="critical()" [attr.aria-pressed]="critical()" (click)="toggleCritical()"
-      kTooltip="Highlight the longest run of open work in each chain" i18n-kTooltip>
+    <button type="button" class="k-toolbar-btn dm-toggle" [class.is-set]="critical()" [attr.aria-pressed]="critical()" (click)="toggleCritical()"
+      kTooltip="Highlight the longest run of open work in each chain" i18n-kTooltip
+      [attr.aria-label]="compactControls() ? criticalPathLabel : null">
       <i class="ti ti-route" aria-hidden="true"></i>
-      &ngsp;<ng-container i18n="Dependencies view toggle: highlight each chain's critical path">Critical path</ng-container>
+      <span i18n="Dependencies view toggle: highlight each chain's critical path">Critical path</span>
     </button>
   </div>
 </div>
@@ -132,7 +137,7 @@
     <!-- Sideways scroll, not stacking: a chain's meaning is its left-to-right order, so a wide chain
          keeps its shape and scrolls inside its own box while the page stays put. -->
     <div class="dm-scroll">
-      <div class="dm-canvas" [style.width.px]="chain.width" [style.height.px]="chain.height + stepLabelHeight" (click)="selectedEdge.set(null)">
+      <div class="dm-canvas" [style.width.px]="chain.width" [style.height.px]="chain.height + stepLabelHeight" (click)="selectedEdgeId.set(null)">
         @for (column of stepColumns(chain); track column.index) {
         <span class="dm-step-band" [class.is-alt]="column.index % 2 === 1" [class.is-current]="column.tone === 'is-current'" [style.left.px]="column.bandX" [style.width.px]="column.last ? null : column.bandWidth" [style.right.px]="column.last ? 0 : null" aria-hidden="true"></span>
         @if (column.skipsWeeks) {
@@ -153,12 +158,13 @@
           <!-- A reversed edge is still drawn left to right, so its arrow goes on the start. -->
           <path [attr.d]="edge.path" [attr.class]="wireClass(edge)" [attr.marker-end]="edge.reversed ? null : markerUrl(edge)" [attr.marker-start]="edge.reversed ? markerUrl(edge) : null" />
           }
-          <!-- Wide invisible strokes over the connectors the viewer may remove, drawn last so they are on top. -->
+          <!-- Wide invisible strokes over the connectors the viewer may remove, drawn last so they are on
+               top. Pointer only: they light the connector and bring out its unlink button, which is the
+               control keyboard and screen reader users reach. -->
           @for (edge of chain.edges; track edge.id) {
           @if (canRemove(edge)) {
-          <path class="dm-wire-hit" [attr.d]="edge.path" tabindex="0" role="button" [attr.aria-label]="edgeLabel(edge)"
-            (click)="selectEdge($event, chain, edge)" (keydown.enter)="selectEdge($event, chain, edge)" (keydown.space)="selectEdge($event, chain, edge)"
-            (mouseenter)="hoveredEdgeId.set(edge.id)" (mouseleave)="hoveredEdgeId.set(null)" />
+          <path class="dm-wire-hit" [attr.d]="edge.path"
+            (click)="selectEdge($event, edge)" (mouseenter)="hoveredEdgeId.set(edge.id)" (mouseleave)="hoveredEdgeId.set(null)" />
           }
           }
           @if (linkDraft()?.line; as line) {
@@ -173,16 +179,26 @@
           [class.is-critical]="isCritical(node.id)" [class.is-offpath]="isOffPath(node.id)" [attr.data-card-id]="node.id"
           [class.is-match]="matchedIds()?.has(node.id)" [class.is-selected]="node.id === selectedCardId()" [class.is-risk]="node.atRisk"
           [style.left.px]="node.x" [style.top.px]="node.y + stepLabelHeight" [class.is-slim]="density() === 'slim'" [style.width.px]="tileWidth" [style.height.px]="node.height"
-          [href]="href(node)" [attr.aria-label]="tileLabel(node)" (click)="open($event, node)"
+          [href]="href(node)" [attr.aria-label]="tileLabel(node)" (click)="open($event, node)" (contextmenu)="onCardContextMenu(node, $event)"
           (mouseenter)="focus(node.id)" (mouseleave)="releaseFocus()" (focus)="focus(node.id)" (blur)="releaseFocus()">
           <span class="dm-tile-head">
             <i class="ti dm-status-icon" [class]="'ti dm-status-icon ' + statusIcon(node)" aria-hidden="true"></i>
             <span class="dm-key">{{ node.card.key }}</span>
             @if (placeName(node); as place) {
-            <span class="dm-place" [class.is-board]="showsBoard(node)">
-              @if (showsBoard(node)) { <i [class]="'ti ti-' + boardIcon(node)" aria-hidden="true"></i> }
+            @if (showsBoard(node)) {
+            <span class="dm-place is-board">
+              <i [class]="'ti ti-' + boardIcon(node)" aria-hidden="true"></i>
               <span class="dm-place-name">{{ place }}</span>
             </span>
+            } @else {
+            <!-- The shared list chip (shared/_list-chip.scss) in the list's own hue, as a calendar tile
+                 or table status cell names a list. -->
+            @let list = placeList(node);
+            <span class="dm-list" [style.--list-color]="list.color">
+              <i [class]="'ti ti-' + list.icon" aria-hidden="true"></i>
+              <span>{{ place }}</span>
+            </span>
+            }
             }
             @if (riskLabel(node); as risk) {
             <i class="ti ti-alert-triangle dm-risk-icon" [kTooltip]="risk" aria-hidden="true"></i>
@@ -230,7 +246,7 @@
             }
             }
             @if (dueLabel(node); as due) {
-            <span class="dm-due" [class.is-overdue]="isOverdue(node)"><i class="ti ti-calendar-due" aria-hidden="true"></i>{{ due }}</span>
+            <span class="dm-due" [class.overdue]="isOverdue(node)" [class.due-soon]="isDueSoon(node)"><i class="ti ti-calendar-due" aria-hidden="true"></i>{{ due }}</span>
             }
             <span class="dm-spacer"></span>
             @if (node.offMapBlockers) {
@@ -254,11 +270,19 @@
         </button>
         }
         }
-        @if (selectedEdgeIn(chain); as picked) {
-        <button type="button" class="dm-wire-remove" [style.left.px]="picked.x" [style.top.px]="picked.y" (click)="removeSelectedEdge($event, chain)">
+        <!-- One unlink button per removable connector, on the line just before its arrow. Hidden until the
+             connector or one of its cards is hovered, the connector is clicked, or the button gets
+             keyboard focus; always out on touch. Removing is immediate: the toast offers Undo. -->
+        @for (edge of chain.edges; track edge.id) {
+        @if (canRemove(edge)) {
+        <button type="button" class="dm-unlink" [class.is-shown]="unlinkShown(edge)"
+          [style.left.px]="edge.unlinkAt.x" [style.top.px]="edge.unlinkAt.y + stepLabelHeight"
+          [attr.aria-label]="unlinkLabel(edge)" [kTooltip]="unlinkLabel(edge)"
+          (click)="unlink(edge, $event)" (mouseenter)="hoveredEdgeId.set(edge.id)" (mouseleave)="hoveredEdgeId.set(null)"
+          (focus)="hoveredEdgeId.set(edge.id)" (blur)="hoveredEdgeId.set(null)">
           <i class="ti ti-unlink" aria-hidden="true"></i>
-          &ngsp;<ng-container i18n="Button on a selected Dependencies view connector: delete that dependency">Remove</ng-container>
         </button>
+        }
         }
       </div>
     </div>
@@ -277,17 +301,25 @@
           @for (node of step; track node.id) {
           <li>
             <a class="dm-row" [class]="'dm-row is-' + node.status" [class.is-match]="matchedIds()?.has(node.id)" [class.is-selected]="node.id === selectedCardId()" [class.is-risk]="node.atRisk"
-              [href]="href(node)" [attr.aria-label]="tileLabel(node)" (click)="open($event, node)">
+              [href]="href(node)" [attr.aria-label]="tileLabel(node)" (click)="open($event, node)" (contextmenu)="onCardContextMenu(node, $event)">
               <i class="ti dm-status-icon" [class]="'ti dm-status-icon ' + statusIcon(node)" aria-hidden="true"></i>
               <span class="dm-row-main">
                 <span class="dm-title">{{ node.card.title }}</span>
                 <span class="dm-row-meta">
                   <span class="dm-key">{{ node.card.key }}</span>
                   @if (placeName(node); as place) {
-                  <span class="dm-place" [class.is-board]="showsBoard(node)">
-                    @if (showsBoard(node)) { <i [class]="'ti ti-' + boardIcon(node)" aria-hidden="true"></i> }
+                  @if (showsBoard(node)) {
+                  <span class="dm-place is-board">
+                    <i [class]="'ti ti-' + boardIcon(node)" aria-hidden="true"></i>
                     <span class="dm-place-name">{{ place }}</span>
                   </span>
+                  } @else {
+                  @let list = placeList(node);
+                  <span class="dm-list" [style.--list-color]="list.color">
+                    <i [class]="'ti ti-' + list.icon" aria-hidden="true"></i>
+                    <span>{{ place }}</span>
+                  </span>
+                  }
                   }
                   @if (isCritical(node.id)) {
                   <span class="dm-critical-tag"><i class="ti ti-route" aria-hidden="true"></i>&ngsp;<ng-container i18n="Dependencies view step list tag: the card is on its chain's critical path">Critical path</ng-container></span>
@@ -337,7 +369,7 @@
               </span>
               <span class="dm-row-due">
                 @if (dueLabel(node); as due) {
-                <span class="dm-due" [class.is-overdue]="isOverdue(node)"><i class="ti ti-calendar-due" aria-hidden="true"></i>{{ due }}</span>
+                <span class="dm-due" [class.overdue]="isOverdue(node)" [class.due-soon]="isDueSoon(node)"><i class="ti ti-calendar-due" aria-hidden="true"></i>{{ due }}</span>
                 }
               </span>
               <span class="dm-row-people">
@@ -368,4 +400,26 @@
   </section>
   }
 </div>
+}
+
+<!-- The board's own card menu, on right-click of a tile or step row. Mounted at the view's root so no
+     chain panel or tile layer can paint over it. -->
+@if (actionsMenuCard(); as card) {
+<k-card-actions-menu
+  [cardId]="card.id"
+  [cardKey]="card.key"
+  [organisationKey]="card.organisationKey"
+  [boardId]="card.boardId"
+  [workspaceId]="card.workspaceId"
+  [sourceListId]="card.listId"
+  [sourceLists]="response()?.lists ?? []"
+  [title]="card.title"
+  [dueDateLocalDate]="card.dueDateLocalDate"
+  [dueDateSlot]="card.dueDateSlot"
+  [dueDateTimezone]="card.dueDateTimezone"
+  [completedAt]="card.completedAt"
+  [archivedAt]="card.archivedAt"
+  [anchorPoint]="actionsMenuPoint()"
+  (close)="closeActionsMenu()"
+/>
 }

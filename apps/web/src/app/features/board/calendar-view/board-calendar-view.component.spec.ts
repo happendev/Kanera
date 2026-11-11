@@ -249,12 +249,33 @@ describe("BoardCalendarViewComponent", () => {
     expect(july.days.filter((day) => day.isPadding).every((day) => day.cards.length === 0)).toBe(true);
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector(".calendar-toolbar")).toBeNull();
+    // The page owns the range, so the stacked toolbar holds the Slim cards toggle and no paging.
+    expect(host.querySelector(".calendar-toolbar-left")).toBeNull();
+    expect(host.querySelector(".calendar-toolbar k-segmented")).toBeNull();
+    expect(host.querySelectorAll(".calendar-toolbar button").length).toBe(1);
     expect(host.querySelectorAll(".calendar-month-header h3").length).toBe(2);
     expect([...host.querySelectorAll(".cal-card-title")].map((el) => el.textContent?.trim())).toEqual([
       "Ship calendar",
       "Ship calendar",
     ]);
+  });
+
+  it("slim cards keep only the key row and title, and remember the choice", async () => {
+    localStorage.removeItem("kanera.view.calendarSlim:all");
+    const fixture = await create([card({ id: "slim", dueDateLocalDate: "2026-05-20", blockedByCount: 1 })]);
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector(".cal-context-row")).not.toBeNull();
+
+    fixture.componentInstance.toggleSlim();
+    fixture.detectChanges();
+
+    expect(host.querySelector(".cal-card-title")).not.toBeNull();
+    expect(host.querySelector(".cal-context-row")).toBeNull();
+    expect(host.querySelector(".cal-label-row")).toBeNull();
+    expect(localStorage.getItem("kanera.view.calendarSlim:all")).toBe("1");
+
+    fixture.componentInstance.toggleSlim();
+    expect(localStorage.getItem("kanera.view.calendarSlim:all")).toBe("0");
   });
 
   it("uses a one-week range in week mode", async () => {
@@ -320,17 +341,46 @@ describe("BoardCalendarViewComponent", () => {
   });
 
   it("hides all-day due times and shows slotted due times", async () => {
-    const fixture = await create([
-      card({ id: "all-day", title: "All day card", dueDateSlot: "anyTime" }),
-      card({ id: "morning", title: "Morning card", dueDateSlot: "morning" }),
-    ]);
+    // Before the cards are due, so neither is overdue: an overdue all-day card says so in a chip.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-01T09:00:00Z"));
+    try {
+      const fixture = await create([
+        card({ id: "all-day", title: "All day card", dueDateSlot: "anyTime" }),
+        card({ id: "morning", title: "Morning card", dueDateSlot: "morning" }),
+      ]);
 
-    const cards = Array.from(fixture.nativeElement.querySelectorAll(".cal-card")) as HTMLElement[];
-    expect(cards.find((el) => el.textContent?.includes("All day card"))?.querySelector(".cal-time")).toBeNull();
-    expect(cards.find((el) => el.textContent?.includes("Morning card"))?.querySelector(".cal-time")?.textContent?.trim()).toBe(slotTimeLabel("morning"));
+      const cards = Array.from(fixture.nativeElement.querySelectorAll(".cal-card")) as HTMLElement[];
+      expect(cards.find((el) => el.textContent?.includes("All day card"))?.querySelector(".cal-time")).toBeNull();
+      const time = cards.find((el) => el.textContent?.includes("Morning card"))?.querySelector(".cal-time");
+      expect(time?.textContent?.trim()).toBe(slotTimeLabel("morning"));
+      expect(time?.classList.contains("overdue")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it("leads with the title, then the key inside the shared context row", async () => {
+  it("puts an overdue card's urgency on its time chip, not on the whole tile", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z"));
+    try {
+      const fixture = await create([
+        card({ id: "all-day", title: "All day card", dueDateSlot: "anyTime" }),
+        card({ id: "morning", title: "Morning card", dueDateSlot: "morning" }),
+      ]);
+
+      const cards = Array.from(fixture.nativeElement.querySelectorAll(".cal-card")) as HTMLElement[];
+      const allDay = cards.find((el) => el.textContent?.includes("All day card"))!;
+      const morning = cards.find((el) => el.textContent?.includes("Morning card"))!;
+      // The danger chip: the slotted card's time, and an "Overdue" chip where there is no time.
+      expect(morning.querySelector(".cal-time.overdue")?.textContent?.trim()).toBe(slotTimeLabel("morning"));
+      expect(allDay.querySelector(".cal-time.overdue")?.textContent?.trim()).toBe("Overdue");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens with the key row like a board tile, then the title, then the facts", async () => {
     const fixture = await create([
       card({ dueDateSlot: "morning" }),
     ]);
@@ -339,13 +389,30 @@ describe("BoardCalendarViewComponent", () => {
     ]));
     fixture.detectChanges();
 
-    const text = fixture.nativeElement.querySelector(".cal-card-text") as HTMLElement | null;
-    expect(text?.children[0]?.classList.contains("cal-card-title")).toBe(true);
-    // The key shares the context row with time and board rather than owning a row of its own.
-    const context = text?.children[1] as HTMLElement | undefined;
-    expect(context?.classList.contains("cal-context-row")).toBe(true);
-    expect(context?.children[0]?.classList.contains("cal-card-key")).toBe(true);
-    expect(context?.children[0]?.textContent?.trim()).toBe("WORK-1");
+    const tile = fixture.nativeElement.querySelector(".cal-card") as HTMLElement;
+    const rows = [...tile.children].map((child) => child.className.split(" ")[0]);
+    expect(rows.slice(0, 3)).toEqual(["cal-key-row", "cal-card-title", "cal-context-row"]);
+    expect(tile.querySelector(".cal-key-row > .cal-card-key")?.textContent?.trim()).toBe("WORK-1");
+    expect(tile.querySelector(".cal-context-row .cal-card-key")).toBeNull();
+  });
+
+  it("names the card's list in the shared list chip, in the list's hue", async () => {
+    const fixture = await create();
+    fixture.componentRef.setInput("lists", [{ id: "list-1", name: "In Progress", color: "blue", icon: "progress" }]);
+    fixture.detectChanges();
+
+    const chip = fixture.nativeElement.querySelector(".cal-context-row .cal-list") as HTMLElement | null;
+    expect(chip?.textContent?.trim()).toBe("In Progress");
+    expect(chip?.style.getPropertyValue("--list-color")).toBe("var(--color-blue)");
+    expect(chip?.querySelector("i")?.className).toContain("ti-progress");
+  });
+
+  it("shows the Blocked chip for a card waiting on open work", async () => {
+    const fixture = await create([card({ blockedByCount: 2 })]);
+
+    const blocked = fixture.nativeElement.querySelector(".cal-context-row .cal-blocked") as HTMLElement | null;
+    expect(blocked?.textContent?.trim()).toBe("Blocked");
+    expect(blocked?.getAttribute("aria-label")).toBe("Blocked by 2 open cards");
   });
 
   it("renders assignees with overflow", async () => {
@@ -376,22 +443,10 @@ describe("BoardCalendarViewComponent", () => {
     expect(meta?.querySelector(".ti-message-circle")).toBeNull();
   });
 
-  it("keeps metadata in the text column with the assignees pinned beside it", async () => {
+  it("pins the assignees to the right end of the key row", async () => {
     const fixture = await create([
       card({ hasDescription: true, attachmentCount: 1 }),
     ]);
-    fixture.componentRef.setInput("assigneesByCard", new Map([
-      ["card-1", [member({ userId: "user-1" })]],
-    ]));
-    fixture.detectChanges();
-
-    const body = fixture.nativeElement.querySelector(".cal-card-body") as HTMLElement | null;
-    expect(body?.querySelector(".cal-card-text .cal-meta-row .ti-align-left")).toBeTruthy();
-    expect(body?.querySelector(":scope > .cal-assignees k-avatar")).toBeTruthy();
-  });
-
-  it("pins the assignees to the label row when the card has labels", async () => {
-    const fixture = await create();
     fixture.componentRef.setInput("labelsByCard", new Map([
       ["card-1", [{ id: "l1", name: "Bug", color: "red" }]],
     ]));
@@ -401,8 +456,9 @@ describe("BoardCalendarViewComponent", () => {
     fixture.detectChanges();
 
     const tile = fixture.nativeElement as HTMLElement;
-    expect(tile.querySelector(".cal-card-top > .cal-assignees k-avatar")).toBeTruthy();
-    expect(tile.querySelector(".cal-card-body .cal-assignees")).toBeNull();
+    expect(tile.querySelector(".cal-key-row > .cal-assignees k-avatar")).toBeTruthy();
+    expect(tile.querySelectorAll(".cal-assignees").length).toBe(1);
+    expect(tile.querySelector(".cal-meta-row .ti-align-left")).toBeTruthy();
   });
 
   it("emits card opens", async () => {
