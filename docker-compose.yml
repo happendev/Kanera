@@ -501,8 +501,11 @@ services:
       timeout: 3s
       retries: 6
       start_period: 10s
-    expose:
-      - "80"
+    # Loopback only, so a fresh `docker compose up` can be opened at http://localhost:4200 (the
+    # example .env's WEB_ORIGIN) without a proxy, and a host reverse proxy has a fixed target.
+    # Public traffic must still arrive through HTTPS in front of this port; never bind it to 0.0.0.0.
+    ports:
+      - "127.0.0.1:${WEB_BIND_PORT:-4200}:80"
 
   # Emit one deployment-level success notification after Compose has verified every core service.
   # Individual processes deliberately do not emit startup alerts: scaled services would spam one

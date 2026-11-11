@@ -6,19 +6,45 @@
   <img alt="Kanera" src="apps/web/public/assets/logo/Kanera%20light%20long.svg" width="425">
 </picture>
 
-**One clear view. Keep work moving.**
+**Self-hostable project management where your team and your AI agents work on the same boards.**
 
-See what is assigned, what changed, what is blocked, and what has been completed across every project, client, and team.
+Kanban, Table, Calendar, Timeline, and dependency views over one set of cards. More structure than a basic Kanban board, without the overhead of a heavyweight work suite.
 
-[Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [Work with AI agents](#work-with-ai-agents-with-progress-you-can-see) · [Explore dependencies](#dependencies-show-what-can-move-next) · [Connect GitHub](#keep-github-pull-requests-and-commits-with-the-work) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
+[![Latest release](https://img.shields.io/github/v/release/happendev/Kanera?filter=v*&label=release)](https://github.com/happendev/Kanera/releases/latest)
+[![License: ELv2](https://img.shields.io/badge/license-Elastic%202.0-blue)](LICENSE)
+[![MCP server](https://img.shields.io/badge/MCP-OAuth%20server-8A2BE2)](https://www.kanera.app/docs/ai-mcp)
+[![Docker images](https://img.shields.io/badge/docker-ghcr.io-2496ED?logo=docker&logoColor=white)](DEPLOY.md)
+
+[Try it free](https://board.kanera.app/signup) · [Self-host with Docker](#self-host-with-docker) · [Connect an AI agent](#connect-your-agent-through-mcp-or-the-cli) · [Feature tour](https://www.kanera.app/features) · [Docs](https://www.kanera.app/docs)
 
 </div>
 
 ![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg?v=20261105refresh2)
 
-Kanera coordinates assigned, active, blocked, and completed work across projects, clients, and teams from one fast, polished workspace. It brings boards, structured tasks, dependency maps and timelines, notes, assignments, progress history, automation, and integrations into one focused system—more visibility than a basic Kanban board without the overhead of a heavyweight work suite.
+## Why Kanera
 
-Use the hosted service and get started in minutes, or self-host Kanera on your own infrastructure.
+- **Agents work on your board, not in a side chat.** Claude, Codex, Cursor, and other agents pick up cards over MCP or the `kanera` CLI. A live chip shows each run on its card, turns amber when the agent needs you, and every change is attributed **via Claude** or **via Codex**.
+- **Every board in a workspace shares one setup.** Lists, labels, custom fields, and automations are defined once per workspace, so `In Review` or `Client` means the same thing on every board and cross-board views line up without cleanup.
+- **See what blocks what.** Link prerequisites across boards, then read the dependency map or the Timeline's critical path, slack, and projected finish.
+- **Self-hosted has no gating.** No plans and no per-seat fees. Guests, the REST API, webhooks, and notifications to Slack, Discord, ntfy, Gotify, and more are all included.
+
+### Self-host with Docker
+
+Prebuilt images ship with every release, so the server needs no checkout or build:
+
+```bash
+mkdir kanera && cd kanera
+curl -fsSLo docker-compose.yml https://github.com/happendev/Kanera/releases/latest/download/docker-compose.yml
+curl -fsSLo .env https://github.com/happendev/Kanera/releases/latest/download/env.example
+for key in POSTGRES_PASSWORD JWT_SECRET MCP_INTERNAL_SECRET MFA_ENCRYPTION_KEY MEDIA_SIGNING_SECRET SECRETS_ENCRYPTION_KEY; do
+  sed -i "s|^$key=.*|$key=$(openssl rand -hex 32)|" .env
+done
+docker compose up -d
+```
+
+Open <http://localhost:4200> to try it. To serve it on a domain, set it in `.env` and point your HTTPS reverse proxy at `127.0.0.1:4200`. [DEPLOY.md](DEPLOY.md) covers the proxy, email, backups, and upgrades; [DOKPLOY_DEPLOY.md](DOKPLOY_DEPLOY.md) covers Dokploy.
+
+Prefer not to run it yourself? The [hosted service](https://board.kanera.app/signup) has a free plan and a 30-day Pro trial with no card required.
 
 ## One place for moving work forward
 
