@@ -1425,6 +1425,8 @@
     "2139615018945424245": "{$person} adjuntó:",
     "7859942588673701410": "{$file} de {$person}",
     "5884008554481531972": "No se pudo guardar el comentario. Tu borrador sigue disponible; inténtalo de nuevo.",
+    "4313782791271467411": "Comentario eliminado",
+    "7850497084018014483": "No se pudo eliminar el comentario.",
     "4452209265971998699": "archivo adjunto",
     "4559055066431973497": "copió esta tarjeta de {$board}",
     "3836896113285867194": "copió esta tarjeta de otro tablero",

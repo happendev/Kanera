@@ -1425,6 +1425,8 @@
     "2139615018945424245": "{$person} a joint :",
     "7859942588673701410": "{$file} de {$person}",
     "5884008554481531972": "Impossible d’enregistrer le commentaire. Votre brouillon est toujours disponible ; réessayez.",
+    "4313782791271467411": "Commentaire supprimé",
+    "7850497084018014483": "Impossible de supprimer le commentaire.",
     "4452209265971998699": "pièce jointe",
     "4559055066431973497": "a copié cette carte depuis {$board}",
     "3836896113285867194": "a copié cette carte depuis un autre tableau",

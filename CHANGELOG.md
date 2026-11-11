@@ -6,6 +6,7 @@ All notable changes to Kanera are documented here.
 
 ### Added
 
+- **Undo comment deletes:** deleting a comment shows a **Comment deleted** toast with **Undo**; the comment is only removed for everyone once the toast closes.
 - **Up next:** drag cards directly from Assigned or In progress in My Cards and Team Cards overviews into the open queue.
 
 - **Mermaid diagrams:** ```` ```mermaid ```` code blocks are drawn as diagrams in card descriptions, notes and Markdown attachment previews, using the app's theme, accent colours and rounded shapes. Wide diagrams scroll within their frame to keep labels readable; comments keep showing the source.
