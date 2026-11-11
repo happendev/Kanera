@@ -10192,6 +10192,20 @@
       "src/app/features/board/card-activity.component.ts"
     ]
   },
+  "4313782791271467411": "Comment deleted",
+  "@4313782791271467411": {
+    "description": "Toast after deleting a comment",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "7850497084018014483": "Couldn't delete the comment.",
+  "@7850497084018014483": {
+    "description": "Toast when deleting a comment fails",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
   "4452209265971998699": "attachment",
   "@4452209265971998699": {
     "description": "Stand-in name for an unnamed file",

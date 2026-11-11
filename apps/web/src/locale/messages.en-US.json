@@ -1425,6 +1425,8 @@
     "2139615018945424245": "{$person} attached:",
     "7859942588673701410": "{$file} from {$person}",
     "5884008554481531972": "Couldn't save the comment. Your draft is still available; try again.",
+    "4313782791271467411": "Comment deleted",
+    "7850497084018014483": "Couldn't delete the comment.",
     "4452209265971998699": "attachment",
     "4559055066431973497": "copied this card from {$board}",
     "3836896113285867194": "copied this card from another board",

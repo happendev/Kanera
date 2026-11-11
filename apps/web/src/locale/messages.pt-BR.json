@@ -1425,6 +1425,8 @@
     "2139615018945424245": "{$person} anexou:",
     "7859942588673701410": "{$file} de {$person}",
     "5884008554481531972": "Não foi possível salvar o comentário. Seu rascunho continua disponível; tente novamente.",
+    "4313782791271467411": "Comentário excluído",
+    "7850497084018014483": "Não foi possível excluir o comentário.",
     "4452209265971998699": "anexo",
     "4559055066431973497": "copiou este cartão de {$board}",
     "3836896113285867194": "copiou este cartão de outro quadro",
