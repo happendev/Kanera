@@ -19,6 +19,8 @@ test("the repository compose file converts to a standalone release file", () => 
   assert.match(output, /target: \/docker-entrypoint-initdb\.d\/00-init\.sql/);
   assert.match(output, /CREATE EXTENSION IF NOT EXISTS "citext";/);
   assert.match(output, /<<: \*app-env/);
+  // Self-hosters open the example .env's WEB_ORIGIN (localhost:4200) straight after `up`.
+  assert.match(output, /- "127\.0\.0\.1:\$\{WEB_BIND_PORT:-4200\}:80"/);
 });
 
 test("rejects a version that is not X.Y.Z", () => {

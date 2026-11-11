@@ -58,6 +58,10 @@ SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
 KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS=false
 ```
 
+Dokploy routes the domain to the `web` container itself. The compose file also publishes `web` on
+`127.0.0.1:4200` for Docker-only installs; if another stack on the server already uses that port,
+set `WEB_BIND_PORT` to a free one, and `POSTGRES_BIND_PORT` likewise for `5433`.
+
 Realtime compression is disabled by default to avoid compression work and delivery queues for
 Kanera's typically small messages. Set `REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true` to opt in when
 bandwidth is constrained and large updates are common. When enabled, messages above the 1024-byte
