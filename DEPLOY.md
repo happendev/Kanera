@@ -102,6 +102,12 @@ passes these through, so set them in `.env` to override.
 runs against Postgres at once and is usually the first ceiling under write-heavy
 load. Keep the total comfortably below Postgres `max_connections`:
 
+The worker shares one PostgreSQL LISTEN connection across its three subscribers. Its effective
+pool ceiling is `max(2, WORKER_PG_POOL_MAX - 2)` in Compose: the default five-slot budget now uses
+at most three connections (one listener and two queries). This preserves the previous query
+concurrency while saving two idle listener sessions. The capacity formula below remains a
+conservative upper bound. When running the worker directly, the same adjustment uses `PG_POOL_MAX`.
+
 ```text
 (API_REPLICAS × PG_POOL_MAX) + (public-api replicas × PG_POOL_MAX) + WORKER_PG_POOL_MAX + maintenance margin
 ```
@@ -661,7 +667,7 @@ staff, demo, seed, test, and load-test organisations.
 | `POSTGRES_BIND_PORT` | no | Host port for the bundled Postgres service. Defaults to `5433`, mapped to container port `5432`. |
 | `WEB_BIND_PORT` | no | Loopback host port for the `web` container. Defaults to `4200`, mapped to container port `80`. Put HTTPS in front of it; it is never bound to external interfaces. |
 | `PG_POOL_MAX` | no | Max concurrent DB connections per API/public-api process. Defaults to `20` in Compose. Raise to `30`–`50` on a dedicated host. See Performance tuning. |
-| `WORKER_PG_POOL_MAX` | no | Max concurrent DB connections for the single worker. Defaults to `5` in compose. |
+| `WORKER_PG_POOL_MAX` | no | Worker connection budget, default `5` in Compose. Effective ceiling is `max(2, budget - 2)` after sharing LISTEN sessions; see Performance tuning. |
 | `PG_CONNECTION_TIMEOUT_MS` | no | Wait for a free pooled connection before failing. Defaults to `5000`. |
 | `PG_STATEMENT_TIMEOUT_MS` | no | Postgres kills any query exceeding this. Defaults to `30000`. |
 | `MIGRATION_PG_STATEMENT_TIMEOUT_MS` | no | Statement timeout for the one-shot migrator only. Defaults to `0` (disabled) so schema/data reconciliation is not killed by the API query timeout. |

@@ -245,20 +245,6 @@
   }
 }
 
-// A hairline and a wider gap between the page's actions and the view switch, so the two read as two
-// groups. Without it the board's watch, overview and menu icons ran straight into the view icons as
-// one undifferentiated wall of ten glyphs. A divider between peers, not an indicator on either. The
-// compact layout gives the switch its own row, which separates them already (below).
-.ph-controls:not(:empty) + .ph-views:not(:empty)::before {
-  content: "";
-  flex: none;
-  align-self: center;
-  width: 1px;
-  height: 20px;
-  margin-inline: var(--space-1) var(--space-2);
-  background: var(--border);
-}
-
 // ─── variant="chrome" ─────────────────────────────────────────────────────────
 
 :host(.is-chrome) {
@@ -519,10 +505,6 @@
     min-width: 0;
     --sg-fill-width: 100%;
     --sg-fill-scroll: 1;
-  }
-
-  .ph-controls:not(:empty) + .ph-views:not(:empty)::before {
-    display: none;
   }
 
   // No room for both lines of text next to the controls on the chrome bar.

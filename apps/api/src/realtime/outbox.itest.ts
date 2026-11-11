@@ -170,7 +170,20 @@ void test("filtered board events write webhook outbox and io-less direct user ou
   assert.ok(board);
   await db.insert(boardMembers).values({ boardId: board.id, userId: boardMember.id, role: "observer" });
 
+  // Retain the original audience-resolution coverage before testing an explicit stale audience.
   await emitToBoardAudience(board.id, "board:updated", { board });
+  const resolvedRows = await db.select().from(directRealtimeOutbox).where(eq(directRealtimeOutbox.eventType, "board:updated"));
+  assert.deepEqual(resolvedRows.map(row => row.userId).sort(), [user.id, boardMember.id].sort());
+  await db.delete(directRealtimeOutbox).where(eq(directRealtimeOutbox.eventType, "board:updated"));
+  await db.delete(eventOutbox).where(and(eq(eventOutbox.eventType, "board:updated"), eq(eventOutbox.boardId, board.id)));
+
+  // Cross a bulk-insert boundary and model deletion after audience resolution. Browser E2E cannot
+  // deterministically place a deletion between the audience query and its outbox insert.
+  const recipients = await insertTestUsers(db, Array.from({ length: 101 }, (_, index) => ({
+    clientId: user.clientId, email: `recipient-${index}@example.com`, passwordHash: "x", displayName: `Recipient ${index}`,
+  }))).returning();
+  const audience = [user.id, boardMember.id, "11111111-1111-4111-8111-111111111111", ...recipients.map(row => row.id), user.id];
+  await emitToBoardAudience(board.id, "board:updated", { board }, { audienceUserIds: audience });
 
   const [event] = await db
     .select()
@@ -183,6 +196,9 @@ void test("filtered board events write webhook outbox and io-less direct user ou
   const directRows = await db.select().from(directRealtimeOutbox).where(eq(directRealtimeOutbox.eventType, "board:updated"));
   assert.ok(directRows.some((row) => row.userId === user.id));
   assert.ok(directRows.some((row) => row.userId === boardMember.id));
+  assert.equal(directRows.length, 103, "every surviving unique recipient gets exactly one row across chunks");
+  assert.deepEqual(directRows.map(row => row.userId).sort(), [user.id, boardMember.id, ...recipients.map(row => row.id)].sort());
+  assert.ok(directRows.every(row => JSON.stringify(row.payload) === JSON.stringify(directRows[0]!.payload)));
 
   let workspaceBroadcasts = 0;
   const restore = setRealtimeOutboxDependenciesForTests({

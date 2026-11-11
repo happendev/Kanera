@@ -178,21 +178,34 @@ async function emitFilteredUserPayloads<E extends keyof ServerToClientEvents>(
 
   // Filtered fanout is a confidentiality boundary: users receive private user-room/direct events,
   // while the durable workspace/board outbox row is retained only for webhooks and audit replay.
-  const directWrites: Array<Promise<unknown>> = [];
-  for (const [userId, payload] of uniquePayloads) {
-    const realtimeDispatched = broadcastToUser(userId, event, payload);
-    directWrites.push(
-      publishDirectRealtimeEvent("user", userId, event, payload, { realtimeDispatched })
-        .catch((err) => logRealtimePublishFailure(err, { scope: "user", scopeId: userId, event })),
-    );
+  // Preserve one private payload per recipient, but reuse bounded inserts for io-less publishers.
+  // Await the chunks sequentially so a large audience does not fan out database work on the pool.
+  const pending = Array.from(uniquePayloads, ([userId, payload]) => ({ userId, payload }))
+    .filter(({ userId, payload }) => !broadcastToUser(userId, event, payload));
+  for (let offset = 0; offset < pending.length; offset += 100) {
+    const chunk = pending.slice(offset, offset + 100);
+    try {
+      await publishUserRealtimeEvents(event, chunk);
+    } catch (err) {
+      const cause: unknown = err instanceof Error ? err.cause : undefined;
+      if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "23503") {
+        // A recipient can disappear after audience resolution. A FK rejection rolls back the
+        // entire INSERT, so isolate that recipient without dropping other users' events. Do not
+        // retry ambiguous connection failures: the batch might already have committed.
+        for (const { userId, payload } of chunk) {
+          await publishDirectRealtimeEvent("user", userId, event, payload)
+            .catch((error) => logRealtimePublishFailure(error, { scope: "user", scopeId: userId, event }));
+        }
+      } else {
+        logRealtimePublishFailure(err, { scope: "user", scopeId: chunk[0]!.userId, event });
+      }
+    }
   }
-
-  const outboxWrite = publishRealtimeEvent(scope, scopeId, event, outboxPayload, { realtimeDispatched: true })
+  await publishRealtimeEvent(scope, scopeId, event, outboxPayload, { realtimeDispatched: true })
     .catch((err) => {
       logRealtimePublishFailure(err, { scope, scopeId, event });
       return null;
     });
-  await Promise.all([...directWrites, outboxWrite]);
 }
 
 /**

@@ -31,13 +31,13 @@ export async function boardIdOf(page: Page, boardName: string): Promise<string> 
 }
 
 /**
- * Creates a write-scoped workspace API key the way an integrator would, from the settings API tab,
+ * Creates a workspace API key (write scope by default) the way an integrator would, from the settings API tab,
  * and returns the one-time revealed secret.
  */
-export async function createWorkspaceApiKey(page: Page, settingsHref: string, name: string): Promise<string> {
+export async function createWorkspaceApiKey(page: Page, settingsHref: string, name: string, scope: "write" | "admin" = "write"): Promise<string> {
   await page.goto(`${settingsHref}/api`);
   await page.locator('input[name="apiKeyName"]').fill(name);
-  await page.locator('select[name="apiKeyScope"]').selectOption("write");
+  await page.locator('select[name="apiKeyScope"]').selectOption(scope);
   await page.getByRole("button", { name: "Create API key" }).click();
   const reveal = page.locator(".secret-reveal").filter({ has: page.getByRole("button", { name: "Copy API key" }) });
   await expect(reveal).toBeVisible();

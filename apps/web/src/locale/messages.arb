@@ -9740,6 +9740,13 @@
       "src/app/features/board/calendar-view/board-calendar-view.component.html"
     ]
   },
+  "5463324868498580633": "Nothing due",
+  "@5463324868498580633": {
+    "description": "A calendar day with no cards due",
+    "x-files": [
+      "src/app/features/board/calendar-view/board-calendar-view.component.html"
+    ]
+  },
   "8411907789677252899": "+{$COUNT} more",
   "@8411907789677252899": {
     "description": "Button - show the cards hidden in a calendar day",
@@ -9754,13 +9761,6 @@
     "x-files": [
       "src/app/features/board/calendar-view/board-calendar-view.component.html",
       "src/app/features/board/card-detail-description.component.html"
-    ]
-  },
-  "5463324868498580633": "Nothing due",
-  "@5463324868498580633": {
-    "description": "A calendar day with no cards due",
-    "x-files": [
-      "src/app/features/board/calendar-view/board-calendar-view.component.html"
     ]
   },
   "3406674546225707827": "Blocked",

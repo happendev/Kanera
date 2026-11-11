@@ -45,7 +45,7 @@ test("a public API write reaches an open board live and a signed webhook", async
     const settingsHref = await workspaceSettingsHref(page, testWorkspace.boardName);
 
     // Credentials are created the way an integrator would: once, from workspace settings.
-    const apiKey = await createWorkspaceApiKey(page, settingsHref, uniqueName("E2E key"));
+    const apiKey = await createWorkspaceApiKey(page, settingsHref, uniqueName("E2E key"), "admin");
     expect(apiKey).toMatch(/^kanera_/);
 
     await page.locator('input[name="webhookName"]').fill(uniqueName("E2E webhook"));
@@ -89,6 +89,15 @@ test("a public API write reaches an open board live and a signed webhook", async
       expect(delivery.headers["x-kanera-signature"]).toBe(expected);
       const event = JSON.parse(delivery.body) as { type: string; boardId?: string; cardId?: string };
       expect(event).toMatchObject({ type: "card:created", boardId, cardId: card.id });
+
+      // Board metadata uses private audience rows, drained by the worker and delivered over
+      // Valkey to the app API. Its separate webhook row must survive the batched publication.
+      const renamedBoard = uniqueName("E2E renamed board");
+      const renamed = await publicApi.patch(`${v1}/boards/${boardId}`, { data: { name: renamedBoard } });
+      expect(renamed.ok(), await renamed.text()).toBe(true);
+      await expect(member.locator("a.board-link").filter({ hasText: renamedBoard })).toBeVisible();
+      await expect.poll(() => receiver.deliveries.some((d) => d.body.includes(renamedBoard)
+        && d.body.includes('"board:updated"')), { timeout: 30_000 }).toBe(true);
     } finally {
       await publicApi.dispose();
     }

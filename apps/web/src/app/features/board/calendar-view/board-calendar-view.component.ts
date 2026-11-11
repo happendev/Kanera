@@ -78,6 +78,10 @@ const PHONE_MAX_WIDTH = 560;
 const COMPACT_MAX_WIDTH = 1000;
 /** Tiles a compact month cell shows before the rest fold behind "+N more". */
 const COMPACT_MONTH_CARD_LIMIT = 3;
+// A crowded full-width month shows four tiles plus “more”; the taller week/agenda gets nineteen.
+// A day with exactly the limit fits without replacing its last card with a one-card expansion.
+const FULL_MONTH_CARD_LIMIT = 5;
+const AGENDA_CARD_LIMIT = 20;
 
 export function calendarLayoutForWidth(width: number): CalendarLayout {
   // 0 means "not laid out" (and every width in a DOM-less test): keep the full grid rather than
@@ -179,11 +183,8 @@ export class BoardCalendarViewComponent {
   readonly skeletonDays = Array.from({ length: 35 }, (_, i) => i);
   readonly skeletonCards = [0, 1];
 
-  /**
-   * Seeded from the viewport so a phone does not paint a frame of the seven-column grid before the
-   * first measurement; the host is never wider than the window, so this only ever errs towards the
-   * roomier layout and the observer corrects it on the first frame.
-   */
+  readonly layoutMeasured = signal(typeof ResizeObserver === "undefined");
+  /** A viewport hint for the skeleton only; real cards wait for the first panel measurement. */
   readonly layout = signal<CalendarLayout>(
     calendarLayoutForWidth(typeof window === "undefined" ? 0 : window.innerWidth),
   );
@@ -204,7 +205,15 @@ export class BoardCalendarViewComponent {
     afterNextRender(() => {
       if (typeof ResizeObserver === "undefined") return;
       const host = this.element.nativeElement;
-      const observer = new ResizeObserver(() => this.layout.set(calendarLayoutForWidth(host.clientWidth)));
+      // The sidebar/drawer can make the panel much narrower than the window. Measure before
+      // mounting cards, rather than rendering an uncapped month and throwing it away a frame later.
+      const measure = () => {
+        if (host.clientWidth <= 0) return;
+        this.layout.set(calendarLayoutForWidth(host.clientWidth));
+        this.layoutMeasured.set(true);
+      };
+      measure();
+      const observer = new ResizeObserver(measure);
       observer.observe(host);
       destroyRef.onDestroy(() => observer.disconnect());
     });
@@ -332,29 +341,21 @@ export class BoardCalendarViewComponent {
     this.pickedDayKey.set(key);
   }
 
-  /** Cards a cell renders: everything, except a compact month cell that has not been expanded. */
+  /** Keep crowded days bounded in every host; expansion is explicit and keeps all drop targets. */
   cellCards(day: CalendarDay): AnyCard[] {
-    if (!this.isCapped(day)) return day.cards;
-    return day.cards.slice(0, COMPACT_MONTH_CARD_LIMIT - 1);
+    const limit = this.dayCardLimit();
+    return day.cards.length > limit && !this.expandedDayKeys().has(day.key)
+      ? day.cards.slice(0, limit - 1)
+      : day.cards;
   }
 
-  /** How many tiles sit behind the cell's "+N more"; 0 when the cell shows them all. */
   hiddenCardCount(day: CalendarDay): number {
     return day.cards.length - this.cellCards(day).length;
   }
 
-  /**
-   * Only a compact month caps: a week is a single row with the whole pane's height to grow into, and
-   * a full-width cell is wide enough that a tall day still reads as a column of cards. The cap hides
-   * one more than the limit so "+N more" takes the last slot instead of a lone "+1" replacing one tile.
-   */
-  private isCapped(day: CalendarDay): boolean {
-    // The stacked view is always a month grid, whatever the (hidden) paged mode says.
-    const monthGrid = this.navigation() === "stacked" || this.mode() === "month";
-    return this.layout() === "compact"
-      && monthGrid
-      && day.cards.length > COMPACT_MONTH_CARD_LIMIT
-      && !this.expandedDayKeys().has(day.key);
+  private dayCardLimit(): number {
+    if (this.layout() === "phone" || (this.navigation() === "paged" && this.mode() === "week")) return AGENDA_CARD_LIMIT;
+    return this.layout() === "compact" ? COMPACT_MONTH_CARD_LIMIT : FULL_MONTH_CARD_LIMIT;
   }
 
   toggleDayExpanded(key: string) {

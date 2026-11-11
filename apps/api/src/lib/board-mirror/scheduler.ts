@@ -18,10 +18,6 @@ export function startBoardMirrorScheduler(options: { log?: FastifyBaseLogger; po
     onNotify: () => scheduler.trigger(),
     log: options.log,
     label: "board mirror outbox",
-    // Unlike the outbox dispatchers this scheduler polls anyway, so a connection that cannot LISTEN
-    // is returned to the pool rather than held idle.
-    releaseOnListenFailure: true,
-    listenFailedMessage: "board mirror outbox listen failed; polling remains active",
   });
   return async () => {
     await scheduler.stop();

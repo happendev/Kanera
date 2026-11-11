@@ -1,75 +1,127 @@
 import type { FastifyBaseLogger } from "fastify";
-import type { PoolClient } from "pg";
+import type { Notification, Pool, PoolClient } from "pg";
 import { pool } from "../db.js";
 
 export interface NotifyListener {
-  /** Unlistens and returns the connection to the pool; safe to call once the owner stops. */
+  /** Completion of the initial subscription attempt; polling remains the fallback on failure. */
+  ready: Promise<void>;
+  /** Removes this callback and releases the shared connection after the last subscriber stops. */
   release(): Promise<void>;
 }
 
-/**
- * A dedicated pool connection that LISTENs on one Postgres channel and calls `onNotify` for each
- * notification. The poll loop of whichever scheduler owns it remains the durability fallback, so a
- * failed LISTEN is logged and either kept (the connection still delivers errors) or released when
- * `releaseOnListenFailure` is set. Stop races are handled: a release that arrives while the connect
- * is still in flight hands the connection straight back.
- */
-export function startNotifyListener(options: {
+interface ListenerOptions {
   channel: string;
   onNotify: () => void;
   log?: FastifyBaseLogger;
-  /** Noun for log lines, e.g. "event outbox" → "event outbox listener failed". */
   label: string;
-  releaseOnListenFailure?: boolean;
-  /** Overrides the log line for a failed LISTEN (the default is `${label} listen failed`). */
-  listenFailedMessage?: string;
-}): NotifyListener {
-  const { channel, onNotify, log, label } = options;
-  let stopped = false;
-  let listener: PoolClient | null = null;
-  let released = false;
-  const listenerReady: Promise<PoolClient | null> = pool.connect().then(async (client) => {
-    if (stopped) {
-      client.release();
-      return null;
-    }
-    client.on("notification", (message) => {
-      if (message.channel === channel) onNotify();
-    });
-    client.on("error", (err) => {
-      log?.error({ err }, `${label} listener failed`);
-    });
-    try {
-      await client.query(`listen ${channel}`);
-    } catch (err) {
-      log?.error({ err }, options.listenFailedMessage ?? `${label} listen failed`);
-      if (options.releaseOnListenFailure) {
-        client.release();
-        return null;
+}
+
+/** One process-wide LISTEN session; subscriber changes and reconnects never overlap. */
+export function createNotifyListenerHub(connectionPool: Pool) {
+  const subscribers = new Set<ListenerOptions>();
+  const channels = new Set<string>();
+  let client: PoolClient | null = null;
+  let pending = Promise.resolve();
+  let retry: ReturnType<typeof setTimeout> | undefined;
+
+  const notify = (message: Notification) => {
+    for (const subscriber of subscribers) {
+      if (subscriber.channel !== message.channel) continue;
+      try {
+        subscriber.onNotify();
+      } catch (err) {
+        subscriber.log?.error({ err }, `${subscriber.label} notification callback failed`);
       }
     }
-    if (stopped) {
-      await client.query(`unlisten ${channel}`).catch(() => undefined);
-      client.release();
-      return null;
-    }
-    listener = client;
-    return client;
-  }).catch((err) => {
-    log?.error({ err }, `${label} listener could not start`);
-    return null;
-  });
+  };
+  const discard = (broken = false) => {
+    const previous = client;
+    client = null;
+    channels.clear();
+    if (!previous) return;
+    previous.removeListener("notification", notify);
+    previous.removeListener("error", disconnected);
+    previous.removeListener("end", ended);
+    previous.release(broken);
+  };
+  const retryLater = () => {
+    if (retry || subscribers.size === 0) return;
+    retry = setTimeout(() => {
+      retry = undefined;
+      void reconcile();
+    }, 1_000);
+    retry.unref();
+  };
+  const disconnected = (err: Error) => {
+    for (const subscriber of subscribers) subscriber.log?.error({ err }, `${subscriber.label} listener failed`);
+    discard(true);
+    retryLater();
+  };
+  const ended = () => disconnected(new Error("PostgreSQL notification connection ended"));
+
+  const reconcile = (): Promise<void> => {
+    pending = pending.then(async () => {
+      if (subscribers.size === 0) {
+        clearTimeout(retry);
+        retry = undefined;
+        if (client) {
+          // Do not return a connection with active LISTEN channels or our callbacks to the pool.
+          await client.query("unlisten *");
+          discard();
+        }
+        return;
+      }
+      if (!client) {
+        client = await connectionPool.connect();
+        client.on("notification", notify);
+        client.on("error", disconnected);
+        client.on("end", ended);
+      }
+      const current = client;
+      const wanted = new Set(Array.from(subscribers, ({ channel }) => channel));
+      for (const channel of channels) {
+        if (wanted.has(channel)) continue;
+        await current.query(`unlisten ${channel}`);
+        channels.delete(channel);
+      }
+      for (const channel of wanted) {
+        if (channels.has(channel)) continue;
+        await current.query(`listen ${channel}`);
+        if (client !== current) throw new Error("notification connection lost during subscription");
+        channels.add(channel);
+      }
+      // A stop can arrive while connect/LISTEN awaits I/O; its queued reconciliation releases us.
+    }).catch((err: unknown) => {
+      for (const subscriber of subscribers) subscriber.log?.error({ err }, `${subscriber.label} listener could not subscribe`);
+      discard(true);
+      retryLater();
+    });
+    return pending;
+  };
 
   return {
-    async release() {
-      stopped = true;
-      if (released) return;
-      released = true;
-      const client = listener ?? await listenerReady;
-      if (!client) return;
-      listener = null;
-      await client.query(`unlisten ${channel}`).catch(() => undefined);
-      client.release();
+    subscribe(options: ListenerOptions): NotifyListener {
+      // Channels are internal constants; still keep interpolated identifiers strictly bounded.
+      if (!/^[a-z_][a-z0-9_]*$/.test(options.channel)) throw new Error("invalid notification channel");
+      subscribers.add(options);
+      const ready = reconcile();
+      let releasing: Promise<void> | undefined;
+      return {
+        ready,
+        release() {
+          if (releasing) return releasing;
+          subscribers.delete(options);
+          releasing = reconcile();
+          return releasing;
+        },
+      };
     },
   };
+}
+
+const hub = createNotifyListenerHub(pool);
+
+/** The event dispatcher and mirror share a channel; both must receive each wake on one session. */
+export function startNotifyListener(options: ListenerOptions): NotifyListener {
+  return hub.subscribe(options);
 }

@@ -57,13 +57,21 @@ test("the dependencies view maps a cross-board chain, updates live and opens car
     expect((await api.put(`/api/cards/${blocked.id}/labels`, { data: { labelIds: [label.id] } })).ok()).toBe(true);
     await expect(mapTile(viewer, blocked.title).locator(".dm-labels")).toContainText(label.name);
 
+    // A remounted rich card must pick up a due-slot edit, rather than reuse the old instant.
+    expect((await api.patch(`/api/cards/${blocked.id}`, { data: {
+      dueDateLocalDate: "2030-07-01", dueDateSlot: "morning",
+    } })).ok()).toBe(true);
+    await expect(mapTile(viewer, blocked.title).locator(".dm-due")).toContainText(/·\s*0?9:00(?:\s*AM)?$/i);
+
     // Slim cards drop to key and title; pressing again brings the detail back.
     const slim = viewer.locator("k-dependency-map").getByRole("button", { name: "Slim cards" });
     await slim.click();
     await expect(slim).toHaveAttribute("aria-pressed", "true");
     await expect(mapTile(viewer, blocked.title)).toHaveClass(/is-slim/);
     await expect(mapTile(viewer, blocked.title).locator(".dm-labels")).toHaveCount(0);
+    expect((await api.patch(`/api/cards/${blocked.id}`, { data: { dueDateLocalDate: "2030-07-01", dueDateSlot: "afternoon" } })).ok()).toBe(true);
     await slim.click();
+    await expect(mapTile(viewer, blocked.title).locator(".dm-due")).toContainText(/13:00|1:00\s*PM/i);
     await expect(mapTile(viewer, blocked.title).locator(".dm-labels")).toContainText(label.name);
 
     // A new dependent added elsewhere joins the chain on the open map without a reload.

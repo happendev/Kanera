@@ -4,6 +4,11 @@ All notable changes to Kanera are documented here.
 
 ## [Unreleased]
 
+### Performance
+
+- Card activity opens faster on busy boards, large notification inboxes page more efficiently, and board updates use fewer database writes for large audiences.
+- Calendar measures its panel before rendering and folds crowded days behind “more”. Dependencies loads nearby chain contents as you scroll, keeping large maps and phone layouts responsive.
+
 ### Added
 
 - **Undo comment deletes:** deleting a comment shows a **Comment deleted** toast with **Undo**; the comment is only removed for everyone once the toast closes.

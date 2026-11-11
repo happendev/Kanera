@@ -50,7 +50,9 @@ export const notifications = pgTable(
   },
   (t) => [
     check("notifications_reason_ck", valueIn(t.reason, NOTIFICATION_REASONS)),
-    index("notifications_user_id_created_at_idx").on(t.userId, t.createdAt),
+    // Include the UUID tie-break so LIMIT can stop on the exact inbox ordering. Replace the
+    // shorter user/time index rather than maintaining two indexes with the same leading columns.
+    index("notifications_user_id_created_at_id_idx").on(t.userId, t.createdAt.desc(), t.id.desc()),
     index("notifications_user_id_unread_idx")
       .on(t.userId, t.createdAt)
       .where(sql`${t.readAt} is null`),

@@ -66,7 +66,7 @@
   } @else if (!visibleCards().length) {
   <k-empty-state icon="timeline" raised title="Nothing to plan yet" i18n-title="Empty state title on the Timeline view" text="Cards appear here once the board has some. Give them a start and a due date and they become bars." i18n-text="Empty state text on the Timeline view" />
   } @else {
-  <div #scroller class="tl-scroller" (scroll)="onScroll()" (focusin)="onRowFocus($event)" [style.--tl-name-width.px]="namePaneWidth()" [style.--tl-row-height.px]="rowHeight()" [style.--tl-bar-height.px]="barHeight()" [style.--tl-group-height.px]="groupRowHeight">
+  <div #scroller class="tl-scroller" (focusin)="onRowFocus($event)" [style.--tl-name-width.px]="namePaneWidth()" [style.--tl-row-height.px]="rowHeight()" [style.--tl-bar-height.px]="barHeight()" [style.--tl-group-height.px]="groupRowHeight">
     <div class="tl-sheet" [style.width.px]="namePaneWidth() + chartWidth()">
       <!-- Header: the name pane's corner stays put in both directions; the tiers scroll with the chart. -->
       <div class="tl-header" role="presentation">
@@ -276,7 +276,7 @@
           </defs>
           @for (wire of wires(); track wire.id) {
           <path [attr.d]="wire.path" [attr.class]="wireClass(wire)" [attr.marker-end]="'url(#tl-arrow-' + wire.tone + ')'" />
-          <path class="tl-wire-hit" [attr.d]="wire.path" tabindex="0" role="button" [attr.aria-label]="wireLabel(wire)" [attr.aria-pressed]="selectedEdgeId() === wire.id" (click)="selectWire(wire, $event)" (keydown.enter)="selectWire(wire, $event)" />
+          <path class="tl-wire-hit" [attr.d]="wire.path" tabindex="0" role="button" [attr.aria-label]="wire.label" [attr.aria-pressed]="selectedEdgeId() === wire.id" (click)="selectWire(wire, $event)" (keydown.enter)="selectWire(wire, $event)" />
           }
           @if (linkDraft()) {
           <path class="tl-wire is-draft" [attr.d]="draftPath()" marker-end="url(#tl-arrow-lit)" />

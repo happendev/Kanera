@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appLocale } from "../../core/i18n/locale";
-import { dueDateInputValue, dueDateSlotFor, formatDueDate, isOverdue } from "./due-date.util";
+import { dueDateInputValue, dueDateSlotFor, formatDueDate, isOverdue, isDueSoon, dueDateTimestamp } from "./due-date.util";
 
 describe("due date helpers", () => {
   afterEach(() => {
@@ -45,6 +45,22 @@ describe("due date helpers", () => {
     const date = expected.toLocaleDateString(appLocale(), { month: "short", day: "numeric" });
     const time = expected.toLocaleTimeString(appLocale(), { hour: "numeric", minute: "2-digit" });
     expect(formatDueDate("2026-01-21", "morning", "America/New_York")).toBe(`${date} · ${time}`);
+  });
+
+  // Cache failures here would cross-contaminate slots/zones or freeze due-soon at the first
+  // clock reading. DST boundaries and a moving 24-hour window are deterministic unit cases.
+  it("keeps cached instants distinct across slots, zones and DST while due-soon follows now", () => {
+    expect(dueDateTimestamp("2026-03-07", "morning", "America/New_York"))
+      .toBe(Date.parse("2026-03-07T14:00:00Z"));
+    expect(dueDateTimestamp("2026-03-08", "morning", "America/New_York"))
+      .toBe(Date.parse("2026-03-08T13:00:00Z"));
+    expect(dueDateTimestamp("2026-03-08", "afternoon", "America/New_York"))
+      .toBe(Date.parse("2026-03-08T17:00:00Z"));
+    expect(dueDateTimestamp("2026-03-08", "morning", "UTC"))
+      .toBe(Date.parse("2026-03-08T09:00:00Z"));
+    expect(isDueSoon("2026-03-08", "morning", "America/New_York", new Date("2026-03-07T12:00:00Z"))).toBe(false);
+    expect(isDueSoon("2026-03-08", "morning", "America/New_York", new Date("2026-03-07T14:00:00Z"))).toBe(true);
+    expect(isDueSoon("2026-03-08", "morning", "America/New_York", new Date("2026-03-08T13:00:00Z"))).toBe(false);
   });
 
   it("does not show the internal anytime due time", () => {
