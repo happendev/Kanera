@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-24.04
     # Browser system packages can take ten minutes to download from Ubuntu's mirrors. Keep setup
     # outside the test budget so a slow mirror cannot cancel an otherwise healthy shard.
-    timeout-minutes: 30
+    timeout-minutes: 45
     # Seeded users, boards and realtime channels are shared inside a stack. Separate runners give
     # each shard its own database, Valkey, ports and services without weakening realtime coverage.
     strategy:
@@ -118,7 +118,9 @@ jobs:
         run: pnpm exec playwright install-deps chromium
 
       - run: pnpm test:e2e
-        timeout-minutes: 20
+        # Shards take about 20 minutes on hosted runners, including stack startup. Leave room
+        # for normal runner variance so a healthy shard can finish and upload its artifacts.
+        timeout-minutes: 30
         env:
           KANERA_E2E_SHARD: ${{ matrix.shard }}
 
