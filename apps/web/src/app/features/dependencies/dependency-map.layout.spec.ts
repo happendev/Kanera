@@ -1,7 +1,7 @@
 import type { DependencyGraphEdge } from "@kanera/shared/dto";
 import { expandCardSummary, type WireCardSummary } from "@kanera/shared/events";
 import { describe, expect, it } from "vitest";
-import { chainNeighbourhood, layoutDependencyMap, NO_DUE_DATE, packChains, TILE_HEIGHT, weekColumnKey, weekColumnStart } from "./dependency-map.layout";
+import { chainNeighbourhood, layoutDependencyMap, MAP_PADDING, NO_DUE_DATE, packChains, TILE_HEIGHT, TILE_WIDTH, WAVE_GAP, weekColumnKey, weekColumnStart } from "./dependency-map.layout";
 
 /**
  * Failure modes, each a pure-function edge case the E2E map test cannot enumerate:
@@ -17,11 +17,15 @@ import { chainNeighbourhood, layoutDependencyMap, NO_DUE_DATE, packChains, TILE_
  * - a connector that skips steps runs behind the tiles in between;
  * - a short chain leaves a hole under it as tall as its row's tallest chain, or a chain with more
  *   steps than fit is packed wider than the map;
+ * - two short chains that fit side by side are stacked instead, or a chain nothing can sit beside
+ *   stops short of the map's edge (half the map left empty), or stretches over its neighbour;
  * - the critical path runs through a done card, stops short of the goal, picks the shorter of
  *   two runs, or keeps only one of two equally long runs;
  * - on the date axis a card lands in the wrong week (week starts, year ends, time zones), undated
  *   cards are mixed into a week, a blocker due after its dependent draws as a forward arrow, or two
- *   chains put the same week at different places.
+ *   chains put the same week at different places;
+ * - a connector's unlink button lands on a tile, or on the left card's link handle, instead of in
+ *   the gap right before the card the connector points at.
  */
 
 const NOW = new Date("2026-10-19T12:00:00Z");
@@ -150,7 +154,7 @@ describe("layoutDependencyMap with tiles of different heights", () => {
     for (let i = 1; i < column.length; i += 1) expect(column[i]!.y).toBeGreaterThanOrEqual(column[i - 1]!.y + column[i - 1]!.height);
     const edge = layout.chains[0]!.edges.find((entry) => entry.from === "a")!;
     const a = layout.nodesById.get("a")!;
-    expect(edge.path.startsWith(`M ${a.x + 252} ${a.y + 100} `)).toBe(true);
+    expect(edge.path.startsWith(`M ${a.x + TILE_WIDTH} ${a.y + 100} `)).toBe(true);
     expect(layout.chains[0]!.height).toBe(Math.max(...column.map((node) => node.y + node.height)) + 16);
   });
 });
@@ -169,20 +173,64 @@ describe("connectors that skip steps", () => {
     const straights = [...skip.path.matchAll(/ L (\S+) (\S+)/g)].map((match) => ({ x: Number(match[1]), y: Number(match[2]) }));
     expect(straights).toHaveLength(2);
     for (const { x, y } of straights) {
-      const crossed = chain.nodes.filter((node) => node.x < x && x <= node.x + 252);
+      const crossed = chain.nodes.filter((node) => node.x < x && x <= node.x + TILE_WIDTH);
       expect(crossed.length).toBeGreaterThan(0);
       for (const node of crossed) expect(y < node.y || y > node.y + node.height).toBe(true);
+    }
+  });
+  it("put each unlink button in the gap before the card the connector points at, clear of the link handle", () => {
+    const layout = layoutDependencyMap(
+      [card("a"), card("b", { blockedByCount: 1 }), card("c", { blockedByCount: 1 }), card("d", { blockedByCount: 2 })],
+      [blocks("a", "b"), blocks("b", "c"), blocks("c", "d"), blocks("a", "d")],
+      { showRelated: false, now: NOW },
+    );
+    // The link handle is an 18px dot centred on the left card's edge; the unlink dot is 20px.
+    const handleReach = 9 + 10;
+    for (const edge of layout.chains[0]!.edges) {
+      const right = layout.nodesById.get(edge.to)!;
+      const gapStart = right.x - WAVE_GAP;
+      expect(edge.unlinkAt.x, edge.id).toBeGreaterThan(gapStart + handleReach - 1);
+      expect(edge.unlinkAt.x, edge.id).toBeLessThan(right.x - 10);
+      for (const node of layout.nodesById.values()) {
+        const inside = edge.unlinkAt.x > node.x && edge.unlinkAt.x < node.x + TILE_WIDTH && edge.unlinkAt.y > node.y && edge.unlinkAt.y < node.y + node.height;
+        expect(inside, `${edge.id} on ${node.id}`).toBe(false);
+      }
     }
   });
 });
 
 describe("packChains", () => {
-  const chain = (waves: number, height: number) => ({ waves, height, width: 308 * waves - 24 });
+  // A chain's canvas width, as layoutDependencyMap computes it; its box adds a 1px border each side.
+  const chain = (waves: number, height: number) => ({ waves, height, width: MAP_PADDING * 2 + waves * TILE_WIDTH + (waves - 1) * WAVE_GAP });
+  const box = (waves: number) => chain(waves, 0).width + 2;
 
   it("fills the gap under a short chain before starting below the tallest", () => {
-    // Three columns of two-step room each would fit three chains; the map is three chains wide.
-    const { placements } = packChains([chain(2, 100), chain(2, 400), chain(2, 100), chain(2, 100)], 308 * 6);
+    // The map is three two-step chains wide.
+    const { placements } = packChains([chain(2, 100), chain(2, 400), chain(2, 100), chain(2, 100)], box(2) * 3 + 12 * 2 + 40);
     expect(placements[3]).toMatchObject({ x: 0, y: placements[0]!.height + 12 });
+  });
+
+  it("puts short chains side by side when their tiles fit, and fills the row to the map's edge", () => {
+    // 1138px: the map area of a 1440px window with the sidebar open.
+    const { placements } = packChains([chain(2, 100), chain(2, 100), chain(2, 100)], 1138);
+    expect(placements[0]).toMatchObject({ x: 0, y: 0, width: box(2) });
+    expect(placements[1]).toMatchObject({ x: box(2) + 12, y: 0 });
+    expect(placements[1]!.x + placements[1]!.width).toBe(1138);
+    // The third has the left spot under the first; nothing fits beside it there except the second
+    // above, so it stretches only as far as the map's edge allows without crossing a neighbour.
+    expect(placements[2]!.y).toBe(placements[0]!.height + 12);
+    for (const [i, a] of placements.entries()) {
+      for (const b of placements.slice(i + 1)) {
+        const apart = a.x + a.width + 12 <= b.x || b.x + b.width + 12 <= a.x || a.y + a.height + 12 <= b.y || b.y + b.height + 12 <= a.y;
+        expect(apart).toBe(true);
+      }
+    }
+  });
+
+  it("stretches a lone short chain across the map instead of leaving the rest empty", () => {
+    const { placements } = packChains([chain(2, 100)], 1138);
+    expect(placements[0]).toMatchObject({ x: 0, width: 1138 });
+    expect(placements[0]!.height).toBe(2 + 40 + 22 + 100);
   });
 
   it("never packs a chain wider than the map; it scrolls inside its box instead", () => {

@@ -153,11 +153,11 @@ Connect cards with **Blocks**, **Blocked by**, or **Relates to** relationships, 
 
 Open **Dependencies** on a board, in **My Cards**, or in **Team Cards**. Follow the chain in **Map**, compare due weeks in **Timeline**, or read a numbered **Steps** list that adapts to your phone. On a workspace board, switch between the board's chains and the wider workspace while keeping each card's source and permissions intact.
 
-![Kanera Dependencies Map showing connected prerequisites, blocked cards, owners, and filters for Blocked, At risk, Start here, and Ready](docs/readme-assets/dependency-map.jpg?v=20261105refresh)
+![Kanera Dependencies Map showing connected prerequisites, blocked cards, owners, and filters for Blocked, At risk, Start here, and Ready](docs/readme-assets/dependency-map.jpg?v=20261111views1)
 
 Find **Blocked**, **At risk**, **Start here**, and **Ready** work without losing the chain around it. The biggest bottleneck points to the card holding up the most open work; **Critical path** highlights the longest routes by number of open cards. Timeline aligns every chain to shared due-week columns and marks prerequisites due after their dependents in amber.
 
-![Kanera Dependencies Timeline aligning connected cards by due week and marking scheduling risks in amber](docs/readme-assets/dependency-timeline.jpg?v=20261105refresh)
+![Kanera Dependencies Timeline aligning connected cards by due week and marking scheduling risks in amber](docs/readme-assets/dependency-timeline.jpg?v=20261111views1)
 
 In Map or Timeline, drag from a card's **+** handle to add a blocking link, or select a connector to remove it. Tap-to-link and keyboard controls work too, with **Undo** and **Redo** for your map edits. Changes update live, and agents can inspect the same chains through MCP, the CLI, SDK, or REST API.
 
@@ -167,7 +167,7 @@ Read the [Dependencies view, timeline, and editing guide](https://www.kanera.app
 
 Give a card a start date next to its due date and the board's **Timeline** view draws it as a bar on a Gantt-style chart, grouped by list, assignee or label. Drag a bar to reschedule it (its working-day length is kept), pull an end to change its length, click an empty lane to place an unscheduled card, and drag from one bar's end to another to make the second wait on the first. **Critical path** runs a working-day schedule over the board's blocking links, highlights the chain with no slack, fades the rest and shows how far each other card could slip. Cards whose prerequisite is planned to finish after they start are flagged as scheduling conflicts.
 
-![Kanera campaign Timeline with start-to-finish bars grouped by list and connected by dependency wires](docs/readme-assets/timeline.jpg?v=20261105refresh)
+![Kanera campaign Timeline with start-to-finish bars grouped by list and connected by dependency wires](docs/readme-assets/timeline.jpg?v=20261111views1)
 
 Read the [Timeline and Start Dates guide](https://www.kanera.app/docs/timeline) for working-day scheduling, desktop and phone controls, [MCP planning examples](https://www.kanera.app/docs/ai-mcp-examples#review-a-timeline-and-propose-a-reschedule), and [schedule events](https://www.kanera.app/docs/ai-mcp-events#schedule-transitions).
 

@@ -555,11 +555,18 @@ test("Team Cards offers the Timeline over every board, grouped by board, live fo
     await expect(bar(viewer, card)).toBeVisible();
     // Measure against the unchanged boundary, so initial auto-fit/scroll cannot masquerade as
     // a date change. The moving bar spans three inclusive days at the chart's current scale.
-    const offsetDays = async () => {
-      const moving = (await bar(viewer, card).boundingBox())!;
-      const boundary = (await bar(viewer, earlier).boundingBox())!;
-      return (moving.x - boundary.x) / (moving.width / 3);
-    };
+    const offsetDays = () => viewer.locator("k-board-timeline-view").evaluateAll((timelines, ids) => {
+      // Search is debounced: the old chart can still be visible before its loading skeleton
+      // replaces the rows. Read both bars in one render, and retry through that loading state.
+      // Separate boundingBox calls can retain a detached bar or mix two different chart scales.
+      const timeline = timelines[0];
+      const moving = timeline?.querySelector(`.tl-row-card[data-card-id="${ids.card}"] .tl-bar`);
+      const boundary = timeline?.querySelector(`.tl-row-card[data-card-id="${ids.earlier}"] .tl-bar`);
+      if (!moving?.getClientRects().length || !boundary?.getClientRects().length) return Number.NaN;
+      const movingBox = moving.getBoundingClientRect();
+      const boundaryBox = boundary.getBoundingClientRect();
+      return (movingBox.x - boundaryBox.x) / (movingBox.width / 3);
+    }, { card: card.id, earlier: earlier.id });
     await expect.poll(offsetDays).toBeCloseTo(28, 1);
 
     await page.goto("/team-cards");

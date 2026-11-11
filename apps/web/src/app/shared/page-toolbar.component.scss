@@ -169,11 +169,14 @@
       flex: 1 1 100%;
     }
 
+    // 1 1 auto, not 1 1 0: each segment starts from its own label's width and shares only the room
+    // left over, so a longer name ("By week" beside "Map") is never cut at its right edge to keep
+    // the segments equal.
     > k-segmented {
       flex: 1 1 100%;
       margin: 0;
       --sg-fill-width: 100%;
-      --sg-fill-flex: 1 1 0;
+      --sg-fill-flex: 1 1 auto;
     }
   }
 
