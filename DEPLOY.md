@@ -12,6 +12,9 @@ curl -fsSLo .env https://github.com/happendev/Kanera/releases/latest/download/en
 docker compose up -d
 ```
 
+The web app then answers on <http://localhost:4200> (loopback only); put HTTPS in front of it as
+described in [Publish ports](#2-publish-ports).
+
 To update, download the new release's `docker-compose.yml` over the old one and run
 `docker compose pull && docker compose up -d`. The standalone file is generated from this
 repository's `docker-compose.yml` by `scripts/build-release-compose.mjs`; it leaves out the
@@ -302,27 +305,26 @@ errors continue to use this webhook directly.
 
 ## 2. Publish ports
 
-The default compose file keeps services private. If you are running only Docker
-on the server, add a `compose.override.yml` file:
+The compose file publishes the `web` container on `127.0.0.1:4200` (loopback only;
+change it with `WEB_BIND_PORT`), so the example `.env` can be tried at
+<http://localhost:4200> with no proxy. Every other service stays private. If you
+are running only Docker on the server and use the public API or MCP, add a
+`compose.override.yml` file:
 
 ```yaml
 services:
-  web:
-    ports:
-      - "8080:80"
-
   public-api:
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
 
   mcp:
     ports:
-      - "3002:3002"
+      - "127.0.0.1:3002:3002"
 ```
 
 Then point your HTTPS reverse proxy at:
 
-- `http://127.0.0.1:8080` for the Kanera web app
+- `http://127.0.0.1:4200` for the Kanera web app
 - `http://127.0.0.1:3001` for the public API, if you use it
 - `http://127.0.0.1:3002` for the MCP server, if you use it
 
@@ -657,6 +659,7 @@ staff, demo, seed, test, and load-test organisations.
 | `MCP_REPLICAS` | no | Number of MCP server processes Compose keeps running. Defaults to `1`; raise if remote MCP traffic needs more capacity. |
 | `DATABASE_SSL` | no | Defaults to `false` for the bundled Postgres container. Set `true` only for a database that requires SSL. |
 | `POSTGRES_BIND_PORT` | no | Host port for the bundled Postgres service. Defaults to `5433`, mapped to container port `5432`. |
+| `WEB_BIND_PORT` | no | Loopback host port for the `web` container. Defaults to `4200`, mapped to container port `80`. Put HTTPS in front of it; it is never bound to external interfaces. |
 | `PG_POOL_MAX` | no | Max concurrent DB connections per API/public-api process. Defaults to `20` in Compose. Raise to `30`–`50` on a dedicated host. See Performance tuning. |
 | `WORKER_PG_POOL_MAX` | no | Max concurrent DB connections for the single worker. Defaults to `5` in compose. |
 | `PG_CONNECTION_TIMEOUT_MS` | no | Wait for a free pooled connection before failing. Defaults to `5000`. |

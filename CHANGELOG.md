@@ -31,6 +31,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Self-hosting:** the Docker Compose file now publishes the web app on `127.0.0.1:4200`, so a fresh `docker compose up -d` opens at <http://localhost:4200> without a proxy and your HTTPS proxy has a fixed target. Change the port with `WEB_BIND_PORT`; if something on the server already uses 4200, set it before upgrading.
 - **Interface refresh:** a cleaner, more consistent look across boards, tables, Calendar, Timeline and Dependencies, Home, My Cards and Team Cards, notifications, menus, the new card dialog and card detail, with clearer light and dark themes. Phones get the full screen width, with navigation behind a menu button, and larger touch targets.
 - **Faster card details:** sections render independently, large collections defer offscreen rendering, and realtime bursts share one offline-cache write. Detail/feed loads are cancellable and deduplicated, unchanged reconnects use conditional requests, and per-card revisions preserve live edits without retrying the initial detail load.
 
