@@ -38,6 +38,8 @@ import {
   NAME_PANE_WIDTH_MAX,
   NAME_PANE_WIDTH_MIN,
   NAME_PANE_WIDTH_NARROW,
+  NAME_PANE_WIDTH_WIDE,
+  WIDE_MIN_WIDTH,
   MAX_PX_PER_DAY,
   MIN_PX_PER_DAY,
   plannedBars,
@@ -249,7 +251,7 @@ export class BoardTimelineViewComponent implements OnInit {
   // repeat it (and cost every row a second line).
   readonly showLabelChips = computed(() => !this.narrow() && this.groupBy() !== "label");
   /** Whether any row shows label chips; only then do card rows grow a second line for them. */
-  private readonly hasLabelChips = computed(() => {
+  readonly hasLabelChips = computed(() => {
     if (!this.showLabelChips()) return false;
     const labels = this.labelsByCard();
     return this.visibleCards().some((card) => (labels.get(card.id)?.length ?? 0) > 0);
@@ -265,7 +267,10 @@ export class BoardTimelineViewComponent implements OnInit {
   readonly customNamePaneWidth = signal<number | null>(null);
   // Long titles never fit a fixed pane, so the viewer can widen it. Phones keep the fixed narrow
   // pane (and hide the labels): the chart is the point there and the handle would fight the scroll.
-  readonly namePaneWidth = computed(() => this.narrow() ? NAME_PANE_WIDTH_NARROW : this.clampNamePaneWidth(this.customNamePaneWidth() ?? NAME_PANE_WIDTH));
+  // A wide host starts the pane wider (NAME_PANE_WIDTH_WIDE) so titles get room the chart can spare;
+  // a width the viewer dragged to always wins.
+  readonly namePaneWidth = computed(() => this.narrow() ? NAME_PANE_WIDTH_NARROW
+    : this.clampNamePaneWidth(this.customNamePaneWidth() ?? (this.hostWidth() >= WIDE_MIN_WIDTH ? NAME_PANE_WIDTH_WIDE : NAME_PANE_WIDTH)));
   private paneResize: { pointerId: number; startX: number; startWidth: number } | null = null;
 
   private readonly appRef = inject(ApplicationRef);
@@ -293,6 +298,11 @@ export class BoardTimelineViewComponent implements OnInit {
   });
   private readonly visibleCardIds = computed(() => new Set(this.visibleCards().map((card) => card.id)));
   readonly cardsById = computed(() => new Map(this.cards().map((card) => [card.id, card])));
+  /** The card whose right-click menu is open; null once the card leaves the view. */
+  readonly activeActionsCard = computed(() => {
+    const id = this.activeActionsCardId();
+    return id ? this.cardsById().get(id) ?? null : null;
+  });
   private readonly blockerKeys = computed(() => new Map([
     ...(this.scheduleResponse()?.cards ?? []).map((card) => [card.id, card.key] as const),
     ...this.cards().map((card) => [card.id, card.key] as const),
@@ -883,7 +893,8 @@ export class BoardTimelineViewComponent implements OnInit {
   /** The pane's own chrome (icon, padding, avatars) plus each row's natural chip width; the widest wins. */
   private measureLabels(): void {
     let widest = 0;
-    for (const labels of this.host.nativeElement.querySelectorAll<HTMLElement>(".tl-card-name .tl-labels")) {
+    // The whole second line, key included, so a row's key and labels both show whole.
+    for (const labels of this.host.nativeElement.querySelectorAll<HTMLElement>(".tl-card-name .tl-meta-line:has(.tl-labels)")) {
       const name = labels.closest<HTMLElement>(".tl-card-name");
       const text = labels.closest<HTMLElement>(".tl-name-text");
       if (!name || !text) continue;

@@ -19,6 +19,7 @@ import type { AppSocket } from "../../core/realtime/socket.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ConfirmService } from "../../shared/confirm.service";
+import { ToastService } from "../../shared/toast.service";
 import { BoardState } from "./board-state";
 import { CardDetailPersistence } from "./card-detail-persistence.service";
 import { DatePickerPopover } from "./date-picker.popover";
@@ -1894,6 +1895,15 @@ describe("CardDetailComponent realtime regressions", () => {
       (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(".comment-actions button"),
     ).find((button) => button.textContent?.trim() === "Delete");
     deleteButton?.click();
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector(".comment")).toBeNull();
+    expect(api.delete).not.toHaveBeenCalled();
+
+    // Deletion stays local until the administrator dismisses the undo toast.
+    const toasts = TestBed.inject(ToastService);
+    const toast = toasts.messages().find((message) => message.message === "Comment deleted")!;
+    expect(toast.action?.label).toBe("Undo");
+    toasts.dismiss(toast.id);
     await fixture.whenStable();
     expect(api.delete).toHaveBeenCalledWith("/comments/comment-1");
     expect(fixture.componentInstance.feedItems()).toEqual([]);

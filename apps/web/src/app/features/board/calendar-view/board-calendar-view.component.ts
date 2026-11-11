@@ -5,7 +5,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRe
 import type { Card, List } from "@kanera/shared/schema";
 import type { WireCard, WireCardSummary, WireList } from "@kanera/shared/events";
 import { ApiClient } from "../../../core/api/api.client";
-import { APP_DOM_EVENTS } from "../../../core/browser/browser-contracts";
+import { APP_DOM_EVENTS, viewPreferenceKey } from "../../../core/browser/browser-contracts";
 import { ToastService } from "../../../shared/toast.service";
 import { WorkspaceService } from "../../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
@@ -19,7 +19,8 @@ import { CARD_DRAG_START_DELAY } from "../card-drag-scroll";
 import type { CardAssigneePresentation } from "../card.component";
 import { CardLabelsComponent, type CardLabelPresentation } from "../card-labels.component";
 import { openCardDetailInNewTab } from "../card-navigation.util";
-import { DUE_DATE_SLOT_OPTIONS, dueDateSlotFor, isOverdue, type DueDateSlot } from "../due-date.util";
+import { DUE_DATE_SLOT_OPTIONS, dueDateSlotFor, isDueSoon, isOverdue, type DueDateSlot } from "../due-date.util";
+import { blockedChipLabel } from "../card-relations.util";
 import { formatDate, formatDateRange } from "../../../shared/date-format";
 import { boardStateCardStore, TABLE_CARD_STORE, type TableCardStore } from "../table-view/table-card-store";
 import { localDateKey, parseDateKey, startOfLocalDay } from "../../../shared/day-key.util";
@@ -98,6 +99,16 @@ export function calendarLayoutForWidth(width: number): CalendarLayout {
  *   that span many boards and are read by scrolling. Neighbouring-month cells stay blank there: the
  *   month itself is rendered further down, and repeating its cards would show a card twice.
  */
+const CALENDAR_SLIM_KEY = viewPreferenceKey("calendarSlim", "all");
+
+function readCalendarSlim(): boolean {
+  try {
+    return localStorage.getItem(CALENDAR_SLIM_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 @Component({
   selector: "k-board-calendar-view",
   standalone: true,
@@ -148,8 +159,15 @@ export class BoardCalendarViewComponent {
     { id: "month", icon: "calendar-month", label: $localize`:Calendar view mode - show a whole month:Month` },
     { id: "week", icon: "calendar-week", label: $localize`:Calendar view mode - show one week:Week` },
   ];
+  /** The Today button's name in its icon-only (phone) form; the same message as its visible label. */
+  readonly todayButtonLabel = $localize`:Button - jump the calendar to today:Today`;
   readonly anchorDate = signal(startOfLocalDay(new Date()));
   readonly activeActionsCardId = signal<string | null>(null);
+  /** The card whose right-click menu is open; null once the card leaves the view. */
+  readonly activeActionsCard = computed(() => {
+    const id = this.activeActionsCardId();
+    return id ? this.cards().find((card) => card.id === id) ?? null : null;
+  });
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly weekdayLabels = WEEKDAY_LABELS;
   /** Touch waits, so a finger can still scroll the grid; the mouse has drag-scroll on the cell background. */
@@ -169,6 +187,13 @@ export class BoardCalendarViewComponent {
   readonly layout = signal<CalendarLayout>(
     calendarLayoutForWidth(typeof window === "undefined" ? 0 : window.innerWidth),
   );
+  /**
+   * Slim tiles: key and title only, so a busy month fits without scrolling. One choice per device for
+   * every calendar (boards, My Cards, Team Cards): it is about how much the reader wants on a tile,
+   * not about a particular board.
+   */
+  readonly slim = signal(readCalendarSlim());
+  readonly slimLabel = $localize`:Calendar view toggle - smaller tiles with only the key and title:Slim cards`;
   /** Month cells the user has opened past the compact cap with "+N more". */
   readonly expandedDayKeys = signal<ReadonlySet<string>>(new Set());
   /** The day picked in the phone month grid; `null` falls back to `phoneSelectedDayKey`'s default. */
@@ -345,6 +370,16 @@ export class BoardCalendarViewComponent {
     return this.expandedDayKeys().has(key);
   }
 
+  toggleSlim(): void {
+    const next = !this.slim();
+    this.slim.set(next);
+    try {
+      localStorage.setItem(CALENDAR_SLIM_KEY, next ? "1" : "0");
+    } catch {
+      // Storage can be unavailable in privacy mode or over quota; the in-memory choice still applies.
+    }
+  }
+
   setMode(mode: "month" | "week") {
     this.mode.set(mode);
   }
@@ -470,6 +505,27 @@ export class BoardCalendarViewComponent {
 
   isOverdue(card: AnyCard): boolean {
     return !card.archivedAt && !card.completedAt && isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
+  }
+
+  /** The board tile's amber state, on the tile's time chip: open work due within the next 24 hours. */
+  isDueSoon(card: AnyCard): boolean {
+    return !card.archivedAt && !card.completedAt && isDueSoon(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
+  }
+
+  /** Tooltip for the tile's Blocked chip, or null when the card is not waiting on open work. */
+  blockedLabel(card: AnyCard): string | null {
+    return blockedChipLabel(card);
+  }
+
+  /** Whether the tile has anything for its facts row (Blocked, time, overdue, list, board). */
+  hasFacts(card: AnyCard): boolean {
+    return Boolean(
+      this.blockedLabel(card)
+      || this.slotTime(card)
+      || this.isOverdue(card)
+      || (!card.completedAt && this.listFor(card))
+      || this.boardSummaryFor(card),
+    );
   }
 
   slotTime(card: AnyCard): string {

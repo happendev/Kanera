@@ -44,6 +44,9 @@ const POINT_MAX_WIDTH = 12;
 /** Width of the left name pane, where titles live; the chart begins right of it. */
 export const NAME_PANE_WIDTH = 300;
 export const NAME_PANE_WIDTH_NARROW = 164;
+/** The default on a host at least `WIDE_MIN_WIDTH` across, where the chart can spare the room. */
+export const NAME_PANE_WIDTH_WIDE = 360;
+export const WIDE_MIN_WIDTH = 1100;
 /** Bounds when the viewer drags the pane's edge: room for a title at least, never most of the chart. */
 export const NAME_PANE_WIDTH_MIN = 200;
 export const NAME_PANE_WIDTH_MAX = 720;

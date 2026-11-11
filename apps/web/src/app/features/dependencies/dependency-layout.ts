@@ -38,7 +38,7 @@ export interface DependencyLayoutState {
 }
 
 /**
- * The Map/Timeline/Steps choice, owned by the host page so the switch sits in its toolbar beside
+ * The Map/By week/Steps choice, owned by the host page so the switch sits in its toolbar beside
  * the other view controls, as Work done's layout switch does. Remembered per preference scope.
  */
 export function dependencyLayoutState(scope: () => string): DependencyLayoutState {
@@ -55,7 +55,9 @@ export function dependencyLayoutState(scope: () => string): DependencyLayoutStat
     }),
     options: [
       { id: "map", icon: "git-merge", label: $localize`:dependency map layout|Dependencies view layout - chains drawn as a map with connectors:Map` },
-      { id: "timeline", icon: "calendar-week", label: $localize`:Dependencies view layout - cards placed in columns by the week they are due:Timeline` },
+      // Named "By week", not "Timeline": the board has a Timeline view of its own (bars over dates),
+      // and this layout is columns of due weeks. The stored id stays "timeline".
+      { id: "timeline", icon: "calendar-week", label: $localize`:Dependencies view layout - cards placed in columns by the week they are due:By week` },
       { id: "list", icon: "list-numbers", label: $localize`:Dependencies view layout - chains listed step by step:Steps` },
     ],
     setLayout(layout) {

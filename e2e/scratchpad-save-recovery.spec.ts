@@ -47,9 +47,20 @@ test("a single docked scratchpad preserves text across late foreground reads and
     await page.unrouteAll({ behavior: "wait" });
     await link.cut();
     await expect.poll(() => link.refusedAttempts).toBeGreaterThan(0);
+    // Cutting realtime leaves HTTP available. Refuse saves too, otherwise a fast PATCH clears
+    // the recovery draft before we can observe the unsaved text.
+    const saveUrl = `**/api/scratchpad/notes/${note.id}`;
+    await page.route(saveUrl, async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      await route.abort("connectionreset");
+    });
     await editor.fill("Original text with my morning notes and offline additions");
     await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    // The client may reject the save before HTTP once its offline indicator catches up.
+    await expect(page.locator("k-scratchpad-panel").getByRole("status")).toHaveText("Not saved");
     await expect.poll(async () => JSON.stringify(await drafts(page))).toContain("offline additions");
+    expect(await content(api, note.id)).toBe("Original text with my morning notes");
+    await page.unroute(saveUrl);
     link.restore();
     // A refused handshake can recover through the 15-second reconnect watchdog.
     await expect.poll(() => link.connectionCount, { timeout: 30_000 }).toBeGreaterThan(0);

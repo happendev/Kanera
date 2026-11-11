@@ -158,6 +158,8 @@ export class CardActivityComponent {
   readonly currentUserId = this.auth.user;
   readonly memberIds = computed(() => new Set(this.members().map((member) => member.userId)));
   readonly feedItems = signal<CardFeedItem[]>([]);
+  /** Comments hidden behind an Undo toast whose DELETE has not been sent yet. */
+  private readonly pendingDeletedCommentIds = signal<ReadonlySet<string>>(new Set());
   // Feed load lifecycle. feedLoading gates a skeleton (only while we have no items yet) so the
   // initial fetch never flashes "No activity yet"; feedError drives an inline error + Retry.
   readonly feedLoading = signal(false);
@@ -186,11 +188,14 @@ export class CardActivityComponent {
   //   audit trail and make an unexplained "N mirrored changes" entry redundant and misleading.
   // - agentRun:started is recorded for audit (run start/end never notifies), but the live run block above the
   //   fields already shows in-flight work, so the feed only carries the outcome (agentRun:ended).
-  readonly renderableFeedItems = computed(() =>
-    this.feedItems().filter((item) =>
-      item.type !== "activity" || (item.data.coalesceKey !== "card:mirrorSync" && item.data.action !== "agentRun:started"),
-    ),
-  );
+  // - Comments the viewer just deleted stay hidden while their Undo toast is up; the DELETE is
+  //   deferred until it expires, so a feed refresh in that window must not bring them back.
+  readonly renderableFeedItems = computed(() => {
+    const pendingDeleted = this.pendingDeletedCommentIds();
+    return this.feedItems().filter((item) => item.type === "activity"
+      ? item.data.coalesceKey !== "card:mirrorSync" && item.data.action !== "agentRun:started"
+      : item.type !== "comment" || !pendingDeleted.has(item.data.id));
+  });
   // The Agents filter only appears once an agent has written a comment on the card; an agent that
   // only changed fields doesn't earn a tab. If that last comment goes away while the tab is
   // selected, the feed falls back to All rather than leaving a hidden filter applied.
@@ -839,12 +844,37 @@ export class CardActivityComponent {
     return item?.type === "comment" ? item.data.body : "";
   }
 
-  async deleteComment(id: string) {
+  deleteComment(id: string) {
     if (!this.canMutate()) return;
-    await this.api.delete(`/comments/${id}`);
-    const next = this.feedItems().filter((item) => item.type !== "comment" || item.data.id !== id);
-    this.feedItems.set(next);
-    this.persistFeedSnapshot(this.cardId(), next);
+    const cardId = this.cardId();
+    const setHidden = (hidden: boolean) => this.pendingDeletedCommentIds.update((ids) => {
+      const next = new Set(ids);
+      if (hidden) next.add(id); else next.delete(id);
+      return next;
+    });
+    // Undo instead of confirm: hide now, DELETE only once the toast is gone, so a reversed delete
+    // never reaches the server (or other viewers). The commit can run after the drawer has moved to
+    // another card, so it only touches this feed when it is still showing the same card.
+    setHidden(true);
+    this.toasts.undoable({
+      message: $localize`:Toast after deleting a comment:Comment deleted`,
+      icon: "trash",
+      undo: () => setHidden(false),
+      commit: async () => {
+        try {
+          await this.api.delete(`/comments/${id}`);
+        } catch {
+          setHidden(false);
+          this.toasts.error($localize`:Toast when deleting a comment fails:Couldn't delete the comment.`);
+          return;
+        }
+        setHidden(false);
+        if (this.cardId() !== cardId) return;
+        const next = this.feedItems().filter((item) => item.type !== "comment" || item.data.id !== id);
+        this.feedItems.set(next);
+        this.persistFeedSnapshot(cardId, next);
+      },
+    });
   }
 
   async loadMoreFeed() {

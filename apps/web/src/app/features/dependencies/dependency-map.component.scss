@@ -1,3 +1,8 @@
+@use "../../shared/toolbar-styles" as toolbar;
+@use "../../shared/chip";
+@use "../../shared/list-chip";
+@use "../../shared/card-key" as key;
+
 :host {
   display: flex;
   flex-direction: column;
@@ -56,13 +61,15 @@
   align-items: center;
   // A word space between the count and its label; the icon sits a little further off.
   gap: 4px;
-  height: 32px;
-  padding: 0 10px;
+  // The shared toolbar height, so the counts line up with the toggles beside them (.k-toolbar-btn)
+  // and with the Timeline and Calendar toolbars.
+  height: var(--h-lg);
+  padding: 0 11px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md, var(--radius));
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   white-space: nowrap;
   cursor: pointer;
 
@@ -102,28 +109,16 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-}
 
-.dm-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, var(--radius));
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  cursor: pointer;
+  // Phone width: one row of icon buttons (the scope switch drops its labels in the template), the
+  // way the Timeline toolbar goes icon-only, so the chains start a row higher.
+  &.is-compact {
+    flex-wrap: nowrap;
+    gap: 6px;
 
-  &:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
-
-  &.is-on,
-  &.is-on:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-    color: var(--text);
+    .dm-toggle {
+      @include toolbar.collapsed-label;
+    }
   }
 }
 
@@ -414,7 +409,6 @@
   /* Timeline headings: this week stands out, past weeks step back. */
   &.is-current { color: var(--accent); }
   &.is-past { opacity: 0.7; }
-  &.is-undated { font-style: italic; }
 }
 
 .dm-wires {
@@ -452,25 +446,36 @@
   &:focus-visible { stroke: color-mix(in srgb, var(--ring) 35%, transparent); }
 }
 
-.dm-wire-remove {
+/* On a connector, just before its arrow: removes that dependency. The link handle's twin, red on hover. */
+.dm-unlink {
   position: absolute;
   z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 10px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  padding: 0;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md, var(--radius));
+  border-radius: 999px;
   background: var(--surface);
-  color: var(--text);
-  font-size: var(--text-sm);
-  box-shadow: var(--shadow);
-  transform: translate(-50%, calc(-100% - 8px));
-  white-space: nowrap;
+  color: var(--text-3);
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-fast, 120ms) ease, transform var(--motion-fast, 120ms) ease,
+    background var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
 
-  i { color: var(--danger); font-size: 15px; }
-  &:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+  i { font-size: 12px; }
+
+  /* A bigger target than the dot. */
+  &::before { content: ""; position: absolute; inset: -6px; border-radius: inherit; }
+
+  &.is-shown,
+  &:focus-visible { opacity: 1; pointer-events: auto; }
+  &:hover:not(:disabled) { border-color: var(--danger); background: var(--surface); color: var(--danger); transform: scale(1.15); }
+  &:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 }
 
 /* Drag from here to the card this one blocks; a tap starts picking it instead. */
@@ -520,15 +525,19 @@
   gap: 4px;
   box-sizing: border-box;
   padding: 8px 10px;
-  border: 1px solid var(--border);
+  // The board tile's elevation (card.component.scss): --border-raised as the ring, --shadow-card
+  // beneath it. --dm-elev carries the shadow so every state ring below stacks on top of it and hover
+  // deepens the shadow without ever touching the border or dropping a ring.
+  --dm-elev: var(--shadow-card);
+  border: 1px solid var(--border-raised);
   border-radius: var(--radius);
   background: var(--dm-tile-bg);
   color: var(--text);
   text-decoration: none;
-  box-shadow: var(--shadow-sm);
-  transition: opacity var(--motion-fast, 120ms) ease, box-shadow var(--motion-fast, 120ms) ease, border-color var(--motion-fast, 120ms) ease;
+  box-shadow: var(--dm-elev);
+  transition: opacity var(--motion-fast, 120ms) ease, box-shadow var(--motion-fast, 120ms) ease;
 
-  &:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+  &:hover { --dm-elev: var(--shadow-card-hover); }
   &:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
   // Status reads from the icon, the pill and a soft wash: never an edge stripe.
@@ -543,17 +552,17 @@
 
   // A card from another board, there because a chain crosses into it.
   &.is-context { border-style: dashed; }
-  &.is-risk { box-shadow: 0 0 0 1px color-mix(in srgb, var(--dm-risk) 70%, transparent), var(--shadow-sm); }
-  &.is-match { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent), var(--shadow-sm); }
-  &.is-selected { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
-  &.is-critical { box-shadow: 0 0 0 2px color-mix(in srgb, var(--dm-critical) 75%, transparent), var(--shadow-sm); }
+  &.is-risk { box-shadow: 0 0 0 1px color-mix(in srgb, var(--dm-risk) 70%, transparent), var(--dm-elev); }
+  &.is-match { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent), var(--dm-elev); }
+  &.is-selected { box-shadow: 0 0 0 2px var(--accent), var(--dm-elev); }
+  &.is-critical { box-shadow: 0 0 0 2px color-mix(in srgb, var(--dm-critical) 75%, transparent), var(--dm-elev); }
   &.is-offpath { opacity: 0.55; }
   &.is-dim { opacity: 0.35; }
 
   /* While a dependency is drawn: where it can go, where it would go, and what it cannot block. */
-  &.is-link-source { opacity: 1; box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
-  &.is-link-target { opacity: 1; box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), var(--shadow-sm); cursor: copy; }
-  &.is-link-over { opacity: 1; box-shadow: 0 0 0 2px var(--accent), var(--shadow); cursor: copy; }
+  &.is-link-source { opacity: 1; box-shadow: 0 0 0 2px var(--accent), var(--dm-elev); }
+  &.is-link-target { opacity: 1; box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), var(--dm-elev); cursor: copy; }
+  &.is-link-over { opacity: 1; box-shadow: 0 0 0 2px var(--accent), var(--dm-elev); cursor: copy; }
   &.is-link-muted { opacity: 0.4; cursor: not-allowed; }
 }
 
@@ -580,23 +589,25 @@
 .is-starter .dm-status-icon { color: var(--dm-starter); }
 .is-open .dm-status-icon { color: var(--text-muted); }
 
+// The shared card key (shared/_card-key.scss), as on the board tile and table, not a monospace face.
 .dm-key {
-  flex: none;
-  font-family: var(--mono);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
+  @include key.card-key;
 }
 
+// A board a context card lives on: its icon and name as quiet metadata.
 .dm-place {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   min-width: 0;
 
-  &::before { content: "·"; margin-right: 1px; }
-  &.is-board::before { content: none; }
-
   i { flex: none; font-size: var(--text-sm); }
+}
+
+// The card's list, in the shared list chip; it ellipsizes before it pushes the risk icon off the head.
+.dm-list {
+  @include list-chip.list-chip;
+  flex: 0 1 auto;
 }
 
 .dm-place-name {
@@ -638,7 +649,9 @@
   --label-bar-wrap: nowrap;
   --label-bar-gap: 0;
   --label-chip-height: 18px;
-  --label-chip-max-width: 96px;
+  // The tile's full width: chips shrink and ellipsize (card-labels' default flex) only when the row
+  // genuinely runs out of room, instead of truncating a short pair at a fixed cap.
+  --label-chip-max-width: 100%;
   --label-chip-font-size: var(--text-xs);
   --label-chip-padding-x: 6px;
 }
@@ -664,7 +677,6 @@
   white-space: nowrap;
 
   > i { flex: none; font-size: var(--text-sm); }
-  &.is-more { font-style: italic; }
 }
 
 /* Names keep their width up to a cap, so a long value ellipsizes instead of eating the name. */
@@ -729,9 +741,11 @@
   padding: 0 4px;
   border-radius: 999px;
   background: var(--surface-2);
+  // 10px, off the scale: the "+N" sits inside a 20px avatar circle, where --text-xs crowded it.
   font-size: 10px;
 }
 
+// Plain metadata until the deadline matters, then the shared danger / warning chip (due-states).
 .dm-due {
   display: inline-flex;
   align-items: center;
@@ -739,7 +753,7 @@
   white-space: nowrap;
 
   i { font-size: var(--text-base); }
-  &.is-overdue { color: var(--danger); }
+  @include chip.due-states;
 }
 
 .dm-spacer { flex: 1; }
@@ -753,23 +767,21 @@
   i { font-size: var(--text-base); }
 }
 
+// A card's state in its chain, in the shared state chip (shared/_chip.scss): Blocked is the board
+// tile's danger chip, "Unblocks N" the accent of work that moves things, Ready the success tone and
+// Done neutral. It ellipsizes rather than push the date or people off a narrow foot.
 .dm-status {
+  @include chip.chip;
+  @include chip.chip-tone(neutral);
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  white-space: nowrap;
-  background: var(--surface-2);
-  color: var(--text-muted);
 }
 
-.is-blocked .dm-status { color: var(--dm-blocked); background: color-mix(in srgb, var(--dm-blocked) 12%, transparent); }
-.is-ready .dm-status { color: var(--dm-ready); background: color-mix(in srgb, var(--dm-ready) 14%, transparent); }
-.is-starter .dm-status { color: var(--dm-starter); background: color-mix(in srgb, var(--dm-starter) 12%, transparent); }
+.is-blocked .dm-status { @include chip.chip-tone(danger); }
+.is-ready .dm-status { @include chip.chip-tone(success); }
+.is-starter .dm-status { @include chip.chip-tone(accent); }
 
 /* Step list: the same chain as an ordered list, for phones and for reading top to bottom. */
 .dm-chains.is-list .dm-chain { container: dm-chain / inline-size; }
@@ -1016,6 +1028,7 @@
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
   .dm-stat,
   .dm-toggle { height: 44px; }
+  .dm-controls.is-compact .dm-toggle { width: 44px; }
 
   /* Touch has no hover to reveal the handles, so they stay out, a little larger. */
   .dm-link-handle { width: 22px; height: 22px; margin: -11px 0 0 -11px; opacity: 1; }
@@ -1029,7 +1042,18 @@
     transform: translate(-50%, -50%);
   }
   .dm-wire-hit { stroke-width: 44; }
-  .dm-wire-remove,
+
+  /* Like the link handles, the unlink buttons stay out on touch, with a 44px target. */
+  .dm-unlink { width: 22px; height: 22px; margin: -11px 0 0 -11px; opacity: 1; pointer-events: auto; }
+
+  .dm-unlink::before {
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
   .dm-retry { min-height: 44px; }
   .dm-retry { min-width: 44px; }
   .dm-row { min-height: 44px; box-sizing: border-box; }

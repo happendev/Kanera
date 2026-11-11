@@ -4,6 +4,7 @@ import { cardPath } from "@kanera/shared/card-links";
 import type { CardRelationSummary, DependencyGraphBody, DependencyGraphResponse } from "@kanera/shared/dto";
 import { expandCardSummary, SERVER_EVENTS, type WireCardSummary, type WireCustomField } from "@kanera/shared/events";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { AuthService } from "../../core/auth/auth.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { icu } from "../../core/i18n/icu";
@@ -16,9 +17,11 @@ import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented
 import { ToastService } from "../../shared/toast.service";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { CardActionsMenuPopover } from "../board/card-actions-menu.popover";
 import { CardLabelsComponent, type CardLabelPresentation } from "../board/card-labels.component";
 import { isPlainPrimaryClick } from "../board/card-navigation.util";
-import { formatDueDate, isOverdue } from "../board/due-date.util";
+import { formatDueDate, isDueSoon, isOverdue } from "../board/due-date.util";
+import { WorkspaceService } from "../../core/workspace/workspace.service";
 import {
   chainHeaderHeight,
   chainNeighbourhood,
@@ -59,14 +62,6 @@ interface LinkDraft {
   mode: "press" | "drag" | "pick";
   line: { chainId: string; x1: number; y1: number; x2: number; y2: number } | null;
   overId: string | null;
-}
-
-/** A connector picked for removal, and where its Remove button sits in its chain's canvas. */
-interface EdgeSelection {
-  id: string;
-  chainId: string;
-  x: number;
-  y: number;
 }
 
 /**
@@ -120,7 +115,7 @@ let nextInstanceId = 0;
 @Component({
   selector: "k-dependency-map",
   standalone: true,
-  imports: [AvatarComponent, CardLabelsComponent, EmptyStateComponent, SegmentedComponent, TooltipDirective],
+  imports: [AvatarComponent, CardActionsMenuPopover, CardLabelsComponent, EmptyStateComponent, SegmentedComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./dependency-map.component.html",
   styleUrl: "./dependency-map.component.scss",
@@ -135,6 +130,7 @@ export class DependencyMapComponent implements OnInit {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly toasts = inject(ToastService);
   private readonly shortcuts = inject(KeyboardShortcutsService);
+  private readonly workspaces = inject(WorkspaceService);
 
   /** Board scope. With `workspaceId`, the map also offers the board's whole workspace. */
   readonly boardId = input<string | null>(null);
@@ -143,7 +139,7 @@ export class DependencyMapComponent implements OnInit {
   readonly cardIds = input<readonly string[] | null>(null);
   /** Key for the remembered scope and toggles. */
   readonly preferenceScope = input.required<string>();
-  /** Map, Timeline or Steps. The host owns the switch, in its toolbar (see `dependencyLayoutState`). */
+  /** Map, By week or Steps. The host owns the switch, in its toolbar (see `dependencyLayoutState`). */
   readonly layoutMode = input.required<DependencyLayout>();
   /**
    * The host's search and filter result over its own cards, or null when nothing narrows it.
@@ -172,7 +168,17 @@ export class DependencyMapComponent implements OnInit {
   readonly critical = signal(false);
   readonly filter = signal<DependencyFilter>("all");
   readonly linkDraft = signal<LinkDraft | null>(null);
-  readonly selectedEdge = signal<EdgeSelection | null>(null);
+  private readonly actionsMenuCardId = signal<string | null>(null);
+  readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
+  /** Resolved from the live response, so the menu follows realtime edits and closes if the card goes. */
+  readonly actionsMenuCard = computed(() => {
+    const id = this.actionsMenuCardId();
+    const card = id ? this.response()?.cards.find((candidate) => candidate.id === id) : null;
+    // The response carries compact cards (unset fields omitted); the menu needs them restored.
+    return card ? expandCardSummary(card) : null;
+  });
+  /** A connector clicked on: it stays lit with its unlink button out until the next click elsewhere. */
+  readonly selectedEdgeId = signal<string | null>(null);
   readonly hoveredEdgeId = signal<string | null>(null);
   private readonly undoStack = signal<readonly RelationEdit[]>([]);
   private readonly redoStack = signal<readonly RelationEdit[]>([]);
@@ -397,9 +403,18 @@ export class DependencyMapComponent implements OnInit {
       if (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName)) return false;
       return !active.closest("k-card-detail, [role='dialog']");
     };
+    const removeSelectedLabel = $localize`:Keyboard shortcut description on the Dependencies view - removes the connector the viewer clicked:Remove the selected dependency`;
     this.shortcuts.registerAll($localize`:Keyboard shortcut group heading for the Dependencies view:Dependencies`, [
       { keys: "mod+z", label: $localize`:Keyboard shortcut description on the Dependencies view:Undo the last dependency change`, when: () => this.writesEnabled() && this.undoStack().length > 0 && onMap(), run: () => void this.undo() },
       { keys: "mod+shift+z", label: $localize`:Keyboard shortcut description on the Dependencies view:Redo the dependency change`, when: () => this.writesEnabled() && this.redoStack().length > 0 && onMap(), run: () => void this.redo() },
+      // Document-level, not on the map's host: clicking a connector selects it without moving focus.
+      // Both keys, as on the Timeline: a Mac keyboard's delete key reports Backspace.
+      ...(["delete", "backspace"] as const).map((keys) => ({
+        keys,
+        label: removeSelectedLabel,
+        when: () => this.writesEnabled() && this.selectedEdgeId() !== null && onMap(),
+        run: () => this.removeSelectedEdge(),
+      })),
     ], this.destroyRef);
     effect(() => {
       const scope = this.preferenceScope();
@@ -640,6 +655,25 @@ export class DependencyMapComponent implements OnInit {
     this.cardOpened.emit(node.card);
   }
 
+  /**
+   * Right-click opens the same card menu as a board tile, for cards on boards the viewer can edit.
+   * Read-only cards and a tile clicked mid-link keep the browser's own menu (the tile is a real link).
+   */
+  onCardContextMenu(node: MapNode, event: MouseEvent): void {
+    if (this.linkDraft() || !this.editableBoardIds().has(node.card.boardId)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // Lets the board close any other open card menu (see BoardMenuCoordinatorService).
+    document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, { detail: node.card.id }));
+    this.actionsMenuPoint.set({ x: event.clientX, y: event.clientY });
+    this.actionsMenuCardId.set(node.card.id);
+  }
+
+  closeActionsMenu(): void {
+    this.actionsMenuPoint.set(null);
+    this.actionsMenuCardId.set(null);
+  }
+
   href(node: MapNode): string {
     return cardPath(node.card.organisationKey, node.card.key);
   }
@@ -655,7 +689,7 @@ export class DependencyMapComponent implements OnInit {
 
   edgeTone(edge: MapEdge): "related" | "cleared" | "risk" | "lit" | "critical" | "plain" {
     if (edge.kind === "relates_to") return "related";
-    if (edge.id === this.selectedEdge()?.id || edge.id === this.hoveredEdgeId()) return "lit";
+    if (edge.id === this.selectedEdgeId() || edge.id === this.hoveredEdgeId()) return "lit";
     if (this.isEdgeLit(edge)) return edge.atRisk ? "risk" : "lit";
     // With the critical path on, its links read as one run even where one of them is at risk;
     // the at-risk card keeps its own amber ring.
@@ -736,7 +770,7 @@ export class DependencyMapComponent implements OnInit {
     const canvas = handle.closest<HTMLElement>(".dm-canvas");
     if (!canvas) return;
     const wasPicking = this.linkDraft()?.fromId === node.id;
-    this.selectedEdge.set(null);
+    this.selectedEdgeId.set(null);
     this.linkDraft.set({ fromId: node.id, mode: "press", line: null, overId: null });
     handle.setPointerCapture?.(event.pointerId);
     const start = { x: event.clientX, y: event.clientY };
@@ -773,7 +807,7 @@ export class DependencyMapComponent implements OnInit {
   /** Enter or Space on a handle (a click with no pointer behind it) starts or cancels picking. */
   handleKey(event: MouseEvent, node: MapNode): void {
     if (event.detail !== 0) return;
-    this.selectedEdge.set(null);
+    this.selectedEdgeId.set(null);
     this.linkDraft.set(this.linkDraft()?.fromId === node.id ? null : { fromId: node.id, mode: "pick", line: null, overId: null });
   }
 
@@ -789,7 +823,7 @@ export class DependencyMapComponent implements OnInit {
 
   cancelEditing(): void {
     this.linkDraft.set(null);
-    this.selectedEdge.set(null);
+    this.selectedEdgeId.set(null);
   }
 
   /** Adds the dependency, written from the dependent's side: the card the viewer must be able to edit. */
@@ -805,42 +839,42 @@ export class DependencyMapComponent implements OnInit {
   }
 
 
-  /** Picks a connector: a click puts its Remove button where the pointer is, a key at its middle. */
-  selectEdge(event: Event, chain: MapChain, edge: MapEdge): void {
-    event.preventDefault();
+  /**
+   * Shows a connector's unlink button while the pointer is on the connector or on either of its
+   * cards, or once it has been clicked. Touch has no hover, so there the buttons are always out
+   * (see the stylesheet); keyboard users reach them by Tab, which shows them too.
+   */
+  unlinkShown(edge: MapEdge): boolean {
+    if (this.linkDraft()) return false;
+    const focused = this.focusedId();
+    return edge.id === this.hoveredEdgeId() || edge.id === this.selectedEdgeId() || (focused !== null && (edge.from === focused || edge.to === focused));
+  }
+
+  /** A click on a connector keeps it lit with its unlink button out; a second click lets it go. */
+  selectEdge(event: Event, edge: MapEdge): void {
     event.stopPropagation();
-    const path = event.currentTarget as SVGPathElement;
-    let x: number;
-    let y: number;
-    if (event instanceof MouseEvent && event.detail > 0) {
-      const rect = path.closest(".dm-canvas")!.getBoundingClientRect();
-      x = event.clientX - rect.left;
-      y = event.clientY - rect.top;
-    } else {
-      const point = path.getPointAtLength(path.getTotalLength() / 2);
-      x = point.x;
-      y = point.y + STEP_LABEL_HEIGHT;
-    }
     this.linkDraft.set(null);
-    this.selectedEdge.set({ id: edge.id, chainId: chain.id, x, y });
-    if (!(event instanceof MouseEvent && event.detail > 0)) {
-      setTimeout(() => this.host.nativeElement.querySelector<HTMLElement>(".dm-wire-remove")?.focus());
-    }
+    this.selectedEdgeId.update((current) => (current === edge.id ? null : edge.id));
   }
 
-  selectedEdgeIn(chain: MapChain): EdgeSelection | null {
-    const selected = this.selectedEdge();
-    return selected && selected.chainId === chain.id && chain.edges.some((edge) => edge.id === selected.id) ? selected : null;
+  /** Delete or Backspace removes the connector last clicked, as on the Timeline. */
+  private removeSelectedEdge(): void {
+    const id = this.selectedEdgeId();
+    const edge = this.layout().chains.flatMap((chain) => chain.edges).find((candidate) => candidate.id === id);
+    if (edge && this.canRemove(edge)) void this.unlink(edge);
   }
 
-  async removeSelectedEdge(event: Event, chain: MapChain): Promise<void> {
-    event.stopPropagation();
-    const selected = this.selectedEdge();
-    const edge = chain.edges.find((candidate) => candidate.id === selected?.id);
-    this.selectedEdge.set(null);
-    const pathCard = edge && this.editableEnd(edge);
-    const [source, target] = edge ? this.edgeEnds(edge) : [];
-    if (!edge || !pathCard || !source || !target) return;
+  /**
+   * Removes the relation straight away, written through whichever end the viewer edits. No confirm
+   * step: the toast that follows offers Undo, and Ctrl/⌘+Z works too.
+   */
+  async unlink(edge: MapEdge, event?: Event): Promise<void> {
+    event?.stopPropagation();
+    this.selectedEdgeId.set(null);
+    this.hoveredEdgeId.set(null);
+    const pathCard = this.editableEnd(edge);
+    const [source, target] = this.edgeEnds(edge);
+    if (!pathCard || !source || !target) return;
     await this.record({
       kind: edge.kind, sourceId: source.id, sourceKey: source.card.key, targetId: target.id, targetKey: target.card.key,
       pathId: pathCard.id, added: false, relationId: edge.id,
@@ -932,13 +966,14 @@ export class DependencyMapComponent implements OnInit {
   }
 
 
-  edgeLabel(edge: MapEdge): string {
+  /** The unlink button's name and tooltip, naming both cards so it is clear which link goes. */
+  unlinkLabel(edge: MapEdge): string {
     const [first, second] = this.edgeEnds(edge);
     const a = first?.card.key ?? "";
     const b = second?.card.key ?? "";
     return edge.kind === "blocks"
-      ? $localize`:Screen reader label on a Dependencies view connector, which selects it for removal:${a}:blocker: blocks ${b}:dependent:`
-      : $localize`:Screen reader label on a Dependencies view related-cards connector, which selects it for removal:${a}:first: relates to ${b}:second:`;
+      ? $localize`:Button on a Dependencies view connector - removes the dependency between the two cards:Remove dependency - ${a}:blocker: blocks ${b}:dependent:`
+      : $localize`:Button on a Dependencies view related-cards connector - removes the relates-to link between the two cards:Remove link - ${a}:first: relates to ${b}:second:`;
   }
 
   linkHandleLabel(node: MapNode): string {
@@ -952,6 +987,15 @@ export class DependencyMapComponent implements OnInit {
 
   /** The visible width of the chains area, for timeline chain titles that stay put while lanes scroll. */
   readonly viewWidth = computed(() => this.hostWidth() || contentWidth(this.host.nativeElement));
+  /**
+   * A phone-width map: the scope switch and the three toggles drop to icons (named by aria-label and
+   * tooltip) so they share one row, as the Timeline toolbar does, and the chains start higher.
+   */
+  readonly compactControls = computed(() => this.viewWidth() < 640);
+  /** The toggles' names for their icon-only form; the same messages as their visible labels. */
+  readonly slimLabel = $localize`:Dependencies view toggle - smaller cards without labels, fields, people or dates:Slim cards`;
+  readonly relatedLabel = $localize`:Dependencies view toggle - also draw relates-to links:Related`;
+  readonly criticalPathLabel = $localize`:Dependencies view toggle - highlight each chain's critical path:Critical path`;
 
   /**
    * Column headings sit above each column, at the same x as its tiles: steps, or weeks on the
@@ -1019,6 +1063,16 @@ export class DependencyMapComponent implements OnInit {
     return this.boardsById().get(node.card.boardId)?.name ?? "";
   }
 
+  /**
+   * The colour and icon for a tile's list chip. The graph response names lists only, so the hue comes
+   * from the workspace lists the host page has already cached (no extra request); a list it has not
+   * seen keeps the chip's neutral fallback.
+   */
+  placeList(node: MapNode): { color: string | null; icon: string } {
+    const list = this.workspaces.listsForBoard(node.card.boardId).find((entry) => entry.id === node.card.listId);
+    return { color: list?.color ? `var(--color-${list.color})` : null, icon: list?.icon || "list" };
+  }
+
   boardIcon(node: MapNode): string {
     return this.boardsById().get(node.card.boardId)?.icon || "layout-kanban";
   }
@@ -1039,6 +1093,10 @@ export class DependencyMapComponent implements OnInit {
 
   isOverdue(node: MapNode): boolean {
     return node.status !== "done" && isOverdue(node.card.dueDateLocalDate, node.card.dueDateSlot, node.card.dueDateTimezone);
+  }
+
+  isDueSoon(node: MapNode): boolean {
+    return node.status !== "done" && isDueSoon(node.card.dueDateLocalDate, node.card.dueDateSlot, node.card.dueDateTimezone);
   }
 
   statusIcon(node: MapNode): string {
