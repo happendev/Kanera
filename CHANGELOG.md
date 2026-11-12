@@ -4,6 +4,8 @@ All notable changes to Kanera are documented here.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-11-12
+
 ### Performance
 
 - Card activity opens faster on busy boards, large notification inboxes page more efficiently, and board updates use fewer database writes for large audiences.
