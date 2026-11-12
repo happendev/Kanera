@@ -11,6 +11,8 @@ All notable changes to Kanera are documented here.
 
 ### Added
 
+- Self-hosting now has a one-command installer with localhost and production modes, automatically generated secrets, optional automatic HTTPS through Caddy, and support for an existing reverse proxy.
+
 - **Undo comment deletes:** deleting a comment shows a **Comment deleted** toast with **Undo**; the comment is only removed for everyone once the toast closes.
 - **Up next:** drag cards directly from Assigned or In progress in My Cards and Team Cards overviews into the open queue.
 - **Up next selection and Move to top:** Ctrl/⌘-click or Shift-click several Up next rows (or Not queued cards) to drag them as one; dragging a selection out removes it. Each row has a **Move to top** button, which moves the whole selection when used on a selected row. Board sections in Not queued can be collapsed.

@@ -1,0 +1,30 @@
+# Optional automatic HTTPS for the installer. Save beside docker-compose.yml as
+# docker-compose.override.yml; Compose loads it automatically on starts and updates.
+services:
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - kanera_caddy_data:/data
+      - kanera_caddy_config:/config
+    configs:
+      - source: kanera_caddyfile
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      web:
+        condition: service_healthy
+
+configs:
+  kanera_caddyfile:
+    content: |
+      ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env} {
+        reverse_proxy web:80
+      }
+
+volumes:
+  # Persist ACME accounts and certificates across container replacements and upgrades.
+  kanera_caddy_data:
+  kanera_caddy_config:

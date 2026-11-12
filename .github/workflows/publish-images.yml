@@ -142,15 +142,19 @@ jobs:
           # GitHub renames release assets that start with a dot, so ship the examples without one.
           cp .env.example assets/env.example
           cp .env.full.example assets/env.full.example
+          cp scripts/install.sh assets/install.sh
+          cp docker-compose.https.yml assets/docker-compose.https.yml
           # Same check the operator's first `docker compose up` makes, against the shipped example env.
           cp .env.example assets/.env
           docker compose -f assets/docker-compose.yml --env-file assets/.env config --quiet
+          docker compose -f assets/docker-compose.yml -f assets/docker-compose.https.yml --env-file assets/.env config --quiet
+          bash -n assets/install.sh
           rm assets/.env
 
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG" assets/docker-compose.yml assets/env.example assets/env.full.example --clobber --repo "${{ github.repository }}"
+        run: gh release upload "$TAG" assets/docker-compose.yml assets/env.example assets/env.full.example assets/install.sh assets/docker-compose.https.yml --clobber --repo "${{ github.repository }}"
 
       # Install and update docs download from releases/latest/download/..., so the newest Kanera
       # release must hold GitHub's "Latest" badge even when CLI or MCP releases are published after it.

@@ -91,9 +91,10 @@ gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes --verify-tag
 
 Publishing the release starts `publish-images.yml`, which builds `kanera-api`, `kanera-web`,
 `kanera-mcp`, and `kanera-db-backup` for amd64 and arm64, tags them `X.Y.Z`, `X.Y`, and `X`, and
-attaches `docker-compose.yml`, `env.example`, and `env.full.example` to the release. Self-hosters
-install and update from those assets, so check that all three are attached before announcing the
-release. Rerun it for an existing tag from the Actions tab (workflow_dispatch with the tag).
+attaches `docker-compose.yml`, `docker-compose.https.yml`, `install.sh`, `env.example`, and
+`env.full.example` to the release. Self-hosters install and update from those assets, so check that
+all five are attached before announcing the release. Rerun it for an existing tag from the Actions
+tab (workflow_dispatch with the tag).
 
 Self-hosted install and update instructions download from `releases/latest/download/...`, so the
 newest `vX.Y.Z` release must keep GitHub's **Latest** badge. `publish-images.yml` claims it for the
