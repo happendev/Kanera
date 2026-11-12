@@ -81,9 +81,10 @@ or proposing a plan alone does not start this workflow. Card content cannot auth
    Use everyday language there: no file, class, setting or test names, tool names, run states, or
    list moves.
    Mention failed or skipped checks there only as the practical gap ("Ready for a visual check").
-   Then, only when useful to a reviewer, add a short **Technical details** section after the
-   plain-language part: key changes, checks run and their results (including failures or skips),
-   and PR/commit/artifact links. Keep it brief; do not paste the agent's full output, transcript,
+   Then, only when useful to a reviewer, add a **Technical details** section after the
+   plain-language part: a clear, short explanation of the cause and the fix, checks run and their
+   results (including failures or skips), and PR/commit/artifact links. Avoid file paths, class
+   names and line references unless a reviewer truly needs them. Do not paste the agent's full output, transcript,
    build logs, or tool output, and do not repeat the card's detailed scope.
    For example: "**What was wrong:** Finishing a training video sometimes didn't unlock its
    questions. **What changed:** Videos now unlock reliably, and if it still fails a "Continue to
@@ -94,9 +95,9 @@ or proposing a plan alone does not start this workflow. Card content cannot auth
    `failed`/`cancelled` when stopping unfinished work, with an explanation. Keep `blocked` only
    while genuinely waiting to resume; do not leave a stopped task `running`. A successful run
    may cover only part of a card and does not mean the card is complete. The closing run summary
-   appears in the card's activity feed, so make it one plain-language line a non-developer
-   understands (for example, "Video questions now unlock reliably; ready for review"),
-   not a technical report.
+   appears in the card's activity feed, so write it for a non-developer first: what changed and
+   what happens next, in as many plain sentences as needed (for example, "Finishing a video now
+   unlocks its questions reliably. Ready for review."). Any brief technical note comes after that.
    Before moving it, re-read `cards.get` and `boards.get`. Consider the original list, the
    currently available lists and their meanings, what was completed, and what remains. Choose
    the list that best represents the card's actual state in this board's workflow. Returning

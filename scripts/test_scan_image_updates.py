@@ -17,6 +17,27 @@ spec.loader.exec_module(scan)
 class ImageUpdateTests(unittest.TestCase):
     # Registry outages must fail coverage instead of appearing current; candidate filtering
     # must never switch image flavour, major version, or nginx stable/mainline branches.
+    # Browser E2E cannot exercise release-gate decisions: unchanged CVEs must pass,
+    # absent upgrades must not scan, and a candidate removing a high CVE must fail.
+    def test_latest_image_does_not_block_or_scan_existing_findings(self):
+        with patch.object(scan, "collect_refs", return_value=["nginx:1.30.6-alpine"]), \
+                patch.object(scan, "newest_candidate", return_value=None), \
+                patch.object(scan, "vulns") as vulns, \
+                patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": ""}), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(scan.main(), 0)
+            vulns.assert_not_called()
+
+    def test_only_findings_removed_by_an_available_image_block(self):
+        for candidate_findings, expected in [({"CVE-existing": "HIGH"}, 0), ({}, 1)]:
+            with self.subTest(candidate_findings=candidate_findings), \
+                    patch.object(scan, "collect_refs", return_value=["nginx:1.30.5-alpine"]), \
+                    patch.object(scan, "newest_candidate", return_value="nginx:1.30.6-alpine"), \
+                    patch.object(scan, "vulns", side_effect=[{"CVE-existing": "HIGH"}, candidate_findings]), \
+                    patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": ""}), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(scan.main(), expected)
+
     def test_registry_failure_does_not_mean_already_newest(self):
         with patch.object(scan, "run", return_value=subprocess.CompletedProcess([], 1, "", "rate limited")):
             with self.assertRaisesRegex(RuntimeError, "could not list tags"):

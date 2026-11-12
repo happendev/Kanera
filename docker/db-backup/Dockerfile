@@ -1,8 +1,11 @@
 # Keep this pinned to the same version as the `postgres` service in docker-compose.yml: pg_dump
 # refuses to dump from a server newer than itself, so letting the two drift breaks backups.
-FROM postgres:18.6-alpine
+FROM postgres:18.6-alpine AS runtime
 
-RUN apk add --no-cache \
+# This image runs pg_dump, never the PostgreSQL server entrypoint or its privilege helper.
+RUN rm -f /usr/local/bin/gosu \
+    && apk upgrade --no-cache \
+    && apk add --no-cache \
     aws-cli \
     bash \
     coreutils \

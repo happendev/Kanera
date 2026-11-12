@@ -1,11 +1,11 @@
 # Node LTS only. Even-numbered majors (22, 24, 26) are the LTS line; odd majors are "Current"
 # and never become LTS. Keep this on an even major, in step with .nvmrc and engines.node.
-FROM node:24.22.2-alpine AS base
+FROM node:24.22.3-alpine AS base
 # Install the repository-pinned package manager in the shared base layer. `corepack enable`
 # only creates shims, which otherwise makes every parallel dependency stage fetch pnpm itself.
 ENV COREPACK_DEFAULT_TO_LATEST=0
 RUN corepack enable \
-    && corepack install --global pnpm@11.5.2
+    && corepack install --global pnpm@11.23.0
 WORKDIR /repo
 
 FROM base AS deps
@@ -13,7 +13,7 @@ COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --filter @kanera/api...
+    pnpm install --frozen-lockfile --prod --filter @kanera/api...
 
 FROM base AS admin-web-deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -30,7 +30,12 @@ COPY apps/admin-web apps/admin-web
 COPY apps/web/src/styles.scss apps/web/src/styles.scss
 RUN pnpm --filter @kanera/admin-web build
 
-FROM base AS runtime
+FROM node:24.22.3-alpine AS runtime
+# Entrypoints use node directly; package managers and their dependency trees are build-only.
+RUN apk upgrade --no-cache \
+    && rm -rf /usr/local/lib/node_modules /opt/yarn-* \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
+WORKDIR /repo
 # SMTP STARTTLS certificates are validated inside this image. Alpine does not
 # provide a system trust store by default, so install one and make Node include it.
 RUN apk add --no-cache ca-certificates

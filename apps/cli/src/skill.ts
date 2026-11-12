@@ -38,9 +38,9 @@ kanera run update <runId> --status running --summary "Target confirmed; applying
    project manager or client rather than a developer. Open in plain language: what was wrong (or
    asked), what changed, and what happens now (the next step and who must act; leave release status
    to the team). No
-   file, setting, test or tool names there. Then, only if useful to a reviewer, add a short
-   "Technical details" section: key changes, checks and results (including failures or skips),
-   and PR/commit/artifact links. For partial, failed, or cancelled work, say what remains. Claim
+   file, setting, test or tool names there. Then, only if useful to a reviewer, add a
+   "Technical details" section: a clear, short explanation of cause and fix, checks and results
+   (including failures or skips), and PR/commit/artifact links, without file-by-file references. For partial, failed, or cancelled work, say what remains. Claim
    only what was implemented, tested, merged, or deployed. Update only checklist items actually
    completed. A run summary or chat reply does not replace this comment.
 
@@ -53,7 +53,8 @@ kanera run done <runId> "Signed-in users now reach their dashboard; ready for re
    unfinished work. Ended runs cannot be edited; start a new one if work resumes. Keep blocked
    only while genuinely waiting to resume; do not leave a stopped task running. A successful run
    may cover only part of a card and does not mean the card is complete. The closing summary
-   shows in the card's activity feed: make it one plain-language line a non-developer understands.
+   shows in the card's activity feed: write it for a non-developer first,
+   in plain sentences; any brief technical note comes after.
    Before moving it, re-read the card and board. Consider the original list, the currently
    available lists and their meanings, what was completed, and what remains. Choose the list
    that best represents the card's actual state in this board's workflow. Returning to the

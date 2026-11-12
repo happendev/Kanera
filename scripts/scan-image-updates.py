@@ -73,7 +73,7 @@ def collect_refs(root: Path) -> list[str]:
     for path in sorted(root.rglob("Dockerfile")):
         if "node_modules" in path.parts:
             continue
-        for m in re.finditer(r"^FROM\s+(\S+)", path.read_text(), re.M):
+        for m in re.finditer(r"^FROM\s+(?:--platform=\S+\s+)?(\S+)", path.read_text(), re.M):
             refs.add(m.group(1))
     # Drop build-stage names (`FROM base AS ...`) and anything still holding a compose variable.
     return sorted(r for r in refs if ":" in r and "${" not in r)
