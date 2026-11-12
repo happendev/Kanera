@@ -59,7 +59,7 @@
   <!-- One drop-list group across every month panel, so a stacked calendar can carry a card from one
        month's grid into another's. cdkScrollable lets CDK auto-scroll the pane while dragging. -->
   <div class="calendar-scroll" cdkDropListGroup cdkScrollable>
-    @if (loading()) {
+    @if (loading() || !layoutMeasured()) {
     <section class="calendar-month">
       <div class="calendar-month-body">
         <div class="calendar-weekdays" aria-hidden="true">
@@ -223,12 +223,7 @@
               <ng-container [ngTemplateOutlet]="tileContent" [ngTemplateOutletContext]="{ $implicit: card }" />
             </button>
             }
-            @if (hiddenCardCount(day)) {
-            <!-- A compact month cell keeps its row short; the rest of the day opens in place. -->
-            <button type="button" class="cal-more" (click)="toggleDayExpanded(day.key)" i18n="Button - show the cards hidden in a calendar day">+{{ hiddenCardCount(day) // i18n(ph="count") }} more</button>
-            } @else if (isDayExpanded(day.key) && layout() === "compact") {
-            <button type="button" class="cal-more" (click)="toggleDayExpanded(day.key)" i18n="Button - fold a calendar day's cards back">Show less</button>
-            }
+            <ng-container [ngTemplateOutlet]="dayExpansion" [ngTemplateOutletContext]="{ $implicit: day }" />
           </div>
         </section>
         } @else {
@@ -290,7 +285,7 @@
     </header>
     @if (day.cards.length) {
     <div class="cal-agenda-cards">
-      @for (card of day.cards; track card.id) {
+      @for (card of cellCards(day); track card.id) {
       <button
         type="button"
         class="cal-card"
@@ -304,9 +299,18 @@
         <ng-container [ngTemplateOutlet]="tileContent" [ngTemplateOutletContext]="{ $implicit: card }" />
       </button>
       }
+      <ng-container [ngTemplateOutlet]="dayExpansion" [ngTemplateOutletContext]="{ $implicit: day }" />
     </div>
     }
   </section>
+</ng-template>
+
+<ng-template #dayExpansion let-day>
+  @if (hiddenCardCount(day)) {
+  <button type="button" class="cal-more" (click)="toggleDayExpanded(day.key)" i18n="Button - show the cards hidden in a calendar day">+{{ hiddenCardCount(day) // i18n(ph="count") }} more</button>
+  } @else if (isDayExpanded(day.key)) {
+  <button type="button" class="cal-more" (click)="toggleDayExpanded(day.key)" i18n="Button - fold a calendar day's cards back">Show less</button>
+  }
 </ng-template>
 
 <ng-template #tileContent let-card>

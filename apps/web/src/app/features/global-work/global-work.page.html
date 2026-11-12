@@ -987,6 +987,7 @@
         [allowQuickComplete]="dockAllowQuickComplete()"
         [offlineMessage]="dockOfflineMessage()"
         (reordered)="onPriorityReordered($event)"
+        (reorderedMany)="onPriorityReorderedMany($event)"
         (removed)="onPriorityRemoved($event)"
         (added)="onUpNextAddFromPanel($event)"
         (cardOpened)="openCardById($event)"

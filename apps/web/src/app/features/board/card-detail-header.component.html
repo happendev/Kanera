@@ -10,16 +10,14 @@
   </div>
   }
   <div class="panel-header" [class.has-cover]="vm.coverUrl()">
+    <!-- One row on wider screens (completion, title, actions); on phones this becomes the sticky top
+         bar holding the close button, and the title takes its own full-width row beneath it. -->
+    <div class="panel-toolbar">
     @if (vm.canEditRole()) {
     <button class="ghost icon completion-btn" [class.is-active]="vm.card().completedAt" (click)="vm.toggleCompletion()" [disabled]="vm.savingCompletion() || !vm.canEdit()" [attr.aria-label]="vm.card().completedAt ? vm.labels.markIncomplete : vm.labels.markComplete"
       [kTooltip]="vm.card().completedAt ? vm.labels.markIncomplete : vm.labels.markComplete">
       <i aria-hidden="true" [class]="vm.card().completedAt ? (vm.completionTickedCardId() === vm.card().id ? 'ti ti-circle-check is-drawing' : 'ti ti-circle-check') : 'ti ti-circle'"></i>
     </button>
-    }
-    @if (vm.editingTitle()) {
-    <input #titleInput type="text" class="title-input" [value]="vm.draftTitle()" (input)="vm.draftTitle.set($any($event.target).value)" (blur)="vm.saveTitle()" (keydown.enter)="vm.saveTitle()" (keydown.escape)="vm.cancelTitle(); $event.stopPropagation()" />
-    } @else {
-    <h2 class="card-title" [class.is-readonly]="!vm.canEdit()" (click)="vm.editTitle()">{{ vm.card().title }}</h2>
     }
     @if (vm.showCardKeys()) {
     <button type="button" class="card-key" (click)="vm.copyCardKey()" [kTooltip]="vm.labels.copyKey(vm.card().key)">{{ vm.card().key }}</button>
@@ -121,6 +119,12 @@
     <button class="ghost icon close-btn" (click)="vm.requestClose()" aria-label="Close" i18n-aria-label="Button: close the card detail">
       <i aria-hidden="true" class="ti ti-x"></i>
     </button>
+    </div>
+    @if (vm.editingTitle()) {
+    <input #titleInput type="text" class="title-input" [value]="vm.draftTitle()" (input)="vm.draftTitle.set($any($event.target).value)" (blur)="vm.saveTitle()" (keydown.enter)="vm.saveTitle()" (keydown.escape)="vm.cancelTitle(); $event.stopPropagation()" />
+    } @else {
+    <h2 class="card-title" [class.is-readonly]="!vm.canEdit()" (click)="vm.editTitle()">{{ vm.card().title }}</h2>
+    }
   </div>
 
   <!-- Compact list + board row, shown only below md (mobile/full-screen). These

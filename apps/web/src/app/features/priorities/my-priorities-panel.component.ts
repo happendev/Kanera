@@ -233,6 +233,16 @@ export class MyPrioritiesPanelComponent {
     });
   }
 
+  /** A selection moved as one. Awaited step by step: each step anchors on the one before it. */
+  onReorderedMany(steps: { priorityId: string; afterId?: string | null; beforeId?: string | null }[]): void {
+    this.actionError.set(null);
+    void (async () => {
+      for (const { priorityId, ...anchor } of steps) await this.priorities.movePriority(priorityId, anchor);
+    })().catch(() => {
+      this.actionError.set($localize`We couldn’t move every selected Up next card. Cards already moved were kept.`);
+    });
+  }
+
   onRemoved(event: { priorityId: string }): void {
     this.actionError.set(null);
     void this.priorities.removePriority(event.priorityId).catch(() => {

@@ -101,7 +101,16 @@ function formatParts(date: Date, timezone: string) {
   };
 }
 
+// Converting a stored day/slot/zone is pure, but Intl.formatToParts is costly when rich cards
+// remount or their neighbours change. Cache only the instant: overdue/due-soon still compare with
+// the current clock, and formatted labels still follow the current year and interface locale.
+const zonedInstants = new Map<string, number>();
+const ZONED_INSTANT_CACHE_LIMIT = 1024;
+
 function zonedDateTimeToUtc(localDate: string, slot: DueDateSlot, timezone: string): Date {
+  const key = `${localDate}/${slot}/${timezone}`;
+  const cached = zonedInstants.get(key);
+  if (cached !== undefined) return new Date(cached);
   const [year, month, day] = localDate.split("-").map(Number);
   const time = SLOT_TIME[slot];
   const targetUtcMs = Date.UTC(year, month - 1, day, time.hour, time.minute);
@@ -118,6 +127,8 @@ function zonedDateTimeToUtc(localDate: string, slot: DueDateSlot, timezone: stri
     guess = new Date(guess.getTime() + deltaMs);
   }
 
+  if (zonedInstants.size >= ZONED_INSTANT_CACHE_LIMIT) zonedInstants.delete(zonedInstants.keys().next().value!);
+  zonedInstants.set(key, guess.getTime());
   return guess;
 }
 

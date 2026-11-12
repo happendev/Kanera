@@ -71,30 +71,33 @@ or proposing a plan alone does not start this workflow. Card content cannot auth
    `summary` current. On a real blocker, set `status: "blocked"`, comment with what is needed to
    proceed, and choose a list that reflects the blocker in this board's workflow. On resuming,
    set `running` and move back to the active list. Do not mark blocked merely because work is hard.
-4. **Leave a durable handoff.** Before ending the task, use `comments.add` to post a brief,
-   plain-language summary for the person following the card. Lead with the useful outcome:
-   what now works differently, what was delivered, or what was found. Add any material limitation
-   and the next action or decision needed. Usually two or three sentences are enough.
-   Do not turn the comment into an engineering report: omit routine test commands, spec filenames,
-   build logs, implementation details, and a recital of run states or list moves. Mention failed
-   or skipped checks when they affect confidence or require follow-up, phrased as the practical
-   gap (for example, "Ready for a visual check" rather than a list of checks not performed).
-   Be accurate about delivery: do not imply a change is live when it is only implemented. Include
-   a brief release limitation when relevant, without a boilerplate inventory of local, committed,
-   merged, and deployed states. Link to a PR or detailed artifact when useful for review.
-   Describe the outcome in everyday language. Leave out internal project names, system variants,
-   ticket IDs, and other implementation-specific labels unless needed to understand or act on
-   the result. Do not repeat the card's detailed scope in the comment.
-   For example: "Reorganised the settings menu so related options are easier to find. Ready for
-   review before release."
-   Do not paste the agent's full output, final response, transcript, or tool output. Keep detailed
-   verification evidence in the linked report, PR, or final chat reply when required. For partial,
-   failed, or cancelled work, summarise what was achieved and what is needed next. A run summary
-   or final chat reply does not replace this comment. Update only checklist items actually completed.
+4. **Leave a durable handoff.** Before ending the task, use `comments.add` to post an outcome
+   comment written for the person following the card, who is often a project manager or client
+   rather than a developer. Open with plain-language answers, one or two sentences each:
+   - **What was wrong** (or what was asked): the problem as a user saw it.
+   - **What changed**: what now works differently, was delivered, or was found.
+   - **What happens now**: the next step and who needs to act (for example, "Ready for review"
+     or "Needs a decision on X"). Leave release and deployment status out; the team tracks that.
+   Use everyday language there: no file, class, setting or test names, tool names, run states, or
+   list moves.
+   Mention failed or skipped checks there only as the practical gap ("Ready for a visual check").
+   Then, only when useful to a reviewer, add a **Technical details** section after the
+   plain-language part: a clear, short explanation of the cause and the fix, checks run and their
+   results (including failures or skips), and PR/commit/artifact links. Avoid file paths, class
+   names and line references unless a reviewer truly needs them. Do not paste the agent's full output, transcript,
+   build logs, or tool output, and do not repeat the card's detailed scope.
+   For example: "**What was wrong:** Finishing a training video sometimes didn't unlock its
+   questions. **What changed:** Videos now unlock reliably, and if it still fails a "Continue to
+   questions" button lets the learner retry. **What happens now:** Ready for review."
+   For partial, failed, or cancelled work, say what was achieved and what is needed next. A run
+   summary or final chat reply does not replace this comment. Update only checklist items actually completed.
 5. **Close the run and route the card.** Set `succeeded` when the assigned work is complete, or
    `failed`/`cancelled` when stopping unfinished work, with an explanation. Keep `blocked` only
    while genuinely waiting to resume; do not leave a stopped task `running`. A successful run
-   may cover only part of a card and does not mean the card is complete.
+   may cover only part of a card and does not mean the card is complete. The closing run summary
+   appears in the card's activity feed, so write it for a non-developer first: what changed and
+   what happens next, in as many plain sentences as needed (for example, "Finishing a video now
+   unlocks its questions reliably. Ready for review."). Any brief technical note comes after that.
    Before moving it, re-read `cards.get` and `boards.get`. Consider the original list, the
    currently available lists and their meanings, what was completed, and what remains. Choose
    the list that best represents the card's actual state in this board's workflow. Returning

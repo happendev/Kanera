@@ -1,7 +1,7 @@
 import Fastify, { type FastifyServerOptions } from "fastify";
 import { EMAIL_QUEUE_STATUS, emailQueue, PUSH_QUEUE_STATUS, pushQueue } from "@kanera/shared/schema";
 import { sql } from "drizzle-orm";
-import { db } from "./db.js";
+import { db, pool } from "./db.js";
 import { env } from "./env.js";
 import { productAnalytics } from "./lib/product-analytics.js";
 import { startAgentRunStallScheduler } from "./lib/agent-runs.js";
@@ -40,6 +40,10 @@ export interface BuildWorkerServerOptions {
 }
 
 export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) {
+  // Three permanent LISTEN clients previously occupied this pool; the shared listener needs one.
+  // Keep the old ordinary-query budget instead of turning the two saved sessions into parallel work.
+  // Two total slots are the minimum for one listener plus a query on unusually small custom pools.
+  pool.options.max = Math.max(2, env.PG_POOL_MAX - 2);
   await initRedis();
   const app = Fastify({
     logger: options.logger ?? {

@@ -47,6 +47,8 @@ export const STORAGE_KEYS = {
   SHARE_TARGET_DESTINATION: "kanera:share-target-destination",
   SIDEBAR_COLLAPSED: "kanera_sidebar_collapsed",
   WORKSPACES_COLLAPSED: "kanera_workspaces_collapsed",
+  // Board sections folded in Up next's Not queued list; per device, like the sidebar's groups.
+  UP_NEXT_COLLAPSED_BOARDS: "kanera:up-next-collapsed-boards",
   THEME: "kanera-theme",
   // Accent (primary colour) choice, stored per device alongside THEME. Read by the index.html
   // pre-paint script as well as ThemeService, so the literal is duplicated there intentionally.

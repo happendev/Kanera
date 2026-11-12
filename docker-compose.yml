@@ -256,6 +256,7 @@ services:
     environment:
       <<: *app-env
       WORKER_PORT: 3003
+      # The worker subtracts two retired LISTEN slots, preserving its ordinary-query budget.
       PG_POOL_MAX: ${WORKER_PG_POOL_MAX:-5}
       WORKER_PG_POOL_MAX: ${WORKER_PG_POOL_MAX:-5}
       # Recipient for the Monday 07:00 UTC system recap (also seeds the first admin account).

@@ -253,13 +253,27 @@ void test("card feed shows card creation before same-transaction automation acti
   );
   assert.equal(activityRows[0]!.createdAt.getTime(), activityRows[1]!.createdAt.getTime());
 
+  // Historical payload references can overlap a direct card event, or refer to another entity.
+  // UNION ALL would duplicate the first; replacing OR with CASE would hide the second.
+  const [creation] = await db.select().from(activityEvents).where(and(eq(activityEvents.entityType, "card"), eq(activityEvents.entityId, card.id))).limit(1);
+  assert.ok(creation);
+  const extra = await db.insert(activityEvents).values([
+    { boardId: board.id, workspaceId: workspace.id, actorId: creation.actorId, entityType: "card", entityId: card.id, action: "updated", payload: { cardId: card.id }, createdAt: creation.createdAt },
+    { boardId: board.id, workspaceId: workspace.id, actorId: creation.actorId, entityType: "card", entityId: randomUUID(), action: "updated", payload: { cardId: card.id }, createdAt: creation.createdAt },
+    { boardId: board.id, workspaceId: workspace.id, actorId: creation.actorId, entityType: "card", entityId: card.id, action: "updated", payload: { cardId: card.id }, feedVisible: false, createdAt: creation.createdAt },
+  ]).returning();
   const feed = await app.inject({
     method: "GET",
     url: `/cards/${card.id}/feed?limit=10`,
     headers: { authorization: `Bearer ${accessToken}` },
   });
   assert.equal(feed.statusCode, 200);
-  const body = feed.json<{ items: { type: "activity"; data: { action: string } }[] }>();
+  const body = feed.json<{ items: { type: "activity"; data: { id: string; action: string } }[] }>();
+  const ids = body.items.map(item => item.data.id);
+  assert.equal(ids.filter(id => id === extra[0]!.id).length, 1);
+  assert.equal(ids.filter(id => id === extra[1]!.id).length, 1);
+  assert.ok(!ids.includes(extra[2]!.id));
+  assert.equal(ids.length, 4);
   assert.deepEqual(
     body.items.filter((item) => item.type === "activity").map((item) => item.data.action).slice(0, 2),
     ["created", "completed"],

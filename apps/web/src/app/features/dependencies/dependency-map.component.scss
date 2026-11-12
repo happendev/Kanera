@@ -212,6 +212,8 @@
 }
 
 .dm-chain {
+  // Each chain lays out independently. Mounting its tiles need not invalidate neighbouring canvases.
+  contain: layout;
   box-sizing: border-box;
   min-width: 0;
   border: 1px solid var(--border);

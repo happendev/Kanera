@@ -155,6 +155,87 @@ describe("PriorityQueueComponent", () => {
     expect(reordered).toEqual([]);
   });
 
+  describe("with a multi-row selection", () => {
+    const five: WorkPrioritiesResponse = {
+      ...queue,
+      items: [1, 2, 3, 4, 5].map((rank) => entry(`p${rank}`, rank, true)),
+      totalCount: 5,
+      hiddenCount: 0,
+    };
+
+    function selectable() {
+      const fixture = setup(five);
+      fixture.componentRef.setInput("multiSelect", true);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const click = (id: string, init: MouseEventInit) => {
+        const row = component.rows().find((candidate) => candidate.entry.id === id)!;
+        component.onRowMainClick(row, row.card!, new MouseEvent("click", init));
+      };
+      const steps: PriorityReorder[][] = [];
+      const single: PriorityReorder[] = [];
+      component.reorderedMany.subscribe((event) => steps.push(event));
+      component.reordered.subscribe((event) => single.push(event));
+      return { fixture, component, click, steps, single };
+    }
+
+    it("selects with Ctrl/⌘ and Shift like board tiles, and a plain click clears it", () => {
+      const { component, click } = selectable();
+      const opened: string[] = [];
+      component.cardOpened.subscribe((event) => opened.push(event.cardId));
+
+      click("p2", { ctrlKey: true });
+      click("p4", { metaKey: true });
+      expect(component.selection().map((item) => item.id)).toEqual(["p2", "p4"]);
+      expect(opened).toEqual([]);
+
+      // The range runs from the last toggled row, and repeated Shift-clicks resize it from there.
+      click("p2", { shiftKey: true });
+      expect(component.selection().map((item) => item.id)).toEqual(["p2", "p3", "p4"]);
+      click("p5", { shiftKey: true });
+      expect(component.selection().map((item) => item.id)).toEqual(["p4", "p5"]);
+
+      click("p1", {});
+      expect(component.selection()).toEqual([]);
+      expect(opened).toHaveLength(1);
+    });
+
+    it("moves the selection to the top in queue order, each step anchored on the last", () => {
+      const { component, click, steps, single } = selectable();
+      click("p4", { ctrlKey: true });
+      click("p2", { ctrlKey: true });
+
+      component.moveToTop(five.items[3]!);
+      expect(steps).toEqual([[{ priorityId: "p2", afterId: null }, { priorityId: "p4", afterId: "p2" }]]);
+
+      // An unselected row still moves on its own.
+      component.moveToTop(five.items[4]!);
+      expect(single).toEqual([{ priorityId: "p5", afterId: null }]);
+      // Already heading the queue: nothing to do.
+      expect(component.isAtTop(five.items[0]!)).toBe(true);
+    });
+
+    it("drops a dragged selection as one block, skipping slots its own rows occupy", () => {
+      const { component, click, steps } = selectable();
+      click("p2", { ctrlKey: true });
+      click("p4", { ctrlKey: true });
+
+      // Dragging p2: CDK counts [p1, p3, p4, p5]. Slot 3 is before p5.
+      component.onDrop(drop(1, 3));
+      // Slot 2 is p4's own place, which travels with the drag, so it lands before p5 too.
+      component.onDrop(drop(1, 2));
+      const block = [{ priorityId: "p2", afterId: "p3" }, { priorityId: "p4", afterId: "p2" }];
+      expect(steps).toEqual([block, block]);
+
+      // Released outside: the whole selection leaves the queue.
+      const removed: string[] = [];
+      component.removed.subscribe((event) => removed.push(event.priorityId));
+      component.onDrop(drop(1, 0, { releasedInside: false }));
+      expect(removed).toEqual(["p2", "p4"]);
+      expect(component.selection()).toEqual([]);
+    });
+  });
+
   it("marks the preview outside the surface and zeroes its return transition on release", () => {
     const fixture = setup();
     const preview = document.createElement("div");

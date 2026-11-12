@@ -285,6 +285,10 @@ Set `POSTGRES_WORK_MEM=4MB` and redeploy Postgres to roll back. The limit is per
 sort/hash operation, so concurrent operations can multiply memory use. Managed
 Postgres requires changing the default through the provider instead.
 
+The worker shares one PostgreSQL LISTEN session. Its effective pool ceiling is
+`max(2, WORKER_PG_POOL_MAX - 2)`: the default `5` uses three connections while keeping
+the previous two ordinary-query slots. See [connection-pool tuning](DEPLOY.md#performance-tuning).
+
 The bundled Postgres service only publishes to host loopback. For temporary remote access, tunnel
 the loopback port over SSH (including over WireGuard) instead of exposing Postgres on an interface:
 

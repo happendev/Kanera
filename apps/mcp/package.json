@@ -21,12 +21,12 @@
     "@modelcontextprotocol/server": "^2.4.0",
     "@prometheus-io/client": "^0.16.1",
     "ioredis": "^5.11.1",
+    "tsx": "^4.23.15",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.4.0",
     "@types/node": "^24.19.2",
-    "tsx": "^4.23.15",
     "typescript": "~5.9.3"
   }
 }

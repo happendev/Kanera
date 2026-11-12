@@ -112,7 +112,10 @@
   @for (chain of visibleChains(); track chain.id; let index = $index) {
   @let place = packed?.placements?.[index];
   <section class="dm-chain" [attr.aria-label]="goalTitle(chain)"
+    kDependencyChainViewport #viewport="chainViewport" [estimatedHeight]="place?.height ?? chainEstimatedHeight(chain)"
+    [contentVersion]="chain" [width]="viewWidth()" [pinned]="chainPinned(chain)"
     [style.left.px]="place?.x" [style.top.px]="place?.y" [style.width.px]="place?.width" [style.height.px]="place?.height">
+    @if (viewport.mounted()) {
     <header class="dm-chain-head" [class.is-compact]="layoutMode() !== 'list' && (place?.width ?? viewWidth()) <= 640"
       [style.height.px]="layoutMode() !== 'list' ? chainHeadHeight(place?.width ?? viewWidth()) : null">
       <i class="ti ti-flag-3" aria-hidden="true"></i>
@@ -396,6 +399,7 @@
       </li>
       }
     </ol>
+    }
     }
   </section>
   }

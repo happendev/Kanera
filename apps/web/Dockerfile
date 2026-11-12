@@ -1,11 +1,12 @@
 # Node LTS only. Even-numbered majors (22, 24, 26) are the LTS line; odd majors are "Current"
 # and never become LTS. Keep this on an even major, in step with .nvmrc and engines.node.
-FROM node:24.22.2-alpine AS build
+# Browser assets are architecture-independent; only the nginx runtime targets the deployment CPU.
+FROM --platform=$BUILDPLATFORM node:24.22.3-alpine AS build
 # Hydrate Corepack before dependency installation so the build does not rely on an
 # implicit package-manager download at the first `pnpm` invocation.
 ENV COREPACK_DEFAULT_TO_LATEST=0
 RUN corepack enable \
-    && corepack install --global pnpm@11.5.2
+    && corepack install --global pnpm@11.23.0
 WORKDIR /repo
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/
@@ -22,6 +23,7 @@ RUN pnpm --filter @kanera/web build
 # resolves to, while 1.31.x is nginx:mainline-alpine. Keep this on an even minor — Dependabot is
 # restricted to patch updates for nginx so it cannot cross over on its own.
 FROM nginx:1.30.6-alpine AS runtime
+RUN apk upgrade --no-cache
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/web/dist/web/browser /usr/share/nginx/html
 EXPOSE 80

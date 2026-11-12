@@ -1,6 +1,7 @@
 import type { dto } from "@kanera/shared";
 import { activityEvents, comments, users, type cards } from "@kanera/shared/schema";
-import { and, asc, desc, eq, getTableColumns, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, ne, or, sql, type SQL } from "drizzle-orm";
+import { union } from "drizzle-orm/pg-core";
 import { db } from "../../db.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { signedAvatarUrl } from "../../lib/media-keys.js";
@@ -33,13 +34,38 @@ export async function loadCardFeedPage({
     // Keep collapsed/no-op bursts out of the card detail feed while the
     // underlying activity row remains available to the audit trail.
     eq(activityEvents.feedVisible, true),
-    or(
-      and(eq(activityEvents.entityType, "card"), eq(activityEvents.entityId, cardId)),
-      sql`${activityEvents.payload}->>'cardId' = ${cardId}`,
-    )!,
   ];
   const activityPriority = sql<number>`case when ${activityEvents.entityType} = 'card' and ${activityEvents.action} = 'created' then 0 else 1 end`;
   if (cursor) activityConditions.push(feedAfterCursor(cursor, activityEvents.createdAt, activityEvents.id, activityPriority));
+  const directActivity = and(eq(activityEvents.entityType, "card"), eq(activityEvents.entityId, cardId))!;
+  const referencedActivity = sql`${activityEvents.payload}->>'cardId' = ${cardId}`;
+  const activityColumns = {
+    ...getTableColumns(activityEvents),
+    actorName: sql<string>`case when ${activityEvents.actorKind} = 'system' then 'Kanera' when ${activityEvents.actorKind} = 'apiKey' then coalesce(${activityEvents.apiKeyName}, 'API key') else ${users.displayName} end`,
+    actorAvatarUrl: sql<string | null>`case when ${activityEvents.actorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+    actorClientId: users.clientId,
+  };
+  const activityOrder = [desc(activityEvents.createdAt), asc(activityPriority), asc(activityEvents.id)];
+  const activityBranch = (match: SQL) => db
+    .select({ ...activityColumns, feedPriority: activityPriority.as("feed_priority") })
+    .from(activityEvents)
+    .leftJoin(users, eq(users.id, activityEvents.actorId))
+    .where(and(...activityConditions, match))
+    .orderBy(...activityOrder)
+    .limit(limit + 1);
+  const activityQuery = cursor
+    // Cursor pages already use a selective plan; splitting them measured slower. Keep their SQL.
+    ? db.select(activityColumns).from(activityEvents)
+      .leftJoin(users, eq(users.id, activityEvents.actorId))
+      .where(and(...activityConditions, or(directActivity, referencedActivity)))
+      .orderBy(...activityOrder).limit(limit + 1)
+    // Bound each indexed lookup before merging. UNION preserves the original OR's single row
+    // when a historical card event also carries its own cardId in payload. Keep the board and
+    // visibility predicates in both arms: an entity reference is not an access grant.
+    : union(activityBranch(directActivity), activityBranch(referencedActivity))
+      .orderBy(sql`"created_at" desc`, sql`"feed_priority" asc`, sql`"id" asc`)
+      .limit(limit + 1)
+      .then((rows) => rows.map(({ feedPriority: _priority, ...row }) => row));
 
   const [commentRows, activityRows] = await Promise.all([
     db
@@ -62,18 +88,7 @@ export async function loadCardFeedPage({
       .where(and(...commentConditions))
       .orderBy(desc(comments.createdAt), asc(comments.id))
       .limit(limit + 1),
-    db
-      .select({
-        ...getTableColumns(activityEvents),
-        actorName: sql<string>`case when ${activityEvents.actorKind} = 'system' then 'Kanera' when ${activityEvents.actorKind} = 'apiKey' then coalesce(${activityEvents.apiKeyName}, 'API key') else ${users.displayName} end`,
-        actorAvatarUrl: sql<string | null>`case when ${activityEvents.actorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
-        actorClientId: users.clientId,
-      })
-      .from(activityEvents)
-      .leftJoin(users, eq(users.id, activityEvents.actorId))
-      .where(and(...activityConditions))
-      .orderBy(desc(activityEvents.createdAt), asc(activityPriority), asc(activityEvents.id))
-      .limit(limit + 1),
+    activityQuery,
   ]);
 
   const [reactionsMap, mirrorIds] = await Promise.all([

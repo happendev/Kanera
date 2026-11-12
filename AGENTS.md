@@ -127,8 +127,9 @@ substantive work, and move to the board's
 actual active list. Update progress at milestones and at least every ten minutes. On a blocker,
 record what is needed in both the run and a card comment, and use the appropriate waiting list.
 
-Before your final reply, post an outcome comment with changes, verification results, relevant
-PR/commit/artifact links, and remaining work; end the run appropriately. Before moving the card,
+Before your final reply, post an outcome comment that opens in plain language for non-developers
+(what was wrong, what changed, what happens now), then optional, concise technical details without file-by-file references (verification
+results, PR/commit/artifact links); end the run appropriately. Before moving the card,
 re-read the card and board. Consider the original list, available lists and their meanings,
 completed work and remaining work; choose the list that reflects the card's actual state in this
 board's workflow. Returning to the original list may be appropriate but is not automatic. Do not

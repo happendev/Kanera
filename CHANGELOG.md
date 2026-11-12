@@ -4,10 +4,18 @@ All notable changes to Kanera are documented here.
 
 ## [Unreleased]
 
+### Performance
+
+- Card activity opens faster on busy boards, large notification inboxes page more efficiently, and board updates use fewer database writes for large audiences.
+- Calendar measures its panel before rendering and folds crowded days behind “more”. Dependencies loads nearby chain contents as you scroll, keeping large maps and phone layouts responsive.
+
 ### Added
+
+- Self-hosting now has a one-command installer with localhost and production modes, automatically generated secrets, optional automatic HTTPS through Caddy, and support for an existing reverse proxy.
 
 - **Undo comment deletes:** deleting a comment shows a **Comment deleted** toast with **Undo**; the comment is only removed for everyone once the toast closes.
 - **Up next:** drag cards directly from Assigned or In progress in My Cards and Team Cards overviews into the open queue.
+- **Up next selection and Move to top:** Ctrl/⌘-click or Shift-click several Up next rows (or Not queued cards) to drag them as one; dragging a selection out removes it. Each row has a **Move to top** button, which moves the whole selection when used on a selected row. Board sections in Not queued can be collapsed.
 - **Unlink on the Dependencies map:** hover a connector or either of its cards and an unlink button appears on the line; one click removes the dependency, with **Undo** in the toast. Clicking a connector and pressing Delete works too, the buttons are reachable with Tab, and on touch screens they're always shown.
 
 - **Mermaid diagrams:** ```` ```mermaid ```` code blocks are drawn as diagrams in card descriptions, notes and Markdown attachment previews, using the app's theme, accent colours and rounded shapes. Wide diagrams scroll within their frame to keep labels readable; comments keep showing the source.

@@ -588,6 +588,40 @@ k-anchored-picker {
   opacity: 0.35;
 }
 
+// Ctrl/⌘- or Shift-click selection. A wash plus the row's own ring, the same vocabulary as the open
+// card's highlight but in the stronger accent wash, so "selected for a gesture" and "open beside the
+// queue" stay distinguishable when one row is both.
+.panel-row.is-multi-selected {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+}
+
+.panel-row.is-multi-selected::before,
+.panel-row.is-multi-selected + .panel-row::before {
+  opacity: 0;
+}
+
+// The rest of a dragged selection fades like the placeholder: it travels with the preview.
+.panel-row.is-drag-companion {
+  opacity: 0.35;
+}
+
+// The preview is a clone of the grabbed row, so the count rides on an attribute set before the
+// drag starts and only shows on the clone.
+.panel-row.cdk-drag-preview[data-drag-label]::after {
+  content: attr(data-drag-label);
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  padding: 2px 8px;
+  color: var(--accent-fg);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: var(--accent);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+}
+
 // Mid-drag, pointer outside the surface: releasing here removes the row (see onDrop), and the dim
 // preview is the advance warning. Its return transition is zeroed inline on release
 // (onDragReleased) so the removal fires immediately instead of after a snap-back animation.

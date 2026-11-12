@@ -272,6 +272,16 @@ For Jira, ClickUp, Asana, monday.com, Notion, Linear, spreadsheets, or an intern
 
 **Self-hosted Kanera** has no plan gating and no per-seat charges. Everything above is included, including guests, the REST API, webhooks, chat destinations, and personal notification channels. You control the infrastructure, storage, maintenance, and backups.
 
+Start a local installation with Docker already installed:
+
+```bash
+curl -fsSL https://www.kanera.app/install.sh | bash -s -- --mode localhost
+```
+
+For automatic production HTTPS, use `--mode production --domain kanera.example.com`.
+The [installer guide](DEPLOY.md#one-command-install) covers requirements, generated secrets,
+existing reverse proxies, and updates.
+
 - [Self-hosting guide](https://www.kanera.app/docs/self-host)
 - [Docker deployment](DEPLOY.md)
 - [Dokploy deployment](DOKPLOY_DEPLOY.md)
