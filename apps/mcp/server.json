@@ -4,7 +4,7 @@
   "title": "Kanera",
   "description": "Manage Kanera workspaces, boards, cards, checklists, comments, notes, automations, and reports.",
   "websiteUrl": "https://www.kanera.app",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "icons": [
     {
       "src": "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",

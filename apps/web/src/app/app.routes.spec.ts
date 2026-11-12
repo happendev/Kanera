@@ -46,6 +46,7 @@ describe("optional card routes", () => {
     const collection = route.matcher!([segment("my-cards")], {} as never, route);
     const card = route.matcher!([segment("my-cards"), segment("c"), segment("card-1")], {} as never, route);
 
+    expect(collection?.consumed.map((part) => part.path)).toEqual(["my-cards"]);
     expect(collection?.posParams?.["cardId"]).toBeUndefined();
     expect(card?.posParams?.["cardId"]?.path).toBe("card-1");
   });

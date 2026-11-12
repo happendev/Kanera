@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import type { CommitImportBody } from "@kanera/shared/dto";
-import { activityEvents, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, clients, comments, emailQueue, eventOutbox, kaneraBoardImports, lists, trelloImports, type ImportCompletedEmailQueueData } from "@kanera/shared/schema";
+import { activityEvents, boardMembers, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, clients, comments, emailQueue, eventOutbox, kaneraBoardImports, lists, trelloImports, type ImportCompletedEmailQueueData } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -771,6 +771,8 @@ void test("Kanera board import collapses assignees when source members map to th
   const [sourceList] = await db.insert(lists).values({ workspaceId: workspace.id, name: "Source list", position: "9000.0000000000" }).returning();
   assert.ok(sourceBoard);
   assert.ok(sourceList);
+  // Direct board inserts bypass admin membership pinning; exports only include board members.
+  await db.insert(boardMembers).values({ boardId: sourceBoard.id, userId: user.id, role: "editor", pinned: true });
   const [sourceCard] = await db.insert(cards).values({ listId: sourceList.id, boardId: sourceBoard.id, title: "Shared assignment", position: "1000.0000000000", createdById: user.id }).returning();
   assert.ok(sourceCard);
   await db.insert(cardAssignees).values({ cardId: sourceCard.id, userId: user.id });
