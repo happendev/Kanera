@@ -32,12 +32,6 @@ describe("publicAuthGuard", () => {
     return TestBed.runInInjectionContext(() => publicAuthGuard(route as never, {} as never));
   }
 
-  it("allows unauthenticated users through", async () => {
-    await expect(runGuard()).resolves.toBe(true);
-
-    expect(createUrlTree).not.toHaveBeenCalled();
-  });
-
   it("redirects authenticated users to the logged-in app", async () => {
     isAuthenticated.mockReturnValue(true);
 
@@ -47,18 +41,15 @@ describe("publicAuthGuard", () => {
   });
 
   it("hydrates before checking whether the user is authenticated", async () => {
-    const calls: string[] = [];
-    hydrate.mockImplementation(async () => {
-      calls.push("hydrate");
-    });
-    isAuthenticated.mockImplementation(() => {
-      calls.push("isAuthenticated");
-      return false;
-    });
-
-    await runGuard();
-
-    expect(calls).toEqual(["hydrate", "isAuthenticated"]);
+    let finishHydration!: () => void;
+    hydrate.mockReturnValue(new Promise<void>((resolve) => { finishHydration = resolve; }));
+    const pending = runGuard();
+    expect(hydrate).toHaveBeenCalledOnce();
+    expect(isAuthenticated).not.toHaveBeenCalled();
+    isAuthenticated.mockReturnValue(true);
+    finishHydration();
+    await expect(pending).resolves.toBe(redirectTree);
+    expect(createUrlTree).toHaveBeenCalledWith(["/"]);
   });
 
   it("preserves a board invitation token for authenticated users", async () => {

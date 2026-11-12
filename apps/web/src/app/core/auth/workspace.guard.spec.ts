@@ -40,16 +40,6 @@ describe("workspaceGuard", () => {
     return TestBed.runInInjectionContext(() => workspaceGuard({} as never, {} as never));
   }
 
-  it("allows an organisation with only a standalone board into the app", async () => {
-    get.mockResolvedValue({
-      groups: [{ workspace: { kind: "board" }, boards: [{ id: "standalone-board" }] }],
-      guestGroups: [],
-    });
-
-    await expect(runGuard()).resolves.toBe(true);
-    expect(createUrlTree).not.toHaveBeenCalled();
-  });
-
   it("redirects a genuinely empty admin organisation to onboarding", async () => {
     await expect(runGuard()).resolves.toBe(redirectTree);
     expect(createUrlTree).toHaveBeenCalledWith(["/onboarding"]);

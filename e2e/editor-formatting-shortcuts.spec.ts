@@ -25,7 +25,8 @@ async function expectSavedFormatting(viewer: Locator) {
   await expect(viewer.locator("a")).toHaveText("link");
   await expect(viewer.locator("a")).toHaveAttribute("href", "https://example.com/docs");
   await expect(viewer.locator("del")).toHaveText("retired");
-  await expect(viewer.locator("strong")).toHaveCount(0);
+  await expect(viewer.locator("strong")).toHaveText("current");
+  await expect(viewer.locator("p")).toHaveText("code link retired plain current");
 }
 
 test("editor shortcuts preserve selection, focus and formatting after save/reload", async ({ page, signIn, apiAs, uniqueName, testWorkspace }, testInfo) => {
@@ -40,7 +41,7 @@ test("editor shortcuts preserve selection, focus and formatting after save/reloa
   await detail.locator(".description-viewer-wrap").click();
   const editor = detail.locator("k-description-editor");
   const document = editor.locator(".tiptap");
-  await document.fill("code link retired plain");
+  await document.fill("code link retired plain current");
 
   await selectWord(document, "code");
   await page.keyboard.press("Control+Backquote");
@@ -61,6 +62,8 @@ test("editor shortcuts preserve selection, focus and formatting after save/reloa
   await expect(document.locator("strong")).toHaveText("plain");
   await page.keyboard.press("Control+Backslash");
   await expect(document.locator("strong")).toHaveCount(0);
+  await selectWord(document, "current");
+  await page.keyboard.press("Control+b");
   await editor.getByRole("button", { name: "Save", exact: true }).click();
   await expectSavedFormatting(detail.locator(".description-viewer-wrap"));
 

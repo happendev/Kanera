@@ -27,7 +27,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [board-overview](board-overview.spec.ts) | Exact counts, inactivity preferences, completed-card exclusion, filter drill-downs and phone access. |
 | [card-dependencies](card-dependencies.spec.ts) | Dependency editing, blocked completion, cross-board fanout, archive/restore, notifications, ready automations, and relationship search. |
 | [card-detail-layout](card-detail-layout.spec.ts) | Reachable drawer/editor controls, overflow, title/close separation and picker placement in desktop panel/modal and phone layouts. |
-| [card-detail-performance](card-detail-performance.spec.ts) | Large-card request/cache budgets, checklist drag indices and responsiveness, 304 revisions, and first-open outbox reconciliation. |
+| [card-detail-performance](card-detail-performance.spec.ts) | Large-card request/cache budgets, checklist drag indices, collapse/expand state and responsiveness, 304 revisions, and first-open outbox reconciliation. |
 | [card-follow](card-follow.spec.ts) | Reminder creation, scheduling, firing, clearing, watching, filters, and live drawer, tile, Home, and inbox updates. |
 | [card-lifecycle](card-lifecycle.spec.ts) | Whole-list archive writing each card's translated history, and its Undo restoring the cards live for another member. |
 | [card-links](card-links.spec.ts) | Canonical clipboard links, two-way links and renames, SPA navigation, editor preservation, unlinking, and coalesced refreshes. |
@@ -40,7 +40,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [dependency-automations](dependency-automations.spec.ts) | Cross-board MCP dependency triggers, retry suppression, reopen/restore/unlink transitions, and worker-chained mirror handoffs. |
 | [dependency-map](dependency-map.spec.ts) | Cross-board graph and due-slot updates, rich-card remounts, dependency editing/undo, readiness, critical paths, date-axis layout, filters, and touch/phone geometry. |
 | [drag-and-drop](drag-and-drop.spec.ts) | Pointer-driven lane scrolling and precise same-list/cross-list ordering reaching another viewer and surviving reload. |
-| [editor-formatting-shortcuts](editor-formatting-shortcuts.spec.ts) | Selection, inline code, link shortcut/focus, clear formatting, and formatted content surviving save/reload. |
+| [editor-formatting-shortcuts](editor-formatting-shortcuts.spec.ts) | Selection, inline code, link shortcut/focus, clear formatting, and bold/strikethrough content surviving save/reload; supersedes the basic bold/strikethrough viewer unit check. |
 | [editor-image-drag](editor-image-drag.spec.ts) | Image reordering without duplicate uploads, undo/redo, and saved order across descriptions, comments, notes, and scratchpad. |
 | [editor-recovery-audit](editor-recovery-audit.spec.ts) | Notes, descriptions, and new/edited comments retaining drafts across late saves, close/reopen, reconnect, failed reads, and rejected writes. |
 | [editor-draft-ownership](editor-draft-ownership.spec.ts) | Saving in another tab preserves description and comment drafts; delayed checklist-description saves preserve a reopened drawer's newer work. |
