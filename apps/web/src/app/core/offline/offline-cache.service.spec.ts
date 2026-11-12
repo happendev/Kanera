@@ -50,11 +50,20 @@ describe("offline storage", () => {
   });
 
   it("does not mark a whole board fresh when only its activity is refreshed", async () => {
-    const cache = new OfflineCacheService();
-    await cache.saveBoard("board-1", board());
-    const before = await cache.loadBoard("board-1");
-    await cache.saveCardDetail("a", detail("a"), []);
-    expect((await cache.loadBoard("board-1"))?.cachedAt).toBe(before?.cachedAt);
+    // Same-millisecond writes would conceal an accidental refresh of the board timestamp.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+      const cache = new OfflineCacheService();
+      await cache.saveBoard("board-1", board());
+      const before = await cache.loadBoard("board-1");
+      expect(before?.cachedAt).toBe("2026-01-01T12:00:00.000Z");
+      vi.setSystemTime(new Date("2026-01-01T13:00:00Z"));
+      await cache.saveCardDetail("a", detail("a"), []);
+      expect((await cache.loadBoard("board-1"))?.cachedAt).toBe(before?.cachedAt);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("evicts older data to keep the cache within its byte budget", async () => {

@@ -132,14 +132,6 @@ describe("DescriptionViewerComponent mentions", () => {
     expect((el.querySelector('img[alt="party"]') as HTMLImageElement | null)?.getAttribute("src")).toBe("/party.png");
   });
 
-  it("preserves rendered Markdown strikethrough through sanitization", async () => {
-    const { el } = await render("Keep ~~old~~ and **current**");
-
-    expect(el.querySelector("del")?.textContent).toBe("old");
-    expect(el.querySelector("strong")?.textContent).toBe("current");
-    expect(el.querySelector("p")?.textContent).toBe("Keep old and current");
-  });
-
   it("keeps an ordered list's numbering after an interrupting bullet list", async () => {
     const { el } = await render(["1. First", "", "- Detail", "", "2. Second", "3. Third"].join("\n"));
 

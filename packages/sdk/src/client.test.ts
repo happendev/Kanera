@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { setImmediate } from "node:timers/promises";
 import { KaneraHttpClient } from "./client.js";
 import { KaneraApiError, KaneraConnectionError } from "./errors.js";
 
@@ -90,12 +91,23 @@ void test("extra headers cannot replace or duplicate the configured authorizatio
   }
 });
 
-void test("reads are retried on rate limits and honour Retry-After", async () => {
+void test("reads are retried on rate limits and honour Retry-After", { timeout: 5_000 }, async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const { calls, fetchImpl } = stub([
-    () => json({ code: "RATE_LIMITED", message: "slow down" }, 429, { "retry-after": "0" }),
+    () => json({ code: "RATE_LIMITED", message: "slow down" }, 429, { "retry-after": "2" }),
     () => json({ userId: "u1" }),
   ]);
-  const result = await client(fetchImpl).get<{ userId: string }>("/api/v1/session");
+  let scheduled!: (delayMs: number) => void;
+  const retry = new Promise<number>((resolve) => { scheduled = resolve; });
+  const pending = client(fetchImpl, { onRetry: ({ delayMs }: { delayMs: number }) => scheduled(delayMs) })
+    .get<{ userId: string }>("/api/v1/session");
+  assert.equal(await retry, 2_000);
+  // Check the actual wait as well as the reported delay: removing sleep must fail too.
+  t.mock.timers.tick(1_999);
+  await setImmediate();
+  assert.equal(calls.length, 1);
+  t.mock.timers.tick(1);
+  const result = await pending;
   assert.equal(result.userId, "u1");
   assert.equal(calls.length, 2);
 });
@@ -121,13 +133,13 @@ void test("a transport failure becomes a connection error", async () => {
 
 void test("a caller's own abort surfaces as itself, not as a Kanera timeout", async () => {
   const controller = new AbortController();
+  const aborted = new Error("aborted");
   const fetchImpl = ((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
-    init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+    init?.signal?.addEventListener("abort", () => reject(aborted));
   })) as unknown as typeof fetch;
   const pending = client(fetchImpl, { maxRetries: 0 }).get("/api/v1/session", { signal: controller.signal });
   controller.abort();
-  const error = await pending.catch((e: unknown) => e);
-  assert.ok(!(error instanceof KaneraConnectionError));
+  await assert.rejects(pending, (error: unknown) => error === aborted);
 });
 
 void test("retryAfterMs accepts both delta-seconds and HTTP-date", () => {

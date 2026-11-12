@@ -85,6 +85,7 @@ test("large card cache bursts coalesce and checklist drags preserve order", asyn
   // direction's median so one delayed frame cannot fail CI, nor fast collapses hide slow expands.
   const latency: number[] = [];
   const collapse = block.locator(".checklist-collapse");
+  await expect(rows).toHaveCount(149);
   for (let index = 0; index < 8; index++) {
     await collapse.scrollIntoViewIfNeeded();
     latency.push(await collapse.evaluate(async (button) => {
@@ -93,6 +94,8 @@ test("large card cache bursts coalesce and checklist drags preserve order", asyn
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       return performance.now() - start;
     }));
+    // A disconnected click handler is fast too. Prove each measured click changed the content.
+    await expect(rows).toHaveCount(index % 2 === 0 ? 0 : 149);
   }
   const median = (samples: number[]) => {
     const sorted = [...samples].sort((a, b) => a - b);
