@@ -65,6 +65,8 @@ jobs:
           file: ${{ matrix.image.dockerfile }}
           platforms: linux/${{ matrix.platform.arch }}
           pull: true
+          # Same-tag base images can predate Alpine security fixes; refresh runtime packages.
+          no-cache-filters: runtime
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ env.TAG }}
@@ -72,6 +74,28 @@ jobs:
           outputs: type=image,name=${{ env.REGISTRY }}/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
+
+      # Scan the exact platform digest before it can receive a release tag or installer assets.
+      - uses: aquasecurity/setup-trivy@v0.3.1
+        with:
+          version: v0.76.2
+
+      # Findings are informational here; the shared weekly upgrade check below owns the gate.
+      - name: Scan built image
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ matrix.image.name }}@${{ steps.build.outputs.digest }}
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          trivy image --image-src remote --platform linux/${{ matrix.platform.arch }} \
+            --scanners vuln --timeout 10m --format json --output vulnerabilities.json "$IMAGE"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          path: vulnerabilities.json
+          retention-days: 30
 
       - run: echo "${{ steps.build.outputs.digest }}" > digest.txt
 
@@ -81,8 +105,49 @@ jobs:
           path: digest.txt
           retention-days: 1
 
+  scan-upstream:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v') }}
+    runs-on: ubuntu-24.04
+    # Full two-platform reports plus the weekly compatible-tag comparisons.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: aquasecurity/setup-trivy@v0.3.1
+        with:
+          version: v0.76.2
+      - name: Report official service images
+        run: |
+          mkdir upstream-reports
+          trivy image --download-db-only
+          # Official images remain upstream-maintained; report all findings for release review.
+          # Extract the shipped pins so this audit cannot silently scan an older hard-coded tag.
+          images=$(awk '$1 == "image:" && ($2 ~ /^postgres:/ || $2 ~ /^valkey\/valkey:/ || $2 ~ /^caddy:/) {print $2}' docker-compose.yml docker-compose.https.yml | sort -u)
+          test -n "$images"
+          for arch in amd64 arm64; do
+            for image in $images; do
+              name=$(printf '%s' "$image" | tr '/:' '__')
+              trivy image --image-src remote --platform "linux/$arch" --scanners vuln \
+                --timeout 10m --skip-db-update --format json \
+                --output "upstream-reports/${name}_${arch}.json" "$image"
+            done
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-official-services
+          path: upstream-reports/
+          retention-days: 30
+
+      # Use exactly the weekly decision logic: a package fix alone is not an available image fix.
+      - name: Report image upgrades that fix vulnerabilities
+        env:
+          CRANE_CMD: docker run --rm gcr.io/go-containerregistry/crane:v0.21.9
+        run: python3 scripts/scan-image-updates.py
+
   manifest:
-    needs: build
+    needs: [build, scan-upstream]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -142,15 +207,19 @@ jobs:
           # GitHub renames release assets that start with a dot, so ship the examples without one.
           cp .env.example assets/env.example
           cp .env.full.example assets/env.full.example
+          cp scripts/install.sh assets/install.sh
+          cp docker-compose.https.yml assets/docker-compose.https.yml
           # Same check the operator's first `docker compose up` makes, against the shipped example env.
           cp .env.example assets/.env
           docker compose -f assets/docker-compose.yml --env-file assets/.env config --quiet
+          docker compose -f assets/docker-compose.yml -f assets/docker-compose.https.yml --env-file assets/.env config --quiet
+          bash -n assets/install.sh
           rm assets/.env
 
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG" assets/docker-compose.yml assets/env.example assets/env.full.example --clobber --repo "${{ github.repository }}"
+        run: gh release upload "$TAG" assets/docker-compose.yml assets/env.example assets/env.full.example assets/install.sh assets/docker-compose.https.yml --clobber --repo "${{ github.repository }}"
 
       # Install and update docs download from releases/latest/download/..., so the newest Kanera
       # release must hold GitHub's "Latest" badge even when CLI or MCP releases are published after it.

@@ -22,6 +22,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [attachments](attachments.spec.ts) | Preview/download behavior across four surfaces, decoded media and original file bytes, cover deletion/undo, and live activity. |
 | [auth](auth.spec.ts) | Password login, invalid credentials, refresh-cookie proxying, reload persistence, and logout. |
 | [billing-realtime](billing-realtime.spec.ts) | Committed plan conversions updating live navigation through separate processes; rolled-back conversions emitting nothing. |
+| [planning-mounting](planning-mounting.spec.ts) | Calendar panel measurement, crowded-day expansion and drag/drop; dependency chain windowing, scroll restoration, keyboard focus and phone Steps. |
 | [board](board.spec.ts) | Card persistence, board and workspace-list fanout, reload convergence, and late cards beyond the lane render cap. |
 | [board-overview](board-overview.spec.ts) | Exact counts, inactivity preferences, completed-card exclusion, filter drill-downs and phone access. |
 | [card-dependencies](card-dependencies.spec.ts) | Dependency editing, blocked completion, cross-board fanout, archive/restore, notifications, ready automations, and relationship search. |
@@ -37,7 +38,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [comment-reply](comment-reply.spec.ts) | Caret and typed replies staying outside quotes in fresh, open, and existing-draft composers. |
 | [correctness-scan](correctness-scan.spec.ts) | Concurrent refresh/checklist writes, transfer access cleanup, post-automation responses and comment context, and deleted-list fanout. |
 | [dependency-automations](dependency-automations.spec.ts) | Cross-board MCP dependency triggers, retry suppression, reopen/restore/unlink transitions, and worker-chained mirror handoffs. |
-| [dependency-map](dependency-map.spec.ts) | Cross-board graph updates, dependency editing/undo, readiness, critical paths, date-axis layout, filters, and touch/phone geometry. |
+| [dependency-map](dependency-map.spec.ts) | Cross-board graph and due-slot updates, rich-card remounts, dependency editing/undo, readiness, critical paths, date-axis layout, filters, and touch/phone geometry. |
 | [drag-and-drop](drag-and-drop.spec.ts) | Pointer-driven lane scrolling and precise same-list/cross-list ordering reaching another viewer and surviving reload. |
 | [editor-formatting-shortcuts](editor-formatting-shortcuts.spec.ts) | Selection, inline code, link shortcut/focus, clear formatting, and formatted content surviving save/reload. |
 | [editor-image-drag](editor-image-drag.spec.ts) | Image reordering without duplicate uploads, undo/redo, and saved order across descriptions, comments, notes, and scratchpad. |
@@ -74,7 +75,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [performance-frontend](performance-frontend.spec.ts) | Complete description diffs, coalesced bounded deep-table refreshes retaining exact IDs, and offline note persistence without unrelated rewrites. |
 | [planning-features](planning-features.spec.ts) | Organisation/workspace feature switches changing live views, deep links, API access, and retained planning data. |
 | [promise-toasts](promise-toasts.spec.ts) | Bulk actions, imports, and exports settling one toast correctly while preserving saved state, dismissal, and supported restore behavior. |
-| [public-api](public-api.spec.ts) | Public API writes reaching open boards through the worker/outbox and producing correctly signed webhook envelopes. |
+| [public-api](public-api.spec.ts) | Public API writes reaching open boards through the worker/outbox, filtered board metadata reaching user rooms through Valkey, and signed webhook envelopes. |
 | [realtime-compression](realtime-compression.spec.ts) | Configured websocket negotiation and ordered, intact small/large updates through the real outbox/Valkey path. |
 | [reconciliation](reconciliation.spec.ts) | Failed and late card moves on the board and in Global Work never undoing a teammate's newer move, and both converging on a public API edit after a socket outage. |
 | [reconnect](reconnect.spec.ts) | Proven socket outages recovering card and agent-run snapshots; brief foreground returns avoiding redundant requests. |
@@ -85,7 +86,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [storage-cleanup](storage-cleanup.spec.ts) | Storage filtering, selection/deletion, live attachment removal for another viewer, and phone layout. |
 | [team-overview](team-overview.spec.ts) | Correct activity/assignment attribution, counts, drill-downs, guest visibility, focused-person queues, dragging assigned/in-progress overview cards into personal and teammate queues, ranking, and live cross-session updates. |
 | [time-tracking](time-tracking.spec.ts) | Working-hour totals, overnight/weekend pauses and resumption, banked stints, short-total suppression, table aggregates, and Work done. |
-| [timeline](timeline.spec.ts) | Date/dependency editing, cross-board updates, filters, conflicts/critical paths, observer/touch access, and bounded rendering for large boards. |
+| [timeline](timeline.spec.ts) | Date/dependency editing, cross-board updates, filters, conflicts/critical paths, observer/touch access, and bounded rendering for large boards with focused rows pinned across scrolling. |
 | [timeline-notifications](timeline-notifications.spec.ts) | Progress-limit settings syncing live and worker-generated scheduling conflicts notifying the right person once. |
 | [unchanged-edits](unchanged-edits.spec.ts) | Unchanged single/bulk card and checklist edits preserving activity counts and timestamps. |
 | [user-profile](user-profile.spec.ts) | Popover lifecycle/focus, exact work counts and completion grid, assignee actions, person deep links, and guest privacy/revocation. |

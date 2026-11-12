@@ -8,6 +8,7 @@
   [cdkDropListDisabled]="!canReorder()"
   [cdkDropListEnterPredicate]="canEnterFromBoard"
   (cdkDropListDropped)="onDrop($event)"
+  (keydown.escape)="clearSelection()"
 >
   @for (row of rows(); track row.entry.id) {
     <!-- `is-completed` is driven purely by `card.completedAt`, so the treatment appears the instant
@@ -23,7 +24,11 @@
       [class.is-selected]="row.card?.id === selectedCardId()"
       [class.is-completed]="!!row.card?.completedAt"
       [class.can-curate]="isDraggable(row.entry)"
-      (cdkDragStarted)="onDragStarted()"
+      [class.is-multi-selected]="isMultiSelected(row.entry)"
+      [class.is-drag-companion]="groupDragging() && isMultiSelected(row.entry)"
+      [attr.data-drag-label]="isMultiSelected(row.entry) && selection().length > 1 ? multiDragLabel() : null"
+      [attr.aria-selected]="multiSelect() && isDraggable(row.entry) ? isMultiSelected(row.entry) : null"
+      (cdkDragStarted)="onDragStarted(row.entry)"
       (cdkDragMoved)="onDragMoved($event)"
       (cdkDragReleased)="onDragReleased()"
       (cdkDragEnded)="onDragEnded()"
@@ -34,7 +39,7 @@
       <span class="row-rank" [style.--rank-heat]="rankHeat(row.entry.rank)">{{ row.entry.rank }}</span>
 
       @if (row.card; as card) {
-        <button type="button" class="row-main" (click)="onCardOpened(card, $event)" (auxclick)="onCardOpened(card, $event)">
+        <button type="button" class="row-main" (click)="onRowMainClick(row, card, $event)" (auxclick)="onCardOpened(card, $event)">
           <!-- Opens the row on its own quiet line, the same placement the board tile and the
                notifications drawer give it. It shared the context line below until it was measured
                against what it was crowding out: ~90px of a ~360px line, spent on a reference nobody
@@ -105,6 +110,10 @@
               </button>
             }
             @if (isDraggable(row.entry)) {
+              <!-- On a selected row this lifts the whole selection, in its current order. -->
+              <button type="button" [disabled]="isAtTop(row.entry)" aria-label="Move to top" i18n-aria-label="Button: move this card (or the selected cards) to the front of the queue" kTooltip="Move to top" i18n-kTooltip="Button: move this card (or the selected cards) to the front of the queue" (click)="moveToTop(row.entry)">
+                <i aria-hidden="true" class="ti ti-arrow-bar-to-up"></i>
+              </button>
               <button type="button" [disabled]="$first" aria-label="Move up" i18n-aria-label="Button: move this card one place earlier in the queue" kTooltip="Move up" i18n-kTooltip="Button: move this card one place earlier in the queue" (click)="moveBy(row.entry, -1)">
                 <i aria-hidden="true" class="ti ti-chevron-up"></i>
               </button>

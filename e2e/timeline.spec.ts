@@ -415,8 +415,15 @@ test("large timelines window rows while preserving scrolling and filters", async
         return performance.now() - started;
       });
       metrics.push({ count, mountedRows: mounted, toggleMs: Math.round(elapsed), domNodes: await page.locator("k-board-timeline-view *").count() });
+      const firstName = page.locator(".tl-card-name").filter({ hasText: "Scale row 0000" });
+      await firstName.evaluate((element: HTMLElement) => element.focus({ preventScroll: true }));
       await page.locator(".tl-scroller").evaluate((element) => { element.scrollTop = element.scrollHeight; });
-      await expect(page.locator(".tl-card-name").filter({ hasText: `Scale row ${String(count - 1).padStart(4, "0")}` })).toBeVisible();
+      const lastName = page.locator(".tl-card-name").filter({ hasText: `Scale row ${String(count - 1).padStart(4, "0")}` });
+      await expect(lastName).toBeVisible();
+      // A focused row must remain mounted outside the scroll window; moving focus releases it.
+      await expect(firstName).toBeFocused();
+      await lastName.evaluate((element: HTMLElement) => element.focus({ preventScroll: true }));
+      await expect(firstName).toHaveCount(0);
       expect(await page.locator(".tl-row-card").count()).toBeLessThan(80);
     }
     await page.screenshot({ path: test.info().outputPath("timeline-2000-rows.png") });

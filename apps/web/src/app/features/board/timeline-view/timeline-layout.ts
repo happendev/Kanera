@@ -420,6 +420,17 @@ export function buildTimelineRows(
   return rows;
 }
 
+/** Rescale cached one-pixel-per-day rows without regrouping, sorting or parsing their dates. */
+export function scaleTimelineRows(rows: readonly TimelineRow[], pxPerDay: number): TimelineRow[] {
+  return rows.map((row) => {
+    const x = row.x === null ? null : row.x * pxPerDay;
+    const width = row.width === null ? null : row.width * pxPerDay;
+    return row.kind === "card"
+      ? { ...row, x, width, point: width !== null && width <= POINT_MAX_WIDTH }
+      : { ...row, x, width };
+  });
+}
+
 function compareScheduled(a: AnyCard, b: AnyCard): number {
   const barA = plannedBar(a);
   const barB = plannedBar(b);

@@ -157,6 +157,7 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
     .union([z.string(), z.boolean()])
     .transform((v) => v === true || v === "true")
     .default(false),
+  // Worker startup removes two retired LISTEN slots from this budget; API processes use it as-is.
   PG_POOL_MAX: z.coerce.number().int().positive().default(10),
   WORKER_PG_POOL_MAX: z.coerce.number().int().positive().default(5),
   PG_IDLE_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),

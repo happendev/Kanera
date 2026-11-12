@@ -29,6 +29,8 @@ import { boardStateCardStore, TABLE_CARD_STORE, type TableCardStore } from "../t
 import type { AnyCard, AnyList } from "../table-view/table-view.types";
 import {
   buildTimelineRows,
+  scaleTimelineRows,
+  mondayOf,
   clampPxPerDay,
   dayAt,
   DEFAULT_PX_PER_DAY,
@@ -106,6 +108,9 @@ interface Wire {
   id: string;
   edge: DependencyGraphEdge;
   path: string;
+  label: string;
+  top: number;
+  bottom: number;
   midX: number;
   midY: number;
   tone: "plain" | "critical" | "risk" | "lit" | "offpath";
@@ -330,7 +335,11 @@ export class BoardTimelineViewComponent implements OnInit {
   // Zoomed out, the planned work can span less than the window; the scale stretches to fill it (plus
   // a week, so the far edge is never a hard stop while panning).
   private readonly minimumDays = computed(() => Math.ceil(Math.max(0, this.hostWidth() - this.namePaneWidth()) / this.pxPerDay()) + 7);
-  readonly range = computed(() => timelineRange(plannedBars(this.visibleCards()), this.today, this.minimumDays()));
+  private readonly plannedRange = computed(() => timelineRange(plannedBars(this.visibleCards()), this.today));
+  readonly range = computed(() => {
+    const range = this.plannedRange();
+    return { startDay: range.startDay, endDay: Math.max(range.endDay, mondayOf(range.startDay + this.minimumDays()) + 6) };
+  });
   readonly chartWidth = computed(() => rangeWidth(this.range(), this.pxPerDay()));
   readonly header = computed(() => timelineHeader(this.range(), this.pxPerDay(), this.today));
   readonly weekends = computed(() => weekendBands(this.range(), this.pxPerDay()));
@@ -340,7 +349,9 @@ export class BoardTimelineViewComponent implements OnInit {
   readonly minZoomLevel = Math.log(MIN_PX_PER_DAY);
   readonly maxZoomLevel = Math.log(MAX_PX_PER_DAY);
 
-  readonly rows = computed<TimelineRow[]>(() => buildTimelineRows(this.visibleCards(), this.groupBy(), this.range(), this.pxPerDay(), {
+  // Zoom changes only horizontal geometry. Keep grouping, date parsing and sorting out of the
+  // animation loop, using one pixel per day and the same zoom-independent range origin.
+  private readonly groupedRows = computed<TimelineRow[]>(() => buildTimelineRows(this.visibleCards(), this.groupBy(), this.plannedRange(), 1, {
     lists: this.lists(),
     boards: this.boardSummariesById() ?? undefined,
     labelsByCard: this.labelsByCard(),
@@ -353,6 +364,8 @@ export class BoardTimelineViewComponent implements OnInit {
       unscheduled: $localize`:Timeline view group for cards with neither a start nor a due date:Unscheduled`,
     },
   }));
+
+  readonly rows = computed(() => scaleTimelineRows(this.groupedRows(), this.pxPerDay()));
 
   /** Top offset of each row, so wires can be drawn between bars without measuring the DOM. */
   readonly rowTops = computed(() => {
@@ -389,7 +402,7 @@ export class BoardTimelineViewComponent implements OnInit {
     }
     const pinned = new Set([this.drag()?.cardId, this.activeActionsCardId()]);
     const focused = this.focusedRowId();
-    for (const row of rows) {
+    if (focused || this.drag()?.cardId || this.activeActionsCardId()) for (const row of rows) {
       if ((row.id === focused || (row.kind === "card" && pinned.has(row.card.id))) && !visible.includes(row)) visible.push(row);
     }
     return visible;
@@ -422,7 +435,11 @@ export class BoardTimelineViewComponent implements OnInit {
     return { cardId: drag.cardId, bar: this.draggedBar(drag) };
   });
 
-  readonly wires = computed<Wire[]>(() => {
+  private readonly wireLabels = computed(() => new Map(this.edges().map((edge) => [edge.id, this.wireLabel(edge)])));
+
+  // Geometry and accessible names do not change during scrolling. Only the cheap viewport
+  // filter below depends on scrollTop; keep paths stable as rows enter and leave the window.
+  private readonly allWires = computed<Wire[]>(() => {
     if (!this.showDependencies()) return [];
     const rows = this.firstRowByCard();
     const { tops } = this.rowTops();
@@ -431,6 +448,8 @@ export class BoardTimelineViewComponent implements OnInit {
     const selected = this.selectedEdgeId();
     const preview = this.previewBar();
     const wires: Wire[] = [];
+    const labels = this.wireLabels();
+    const height = this.rowHeight();
     for (const edge of this.edges()) {
       const source = rows.get(edge.sourceCardId);
       const target = rows.get(edge.targetCardId);
@@ -439,14 +458,26 @@ export class BoardTimelineViewComponent implements OnInit {
       const targetGeometry = this.geometryFor(target, preview);
       const from = { x: sourceGeometry.x + sourceGeometry.width, y: (tops.get(source.id) ?? 0) + this.rowHeight() / 2 };
       const to = { x: targetGeometry.x, y: (tops.get(target.id) ?? 0) + this.rowHeight() / 2 };
-      if (Math.max(from.y, to.y) < this.scrollTop() - 200 || Math.min(from.y, to.y) > this.scrollTop() + this.viewportHeight() + 200) continue;
       const conflict = schedule.cards.get(edge.targetCardId)?.conflicts.some((candidate) => candidate.edgeId === edge.id) ?? false;
       const tone: Wire["tone"] = selected === edge.id ? "lit"
         : critical ? (schedule.criticalEdgeIds.has(edge.id) ? "critical" : "offpath")
         : conflict ? "risk" : "plain";
-      wires.push({ id: edge.id, edge, path: dependencyPath(from, to, this.rowHeight()), midX: (from.x + to.x) / 2, midY: (from.y + to.y) / 2, tone });
+      // A zoom invalidates every path, but most edges remain offscreen. Build each SVG path only
+      // when its wire first enters the viewport, then reuse it for subsequent scroll windows.
+      let path: string | undefined;
+      wires.push({
+        id: edge.id, edge, label: labels.get(edge.id)!, top: Math.min(from.y, to.y), bottom: Math.max(from.y, to.y),
+        get path() { return path ??= dependencyPath(from, to, height); },
+        midX: (from.x + to.x) / 2, midY: (from.y + to.y) / 2, tone,
+      });
     }
     return wires;
+  });
+
+  readonly wires = computed(() => {
+    const top = this.scrollTop() - 200;
+    const bottom = this.scrollTop() + this.viewportHeight() + 200;
+    return this.allWires().filter((wire) => wire.bottom >= top && wire.top <= bottom);
   });
 
   readonly selectedWire = computed(() => this.wires().find((wire) => wire.id === this.selectedEdgeId()) ?? null);
@@ -502,11 +533,15 @@ export class BoardTimelineViewComponent implements OnInit {
     effect((onCleanup) => {
       const element = this.scroller()?.nativeElement;
       if (!element) return;
+      // Template event bindings dirty the view even when quantized scrollTop is unchanged.
+      // Native scrolling lets the window signals alone schedule a render, including sideways pans.
+      const scroll = () => this.onScroll();
       const wheel = (event: WheelEvent) => this.onWheel(event);
       const down = (event: PointerEvent) => this.onPanPointerDown(event);
       const move = (event: PointerEvent) => this.onPanPointerMove(event);
       const up = (event: PointerEvent) => this.onPanPointerUp(event);
       const click = (event: MouseEvent) => this.onPanClick(event);
+      element.addEventListener("scroll", scroll, { passive: true });
       element.addEventListener("wheel", wheel, { passive: false });
       element.addEventListener("pointerdown", down);
       element.addEventListener("pointermove", move);
@@ -514,6 +549,7 @@ export class BoardTimelineViewComponent implements OnInit {
       element.addEventListener("pointercancel", up);
       element.addEventListener("click", click, true);
       onCleanup(() => {
+        element.removeEventListener("scroll", scroll);
         element.removeEventListener("wheel", wheel);
         element.removeEventListener("pointerdown", down);
         element.removeEventListener("pointermove", move);
@@ -737,6 +773,9 @@ export class BoardTimelineViewComponent implements OnInit {
    * case it keeps that zoom and opens on today. No animation; this is where the chart starts.
    */
   private openAtStart(): void {
+    // Fit must use the real name-pane width before the host ResizeObserver's first delivery;
+    // otherwise a wide host fits against the narrow default and clips the last bar.
+    this.hostWidth.set(this.host.nativeElement.clientWidth);
     const fit = this.zoomChosen ? null : this.fitTarget();
     if (fit) this.pxPerDay.set(fit.px);
     // The scale just changed, so place the scroll once the sheet has been drawn at it.
@@ -1087,9 +1126,9 @@ export class BoardTimelineViewComponent implements OnInit {
     return parts.filter(Boolean).join(". ");
   }
 
-  wireLabel(wire: Wire): string {
-    const source = this.cardsById().get(wire.edge.sourceCardId);
-    const target = this.cardsById().get(wire.edge.targetCardId);
+  private wireLabel(edge: DependencyGraphEdge): string {
+    const source = this.cardsById().get(edge.sourceCardId);
+    const target = this.cardsById().get(edge.targetCardId);
     return $localize`:Timeline view accessible name of a dependency wire:${target?.key ?? ""}:dependent: waits on ${source?.key ?? ""}:blocker:`;
   }
 

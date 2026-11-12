@@ -34,21 +34,27 @@ kanera comment MKT-42 "Blocked: which redirect target should signed-in users see
 kanera run update <runId> --status running --summary "Target confirmed; applying the fix"
 \`\`\`
 
-4. Before ending, post a concise outcome comment with changes/findings, checks and results
-   (including failures or skips), relevant PR/commit/artifact links, and remaining work or decisions.
-   For partial, failed, or cancelled work, say what remains. Claim only what was implemented,
-   tested, merged, or deployed. Update only checklist items actually completed. A run summary or
-   chat reply does not replace this comment.
+4. Before ending, post an outcome comment written for the person following the card, often a
+   project manager or client rather than a developer. Open in plain language: what was wrong (or
+   asked), what changed, and what happens now (the next step and who must act; leave release status
+   to the team). No
+   file, setting, test or tool names there. Then, only if useful to a reviewer, add a
+   "Technical details" section: a clear, short explanation of cause and fix, checks and results
+   (including failures or skips), and PR/commit/artifact links, without file-by-file references. For partial, failed, or cancelled work, say what remains. Claim
+   only what was implemented, tested, merged, or deployed. Update only checklist items actually
+   completed. A run summary or chat reply does not replace this comment.
 
 \`\`\`bash
-kanera comment MKT-42 "Redirect fixed; focused checks pass. PR awaits review; deployment pending."
-kanera run done <runId> "Implementation ready for review"
+kanera comment MKT-42 "What was wrong: signed-in users landed on the login page again. What changed: they now go straight to their dashboard. What happens now: ready for review. Technical details: redirect guard fixed; focused checks pass, full suite not run. PR 318."
+kanera run done <runId> "Signed-in users now reach their dashboard; ready for review"
 \`\`\`
 
 5. End the run as succeeded when the assigned work is complete, or failed/cancelled when stopping
    unfinished work. Ended runs cannot be edited; start a new one if work resumes. Keep blocked
    only while genuinely waiting to resume; do not leave a stopped task running. A successful run
-   may cover only part of a card and does not mean the card is complete.
+   may cover only part of a card and does not mean the card is complete. The closing summary
+   shows in the card's activity feed: write it for a non-developer first,
+   in plain sentences; any brief technical note comes after.
    Before moving it, re-read the card and board. Consider the original list, the currently
    available lists and their meanings, what was completed, and what remains. Choose the list
    that best represents the card's actual state in this board's workflow. Returning to the

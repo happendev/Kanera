@@ -57,8 +57,19 @@ export function documentThemeIsDark(): boolean {
   return documentThemeDark();
 }
 
+// Windowed cards repeatedly mount the same people. Reuse the generated SVG URI across component
+// instances, with a bounded cache so visiting many workspaces cannot retain every avatar forever.
+const fallbackUris = new Map<string, string>();
+const FALLBACK_URI_CACHE_LIMIT = 256;
+
 export function blobatarFallbackUri(identity: string, isDark: boolean): string {
-  return blobatarUri(identity, isDark ? BLOBATAR_DARK_THEME_OPTIONS : BLOBATAR_LIGHT_THEME_OPTIONS);
+  const key = `${isDark ? "dark" : "light"}:${identity}`;
+  const cached = fallbackUris.get(key);
+  if (cached !== undefined) return cached;
+  const uri = blobatarUri(identity, isDark ? BLOBATAR_DARK_THEME_OPTIONS : BLOBATAR_LIGHT_THEME_OPTIONS);
+  if (fallbackUris.size >= FALLBACK_URI_CACHE_LIMIT) fallbackUris.delete(fallbackUris.keys().next().value!);
+  fallbackUris.set(key, uri);
+  return uri;
 }
 
 const relativeTimeNow = signal(Date.now());

@@ -71,9 +71,11 @@
   [acceptExternalCardDrops]="true"
   [showAdd]="false"
   [emptyHint]="canReorder() ? emptyHint : null"
+  [multiSelect]="true"
   (reordered)="reordered.emit($event)"
+  (reorderedMany)="reorderedMany.emit($event)"
   (removed)="removed.emit($event)"
-  (added)="added.emit($event)"
+  (added)="onQueueAdded($event)"
   (cardOpened)="cardOpened.emit($event.cardId)"
   (completed)="completed.emit($event)"
 />
@@ -108,44 +110,65 @@
         cdkDropListSortingDisabled
         [cdkDropListConnectedTo]="[queueDropListId]"
         [cdkDropListDisabled]="atCapacity()"
+        (keydown.escape)="notQueuedClearSelection()"
       >
         @for (group of notQueuedGroups(); track group.boardId) {
+          @let boardCollapsed = collapsedBoardIds().has(group.boardId);
           <h5 class="not-queued-board">
-            <k-board-icon [icon]="group.boardIcon" [color]="group.boardColor" [size]="16" />
-            <span>{{ group.boardName }}</span>
-          </h5>
-          @for (row of group.rows; track row.card.id) {
-            <div
-              class="not-queued-row"
-              cdkDrag
-              [cdkDragData]="row.dragData"
-              [class.is-selected]="row.card.id === selectedCardId()"
-              (cdkDragStarted)="onNotQueuedDragStarted()"
-              (cdkDragEnded)="onNotQueuedDragEnded()"
+            <button
+              type="button"
+              class="not-queued-board-toggle"
+              [attr.aria-expanded]="!boardCollapsed"
+              [attr.aria-label]="boardToggleLabel(group.boardName, boardCollapsed)"
+              (click)="toggleBoard(group.boardId)"
             >
-              <button type="button" class="not-queued-main" (click)="cardOpened.emit(row.card.id)">
-                @if (showCardKeys()) { <span class="not-queued-key">{{ row.card.key }}</span> }
-                <span class="not-queued-title">{{ row.card.title }}</span>
-                <span class="not-queued-list" [style.--list-color]="row.listColor">
-                  <i aria-hidden="true" [class]="row.listIconClass"></i>
-                  <span>{{ row.card.listName }}</span>
-                </span>
-              </button>
-              @if (row.due) {
-                <span class="not-queued-due" [class.overdue]="row.overdue" [class.due-soon]="row.dueSoon">@if (row.overdue || row.dueSoon) { <i aria-hidden="true" class="ti ti-calendar-event"></i> }{{ row.due }}</span>
+              <i aria-hidden="true" class="ti not-queued-board-chevron" [class.ti-chevron-right]="boardCollapsed" [class.ti-chevron-down]="!boardCollapsed"></i>
+              <k-board-icon [icon]="group.boardIcon" [color]="group.boardColor" [size]="16" />
+              <span class="not-queued-board-name">{{ group.boardName }}</span>
+              <!-- Only while folded: open, the rows below already say how many there are. -->
+              @if (boardCollapsed) {
+                <span class="not-queued-board-count">{{ group.rows.length }}</span>
               }
-              <button
-                type="button"
-                class="not-queued-add"
-                aria-label="Add to Up next"
-                i18n-aria-label="Button: add this card to the end of Up next"
-                [disabled]="atCapacity()"
-                [kTooltip]="notQueuedTooltip()"
-                (click)="onNotQueuedAdd(row.card.id)"
+            </button>
+          </h5>
+          @if (!boardCollapsed) {
+            @for (row of group.rows; track row.card.id) {
+              <div
+                class="not-queued-row"
+                cdkDrag
+                [cdkDragData]="row.dragData"
+                [class.is-selected]="row.card.id === selectedCardId()"
+                [class.is-multi-selected]="isNotQueuedSelected(row.card.id)"
+                [class.is-drag-companion]="notQueuedGroupDragging() && isNotQueuedSelected(row.card.id)"
+                [attr.data-drag-label]="isNotQueuedSelected(row.card.id) && notQueuedSelection().length > 1 ? notQueuedDragLabel() : null"
+                (cdkDragStarted)="onNotQueuedDragStarted(row.card.id)"
+                (cdkDragEnded)="onNotQueuedDragEnded()"
               >
-                <i aria-hidden="true" class="ti ti-plus"></i>
-              </button>
-            </div>
+                <button type="button" class="not-queued-main" [attr.aria-pressed]="isNotQueuedSelected(row.card.id) || null" (click)="onNotQueuedRowClick(row.card.id, $event)">
+                  @if (showCardKeys()) { <span class="not-queued-key">{{ row.card.key }}</span> }
+                  <span class="not-queued-title">{{ row.card.title }}</span>
+                  <span class="not-queued-list" [style.--list-color]="row.listColor">
+                    <i aria-hidden="true" [class]="row.listIconClass"></i>
+                    <span>{{ row.card.listName }}</span>
+                  </span>
+                </button>
+                @if (row.due) {
+                  <span class="not-queued-due" [class.overdue]="row.overdue" [class.due-soon]="row.dueSoon">@if (row.overdue || row.dueSoon) { <i aria-hidden="true" class="ti ti-calendar-event"></i> }{{ row.due }}</span>
+                }
+                <!-- On a selected row this adds the whole selection, in the order shown here. -->
+                <button
+                  type="button"
+                  class="not-queued-add"
+                  aria-label="Add to Up next"
+                  i18n-aria-label="Button: add this card to the end of Up next"
+                  [disabled]="atCapacity()"
+                  [kTooltip]="notQueuedTooltip()"
+                  (click)="onNotQueuedAdd(row.card.id)"
+                >
+                  <i aria-hidden="true" class="ti ti-plus"></i>
+                </button>
+              </div>
+            }
           }
         } @empty {
           <p class="not-queued-empty" i18n="Empty state of the Not queued list in the Up next panel">Every open card assigned here is already in Up next.</p>

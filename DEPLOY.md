@@ -1,5 +1,56 @@
 # Deploy Kanera with Docker
 
+## One-command install
+
+Install Docker with Compose 2.23 or newer, Bash, curl, and OpenSSL first. Run the installer on the
+machine where Docker runs. It downloads prebuilt images, generates six independent secrets, applies
+migrations, and waits for the app to become healthy. No repository checkout or Node.js is needed.
+
+For a local trial:
+
+```bash
+curl -fsSL https://www.kanera.app/install.sh | bash -s -- --mode localhost
+```
+
+Open <http://localhost:4200> and create your account. The web port is bound to loopback only; localhost
+mode uses HTTP and does not install a certificate or expose Kanera to your network.
+
+For production, point your domain's DNS A/AAAA records at the server, make inbound TCP ports 80 and
+443 reachable, and ensure another service is not already using them. Then run:
+
+```bash
+curl -fsSL https://www.kanera.app/install.sh | bash -s -- --mode production --domain kanera.example.com
+```
+
+The optional Caddy container obtains and renews a publicly trusted certificate and redirects HTTP
+to HTTPS. The installer checks the public HTTPS endpoint before reporting success. DNS, firewall,
+and certificate errors leave your files intact for diagnosis with `docker compose logs caddy`.
+
+Already using a reverse proxy? Add `--https existing`. No Caddy container is installed; configure
+your proxy to serve your HTTPS domain from `http://127.0.0.1:4200`, including WebSocket forwarding.
+This mode checks local app health; you must configure and verify public HTTPS yourself. Dokploy
+users can continue using [the platform-specific guide](DOKPLOY_DEPLOY.md).
+
+Omit `--mode` for guided terminal prompts. Optional flags are `--directory /path/to/kanera`,
+`--port 4201`, `--project-name kanera-demo`, and `--version vX.Y.Z`. Run `bash install.sh --help`
+after downloading the script to see all options. You can also download and inspect the script
+before running it. The installer requires a new directory and an unused Compose project name;
+it refuses to overwrite an installation or reuse its data volumes with new secrets.
+
+The default directory is `./kanera`. It contains a private `.env`, a release-pinned
+`docker-compose.yml`, and, for Caddy, `docker-compose.override.yml`. The database is bound to a
+Docker-assigned loopback port to avoid collisions; use `docker compose port postgres 5432` to find
+it. Caddy stores certificates in persistent Docker volumes. Keep these files and volumes, and back
+up `.env`, the database, and uploads. SMTP is optional and can be configured later in organisation
+settings. Public MCP routing remains an optional step in [Publish ports](#2-publish-ports).
+
+If startup fails, fix the reported problem and run `docker compose up -d` from the installation
+directory. Do not rerun the installer or regenerate secrets. For updates, follow [Upgrading](#upgrading);
+keep the generated `.env` and Caddy override. To update Caddy itself, review and download the release's
+`docker-compose.https.yml` as `docker-compose.override.yml` before pulling images.
+
+## Manual installation
+
 Most deployments should use the prebuilt images. Every release publishes them to GHCR
 (`ghcr.io/happendev/kanera-api`, `kanera-web`, `kanera-mcp`, `kanera-db-backup`) and attaches a
 standalone `docker-compose.yml` that pulls them, so the server needs no checkout and no build:
@@ -102,6 +153,12 @@ passes these through, so set them in `.env` to override.
 runs against Postgres at once and is usually the first ceiling under write-heavy
 load. Keep the total comfortably below Postgres `max_connections`:
 
+The worker shares one PostgreSQL LISTEN connection across its three subscribers. Its effective
+pool ceiling is `max(2, WORKER_PG_POOL_MAX - 2)` in Compose: the default five-slot budget now uses
+at most three connections (one listener and two queries). This preserves the previous query
+concurrency while saving two idle listener sessions. The capacity formula below remains a
+conservative upper bound. When running the worker directly, the same adjustment uses `PG_POOL_MAX`.
+
 ```text
 (API_REPLICAS × PG_POOL_MAX) + (public-api replicas × PG_POOL_MAX) + WORKER_PG_POOL_MAX + maintenance margin
 ```
@@ -187,6 +244,7 @@ KANERA_ENVIRONMENT=production
 
 POSTGRES_PASSWORD=<openssl rand -hex 32>
 JWT_SECRET=<openssl rand -hex 32>
+MCP_INTERNAL_SECRET=<openssl rand -hex 32>
 MFA_ENCRYPTION_KEY=<openssl rand -hex 32>
 MEDIA_SIGNING_SECRET=<openssl rand -hex 32>
 SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
@@ -661,7 +719,7 @@ staff, demo, seed, test, and load-test organisations.
 | `POSTGRES_BIND_PORT` | no | Host port for the bundled Postgres service. Defaults to `5433`, mapped to container port `5432`. |
 | `WEB_BIND_PORT` | no | Loopback host port for the `web` container. Defaults to `4200`, mapped to container port `80`. Put HTTPS in front of it; it is never bound to external interfaces. |
 | `PG_POOL_MAX` | no | Max concurrent DB connections per API/public-api process. Defaults to `20` in Compose. Raise to `30`–`50` on a dedicated host. See Performance tuning. |
-| `WORKER_PG_POOL_MAX` | no | Max concurrent DB connections for the single worker. Defaults to `5` in compose. |
+| `WORKER_PG_POOL_MAX` | no | Worker connection budget, default `5` in Compose. Effective ceiling is `max(2, budget - 2)` after sharing LISTEN sessions; see Performance tuning. |
 | `PG_CONNECTION_TIMEOUT_MS` | no | Wait for a free pooled connection before failing. Defaults to `5000`. |
 | `PG_STATEMENT_TIMEOUT_MS` | no | Postgres kills any query exceeding this. Defaults to `30000`. |
 | `MIGRATION_PG_STATEMENT_TIMEOUT_MS` | no | Statement timeout for the one-shot migrator only. Defaults to `0` (disabled) so schema/data reconciliation is not killed by the API query timeout. |

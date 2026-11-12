@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AnyCard, AnyList } from "../table-view/table-view.types";
-import { buildTimelineRows, dayAt, dependencyPath, mondayOf, timelineHeader, timelineRange, timelineScale, weekendBands, xOf } from "./timeline-layout";
+import { buildTimelineRows, scaleTimelineRows, dayAt, dependencyPath, mondayOf, timelineHeader, timelineRange, timelineScale, weekendBands, xOf } from "./timeline-layout";
 
 /** Zooms at each header scale, in pixels per day. */
 const DAY_PX = 40;
@@ -18,6 +18,7 @@ import { dayNumber } from "@kanera/shared/schedule";
  *   group appears when every card is dated;
  * - a group's summary span stops short of its last bar;
  * - a collapsed group still emits its rows, or a card in two assignee groups is drawn once;
+ * - rescaling cached rows turns an undated row into a point or misses the 12px point boundary;
  * - a forward wire is drawn as a loop, or a conflict wire enters from the right.
  */
 
@@ -171,5 +172,24 @@ describe("dependencyPath", () => {
   it("loops back under the row when the dependent starts before the blocker ends", () => {
     const path = dependencyPath({ x: 200, y: 18 }, { x: 150, y: 54 }, 36);
     expect(path).toBe("M 200 18 H 210 V 34 H 140 V 54 H 150");
+  });
+});
+
+describe("scaleTimelineRows", () => {
+  it("preserves null geometry and crosses the point boundary at fractional zooms", () => {
+    const range = timelineRange([], TODAY);
+    const rows = buildTimelineRows([
+      card("dated", { startDateLocalDate: TODAY, dueDateLocalDate: "2026-10-23" }),
+      card("undated"),
+    ], "list", range, 1, context());
+    for (const px of [2.5, 4, 4.01, 16, 80]) {
+      const scaled = scaleTimelineRows(rows, px);
+      const dated = scaled.find((row) => row.kind === "card" && row.card.id === "dated")!;
+      const undated = scaled.find((row) => row.kind === "card" && row.card.id === "undated")!;
+      expect(dated).toMatchObject({ x: (dayNumber(TODAY) - range.startDay) * px, width: 3 * px, point: px <= 4 });
+      expect(undated).toMatchObject({ x: null, width: null, point: false });
+      expect(scaled[0]).toMatchObject({ x: (dayNumber(TODAY) - range.startDay) * px, width: 3 * px });
+    }
+    expect(rows.find((row) => row.kind === "card" && row.card.id === "dated")?.width).toBe(3);
   });
 });

@@ -40,6 +40,7 @@ import {
   type MapEdge,
   type MapNode,
 } from "./dependency-map.layout";
+import { DependencyChainViewportDirective } from "./dependency-chain-viewport.directive";
 import { readDependencyPreference, updateDependencyPreference, type DependencyLayout } from "./dependency-layout";
 import { tileContent, tileFields, tileHeight, type TileContent, type TileDensity } from "./dependency-map.tile";
 
@@ -115,7 +116,7 @@ let nextInstanceId = 0;
 @Component({
   selector: "k-dependency-map",
   standalone: true,
-  imports: [AvatarComponent, CardActionsMenuPopover, CardLabelsComponent, EmptyStateComponent, SegmentedComponent, TooltipDirective],
+  imports: [DependencyChainViewportDirective, AvatarComponent, CardActionsMenuPopover, CardLabelsComponent, EmptyStateComponent, SegmentedComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./dependency-map.component.html",
   styleUrl: "./dependency-map.component.scss",
@@ -288,6 +289,20 @@ export class DependencyMapComponent implements OnInit {
   });
 
   /** Where each chain box sits in the map layout. */
+  chainPinned(chain: MapChain): boolean {
+    const draft = this.linkDraft();
+    const menu = this.actionsMenuCardId();
+    const selected = this.selectedCardId();
+    return chain.nodes.some((node) => node.id === draft?.fromId || node.id === draft?.overId || node.id === menu || node.id === selected);
+  }
+
+  chainEstimatedHeight(chain: MapChain): number {
+    if (this.layoutMode() !== "list") return chainHeaderHeight(this.viewWidth()) + chain.height + STEP_LABEL_HEIGHT + 2;
+    // Steps have wrapping text and fields, so use an estimate until the first real measurement.
+    // The viewport directive retains that measured height when a chain scrolls out again.
+    return 72 + chain.nodes.reduce((height, node) => height + (this.density() === "slim" ? 120 : node.height + 70), 0);
+  }
+
   readonly packing = computed(() => {
     const chains = this.visibleChains();
     // The observer reports after the next frame; until then, measure, so the first packing of a

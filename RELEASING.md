@@ -18,6 +18,30 @@ hosted application itself is documented in [DEPLOY.md](DEPLOY.md).
 | Published Claude connector | Claude connector directory | live MCP server | deploy MCP; update the directory listing only when its public metadata or connection changes |
 | Kanera docs and agent discovery | `www.kanera.app` | site commit | build and deploy the sibling Kanera-site repository |
 
+## Self-host image security checks
+
+`publish-images.yml` scans each freshly built amd64 and arm64 image by its exact digest before
+creating release tags or attaching installer assets. Trivy reports all severities, including
+findings without fixes, in the `security-*` workflow artifacts. These reports are informational;
+a vulnerability's presence or an upstream package fix alone does not block publication.
+
+The release gate runs the exact same `scripts/scan-image-updates.py` command as weekly
+`image-scan.yml`: it blocks only when a newer compatible stable image tag removes high/critical
+findings from a pinned image. Compatibility follows the weekly same-major, same-flavour and
+stable-branch rules. Findings that remain in the newest compatible image do not block releases.
+Registry or scanner failures still fail the workflow because coverage could not be established.
+
+The workflow also scans the official PostgreSQL, Valkey and optional Caddy pins on both
+architectures and retains `security-official-services`. Review those reports alongside the built
+image reports; a green workflow does **not** mean zero known CVEs. The upgrade gate checks the
+repository's image pins, not npm dependency updates or independently patched packages.
+
+Runtime images install available Alpine package fixes during builds. The release workflow bypasses
+the runtime-stage cache so same-tag base images still receive new package fixes. For local rebuilds,
+use `docker buildx build --pull --no-cache-filter runtime` (or `docker compose build --pull --no-cache`)
+when rechecking after new security updates. Record the scanner/database version, image digests, architecture and remaining
+findings. See [the installer security review](docs/self-host-security.md) for the current baseline.
+
 ## Release order
 
 For a change that touches agent routing, the CLI, or public setup guidance, release in this order:
@@ -91,9 +115,10 @@ gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes --verify-tag
 
 Publishing the release starts `publish-images.yml`, which builds `kanera-api`, `kanera-web`,
 `kanera-mcp`, and `kanera-db-backup` for amd64 and arm64, tags them `X.Y.Z`, `X.Y`, and `X`, and
-attaches `docker-compose.yml`, `env.example`, and `env.full.example` to the release. Self-hosters
-install and update from those assets, so check that all three are attached before announcing the
-release. Rerun it for an existing tag from the Actions tab (workflow_dispatch with the tag).
+attaches `docker-compose.yml`, `docker-compose.https.yml`, `install.sh`, `env.example`, and
+`env.full.example` to the release. Self-hosters install and update from those assets, so check that
+all five are attached before announcing the release. Rerun it for an existing tag from the Actions
+tab (workflow_dispatch with the tag).
 
 Self-hosted install and update instructions download from `releases/latest/download/...`, so the
 newest `vX.Y.Z` release must keep GitHub's **Latest** badge. `publish-images.yml` claims it for the
