@@ -46,16 +46,17 @@ test("card detail controls stay reachable on desktop and phone", async ({ page, 
     await insideViewport(detail);
     expect(await detail.locator(".col-main").evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
     if (width < 768) {
-      // Full-screen on a phone: the title shares the close button's line instead of sitting under
-      // an empty strip that holds only the button, and stays clear of it.
+      // Full-screen on a phone: the action row is the top bar and holds the close button, the title
+      // gets its own full-width row beneath it, and the bar stays pinned once the panel scrolls.
       await detail.evaluate((element) => { element.scrollTop = 0; });
       const close = (await detail.locator(".close-btn").boundingBox())!;
-      const title = await detail.locator(".card-title").evaluate((element) => {
-        const box = element.getBoundingClientRect();
-        return { top: box.top, textRight: box.right - parseFloat(getComputedStyle(element).paddingRight) };
-      });
-      expect(title.top).toBeLessThan(close.y + close.height);
-      expect(title.textRight).toBeLessThanOrEqual(close.x);
+      const title = (await detail.locator(".card-title").boundingBox())!;
+      expect(title.y).toBeGreaterThanOrEqual(close.y + close.height);
+      expect(title.width).toBeGreaterThan(page.viewportSize()!.width * 0.8);
+      await detail.evaluate((element) => { element.scrollTop = 400; });
+      expect(await detail.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      await insideViewport(detail.locator(".close-btn"));
+      expect((await detail.locator(".close-btn").boundingBox())!.y).toBeLessThan(close.y + 1);
     }
     await detail.locator(".attach-row").scrollIntoViewIfNeeded();
     await detail.locator(".label-add-btn").click();

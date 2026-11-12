@@ -195,27 +195,65 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 1px;
+  // No gap, and the board headings pad rather than margin: any strip between rows and headings is a
+  // hover dead zone, and crossing it blinked the highlight off and back on.
   min-height: 0;
   padding: 2px 6px 8px;
   overflow-y: auto;
 }
 
 .not-queued-board {
-  display: flex;
   flex: none;
-  gap: 6px;
-  align-items: center;
-  margin: 10px 10px 4px;
-  color: var(--text-muted);
+  margin: 0;
+  padding: 6px 0 2px;
   font-size: var(--text-xs);
   font-weight: 600;
+}
 
-  span {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+// The whole heading is the fold toggle. Its chevron trails rather than leads, so the board icon
+// keeps the 16px edge the rows' text and the Not queued chevron share (rows' 6px inset + 10px).
+.not-queued-board-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: var(--h-sm);
+  padding: 4px 6px 4px 10px;
+  color: var(--text-muted);
+  font: inherit;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+
+  // Keyed on the heading too, so its padding above and below keeps the highlight lit.
+  &:hover:not(:disabled),
+  .not-queued-board:hover > & {
+    color: var(--text);
+    background: var(--surface-hover);
   }
+}
+
+.not-queued-board-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.not-queued-board-count {
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.not-queued-board-chevron {
+  order: 1;
+  margin-left: auto;
+  font-size: var(--text-base);
 }
 
 .not-queued-row {
@@ -250,6 +288,32 @@
 
   &.cdk-drag-placeholder {
     opacity: 0.35;
+  }
+
+  // Ctrl/⌘- or Shift-click selection; the same wash and ring as the queue's selected rows above.
+  &.is-multi-selected {
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  }
+
+  // The rest of a dragged selection fades like the placeholder: it travels with the preview.
+  &.is-drag-companion {
+    opacity: 0.35;
+  }
+
+  // The preview clones the grabbed row, so the count rides on an attribute set before the drag.
+  &.cdk-drag-preview[data-drag-label]::after {
+    content: attr(data-drag-label);
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    padding: 2px 8px;
+    color: var(--accent-fg);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    background: var(--accent);
+    border-radius: 999px;
+    box-shadow: var(--shadow-sm);
   }
 }
 
@@ -347,6 +411,10 @@
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
   .not-queued-row {
     min-height: 48px;
+  }
+
+  .not-queued-board-toggle {
+    min-height: 44px;
   }
 
   .not-queued-add {

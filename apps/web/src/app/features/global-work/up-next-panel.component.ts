@@ -13,6 +13,7 @@ import {
 } from "../../shared/priority-queue/priority-queue.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { icu } from "../../core/i18n/icu";
+import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
 import { formatDueDate, isDueSoon, isOverdue } from "../board/due-date.util";
 
@@ -69,8 +70,14 @@ export class UpNextPanelComponent {
   readonly allowQuickComplete = input(false);
 
   readonly reordered = output<PriorityReorder>();
+  /** A selection moved as one; see `PriorityQueueComponent.reorderedMany` for why steps run in order. */
+  readonly reorderedMany = output<PriorityReorder[]>();
   readonly removed = output<{ priorityId: string }>();
-  readonly added = output<PriorityAnchor & { cardId: string; dropped?: boolean }>();
+  /**
+   * `cardIds`, when present, is a Not queued selection to add in that order at the anchor; it
+   * replaces any widening the host would do from the board's own selection.
+   */
+  readonly added = output<PriorityAnchor & { cardId: string; dropped?: boolean; cardIds?: string[] }>();
   readonly cardOpened = output<string>();
   readonly completed = output<{ cardId: string; completed: boolean }>();
   readonly closed = output<void>();
@@ -161,16 +168,136 @@ export class UpNextPanelComponent {
   }
 
   onNotQueuedAdd(cardId: string): void {
-    this.added.emit({ cardId, beforeId: null });
+    const cardIds = this.notQueuedGestureIds(cardId);
+    this.notQueuedClearSelection();
+    this.added.emit(cardIds.length > 1 ? { cardId, cardIds, beforeId: null } : { cardId, beforeId: null });
+  }
+
+  /** The queue's own `added`, widened to the Not queued selection when one of its rows was dropped. */
+  onQueueAdded(event: PriorityAnchor & { cardId: string; dropped?: boolean }): void {
+    const cardIds = event.dropped ? this.notQueuedGestureIds(event.cardId) : [event.cardId];
+    if (cardIds.length > 1) {
+      this.notQueuedClearSelection();
+      this.added.emit({ ...event, cardIds });
+      return;
+    }
+    this.added.emit(event);
   }
 
   // Registered like the queue's own drags, so a realtime refresh waits for the drop to settle.
-  onNotQueuedDragStarted(): void {
+  onNotQueuedDragStarted(cardId: string): void {
     this.cardDrag.start("up-next-not-queued");
+    this.notQueuedGroupDragging.set(this.notQueuedGestureIds(cardId).length > 1);
   }
 
   onNotQueuedDragEnded(): void {
+    this.notQueuedGroupDragging.set(false);
     this.cardDrag.end();
+  }
+
+  /* ── Collapsed boards ───────────────────────────────────────────────────────
+   *
+   * Per device, like the sidebar's collapsed groups: it answers "which boards am I not choosing
+   * from right now", which differs between a work laptop and a phone.
+   */
+  readonly collapsedBoardIds = signal<ReadonlySet<string>>(readCollapsedBoards());
+
+  toggleBoard(boardId: string): void {
+    const next = new Set(this.collapsedBoardIds());
+    if (next.has(boardId)) {
+      next.delete(boardId);
+    } else {
+      next.add(boardId);
+      // A collapsed board's rows are out of sight, so they must not ride along on the next add.
+      const hidden = new Set(this.notQueuedGroups().find((group) => group.boardId === boardId)?.rows.map((row) => row.card.id) ?? []);
+      this.notQueuedSelectedIds.update((ids) => new Set([...ids].filter((id) => !hidden.has(id))));
+    }
+    this.collapsedBoardIds.set(next);
+    try {
+      localStorage.setItem(STORAGE_KEYS.UP_NEXT_COLLAPSED_BOARDS, JSON.stringify([...next]));
+    } catch {
+      // Storage can be unavailable in privacy mode; the sections just reopen next visit.
+    }
+  }
+
+  boardToggleLabel(boardName: string, collapsed: boolean): string {
+    return collapsed
+      ? $localize`:Button that shows one board's cards in the Not queued list:Show cards from ${boardName}:board:`
+      : $localize`:Button that hides one board's cards in the Not queued list:Hide cards from ${boardName}:board:`;
+  }
+
+  /* ── Not queued multi-select ────────────────────────────────────────────────
+   *
+   * Ctrl/⌘-click toggles and Shift-click selects a range, as on board tiles. Card ids; anything no
+   * longer offered drops out through `notQueuedSelection`, which also fixes the order to the order
+   * on screen, so a dragged or added selection joins the queue the way it reads here.
+   */
+  private readonly notQueuedSelectedIds = signal<ReadonlySet<string>>(new Set());
+  private notQueuedAnchorId: string | null = null;
+  readonly notQueuedGroupDragging = signal(false);
+
+  /** Expanded rows, top to bottom, the frame both range selection and add order use. */
+  private readonly notQueuedVisibleIds = computed(() => {
+    const collapsed = this.collapsedBoardIds();
+    return this.notQueuedGroups()
+      .filter((group) => !collapsed.has(group.boardId))
+      .flatMap((group) => group.rows.map((row) => row.card.id));
+  });
+
+  readonly notQueuedSelection = computed(() => {
+    const ids = this.notQueuedSelectedIds();
+    return ids.size === 0 ? [] : this.notQueuedVisibleIds().filter((id) => ids.has(id));
+  });
+  private readonly notQueuedSelectionSet = computed(() => new Set(this.notQueuedSelection()));
+
+  readonly notQueuedDragLabel = computed(() =>
+    icu($localize`:Shown on the drag preview while dragging several selected Up next cards:{count, plural, one {# card} other {# cards}}`, { count: this.notQueuedSelection().length }),
+  );
+
+  isNotQueuedSelected(cardId: string): boolean {
+    return this.notQueuedSelectionSet().has(cardId);
+  }
+
+  notQueuedClearSelection(): void {
+    if (this.notQueuedSelectedIds().size === 0) return;
+    this.notQueuedSelectedIds.set(new Set());
+    this.notQueuedAnchorId = null;
+  }
+
+  onNotQueuedRowClick(cardId: string, event: MouseEvent): void {
+    if (event.button === 0 && (event.metaKey || event.ctrlKey || event.shiftKey)) {
+      event.preventDefault();
+      this.selectNotQueued(cardId, event.shiftKey, event.metaKey || event.ctrlKey);
+      return;
+    }
+    this.notQueuedClearSelection();
+    this.cardOpened.emit(cardId);
+  }
+
+  private selectNotQueued(cardId: string, range: boolean, additive: boolean): void {
+    const visible = this.notQueuedVisibleIds();
+    const from = this.notQueuedAnchorId ? visible.indexOf(this.notQueuedAnchorId) : -1;
+    if (range && from >= 0) {
+      const to = visible.indexOf(cardId);
+      const [start, end] = from < to ? [from, to] : [to, from];
+      const next = new Set(additive ? this.notQueuedSelectedIds() : []);
+      for (const id of visible.slice(start, end + 1)) next.add(id);
+      this.notQueuedSelectedIds.set(next);
+      return;
+    }
+    const next = new Set(this.notQueuedSelectedIds());
+    if (next.has(cardId)) next.delete(cardId);
+    else next.add(cardId);
+    this.notQueuedSelectedIds.set(next);
+    this.notQueuedAnchorId = cardId;
+  }
+
+  /** The cards a gesture on `cardId` carries: the selection when `cardId` is in one, capped to room. */
+  private notQueuedGestureIds(cardId: string): string[] {
+    const selection = this.notQueuedSelection();
+    if (selection.length < 2 || !selection.includes(cardId)) return [cardId];
+    const room = Math.max(1, this.maxEntries() - this.totalCount());
+    return selection.slice(0, room);
   }
 }
 
@@ -192,6 +319,15 @@ type NotQueuedGroup = {
   boardColor: string | null;
   rows: NotQueuedRow[];
 };
+
+function readCollapsedBoards(): ReadonlySet<string> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEYS.UP_NEXT_COLLAPSED_BOARDS) ?? "[]");
+    return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
 
 /** ISO dates sort as strings; undated cards go last. */
 function dueKey(card: UpNextAddableCard): string {

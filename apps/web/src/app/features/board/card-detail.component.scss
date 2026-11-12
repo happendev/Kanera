@@ -167,27 +167,6 @@
   to { box-shadow: 0 1px 0 var(--border); } // --divider all but vanishes on the dark surface.
 }
 
-@keyframes card-detail-status-band {
-  from { background: var(--surface-2); }
-  to { background: var(--surface); }
-}
-
-// The phone strip appears only once the panel scrolls. Hidden, not just transparent, at rest, so
-// taps on the title (edit) and the cover (lightbox) beneath it still land.
-@keyframes card-detail-strip-reveal {
-  from {
-    visibility: hidden;
-    opacity: 0;
-    box-shadow: 0 1px 0 transparent;
-  }
-
-  to {
-    visibility: visible;
-    opacity: 1;
-    box-shadow: 0 1px 0 var(--border);
-  }
-}
-
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -345,6 +324,23 @@
 
   &.has-cover {
     padding-top: 12px;
+  }
+}
+
+// Above phone width the toolbar's controls sit in the header's own row, with the title between the
+// completion button and the actions. The wrapper exists for the phone layout's pinned bar (below).
+.panel-toolbar {
+  display: contents;
+}
+
+.panel-header {
+  .completion-btn {
+    order: -2;
+  }
+
+  .card-title,
+  .title-input {
+    order: -1;
   }
 }
 
@@ -888,43 +884,65 @@
 
 @media (max-width: 767.98px) {
 
-  // On phones the title was squeezed between the completion and action buttons.
-  // Let the header wrap and pull the title onto its own full-width row above the
-  // action toolbar so long titles get the whole line.
+  // On phones the header splits in two. The action row becomes the panel's top bar, holding the
+  // close button, and stays pinned while the panel scrolls; the title takes its own full-width row
+  // beneath it and scrolls away with the content. The header box dissolves (display: contents) so
+  // the bar's sticky containing block is the scrolling panel, not the header, which would carry the
+  // bar off-screen with it. A separate strip for a lone close button wasted a 52px band once scrolled.
   .panel-header {
-    flex-wrap: wrap;
+    display: contents;
   }
 
-  .panel.mode-modal {
-    // Fixed, not absolute: the panel itself scrolls at this width (see below) and the close button
-    // must stay reachable. The panel is full-screen here, so viewport coordinates line up with it.
-    // It sits centred in the sticky top strip (.panel::before, below), so nothing interactive can
-    // ever scroll under it, and the header no longer reserves room beside it. Above the strip's
-    // z-index 31.
-    .close-btn {
-      position: fixed;
-      top: calc(env(safe-area-inset-top) + 10px);
-      right: max(8px, calc(env(safe-area-inset-right) + 8px));
-      z-index: 32;
-      background: var(--surface);
-      color: var(--text);
-      border-color: var(--border);
+  .panel-toolbar {
+    position: sticky;
+    top: env(safe-area-inset-top);
+    // Above the body's own sticky and positioned content; the status-bar backing (.panel::before) is 31.
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 20px;
+    background: var(--surface-2);
+  }
 
-      &:hover:not(:disabled) {
-        background: var(--surface-2);
-      }
+  .close-btn {
+    margin-inline-start: auto;
+  }
 
-      // Alone in its corner here, so the coarse-pointer halo (below) can take the full 44px square.
-      &::after {
-        inset-inline: calc(50% - 22px);
-      }
+  // Back in the panel's column: unlike the desktop row, don't grow, shrink or reorder. Matches the
+  // desktop order rule's specificity so it wins here.
+  .panel-header .card-title,
+  .panel-header .title-input {
+    order: 0;
+    flex: none;
+    background: var(--surface-2);
+  }
+
+  .card-title {
+    padding: 0 20px 12px;
+  }
+
+  // Auto width so the column's stretch fills the row inside the margins (a 100% width overflows).
+  .title-input {
+    width: auto;
+    margin: 0 20px 12px;
+  }
+
+  // The subheader normally carries the divider under the header band; without it, the title does.
+  .panel:not(:has(.panel-subheader)) {
+    .card-title,
+    .title-input {
+      border-bottom: 1px solid var(--border);
     }
   }
 
-  .card-title,
-  .title-input {
-    order: -1;
-    flex-basis: 100%;
+  // Hairline under the pinned bar once content scrolls beneath it.
+  @supports (animation-timeline: scroll()) {
+    .panel-toolbar {
+      animation: card-detail-strip-rule linear both;
+      animation-timeline: scroll(nearest block);
+      animation-range: 0 8px;
+    }
   }
 
   &:has(.panel.mode-modal) {
@@ -935,84 +953,19 @@
 
   // One scroll surface on phones. With the cover, header and subheader pinned, the body was left a
   // sliver of the screen to scroll in; scrolling the whole panel lets them move out of the way so
-  // the description, checklists and attachments get the full height. The status-bar backing stays
-  // pinned so content never scrolls under the notch.
+  // the description, checklists and attachments get the full height. The status-bar backing and the
+  // action bar stay pinned so content never scrolls under the notch.
   .panel {
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
-    // Focus and programmatic scrolling (Tab, scrollIntoView on Dependencies) land below the strip.
-    scroll-padding-top: calc(env(safe-area-inset-top) + 52px);
+    // Focus and programmatic scrolling (Tab, scrollIntoView on Dependencies) land below the bar.
+    scroll-padding-top: calc(env(safe-area-inset-top) + 56px);
 
     &::before {
       position: sticky;
       top: 0;
       z-index: 31;
-    }
-  }
-
-  // The full-screen modal grows that backing into a 52px strip that holds the close button. A
-  // floating button covered whatever scrolled beneath it (a checklist row's menu) and, at rest, the
-  // cover image or the header's right edge; content now scrolls under the strip instead. The hairline
-  // only appears once the panel has scrolled, where the strip starts covering content.
-  .panel.mode-modal::before {
-    height: calc(env(safe-area-inset-top) + 52px);
-    background: var(--surface);
-  }
-
-  // Where the strip can follow the scroll, it takes no room at rest: the title shares its line with
-  // the close button, or the cover runs to the top with the button over it, as a phone header should.
-  // A permanent strip left a 52px band holding a lone ×, above even the cover. The strip only
-  // appears once the panel scrolls, so content still never scrolls under a bare button. Without
-  // scroll timelines the strip above stays in flow instead, since a strip that could not hide would
-  // cover the title.
-  @supports (animation-timeline: scroll()) {
-    // Back to the status-bar backing alone, still solid and in flow. The header's colour at rest,
-    // the strip's once scrolled, so it reads as one bar with whichever sits under it.
-    .panel.mode-modal::before {
-      order: -2;
-      height: env(safe-area-inset-top);
-      animation: card-detail-status-band linear both;
-      animation-timeline: scroll(nearest block);
-      animation-range: 0 8px;
-    }
-
-    // The strip itself: sticky under the status bar, overlapping the content below it by its own
-    // height (the negative margin), so it costs no layout.
-    .panel.mode-modal::after {
-      content: "";
-      order: -1;
-      position: sticky;
-      top: env(safe-area-inset-top);
-      z-index: 31;
-      flex-shrink: 0;
-      height: 52px;
-      margin-bottom: -52px;
-      background: var(--surface);
-      // Hidden unless the reveal runs: with animations stripped (a stylesheet override, a test
-      // harness), a strip stuck visible would sit over the title for good.
-      visibility: hidden;
-      animation: card-detail-strip-reveal linear both;
-      animation-timeline: scroll(nearest block);
-      animation-range: 0 8px;
-    }
-
-    // Clear the close button on the title's line, and centre that line on the button: the button is
-    // 32px at 10px from the top, the title's first line ~24px tall.
-    .panel.mode-modal .panel-header:not(.has-cover) {
-      padding-top: 14px;
-
-      .card-title {
-        padding-inline-end: 40px;
-      }
-
-      // The 36px input is taller than the title's line, so it rises by the difference to stay
-      // centred on the button while editing.
-      .title-input {
-        flex-basis: calc(100% - 40px);
-        margin-block-start: -6px;
-        margin-inline-end: 40px;
-      }
     }
   }
 
@@ -1056,10 +1009,17 @@
 
 @media (max-width: 480px) {
 
-  // Tighten header so action buttons have room and don't overflow the panel.
-  .panel-header {
-    gap: 4px;
-    padding: 12px 14px 10px;
+  // Tighter gutters so the action buttons have room and don't overflow the panel.
+  .panel-toolbar {
+    padding-inline: 14px;
+  }
+
+  .card-title {
+    padding-inline: 14px;
+  }
+
+  .title-input {
+    margin-inline: 14px;
   }
 
 }

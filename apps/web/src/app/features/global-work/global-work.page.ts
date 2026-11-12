@@ -1834,15 +1834,16 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * From the panel itself — its "Add card" picker (appends) or a board tile dropped onto it (joins
    * where the pointer released it). Failures render inside the panel, where the gesture ended.
    */
-  onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null; dropped?: boolean }): void {
+  onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null; dropped?: boolean; cardIds?: string[] }): void {
     if (!this.dockCanEdit()) return;
     this.priorityError.set(null);
-    const { cardId, dropped, ...anchor } = event;
+    const { cardId, dropped, cardIds: panelCardIds, ...anchor } = event;
     const target = this.overviewDockQueue()?.target.userId;
     const add = (id: string) => this.overviewDock() && target
       ? this.state.addTeamPriority(target, id, anchor)
       : this.state.addPriority(id, anchor);
-    const cardIds = dropped ? this.upNextDropCardIds(cardId) : [cardId];
+    // A Not queued selection arrives already ordered and capped by the panel.
+    const cardIds = panelCardIds ?? (dropped ? this.upNextDropCardIds(cardId) : [cardId]);
     if (cardIds.length === 1) {
       void add(cardId).catch(() => {
         this.priorityError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
@@ -1891,6 +1892,24 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       : this.state.movePriority(priorityId, anchor);
     void moved.catch(() => {
       this.priorityError.set($localize`We couldn’t reorder that Up next card. Its previous position has been restored.`);
+    });
+  }
+
+  /** A selection moved as one. Awaited step by step: each step anchors on the one before it. */
+  onPriorityReorderedMany(steps: { priorityId: string; afterId?: string | null; beforeId?: string | null }[]): void {
+    if (!this.dockCanEdit()) return;
+    this.priorityError.set(null);
+    const target = this.overviewDockQueue()?.target.userId;
+    const move = (step: (typeof steps)[number]) => {
+      const { priorityId, ...anchor } = step;
+      return this.overviewDock() && target
+        ? this.state.moveTeamPriority(target, priorityId, anchor)
+        : this.state.movePriority(priorityId, anchor);
+    };
+    void (async () => {
+      for (const step of steps) await move(step);
+    })().catch(() => {
+      this.priorityError.set($localize`We couldn’t move every selected Up next card. Cards already moved were kept.`);
     });
   }
 

@@ -8627,7 +8627,9 @@
       "src/app/features/board/board-export.util.ts",
       "src/app/features/board/table-view/export.util.ts",
       "src/app/features/board/work-done-view/work-done-day.component.ts",
-      "src/app/features/home/home.page.ts"
+      "src/app/features/global-work/up-next-panel.component.ts",
+      "src/app/features/home/home.page.ts",
+      "src/app/shared/priority-queue/priority-queue.component.ts"
     ]
   },
   "5778283864184615429": "Add card to {$group}",
@@ -17088,6 +17090,13 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
+  "2590890535729371849": "We couldn’t move every selected Up next card. Cards already moved were kept.",
+  "@2590890535729371849": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/priorities/my-priorities-panel.component.ts"
+    ]
+  },
   "4875676471937718523": "We couldn’t remove that card from Up next. It has been put back.",
   "@4875676471937718523": {
     "x-files": [
@@ -17774,6 +17783,20 @@
   "655734672140667511": "Hide cards not in Up next",
   "@655734672140667511": {
     "description": "Button that hides the Not queued list in the Up next panel",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.ts"
+    ]
+  },
+  "1292748783957003172": "Show cards from {$board}",
+  "@1292748783957003172": {
+    "description": "Button that shows one board's cards in the Not queued list",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.ts"
+    ]
+  },
+  "1365777519146985975": "Hide cards from {$board}",
+  "@1365777519146985975": {
+    "description": "Button that hides one board's cards in the Not queued list",
     "x-files": [
       "src/app/features/global-work/up-next-panel.component.ts"
     ]
@@ -24306,7 +24329,8 @@
     "description": "Automation action summary",
     "x-files": [
       "src/app/features/workspace-settings/automations/automation-presentation.util.ts",
-      "src/app/features/workspace-settings/automations/automations.page.ts"
+      "src/app/features/workspace-settings/automations/automations.page.ts",
+      "src/app/shared/priority-queue/priority-queue.component.html"
     ]
   },
   "645196513002746971": "Move to bottom",

@@ -14,6 +14,7 @@ import { CardKeyDisplayService } from "../card-key-display.service";
 import type { PickerGroup } from "../picker-list.component";
 import { priorityRankHeat } from "../priority-rank";
 import { TooltipDirective } from "../tooltip.directive";
+import { icu } from "../../core/i18n/icu";
 import { priorityAddGroups, type PriorityAddableCard } from "./priority-add-cards";
 import { priorityAnchorAt, type PriorityAnchor } from "./priority-queue-math";
 
@@ -149,6 +150,11 @@ export class PriorityQueueComponent {
   readonly allowQuickComplete = input(false);
   readonly readOnly = input(false);
   /**
+   * Ctrl/⌘-click and Shift-click select several rows, which then drag, move to top and drag out as
+   * one. Opt-in because a host must handle `reorderedMany`; the gestures mirror board tiles.
+   */
+  readonly multiSelect = input(false);
+  /**
    * Optional shared wall-clock reading for a host that renders an aggregate of these row states.
    * Null preserves the ordinary render-time behavior used by standalone queue surfaces.
    */
@@ -158,6 +164,13 @@ export class PriorityQueueComponent {
   protected readonly rankHeat = priorityRankHeat;
 
   readonly reordered = output<PriorityReorder>();
+  /**
+   * A multi-row move (a dragged selection, or "Move to top" on a selected row), as single-row moves
+   * in the order they must run. Each step after the first anchors on the step before it, so the host
+   * must await each one before sending the next: the server places a row relative to its anchor's
+   * position at write time, and a step that overtook its predecessor would land beside the old spot.
+   */
+  readonly reorderedMany = output<PriorityReorder[]>();
   readonly removed = output<{ priorityId: string }>();
   /**
    * A new card for the queue, with the anchor for where it was dropped (append when picked).
@@ -276,6 +289,7 @@ export class PriorityQueueComponent {
       if (!this.readOnly()) return;
       this.closeActionsMenu();
       this.addOpenAt.set(null);
+      this.clearSelection();
     });
   }
 
@@ -373,11 +387,116 @@ export class PriorityQueueComponent {
     this.actionsMenu.set([]);
   }
 
-  onDragStarted(): void {
+  /* ── Multi-select ────────────────────────────────────────────────────────────
+   *
+   * Priority-entry ids, not card ids: an entry is what a move names. Stale ids (a row that left the
+   * queue) stay in the set harmlessly; everything reads `selection()`, which keeps only rows that are
+   * still here and still draggable, in queue order.
+   */
+  private readonly selectedIds = signal<ReadonlySet<string>>(new Set());
+  private selectionAnchorId: string | null = null;
+
+  readonly selection = computed<WorkPriorityItem[]>(() => {
+    const ids = this.selectedIds();
+    if (ids.size === 0) return [];
+    return this.items().filter((item) => ids.has(item.id) && this.isDraggable(item));
+  });
+  private readonly selectionIds = computed(() => new Set(this.selection().map((item) => item.id)));
+
+  /** Copied onto the CDK preview clone, which is taken from the row at drag start. */
+  readonly multiDragLabel = computed(() =>
+    icu($localize`:Shown on the drag preview while dragging several selected Up next cards:{count, plural, one {# card} other {# cards}}`, { count: this.selection().length }),
+  );
+
+  isMultiSelected(entry: WorkPriorityItem): boolean {
+    return this.selectionIds().has(entry.id);
+  }
+
+  clearSelection(): void {
+    if (this.selectedIds().size === 0) return;
+    this.selectedIds.set(new Set());
+    this.selectionAnchorId = null;
+  }
+
+  /** The row's title click: a modifier selects, a plain click opens the card and drops any selection. */
+  onRowMainClick(row: QueueRow, card: WireCardSummary, event: MouseEvent): void {
+    const modified = event.metaKey || event.ctrlKey || event.shiftKey;
+    if (modified && this.multiSelect() && event.button === 0 && this.isDraggable(row.entry)) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.selectRow(row.entry, event.shiftKey, event.metaKey || event.ctrlKey);
+      return;
+    }
+    this.clearSelection();
+    this.onCardOpened(card, event);
+  }
+
+  /** Same toggle and range rules as board tiles (see the board page's bulk selection). */
+  private selectRow(entry: WorkPriorityItem, range: boolean, additive: boolean): void {
+    const current = this.selectedIds();
+    const anchorIndex = this.selectionAnchorId ? this.items().findIndex((item) => item.id === this.selectionAnchorId) : -1;
+    if (range && anchorIndex >= 0) {
+      const to = this.items().findIndex((item) => item.id === entry.id);
+      const [start, end] = anchorIndex < to ? [anchorIndex, to] : [to, anchorIndex];
+      const next = new Set(additive ? current : []);
+      for (const item of this.items().slice(start, end + 1)) {
+        if (this.isDraggable(item)) next.add(item.id);
+      }
+      // The anchor stays put, so repeated Shift-clicks grow and shrink one range.
+      this.selectedIds.set(next);
+      return;
+    }
+    const next = new Set(current);
+    if (next.has(entry.id)) next.delete(entry.id);
+    else next.add(entry.id);
+    this.selectedIds.set(next);
+    this.selectionAnchorId = entry.id;
+  }
+
+  /** The rows a gesture on `entry` acts on: the whole selection when `entry` is part of one. */
+  private gestureGroup(entry: WorkPriorityItem): WorkPriorityItem[] {
+    const selection = this.selection();
+    return selection.length > 1 && selection.some((item) => item.id === entry.id) ? selection : [entry];
+  }
+
+  /** Lands `group` contiguously, in queue order, with its first row at `anchor`. */
+  private emitGroupMove(group: WorkPriorityItem[], anchor: PriorityAnchor): void {
+    const [first, ...others] = group;
+    if (!first) return;
+    if (others.length === 0) {
+      this.reordered.emit({ priorityId: first.id, ...anchor });
+      return;
+    }
+    let previous = first.id;
+    const steps: PriorityReorder[] = [{ priorityId: first.id, ...anchor }];
+    for (const item of others) {
+      steps.push({ priorityId: item.id, afterId: previous });
+      previous = item.id;
+    }
+    this.reorderedMany.emit(steps);
+  }
+
+  /** True when the row (or its selection) already heads the queue, in order. */
+  isAtTop(entry: WorkPriorityItem): boolean {
+    const group = this.gestureGroup(entry);
+    return group.every((item, index) => this.items()[index]?.id === item.id);
+  }
+
+  moveToTop(entry: WorkPriorityItem): void {
+    if (this.isAtTop(entry)) return;
+    this.emitGroupMove(this.gestureGroup(entry), { afterId: null });
+  }
+
+  /** True while a row that is part of a multi-row selection is being dragged. */
+  readonly groupDragging = signal(false);
+
+  onDragStarted(entry: WorkPriorityItem): void {
     this.cardDrag.start(this.dragLaneId());
+    this.groupDragging.set(this.gestureGroup(entry).length > 1);
   }
 
   onDragEnded(): void {
+    this.groupDragging.set(false);
     this.cardDrag.end();
   }
 
@@ -431,12 +550,18 @@ export class PriorityQueueComponent {
     }
     const moved = this.rows()[event.previousIndex]?.entry;
     if (!moved) return;
+    const group = this.gestureGroup(moved);
     // Released outside the surface: the gesture reads "take it out of the queue", so it performs the
     // same removal the row's × does. Safe to key off the release point alone — CDK fires drops only
     // on an actual pointer release, so there is no cancelled-drag path that could land here, and
     // nothing else accepts these rows (this drop list is connected to no other).
     if (!event.isPointerOverContainer) {
-      this.removed.emit({ priorityId: moved.id });
+      for (const item of group) this.removed.emit({ priorityId: item.id });
+      this.clearSelection();
+      return;
+    }
+    if (group.length > 1) {
+      this.emitGroupDrop(moved, group, event.currentIndex);
       return;
     }
     if (event.previousIndex === event.currentIndex) return;
@@ -452,6 +577,23 @@ export class PriorityQueueComponent {
     const rest = this.items().filter((item) => item.id !== moved.id);
     const restRows = this.rows().filter((row) => row.entry.id !== moved.id);
     this.reordered.emit({ priorityId: moved.id, ...priorityAnchorAt(rest, this.queueIndexAt(restRows, rest, slot)) });
+  }
+
+  /**
+   * A dragged selection. CDK's `currentIndex` counts the rendered rows without the dragged one, but
+   * with the rest of the selection still in place, so the slot is first walked past any selected
+   * rows (they travel with the drag) and then re-expressed among the rows that stay.
+   */
+  private emitGroupDrop(moved: WorkPriorityItem, group: WorkPriorityItem[], slot: number): void {
+    const groupIds = new Set(group.map((item) => item.id));
+    const withoutDragged = this.rows().filter((row) => row.entry.id !== moved.id);
+    let index = slot;
+    while (index < withoutDragged.length && groupIds.has(withoutDragged[index]!.entry.id)) index += 1;
+    const landingId = withoutDragged[index]?.entry.id ?? null;
+    const rest = this.items().filter((item) => !groupIds.has(item.id));
+    const restRows = this.rows().filter((row) => !groupIds.has(row.entry.id));
+    const restSlot = landingId === null ? restRows.length : restRows.findIndex((row) => row.entry.id === landingId);
+    this.emitGroupMove(group, priorityAnchorAt(rest, this.queueIndexAt(restRows, rest, restSlot)));
   }
 
   /** The queue index a rendered slot lands on: before that row's first entry, or past the end. */
