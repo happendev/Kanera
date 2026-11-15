@@ -3,7 +3,7 @@ import { AGENT_RUN_STATUSES, AGENT_RUN_TERMINAL_STATUSES, type AgentRun } from "
 
 const runTitle = z.string().trim().min(1).max(200);
 const runSummary = z.string().trim().max(4000);
-const runExternalUrl = z.url().max(2000);
+const runExternalUrl = z.url({ protocol: /^https?$/ }).max(2000);
 
 /**
  * Start a run on a card. Status begins as "running"; the agent later reports progress with the

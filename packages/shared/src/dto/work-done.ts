@@ -1,3 +1,4 @@
+import { isoTimestamp } from "./_dates.js";
 import { z } from "zod";
 import type { WireCardSummary } from "../events/index.js";
 import { ianaTimeZone } from "./_time-zone.js";
@@ -32,8 +33,8 @@ function idListParam(max: number) {
  * and applied in SQL, or the strip would report more work than is actually listed.
  */
 export const workDoneSummaryQuery = z.object({
-  from: z.iso.datetime(),
-  to: z.iso.datetime(),
+  from: isoTimestamp,
+  to: isoTimestamp,
   boardId: z.uuid().optional(),
   q: z.string().trim().min(1).max(200).optional(),
   timeZone: ianaTimeZone,

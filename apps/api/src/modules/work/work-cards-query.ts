@@ -72,15 +72,7 @@ function encodeCursor(cursor: WorkCursor): string {
 function decodeCursor(raw: string | undefined): WorkCursor | null {
   if (!raw) return null;
   try {
-    const value = JSON.parse(gunzipSync(Buffer.from(raw, "base64url")).toString("utf8")) as Partial<WorkCursor>;
-    if (
-      typeof value.asOf !== "string"
-      || !Number.isFinite(new Date(value.asOf).getTime())
-      || !Array.isArray(value.seenIds)
-      || value.seenIds.length > 10_000
-      || value.seenIds.some((id) => typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id))
-    ) throw new Error();
-    return { asOf: value.asOf, seenIds: value.seenIds };
+    return dto.workCardsCursor.parse(JSON.parse(gunzipSync(Buffer.from(raw, "base64url"), { maxOutputLength: 1_000_000 }).toString("utf8")));
   } catch {
     throw badRequest("invalid work cursor");
   }

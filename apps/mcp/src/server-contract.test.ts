@@ -20,6 +20,40 @@ const W2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const TODAY_UTC = new Date().toISOString().slice(0, 10);
 const WEEK_END_UTC = new Date(Date.parse(`${TODAY_UTC}T00:00:00Z`) + 6 * 86_400_000).toISOString().slice(0, 10);
 
+// A real upstream API rejection cannot prove that the MCP parser stopped a
+// request before making that call. Use the real SDK dispatch with a counted
+// transport to check this local contract boundary independently of the UI.
+void test("custom-field input boundaries reject unsafe scalar values before upstream requests", async () => {
+  const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test" });
+  const client = new Client({ name: "kanera-input-validation", version: "1" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return new Response(JSON.stringify({ ok: true }), { status: 200 }); };
+  try {
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    for (const value of [
+      { type: "number", value: "NaN" },
+      { type: "number", value: "1e999999" },
+      { type: "url", value: "javascript:alert(1)" },
+      { type: "url", value: "data:text/html,unsafe" },
+    ]) {
+      const result = await client.callTool({ name: "cards.set_custom_field_value", arguments: { cardId: C, fieldId: F, value } });
+      assert.equal(result.isError, true);
+      assert.equal(calls, 0);
+    }
+    for (const value of [{ valueNumber: "Infinity" }, { valueUrl: "javascript:alert(1)" }]) {
+      const result = await client.callTool({ name: "cards.bulk_set_custom_field", arguments: { boardId: B, cardIds: [C], fieldId: F, mode: "setAll", ...value } });
+      assert.equal(result.isError, true);
+      assert.equal(calls, 0);
+    }
+    const valid = await client.callTool({ name: "cards.set_custom_field_value", arguments: { cardId: C, fieldId: F, value: { type: "number", value: "12.50" } } });
+    assert.notEqual(valid.isError, true);
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = originalFetch; await client.close(); await server.close(); }
+});
+
 type Tool = {
   handler: (args: unknown) => Promise<CallToolResult>;
   title?: string;
@@ -890,7 +924,10 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
     // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
     // Replay keys for the additional effectful writes add ~2.4k; preserve 2.5k of measured growth.
-    assert.ok(schemaCatalogLength <= 207_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    // Shared finite-decimal patterns/length limits and matching single/bulk custom-field
+    // validators measure 207,323 characters after this audit. Allow 500 characters of
+    // deliberate schema growth; the overall OAuth-inclusive ceiling stays unchanged.
+    assert.ok(schemaCatalogLength <= 207_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
     assert.ok(serializedToolCatalogLength <= 216_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8.5k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
@@ -1050,6 +1087,32 @@ void test("all resource templates fetch and serialize their public API entities"
       assert.equal(path, expectedPath);
       assert.deepEqual(JSON.parse((result.contents[0] as { text: string }).text), name === "workspace" ? { workspace: { id, kind: "standard" }, role: "admin" } : { id });
     }
+  } finally {
+    globalThis.fetch = originalFetch;
+    await close();
+  }
+});
+
+// Failure this catches: a resource id is raw URI text interpolated into an API path, so anything
+// but a UUID lets a "read" reach another route (a secret rotation, say) with the user's token.
+void test("resource templates reject identifiers that are not UUIDs before calling the API", async () => {
+  const { client, close } = await connectedClient();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response("{}", { status: 200 });
+  };
+  try {
+    for (const uri of [
+      `kanera://board/..\\workspaces\\${W}\\webhooks\\${B}\\secret?x`,
+      "kanera://card/..\\session?x",
+      "kanera://note/not-a-uuid",
+      `kanera://workspace/${W}?x`,
+    ]) {
+      await assert.rejects(client.readResource({ uri }), Error, uri);
+    }
+    assert.equal(calls, 0);
   } finally {
     globalThis.fetch = originalFetch;
     await close();

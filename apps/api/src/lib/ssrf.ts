@@ -3,6 +3,11 @@ import { isIP } from "node:net";
 import { env } from "../env.js";
 import { badRequest } from "./errors.js";
 
+// One resolver is shared by validation and the actual connection. Callers must use
+// the returned address, rather than validate DNS and let a second lookup choose it.
+export const outboundDns = { lookup };
+export type OutboundPolicy = "webhook" | "notification" | "push" | "public";
+
 // SSRF guard for outbound requests to user/admin-configured URLs (currently webhook
 // endpoints). Workspace admins can set a webhook target URL; without these checks a target
 // resolving to a loopback/private/link-local/metadata address could be used to reach internal
@@ -39,6 +44,9 @@ const BLOCKED_CIDRS = [
   "fe80::/10",
   "ff00::/8",
   "2001:db8::/32",
+  "2001::/23", // transition/special-purpose allocations
+  "2002::/16", // 6to4 can embed a forbidden IPv4 destination
+  "3fff::/20",
 ] as const;
 
 // Even an operator who explicitly allows private notification receivers does not need access to
@@ -59,6 +67,9 @@ const ALWAYS_BLOCKED_NOTIFICATION_CIDRS = [
   "fe80::/10",
   "ff00::/8",
   "2001:db8::/32",
+  "2001::/23",
+  "2002::/16",
+  "3fff::/20",
 ] as const;
 
 function parseIpToBigInt(ip: string): { family: 4 | 6; value: bigint } | null {
@@ -117,10 +128,18 @@ function matchesRange(ip: string, ranges: BlockedRange[]): boolean {
 }
 
 export function isBlockedAddress(ip: string): boolean {
+  const parsed = parseIpToBigInt(ip);
+  // Public IPv6 destinations must be global unicast. In particular, NAT64 and
+  // compatible-address forms must not tunnel around the IPv4 metadata checks.
+  if (parsed?.family === 6 && parsed.value >> 125n !== 1n) return true;
   return matchesRange(ip, BLOCKED_RANGES);
 }
 
 export function isAlwaysBlockedNotificationAddress(ip: string): boolean {
+  const parsed = parseIpToBigInt(ip);
+  // The explicit private-receiver policy permits ULA and loopback, but not
+  // transition/reserved forms that can conceal a second destination address.
+  if (parsed?.family === 6 && parsed.value !== 1n && parsed.value >> 121n !== 0x7en && parsed.value >> 125n !== 1n) return true;
   return matchesRange(ip, ALWAYS_BLOCKED_NOTIFICATION_RANGES);
 }
 
@@ -135,7 +154,7 @@ export function notificationDestinationPolicy(): "public-https" | "private-netwo
 
 // Synchronous create/update-time validation: require https and reject obviously-internal hosts
 // (IP literals in blocked ranges, and the localhost name). DNS-name targets are fully checked at
-// delivery time by assertResolvedHostAllowed. In non-production the guard is relaxed so local
+// delivery time by resolveOutboundTarget. In non-production the guard is relaxed so local
 // integrations can point at http://localhost during development and tests.
 export function assertWebhookUrlAllowed(url: string): void {
   let parsed: URL;
@@ -144,10 +163,13 @@ export function assertWebhookUrlAllowed(url: string): void {
   } catch {
     throw badRequest("invalid webhook url");
   }
+  if (parsed.username || parsed.password) throw badRequest("notification destination url must not contain credentials");
+  if (parsed.hash) throw badRequest("notification destination url must not contain a fragment");
 
-  const host = parsed.hostname.toLowerCase();
+  const host = parsed.hostname.replace(/^\[|\]$/gu, "").toLowerCase();
   const isLocalName = host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local");
 
+  if (isIP(host) && isAlwaysBlockedNotificationAddress(host)) throw badRequest("webhook url host is not allowed");
   if (env.NODE_ENV !== "production") {
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw badRequest("webhook url must use http(s)");
     return;
@@ -158,19 +180,56 @@ export function assertWebhookUrlAllowed(url: string): void {
   if (isIP(host) && isBlockedAddress(host)) throw badRequest("webhook url host is not allowed");
 }
 
-// Delivery-time check: resolve the host and reject if any resolved address is in a blocked
-// range. This defeats DNS rebinding where a public hostname is later repointed at a private IP.
-// Skipped outside production so dev/test webhooks to localhost keep working.
-export async function assertResolvedHostAllowed(url: string): Promise<void> {
-  if (env.NODE_ENV !== "production") return;
-  const { hostname } = new URL(url);
-  if (isIP(hostname)) {
-    if (isBlockedAddress(hostname)) throw badRequest("webhook url host resolves to a blocked address");
-    return;
+/** Browser push endpoints are capability URLs, but still user-controlled network targets. */
+export function assertPushEndpointAllowed(url: string): void {
+  const parsed = parseNotificationDestination(url);
+  if (parsed.protocol !== "https:") throw badRequest("notification destination url must use https");
+  if (parsed.hash) throw badRequest("notification destination url must not contain a fragment");
+  const host = parsed.hostname.replace(/^\[|\]$/gu, "").toLowerCase();
+  if (isIP(host) && !notificationAddressAllowed(host)) throw badRequest("notification destination host is not allowed");
+  if (!privateNotificationDestinationsAllowed() && (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local"))) {
+    throw badRequest("notification destination host is not allowed");
   }
-  const results = await lookup(hostname, { all: true });
-  if (results.length === 0 || results.some((r) => isBlockedAddress(r.address))) {
-    throw badRequest("webhook url host resolves to a blocked address");
+}
+
+export async function resolveOutboundTarget(rawUrl: string, policy: OutboundPolicy, signal: AbortSignal) {
+  // A fragment is never sent on the wire. Saving a webhook now rejects one, but endpoints saved
+  // before that must keep delivering, so drop it here rather than failing every delivery.
+  const url = policy === "push" ? rawUrl : withoutFragment(rawUrl);
+  if (policy === "push") assertPushEndpointAllowed(url);
+  else if (policy === "notification") parseNotificationDestination(url);
+  else assertWebhookUrlAllowed(url);
+  const target = new URL(url);
+  if (policy === "public" && target.protocol !== "https:") throw badRequest("notification destination url must use https");
+  const host = target.hostname.replace(/^\[|\]$/gu, "");
+  signal.throwIfAborted();
+  const addresses = isIP(host)
+    ? [{ address: host, family: isIP(host) }]
+    : await new Promise<Array<{ address: string; family: number }>>((resolve, reject) => {
+      const abort = () => reject(signal.reason instanceof Error ? signal.reason : new Error("outbound request aborted"));
+      signal.addEventListener("abort", abort, { once: true });
+      void outboundDns.lookup(host, { all: true }).then(resolve, reject)
+        .finally(() => signal.removeEventListener("abort", abort));
+    });
+  const allowed = (address: string) => policy === "notification" || policy === "push"
+    ? notificationAddressAllowed(address)
+    : policy === "public" || env.NODE_ENV === "production" ? !isBlockedAddress(address) : !isAlwaysBlockedNotificationAddress(address);
+  if (addresses.length === 0 || addresses.some(({ address }) => !allowed(address))) {
+    throw badRequest("notification destination host resolves to a blocked address");
+  }
+  signal.throwIfAborted();
+  return { target, address: addresses[0]! };
+}
+
+function withoutFragment(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hash && !url.endsWith("#")) return url;
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    // Left for the policy check below to reject with its translated error.
+    return url;
   }
 }
 
@@ -211,8 +270,4 @@ export async function assertNotificationDestinationAllowed(url: string): Promise
   if (results.length === 0 || results.some((result) => !notificationAddressAllowed(result.address))) {
     throw badRequest("notification destination host resolves to a blocked address");
   }
-}
-
-export async function assertResolvedNotificationDestinationAllowed(url: string): Promise<void> {
-  await assertNotificationDestinationAllowed(url);
 }

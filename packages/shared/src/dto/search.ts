@@ -33,7 +33,7 @@ export type AgentSearchQuery = z.infer<typeof agentSearchQueryBody>;
 // Shared context every search result carries for rendering + navigation.
 export interface SearchResultBase {
   id: string;
-  // ts_headline HTML snippet; source text is Postgres-escaped, only <mark> tags added.
+  // ts_headline HTML snippet; source text is API-escaped, only attribute-free <mark> tags allowed.
   snippet: string;
   workspaceId: string;
   workspaceName: string;

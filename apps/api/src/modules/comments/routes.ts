@@ -20,7 +20,7 @@ export async function commentRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/cards/:id/feed", async (req, reply) => {
-    const { id: cardId } = req.params as { id: string };
+    const { id: cardId } = dto.uuidParams("id").parse(req.params);
     const query = dto.listCardFeedQuery.parse(req.query ?? {});
     const limit = query.limit;
     const cursor = cardFeedCursor(query.cursor);
@@ -34,7 +34,7 @@ export async function commentRoutes(app: FastifyInstance) {
   });
 
   app.get("/cards/:id/comments", async (req): Promise<dto.CardCommentsPage> => {
-    const { id: cardId } = req.params as { id: string };
+    const { id: cardId } = dto.uuidParams("id").parse(req.params);
     const query = dto.listCardCommentsQuery.parse(req.query ?? {});
     const cursor = commentCursor(query.cursor);
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
@@ -45,7 +45,7 @@ export async function commentRoutes(app: FastifyInstance) {
   });
 
   app.post("/cards/:id/comments", async (req, reply) => {
-    const { id: cardId } = req.params as { id: string };
+    const { id: cardId } = dto.uuidParams("id").parse(req.params);
     const body = dto.createCommentBody.parse(req.body);
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
@@ -63,7 +63,7 @@ export async function commentRoutes(app: FastifyInstance) {
   });
 
   app.post("/boards/:boardId/comments/bulk/create", async (req, reply) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkCreateCommentsBody.parse(req.body);
     const boardAccess = await assertBoardAccess(req.auth, boardId, "editor");
     const cardIds = [...new Set(body.comments.map((entry) => entry.cardId))];
@@ -91,7 +91,7 @@ export async function commentRoutes(app: FastifyInstance) {
   });
 
   app.patch("/comments/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateCommentBody.parse(req.body);
 
     const [current] = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
@@ -111,7 +111,7 @@ export async function commentRoutes(app: FastifyInstance) {
   });
 
   app.delete("/comments/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
     if (!current) throw notFound();
 
@@ -130,7 +130,7 @@ export async function commentRoutes(app: FastifyInstance) {
   });
 
   app.post("/boards/:boardId/comments/bulk/delete", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkDeleteCommentsBody.parse(req.body);
     const boardAccess = await assertBoardAccess(req.auth, boardId, "editor");
     const rows = await db
@@ -168,7 +168,7 @@ export async function commentRoutes(app: FastifyInstance) {
   });
 
   app.post("/comments/:id/reactions", async (req, reply) => {
-    const { id: commentId } = req.params as { id: string };
+    const { id: commentId } = dto.uuidParams("id").parse(req.params);
     const body = dto.addReactionBody.parse(req.body);
 
     const [current] = await db.select().from(comments).where(eq(comments.id, commentId)).limit(1);
@@ -186,7 +186,7 @@ export async function commentRoutes(app: FastifyInstance) {
   });
 
   app.delete("/comments/:id/reactions/:type", async (req, reply) => {
-    const { id: commentId, type: typeParam } = req.params as { id: string; type: string };
+    const { id: commentId, type: typeParam } = dto.reactionParams.parse(req.params);
     const type = dto.reactionTypeSchema.parse(typeParam);
 
     const [current] = await db.select().from(comments).where(eq(comments.id, commentId)).limit(1);

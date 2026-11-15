@@ -1,3 +1,4 @@
+import { registerInputTextValidation } from "./lib/input-text.js";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -253,6 +254,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   await app.register(mailerPlugin);
   // Fastify plugins inherit the error handler when registered. OAuth setup must return validation
   // errors as 400s rather than letting malformed authorization or registration requests become 500s.
+  registerInputTextValidation(app);
   registerErrorHandler(app, { service: "public-api" });
   await app.register(oauthPublicRoutes);
 

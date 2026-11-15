@@ -225,7 +225,9 @@ void test("public board reads reject unbounded card hydration", async () => {
       headers: { authorization: `Bearer ${secret}` },
     });
     assert.equal(oversized.statusCode, 400);
-    assert.match(oversized.json<{ message: string }>().message, /between 1 and 100/i);
+    const validation = oversized.json<{ code: string; issues: { path: string[]; code: string; maximum?: number }[] }>();
+    assert.equal(validation.code, "VALIDATION");
+    assert.ok(validation.issues.some(issue => issue.path.includes("cardLimit") && issue.code === "too_big" && issue.maximum === 100));
   } finally {
     await publicApi.close();
   }

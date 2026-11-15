@@ -169,7 +169,7 @@ export async function adminOrgRoutes(app: FastifyInstance) {
   });
 
   app.get("/orgs/:clientId", async (req) => {
-    const { clientId } = req.params as { clientId: string };
+    const { clientId } = dto.uuidParams("clientId").parse(req.params);
     const org = await loadOrgOr404(clientId);
 
     const usage = await getOrgStorageUsage(db, clientId);
@@ -238,7 +238,7 @@ export async function adminOrgRoutes(app: FastifyInstance) {
   });
 
   app.get("/orgs/:clientId/people", async (req) => {
-    const { clientId } = req.params as { clientId: string };
+    const { clientId } = dto.uuidParams("clientId").parse(req.params);
     const org = await loadOrgOr404(clientId);
     const query = dto.adminListOrgPeopleQuery.parse(req.query);
     const members = await db.select({ id: users.id, displayName: users.displayName, email: users.email, role: clientMembers.clientRole, lastOnlineAt: users.lastOnlineAt })
@@ -258,7 +258,7 @@ export async function adminOrgRoutes(app: FastifyInstance) {
   });
 
   app.post("/orgs/:clientId/suspend", async (req) => {
-    const { clientId } = req.params as { clientId: string };
+    const { clientId } = dto.uuidParams("clientId").parse(req.params);
     await loadOrgOr404(clientId);
     await db.transaction(async (tx) => {
       await tx.update(clients).set({ suspendedAt: new Date(), updatedAt: new Date() }).where(eq(clients.id, clientId));
@@ -268,7 +268,7 @@ export async function adminOrgRoutes(app: FastifyInstance) {
   });
 
   app.post("/orgs/:clientId/reactivate", async (req) => {
-    const { clientId } = req.params as { clientId: string };
+    const { clientId } = dto.uuidParams("clientId").parse(req.params);
     await loadOrgOr404(clientId);
     await db.transaction(async (tx) => {
       await tx.update(clients).set({ suspendedAt: null, updatedAt: new Date() }).where(eq(clients.id, clientId));
@@ -278,7 +278,7 @@ export async function adminOrgRoutes(app: FastifyInstance) {
   });
 
   app.patch("/orgs/:clientId/plan", async (req) => {
-    const { clientId } = req.params as { clientId: string };
+    const { clientId } = dto.uuidParams("clientId").parse(req.params);
     const org = await loadOrgOr404(clientId);
     const body = dto.adminUpdateOrgPlanBody.parse(req.body);
 
@@ -321,7 +321,7 @@ export async function adminOrgRoutes(app: FastifyInstance) {
   });
 
   app.patch("/orgs/:clientId/settings", async (req) => {
-    const { clientId } = req.params as { clientId: string };
+    const { clientId } = dto.uuidParams("clientId").parse(req.params);
     await loadOrgOr404(clientId);
     const body = dto.adminUpdateOrgSettingsBody.parse(req.body);
 
@@ -346,7 +346,7 @@ export async function adminOrgRoutes(app: FastifyInstance) {
   // and storage objects are retained — recoverable until a future purge job. Superadmin only.
   app.delete("/orgs/:clientId", async (req) => {
     requireSuperadmin(req);
-    const { clientId } = req.params as { clientId: string };
+    const { clientId } = dto.uuidParams("clientId").parse(req.params);
     await loadOrgOr404(clientId);
     await db.transaction(async (tx) => {
       await tx.update(clients).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(clients.id, clientId));

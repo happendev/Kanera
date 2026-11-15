@@ -35,7 +35,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:id/boards", async (req, reply) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const [workspace] = await db.select({ kind: workspaces.kind }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
     // A database constraint on boards cannot reference workspace.kind, so this route is the source
@@ -50,8 +50,8 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.get("/boards/:id", async (req) => {
-    const { id } = req.params as { id: string };
-    const query = req.query as { includeCards?: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
+    const query = dto.boardReadQuery.parse(req.query);
     const ctx = await assertBoardAccess(req.auth, id);
     if (query.includeCards === "false") {
       // Consolidated work views hydrate this bounded source-board context only while a detail
@@ -78,8 +78,8 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.post("/boards/:id/open", async (req) => {
-    const { id } = req.params as { id: string };
-    const query = req.query as { includeCompleted?: string; archived?: string; completedFrom?: string; completedTo?: string; includeCards?: string; listId?: string; cardLimit?: string; cardOffset?: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
+    const query = dto.boardOpenQuery.parse(req.query);
     const includeCompleted = query.includeCompleted === "true";
     const includeArchived = query.archived === "true";
     const includeCards = query.includeCards !== "false";
@@ -118,15 +118,15 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.get("/boards/:id/transfer-targets", async (req) => {
-    const { id } = req.params as { id: string };
-    const query = req.query as { crossWorkspace?: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
+    const query = dto.boardTransferQuery.parse(req.query);
     const allowCrossWorkspace = query.crossWorkspace === "1" || query.crossWorkspace === "true";
     const sourceAccess = await assertBoardAccess(req.auth, id, "editor");
     return loadBoardTransferTargets({ auth: req.auth, boardId: id, sourceWorkspaceId: sourceAccess.workspaceId, allowCrossWorkspace });
   });
 
   app.get("/boards/:id/lists", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const ctx = await assertBoardAccess(req.auth, id, "editor");
     return db
       .select()
@@ -136,7 +136,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.get("/boards/:id/export", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const ctx = await assertBoardAccess(req.auth, id, "editor");
     return buildBoardExportArchive(id, req.auth.cid, ctx.assignedItemsOnly ? req.auth.sub : undefined);
   });
@@ -146,7 +146,7 @@ export async function boardRoutes(app: FastifyInstance) {
   // needs values for filters, Table columns, or export. Returned for all cards regardless
   // of completed/archived visibility — extra entries are keyed by cardId and harmlessly ignored.
   app.get("/boards/:id/custom-field-values", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const ctx = await assertBoardAccess(req.auth, id);
     const rows = await db
       .select()
@@ -160,7 +160,7 @@ export async function boardRoutes(app: FastifyInstance) {
   // Bulk editing only needs values for the selected cards. Keep this separate from the full-board
   // endpoint so filters and the Table can retain their board-complete caching semantics.
   app.post("/boards/:id/custom-field-values/query", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const { cardIds } = dto.selectedCardQueryBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, id);
     const rows = await db
@@ -173,7 +173,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.get("/boards/:id/completed", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const query = dto.completedCardsQuery.omit({ boardId: true }).parse(req.query);
     const ctx = await assertBoardAccess(req.auth, id);
     return loadCompletedCards({ auth: req.auth, ctx, boardId: id, query });
@@ -182,7 +182,7 @@ export async function boardRoutes(app: FastifyInstance) {
   // Both board work-done routes resolve their scope and access boundary here, so the timeline and
   // the activity strip above it can never answer for different sets of cards.
   const boardWorkDoneOptions = async (req: FastifyRequest): Promise<LoadWorkDoneOptions> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     // The summary schema is a superset of the timeline's; parsing it for both means the two share one
     // filter contract and the strip cannot narrow differently from the rows.
     const query = dto.workDoneSummaryQuery.omit({ boardId: true }).parse(req.query);
@@ -216,7 +216,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.patch("/boards/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     // Renaming/reconfiguring a board is a workspace-admin action, not a board-role one.
     const ctx = await assertBoardManageAccess(req.auth, id);
     const body = dto.updateBoardBody.parse(req.body);
@@ -229,13 +229,13 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.get("/workspaces/:id/board-groups", async (req) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId);
     return db.select().from(boardGroups).where(eq(boardGroups.workspaceId, workspaceId)).orderBy(asc(boardGroups.position));
   });
 
   app.post("/workspaces/:id/board-groups", async (req, reply) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createBoardGroupBody.parse(req.body);
 
@@ -246,7 +246,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.patch("/board-groups/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateBoardGroupBody.parse(req.body);
     const [current] = await db.select().from(boardGroups).where(eq(boardGroups.id, id)).limit(1);
     if (!current) throw notFound();
@@ -259,7 +259,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.post("/board-groups/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveBoardGroupBody.parse(req.body);
     const [current] = await db.select().from(boardGroups).where(eq(boardGroups.id, id)).limit(1);
     if (!current) throw notFound();
@@ -272,7 +272,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.delete("/board-groups/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [group] = await db.select().from(boardGroups).where(eq(boardGroups.id, id)).limit(1);
     if (!group) throw notFound();
     await assertWorkspaceAccess(req.auth, group.workspaceId, "admin");
@@ -284,7 +284,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.post("/boards/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveBoardBody.parse(req.body);
     const [current] = await db.select().from(boards).where(eq(boards.id, id)).limit(1);
     if (!current) throw notFound();
@@ -304,7 +304,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.patch("/boards/:id/background", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const ctx = await assertBoardAccess(req.auth, id, "editor");
     const body = dto.updateBoardBackgroundBody.parse(req.body);
 
@@ -315,7 +315,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.get("/boards/:id/deletion-impact", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     await assertBoardManageAccess(req.auth, id);
 
     const [impact] = await db
@@ -326,7 +326,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.delete("/boards/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const ctx = await assertBoardManageAccess(req.auth, id);
 
     const [workspace] = await db.select({ kind: workspaces.kind }).from(workspaces).where(eq(workspaces.id, ctx.workspaceId)).limit(1);
@@ -346,13 +346,13 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.get("/boards/:id/member-candidates", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const ctx = await assertBoardManageAccess(req.auth, id);
     return loadBoardMemberCandidates({ ctx });
   });
 
   app.post("/boards/:id/members", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     // Managing a board's membership is a workspace-admin action, not a board-role one.
     const ctx = await assertBoardManageAccess(req.auth, id);
     const body = dto.addBoardMemberBody.parse(req.body);
@@ -364,13 +364,13 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.get("/boards/:id/members", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     await assertBoardManageAccess(req.auth, id);
     return listBoardMembers({ auth: req.auth, boardId: id });
   });
 
   app.patch("/boards/:id/members/:userId", async (req) => {
-    const { id, userId } = req.params as { id: string; userId: string };
+    const { id, userId } = dto.uuidParams("id", "userId").parse(req.params);
     const ctx = await assertBoardManageAccess(req.auth, id);
     const body = dto.updateBoardMemberBody.parse(req.body);
 
@@ -381,7 +381,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   app.delete("/boards/:id/members/:userId", async (req, reply) => {
-    const { id, userId } = req.params as { id: string; userId: string };
+    const { id, userId } = dto.uuidParams("id", "userId").parse(req.params);
     const voluntary = userId === req.auth.sub;
     const ctx = voluntary ? await assertBoardAccess(req.auth, id) : await assertBoardManageAccess(req.auth, id);
     // Observer users may leave, but a read-only credential must never gain mutation authority.

@@ -4,39 +4,48 @@ import { CLIENT_BILLING_INTERVALS, CLIENT_BILLING_STATUSES, CLIENT_MCP_POLICIES,
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 import { deploymentModeSchema } from "./deployment.js";
 
+// Self-hosted administrators may use private S3/SMTP servers. Restrict protocol/host syntax,
+// without applying the public-internet destination policy used for untrusted webhooks.
+const storageHttpUrl = z.url({ protocol: /^https?$/ }).max(2048).refine(value => {
+  try {
+    const url = new URL(value);
+    return !url.username && !url.password && !url.hash;
+  } catch { return false; }
+});
+
 export const storageConfigSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("local") }),
   z.object({
     kind: z.literal("s3"),
-    endpoint: z.url().optional(),
+    endpoint: storageHttpUrl.optional(),
     region: z.string().min(1),
     bucket: z.string().min(1),
     accessKeyId: z.string().min(1),
     secretAccessKey: z.string().min(1),
-    publicUrlPrefix: z.url().optional(),
+    publicUrlPrefix: storageHttpUrl.optional(),
   }),
 ]);
 export type StorageConfigInput = z.infer<typeof storageConfigSchema>;
 
 export const s3StorageConfigSchema = z.object({
   kind: z.literal("s3"),
-  endpoint: z.url().optional(),
+  endpoint: storageHttpUrl.optional(),
   region: z.string().min(1),
   bucket: z.string().min(1),
   accessKeyId: z.string().min(1),
   secretAccessKey: z.string().min(1),
-  publicUrlPrefix: z.url().optional(),
+  publicUrlPrefix: storageHttpUrl.optional(),
 });
 export type S3StorageConfigInput = z.infer<typeof s3StorageConfigSchema>;
 
 export const smtpConfigSchema = z.object({
-  host: z.string().min(1).max(255),
+  host: z.union([z.hostname(), z.ipv4(), z.ipv6()]),
   port: z.number().int().min(1).max(65535),
   security: z.enum(["none", "starttls", "tls"]),
   username: z.string().max(255).optional(),
   password: z.string().max(1024).optional(),
   fromEmail: z.email().max(254),
-  fromName: z.string().max(GENERAL_NAME_MAX_LENGTH).optional(),
+  fromName: z.string().max(GENERAL_NAME_MAX_LENGTH).regex(/^[^\r\n]*$/).optional(),
 });
 export type SmtpConfigInput = z.infer<typeof smtpConfigSchema>;
 
@@ -79,14 +88,14 @@ export const billingCheckoutBody = z.object({
   interval: z.enum(CLIENT_BILLING_INTERVALS),
   // How many seats to purchase. The server floors this at the org's current used-seat count, so a
   // re-purchase after a downgrade can never buy fewer seats than are already assigned.
-  seatLimit: z.number().int().positive(),
+  seatLimit: z.number().int().positive().max(2147483647),
 });
 export type BillingCheckoutBody = z.infer<typeof billingCheckoutBody>;
 
 // Set the org's purchased seat capacity (buy more / reduce seats). Only applies to paid subscriptions;
 // trials are unlimited until checkout.
 export const setSeatCapacityBody = z.object({
-  seatLimit: z.number().int().positive(),
+  seatLimit: z.number().int().positive().max(2147483647),
 });
 export type SetSeatCapacityBody = z.infer<typeof setSeatCapacityBody>;
 

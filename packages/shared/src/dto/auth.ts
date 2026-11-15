@@ -1,3 +1,4 @@
+import { isoTimestamp } from "./_dates.js";
 import { z } from "zod";
 import { ACCENTS, THEMES } from "../appearance.js";
 import { LOCALES } from "../locales.js";
@@ -43,8 +44,8 @@ export const signupBody = z.object({
     term: z.string().trim().min(1).max(120).optional(),
     landing_page: z.string().max(256).regex(/^\/[^?#]*$/).optional(),
     referring_domain: z.string().max(253).regex(/^[a-zA-Z0-9.-]+$/).optional(),
-    captured_at: z.iso.datetime().optional(),
-    consented_at: z.iso.datetime().optional(),
+    captured_at: isoTimestamp.optional(),
+    consented_at: isoTimestamp.optional(),
     consent_version: z.literal(1).optional(),
     fbclid: z.string().trim().min(1).max(1024).optional(),
     gclid: z.string().trim().min(1).max(1024).optional(),
@@ -98,7 +99,7 @@ export const authConfigResponse = z.object({
 export type AuthConfigResponse = z.infer<typeof authConfigResponse>;
 
 export const loginBody = z.object({
-  email: z.email(),
+  email: z.email().max(254),
   password: z.string().min(1),
 });
 export type LoginBody = z.infer<typeof loginBody>;
@@ -166,7 +167,7 @@ export const authResponse = z.object({
 export type AuthResponse = z.infer<typeof authResponse>;
 
 export const forgotPasswordBody = z.object({
-  email: z.email(),
+  email: z.email().max(254),
   // Optional at the contract level so self-hosted installs keep working; the API
   // requires it for hosted deployments with Turnstile configured.
   turnstileToken: z.string().min(1).max(4096).optional(),

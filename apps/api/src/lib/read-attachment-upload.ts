@@ -1,3 +1,4 @@
+import { assertStorageSafeInput } from "./input-text.js";
 import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
 import type { FastifyRequest } from "fastify";
 import { AppError, badRequest } from "./errors.js";
@@ -25,6 +26,7 @@ export async function readAttachmentUpload(req: FastifyRequest, maxFileBytes: nu
     });
   if (!file) throw badRequest("no file uploaded");
 
+  assertStorageSafeInput(file.filename);
   const ext = getAllowedAttachmentExtension(file.mimetype, file.filename);
   if (!ext) throw badRequest("unsupported file type");
 

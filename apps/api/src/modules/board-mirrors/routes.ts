@@ -3,7 +3,7 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import type { FastifyInstance } from "fastify";
 import { assertBoardAccess, assertBoardManageAccess, assertCardAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import { resolveBoardMirrorAccess } from "../../lib/board-mirror/access.js";
-import { badRequest } from "../../lib/errors.js";
+import { badRequest, forbidden } from "../../lib/errors.js";
 import { assertBoardSyncAllowed } from "../../lib/tier-limits.js";
 import { createMirror } from "./create-mirror.js";
 import { deleteMirror } from "./delete-mirror.js";
@@ -30,21 +30,24 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/workspaces/:workspaceId/mirror-status", async (req): Promise<{ count: number }> => {
-    const { workspaceId } = req.params as { workspaceId: string };
+    const { workspaceId } = dto.uuidParams("workspaceId").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     return loadWorkspaceMirrorStatus(workspaceId);
   });
 
   app.get("/boards/:boardId/mirror-status", async (req): Promise<dto.BoardMirrorStatus> => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     await assertBoardAccess(req.auth, boardId);
     return loadBoardMirrorStatus(req.auth, boardId);
   });
 
   app.post("/boards/:boardId/mirrors", async (req, reply) => {
-    const { boardId: sourceBoardId } = req.params as { boardId: string };
+    const { boardId: sourceBoardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.createBoardMirrorBody.parse(req.body);
     const sourceCtx = await assertBoardAccess(req.auth, sourceBoardId, "editor");
+    // The mirror worker copies every card in the mapped lists with system authority. A member
+    // limited to their assigned items must not be able to export the rest of the board through it.
+    if (sourceCtx.assignedItemsOnly) throw forbidden();
     const targetCtx = await assertBoardManageAccess(req.auth, body.targetBoardId);
     if (sourceBoardId === body.targetBoardId) throw badRequest("a board cannot mirror itself");
     const mappings = await normalizeListMappings(body.lists, sourceCtx.workspaceId, targetCtx.workspaceId);
@@ -56,19 +59,19 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
   });
 
   app.get("/boards/:boardId/mirrors", async (req): Promise<dto.BoardMirrorRow[]> => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     await assertBoardAccess(req.auth, boardId, "editor");
     return loadBoardMirrors(req.auth, boardId, "inbound");
   });
 
   app.get("/boards/:boardId/outbound-mirrors", async (req): Promise<dto.BoardMirrorRow[]> => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     await assertBoardAccess(req.auth, boardId, "editor");
     return loadBoardMirrors(req.auth, boardId, "outbound");
   });
 
   app.patch("/boards/:boardId/mirrors/:mirrorId", async (req): Promise<dto.BoardMirrorRow> => {
-    const { boardId, mirrorId } = req.params as { boardId: string; mirrorId: string };
+    const { boardId, mirrorId } = dto.uuidParams("boardId", "mirrorId").parse(req.params);
     const body = dto.updateBoardMirrorBody.parse(req.body);
     await assertBoardAccess(req.auth, boardId, "editor");
     const mirror = await loadManagedMirror(mirrorId, boardId);
@@ -90,7 +93,7 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
   });
 
   app.post("/boards/:boardId/mirrors/:mirrorId/source-disable", async (req) => {
-    const { boardId, mirrorId } = req.params as { boardId: string; mirrorId: string };
+    const { boardId, mirrorId } = dto.uuidParams("boardId", "mirrorId").parse(req.params);
     await assertBoardAccess(req.auth, boardId, "editor");
     const mirror = await loadManagedMirror(mirrorId, boardId);
     await assertMirrorCapability(req.auth, mirror, "source");
@@ -101,7 +104,7 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
   });
 
   app.post("/boards/:boardId/mirrors/:mirrorId/source-enable", async (req) => {
-    const { boardId, mirrorId } = req.params as { boardId: string; mirrorId: string };
+    const { boardId, mirrorId } = dto.uuidParams("boardId", "mirrorId").parse(req.params);
     await assertBoardAccess(req.auth, boardId, "editor");
     const mirror = await loadManagedMirror(mirrorId, boardId);
     await assertMirrorCapability(req.auth, mirror, "source");
@@ -114,7 +117,7 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
   });
 
   app.delete("/boards/:boardId/mirrors/:mirrorId", async (req, reply) => {
-    const { boardId, mirrorId } = req.params as { boardId: string; mirrorId: string };
+    const { boardId, mirrorId } = dto.uuidParams("boardId", "mirrorId").parse(req.params);
     await assertBoardAccess(req.auth, boardId, "editor");
     // Either participating board may end the relationship; deleting the durable link leaves the
     // already-created target cards intact, regardless of which side initiated the removal.
@@ -126,7 +129,7 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
   });
 
   app.get("/cards/:id/mirrors", async (req): Promise<dto.CardMirrorStatus> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     await assertCardAccess(req.auth, id);
     return loadCardMirrorStatus(req.auth, id);
   });
@@ -134,6 +137,7 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
   app.get("/mirror-target-boards", async (req): Promise<dto.MirrorTargetBoardsResponse> => {
     const { sourceBoardId } = dto.mirrorTargetBoardsQuery.parse(req.query);
     const sourceCtx = await assertBoardAccess(req.auth, sourceBoardId, "editor");
+    if (sourceCtx.assignedItemsOnly) throw forbidden();
     await assertBoardSyncAllowed([sourceCtx.clientId]);
     return listMirrorTargetBoards(req.auth, sourceBoardId);
   });

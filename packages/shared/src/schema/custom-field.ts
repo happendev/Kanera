@@ -1,3 +1,4 @@
+import { iconText } from "./_icon-text.js";
 import { sql } from "drizzle-orm";
 import { boolean, check, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { valueIn } from "./_value-check.js";
@@ -22,7 +23,7 @@ export const customFields = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    icon: text("icon").notNull().default("forms"),
+    icon: iconText("icon", "forms").notNull().default("forms"),
     type: text("type", { enum: CUSTOM_FIELD_TYPES }).notNull(),
     // Only meaningful for `select` and `user` fields: when true a card may hold
     // several option/user ids; when false the value is capped to one.

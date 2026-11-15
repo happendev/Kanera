@@ -620,8 +620,21 @@ describe("DescriptionViewerComponent mentions", () => {
     expect(bubbled).toHaveBeenCalledTimes(1);
   });
 
+  // Failure this catches: a link to another site that only shares the media path was turned into
+  // an attachment chip, and clicking it downloaded the remote file as if it were a Kanera upload.
+  it("leaves media-shaped links on another origin as ordinary links", async () => {
+    const { el } = await render("[Payroll.pdf](https://files.example/api/media/x/payroll.pdf)");
+    vi.stubGlobal("fetch", vi.fn());
+    const link = el.querySelector("a") as HTMLAnchorElement;
+    expect(link.classList.contains("attachment-link-chip")).toBe(false);
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    link.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("downloads Kanera media links with their rendered attachment file name", async () => {
-    const href = "https://api.test/api/media/client-1/cards/card-1/01901234-5678-7abc-8def-0123456789ab.docx?t=token&e=9999999999999";
+    const href = `${window.location.origin}/api/media/client-1/cards/card-1/01901234-5678-7abc-8def-0123456789ab.docx?t=token&e=9999999999999`;
     const { el } = await render(`[Project brief.docx](${href})`);
 
     const blob = new Blob(["doc"], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
@@ -649,7 +662,7 @@ describe("DescriptionViewerComponent mentions", () => {
   });
 
   it("emits opted-in attachment clicks instead of downloading them", async () => {
-    const href = "https://api.test/api/media/client-1/cards/card-1/video.mp4?t=token&e=9999999999999";
+    const href = `${window.location.origin}/api/media/client-1/cards/card-1/video.mp4?t=token&e=9999999999999`;
     const { el, fixture } = await render(`[Walkthrough.mp4](${href})`);
     fixture.componentRef.setInput("handleAttachmentLinks", true);
     fixture.detectChanges();
@@ -670,7 +683,7 @@ describe("DescriptionViewerComponent mentions", () => {
   });
 
   it("emits PDF attachment clicks for native lightbox preview", async () => {
-    const href = "https://api.test/api/media/client-1/cards/card-1/brief.pdf?t=token&e=9999999999999";
+    const href = `${window.location.origin}/api/media/client-1/cards/card-1/brief.pdf?t=token&e=9999999999999`;
     const { el, fixture } = await render(`[Project brief.pdf](${href})`);
     fixture.componentRef.setInput("handleAttachmentLinks", true);
     fixture.detectChanges();

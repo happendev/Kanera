@@ -1,7 +1,7 @@
 import type { CardCustomFieldValue } from "@kanera/shared/schema";
 import { describe, expect, it } from "vitest";
 import { groupCards } from "./group-by.util";
-import { buildBoardExportPayload, buildWorkbookExport, buildWorkbookRows, sanitizeExportFileName } from "./export.util";
+import { buildBoardExportPayload, buildWorkbookExport, buildWorkbookRows, neutraliseSpreadsheetFormula, sanitizeExportFileName } from "./export.util";
 import type { AnyCard, AnyCustomField, AnyLabel, AnyList, AnyMember } from "./table-view.types";
 
 function card(overrides: Partial<AnyCard>): AnyCard {
@@ -578,6 +578,17 @@ describe("board list export", () => {
       { group: "All cards", split: "Urgent", field: "Hours", metric: "sum", total: 10, value: 3 },
       { group: "All cards", split: "No label", field: "Hours", metric: "sum", total: 10, value: 2 },
     ]);
+  });
+
+  // Failure this catches: a card title such as =HYPERLINK(...) is run as a formula when the CSV
+  // export is opened in a spreadsheet app.
+  it("neutralises CSV cells a spreadsheet would run as a formula", () => {
+    for (const value of ['=HYPERLINK("https://example.test","x")', "+SUM(A1)", "-cmd|x", "@x", "\tx"]) {
+      expect(neutraliseSpreadsheetFormula(value)).toBe(`'${value}`);
+    }
+    for (const value of ["Fix login", "-5", "+2.5", "3,5", "a=b", ""]) {
+      expect(neutraliseSpreadsheetFormula(value)).toBe(value);
+    }
   });
 
   it("sanitizes filenames", () => {

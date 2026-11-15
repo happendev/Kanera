@@ -58,6 +58,11 @@ SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
 KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS=false
 ```
 
+Self-hosted installations may set `KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS=true` for
+private ntfy/Gotify/webhook receivers and private HTTPS browser-push endpoints. Browser push still
+requires HTTPS; metadata, link-local and reserved targets remain blocked. Hosted deployments ignore
+this private-network opt-in. Compose already forwards it to the API, public API and worker.
+
 Dokploy routes the domain to the `web` container itself. The compose file also publishes `web` on
 `127.0.0.1:4200` for Docker-only installs; if another stack on the server already uses that port,
 set `WEB_BIND_PORT` to a free one, and `POSTGRES_BIND_PORT` likewise for `5433`.
@@ -81,7 +86,9 @@ Keep `POSTGRES_PASSWORD` URL-safe: Compose also inserts it into each service's i
 `API_TRUST_PROXY=true` is required for the app API when browser traffic reaches
 Node through Dokploy/Traefik or another trusted non-Cloudflare proxy. It lets
 auth rate limits use the real client IP instead of treating every user as the
-proxy.
+proxy. Traefik replaces `X-Forwarded-For` by default, which is what makes `true`
+safe here; if you have configured Traefik to trust forwarded headers from
+arbitrary sources, set the number of proxies instead (see `DEPLOY.md`).
 
 `PUBLIC_API_TRUST_PROXY=true` does the same for the public integration API when
 you expose it through a Dokploy domain, so public API rate limits use the real
@@ -498,9 +505,10 @@ ADMIN_WEB_ORIGIN=https://admin.kanera.example.com
 ADMIN_COOKIE_DOMAIN=
 ```
 
-`ADMIN_TRUST_PROXY` defaults to `true` in Compose so the management portal can
-run behind Dokploy/Traefik. Set it explicitly only if you are running the
-admin-api without a trusted reverse proxy.
+`ADMIN_TRUST_PROXY` defaults to `1` in Compose: one trusted reverse proxy
+(Dokploy/Traefik) in front of the admin-api, so login rate limiting sees the
+real client IP even if that proxy appends to `X-Forwarded-For`. Set the number
+of proxies you actually run, or `false` if the admin-api is directly exposed.
 
 After redeploying with the admin profile enabled, create a Dokploy domain for
 the `admin-api` service:

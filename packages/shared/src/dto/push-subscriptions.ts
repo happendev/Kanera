@@ -9,16 +9,22 @@ export const pushNotificationsConfigResponse = z.object({
 });
 export type PushNotificationsConfigResponse = z.infer<typeof pushNotificationsConfigResponse>;
 
+const pushEndpoint = z.url({ protocol: /^https$/ }).max(4096);
+const pushExpiration = z.number().int().min(0).max(8_640_000_000_000_000).nullable().optional();
+const contentEncoding = z.enum(["aes128gcm", "aesgcm"]).optional();
+const pushKeys = z.object({
+  // Uncompressed P-256 public point (65 bytes), and the 16-byte Web Push auth secret.
+  p256dh: z.string().regex(/^B[A-Za-z0-9_-]{86}=?$/),
+  auth: z.string().regex(/^[A-Za-z0-9_-]{22}(?:==)?$/),
+});
+
 export const pushSubscriptionBody = z.object({
-  endpoint: z.url(),
-  expirationTime: z.number().int().nullable().optional(),
-  contentEncoding: z.string().trim().min(1).max(64).optional(),
+  endpoint: pushEndpoint,
+  expirationTime: pushExpiration,
+  contentEncoding,
   deviceLabel: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
   userAgent: z.string().trim().min(1).max(512).optional(),
-  keys: z.object({
-    p256dh: z.string().min(1),
-    auth: z.string().min(1),
-  }),
+  keys: pushKeys,
 });
 export type PushSubscriptionBody = z.infer<typeof pushSubscriptionBody>;
 
@@ -46,16 +52,13 @@ export const pushTestResponse = z.object({
 export type PushTestResponse = z.infer<typeof pushTestResponse>;
 
 export const pushSubscriptionRefreshBody = z.object({
-  oldEndpoint: z.url(),
+  oldEndpoint: pushEndpoint,
   // The endpoint is a capability URL but can still leak through logs. Requiring the old Web Push
   // auth secret prevents an endpoint-only leak from rotating someone else's subscription.
-  oldAuth: z.string().min(1),
-  endpoint: z.url(),
-  expirationTime: z.number().int().nullable().optional(),
-  contentEncoding: z.string().trim().min(1).max(64).optional(),
-  keys: z.object({
-    p256dh: z.string().min(1),
-    auth: z.string().min(1),
-  }),
+  oldAuth: z.string().min(1).max(64),
+  endpoint: pushEndpoint,
+  expirationTime: pushExpiration,
+  contentEncoding,
+  keys: pushKeys,
 });
 export type PushSubscriptionRefreshBody = z.infer<typeof pushSubscriptionRefreshBody>;

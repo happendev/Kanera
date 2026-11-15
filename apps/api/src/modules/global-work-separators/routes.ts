@@ -152,7 +152,7 @@ export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.post("/work/workspaces/:workspaceId/users/:userId/lists/:listId/separators", async (req, reply) => {
-    const { workspaceId, userId: targetUserId, listId } = req.params as { workspaceId: string; userId: string; listId: string };
+    const { workspaceId, userId: targetUserId, listId } = dto.uuidParams("workspaceId", "userId", "listId").parse(req.params);
     const body = dto.createSeparatorBody.parse(req.body);
     await assertGlobalWorkSeparatorContext({ auth: req.auth, workspaceId, targetUserId, listId });
 
@@ -207,7 +207,7 @@ export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
   });
 
   app.patch("/global-work-separators/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateSeparatorBody.parse(req.body);
     const [current] = await db.select().from(globalWorkSeparators).where(eq(globalWorkSeparators.id, id)).limit(1);
     if (!current) throw notFound();
@@ -245,7 +245,7 @@ export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
   });
 
   app.post("/global-work-separators/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveSeparatorBody.parse(req.body);
     const [current] = await db.select().from(globalWorkSeparators).where(eq(globalWorkSeparators.id, id)).limit(1);
     if (!current) throw notFound();
@@ -304,7 +304,7 @@ export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
   });
 
   app.delete("/global-work-separators/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select().from(globalWorkSeparators).where(eq(globalWorkSeparators.id, id)).limit(1);
     if (!current) throw notFound();
     await assertGlobalWorkSeparatorContext({

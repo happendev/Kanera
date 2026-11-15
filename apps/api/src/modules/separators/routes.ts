@@ -14,7 +14,7 @@ export async function separatorRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.post("/boards/:boardId/lists/:listId/separators", async (req, reply) => {
-    const { boardId, listId } = req.params as { boardId: string; listId: string };
+    const { boardId, listId } = dto.uuidParams("boardId", "listId").parse(req.params);
     const body = dto.createSeparatorBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const [list] = await db.select().from(lists).where(eq(lists.id, listId)).limit(1);
@@ -67,7 +67,7 @@ export async function separatorRoutes(app: FastifyInstance) {
   });
 
   app.patch("/separators/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateSeparatorBody.parse(req.body);
     const [current] = await db.select().from(boardSeparators).where(eq(boardSeparators.id, id)).limit(1);
     if (!current) throw notFound();
@@ -98,7 +98,7 @@ export async function separatorRoutes(app: FastifyInstance) {
   });
 
   app.post("/separators/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveSeparatorBody.parse(req.body);
     const [current] = await db.select().from(boardSeparators).where(eq(boardSeparators.id, id)).limit(1);
     if (!current) throw notFound();
@@ -153,7 +153,7 @@ export async function separatorRoutes(app: FastifyInstance) {
   });
 
   app.delete("/separators/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select().from(boardSeparators).where(eq(boardSeparators.id, id)).limit(1);
     if (!current) throw notFound();
     const ctx = await assertBoardAccess(req.auth, current.boardId, "editor");

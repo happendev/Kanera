@@ -487,3 +487,29 @@ void test("a guest-created board sync is plan-blocked when either participating 
     env.KANERA_DEPLOYMENT_MODE = previousMode;
   }
 });
+
+// Failure this catches: the mirror worker copies every card in the mapped lists with system
+// authority, so a member limited to their assigned items could export the whole board through it.
+void test("a member limited to assigned items cannot mirror the board out", async () => {
+  const fixture = await setup();
+  const guest = await signupOwner(fixture.app, { orgName: "Guest Org", email: "mirror-restricted-guest@example.com", displayName: "Guest" });
+  const guestAuth = { authorization: `Bearer ${guest.accessToken}` };
+  const guestWorkspace = await fixture.app.inject({ method: "POST", url: "/workspaces", headers: guestAuth, payload: { name: "Guest workspace" } });
+  assert.equal(guestWorkspace.statusCode, 201, guestWorkspace.body);
+  const guestWorkspaceId = guestWorkspace.json<{ id: string }>().id;
+  const [guestBoard] = await db.insert(boards).values({ workspaceId: guestWorkspaceId, name: "Guest target", position: "1000.0000000000" }).returning();
+  const [guestList] = await db.select().from(lists).where(eq(lists.workspaceId, guestWorkspaceId)).orderBy(lists.position).limit(1);
+  await db.insert(boardMembers).values({ boardId: fixture.source.id, userId: guest.user.id, role: "editor", assignedItemsOnly: true });
+  const payload = { targetBoardId: guestBoard!.id, lists: [{ sourceListId: fixture.sourceList.id, targetListId: guestList!.id }] };
+
+  const blocked = await fixture.app.inject({ method: "POST", url: `/boards/${fixture.source.id}/mirrors`, headers: guestAuth, payload });
+  assert.equal(blocked.statusCode, 403, blocked.body);
+  const discovery = await fixture.app.inject({ method: "GET", url: `/mirror-target-boards?sourceBoardId=${fixture.source.id}`, headers: guestAuth });
+  assert.equal(discovery.statusCode, 403, discovery.body);
+  assert.equal((await db.select().from(boardMirrors).where(eq(boardMirrors.sourceBoardId, fixture.source.id))).length, 0);
+
+  // Control: the same editor without the restriction may create it.
+  await db.update(boardMembers).set({ assignedItemsOnly: false }).where(and(eq(boardMembers.boardId, fixture.source.id), eq(boardMembers.userId, guest.user.id)));
+  const allowed = await fixture.app.inject({ method: "POST", url: `/boards/${fixture.source.id}/mirrors`, headers: guestAuth, payload });
+  assert.equal(allowed.statusCode, 201, allowed.body);
+});

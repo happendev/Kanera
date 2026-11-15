@@ -1,3 +1,4 @@
+import { outboundHttpClient } from "../../lib/outbound-http.js";
 import "../../test/setup.integration.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
 import { customFields, webhookDeliveries, webhookEndpoints, workspaceApiKeys, workspaceMembers } from "@kanera/shared/schema";
@@ -273,9 +274,9 @@ void test("workspace admins can configure chat destinations without exposing cre
   assert.equal(genericList.statusCode, 200);
   assert.deepEqual(genericList.json<unknown[]>(), []);
 
-  const originalFetch = globalThis.fetch;
+  const originalFetch = outboundHttpClient.fetch;
   let deliveredBody = "";
-  globalThis.fetch = async (_input, init) => {
+  outboundHttpClient.fetch = async (_input, init) => {
     deliveredBody = typeof init?.body === "string" ? init.body : "";
     return new Response("ok", { status: 200 });
   };
@@ -292,7 +293,7 @@ void test("workspace admins can configure chat destinations without exposing cre
     assert.match(deliveredBody, /connected and ready/);
     assert.doesNotMatch(deliveredBody, /hooks\.slack/);
   } finally {
-    globalThis.fetch = originalFetch;
+    outboundHttpClient.fetch = originalFetch;
   }
 
   const invalidPriority = await app.inject({

@@ -10,15 +10,17 @@ import { resolveCardKey } from "./card-keys.js";
 import { lockCardsForWrite } from "./card-write-lock.js";
 import { emitToBoard, emitToUser, emitToWorkspace } from "../realtime/emit.js";
 
-const UUID = "[0-9a-fA-F-]{36}";
+// These IDs can reach queries inside a write transaction. Catching a malformed UUID's SQL
+// error would still abort that transaction, so validate its full structure during URL parsing.
+const UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 const CARD_KEY = "[A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]*";
 const ORGANISATION_KEY = "[A-Fa-f0-9]{16}";
 const URL_RE = new RegExp(`(?:https?:\\/\\/[^\\/\\s)<>]+)?(?:\\/o\\/${ORGANISATION_KEY}\\/c\\/${CARD_KEY}|\\/b\\/${UUID}(?:\\/c\\/${UUID})?|\\/w\\/${UUID}\\/notes)(?:[?#][^\\s)<>]*)?`, "g");
-const BOARD_PATH_RE = /^\/b\/([0-9a-fA-F-]{36})(?:\/)?$/;
-const CARD_PATH_RE = /^\/b\/([0-9a-fA-F-]{36})\/c\/([0-9a-fA-F-]{36})(?:\/)?$/;
+const BOARD_PATH_RE = new RegExp(`^/b/(${UUID})/?$`);
+const CARD_PATH_RE = new RegExp(`^/b/(${UUID})/c/(${UUID})/?$`);
 const CARD_KEY_PATH_RE = /^\/o\/([A-Fa-f0-9]{16})\/c\/([A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]*)(?:\/)?$/;
-const WORKSPACE_NOTES_PATH_RE = /^\/w\/([0-9a-fA-F-]{36})\/notes(?:\/)?$/;
-const UUID_RE = /^[0-9a-fA-F-]{36}$/;
+const WORKSPACE_NOTES_PATH_RE = new RegExp(`^/w/(${UUID})/notes/?$`);
+const UUID_RE = new RegExp(`^${UUID}$`);
 
 type DbLike = typeof db | Tx;
 

@@ -1,3 +1,4 @@
+import { outboundHttpClient } from "./outbound-http.js";
 import "../test/setup.integration.js";
 import { insertTestUsers } from "../test/user-fixtures.js";
 import { clients, notificationSettings, pushQueue, pushSubscriptions } from "@kanera/shared/schema";
@@ -15,10 +16,10 @@ import { ensureSystemWebPushConfig, webPushClient } from "./web-push.js";
 
 void test("hosted Free cancels personal destination delivery while Trial can send", async () => {
   const previousMode = env.KANERA_DEPLOYMENT_MODE;
-  const originalFetch = globalThis.fetch;
+  const originalFetch = outboundHttpClient.fetch;
   env.KANERA_DEPLOYMENT_MODE = "hosted";
   let calls = 0;
-  globalThis.fetch = async () => {
+  outboundHttpClient.fetch = async () => {
     calls += 1;
     return new Response(null, { status: 204 });
   };
@@ -55,12 +56,12 @@ void test("hosted Free cancels personal destination delivery while Trial can sen
     assert.deepEqual(await deliverPersonalNotificationTestRow(db, trialRow), { delivered: true, error: null });
     assert.equal(calls, 1);
   } finally {
-    globalThis.fetch = originalFetch;
+    outboundHttpClient.fetch = originalFetch;
     env.KANERA_DEPLOYMENT_MODE = previousMode;
   }
 });
 
-void test("push queue records zero-subscription deliveries as errors", async () => {
+void test("push queue cancels zero-subscription deliveries without claiming success", async () => {
   const app = await buildIntegrationServer();
   await ensureSystemWebPushConfig();
   const [client] = await db
@@ -89,7 +90,7 @@ void test("push queue records zero-subscription deliveries as errors", async () 
   assert.equal(await runPushQueueSweep({ db, log: app.log }), 1);
 
   const [processed] = await db.select().from(pushQueue).where(eq(pushQueue.id, queued.id)).limit(1);
-  assert.equal(processed?.status, "error");
+  assert.equal(processed?.status, "cancelled");
   assert.equal(processed?.sentAt, null);
   assert.equal(processed?.lastError, "no active push subscriptions");
 });
@@ -122,7 +123,7 @@ void test("push queue sweep drains every queued row across bounded batches", asy
   assert.equal(await runPushQueueSweep({ db, log: app.log }), 51);
   const processed = await db.select().from(pushQueue).where(inArray(pushQueue.id, rows.map((row) => row.id)));
   assert.equal(processed.length, 51);
-  assert.ok(processed.every((row) => row.status === "error" && row.lastError === "no active push subscriptions"));
+  assert.ok(processed.every((row) => row.status === "cancelled" && row.lastError === "no active push subscriptions"));
 });
 
 void test("partial multi-device failure retries only the failed subscription", async () => {
@@ -186,7 +187,7 @@ void test("expired push processing leases are reclaimed but active leases are le
 
   assert.equal(await runPushQueueSweep({ db, log: app.log }), 1);
   const rows = await db.select().from(pushQueue).where(inArray(pushQueue.id, [expired!.id, active!.id]));
-  assert.equal(rows.find((row) => row.id === expired!.id)?.status, "error");
+  assert.equal(rows.find((row) => row.id === expired!.id)?.status, "cancelled");
   assert.equal(rows.find((row) => row.id === active!.id)?.status, "immediate");
 });
 

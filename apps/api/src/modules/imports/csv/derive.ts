@@ -7,7 +7,7 @@ import type {
   CsvImportIssues,
   CsvImportManifest,
 } from "@kanera/shared/dto";
-import { CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto";
+import { CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH, customFieldValueColumns } from "@kanera/shared/dto";
 import { badRequest } from "../../../lib/errors.js";
 import { positionAtIndex } from "../../../lib/position.js";
 import { inferDateOrder, isValidTimezone, parseCsvDate, toInstant, toLocalDate } from "./dates.js";
@@ -74,7 +74,7 @@ export function parsedNumber(value: string): string | null {
     // Comma only: a single comma followed by 1-2 digits is a decimal mark, otherwise grouping.
     compact = /^[+-]?\d+,\d{1,2}$/.test(compact) ? compact.replace(",", ".") : compact.replace(/,/g, "");
   }
-  return DECIMAL_NUMBER.test(compact) ? compact : null;
+  return DECIMAL_NUMBER.test(compact) && customFieldValueColumns.valueNumber.safeParse(compact).success ? compact : null;
 }
 
 function validUrl(value: string): string | null {

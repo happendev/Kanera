@@ -12,21 +12,14 @@ import {
 // Keyset pagination cursor. createdAt alone is not unique, so a createdAt-only
 // cursor silently skips any rows that share the boundary timestamp. We encode
 // the row id as a tiebreaker and page on the (createdAt, id) tuple instead.
-function encodeNotificationCursor(row: { createdAt: Date; id: string }): string {
-  return `${row.createdAt.toISOString()}|${row.id}`;
+function encodeNotificationCursor(row: { cursorTimestamp: string; id: string }): string {
+  return `${row.cursorTimestamp}|${row.id}`;
 }
 
-function decodeNotificationCursor(raw: string): { createdAt: Date; id: string } | null {
-  const sep = raw.indexOf("|");
-  const iso = sep === -1 ? raw : raw.slice(0, sep);
-  // Legacy createdAt-only cursors carry no id. An empty id never satisfies
-  // `id < ''`, so the keyset condition below degrades to createdAt-only — the
-  // old behaviour — keeping any in-flight cursor from a prior deploy working.
-  const id = sep === -1 ? "" : raw.slice(sep + 1);
-  const createdAt = new Date(iso);
-  if (Number.isNaN(createdAt.getTime())) return null;
-  return { createdAt, id };
-}
+// Keep PostgreSQL's microseconds in the opaque cursor. JS Date loses them, which
+// would skip rows within the boundary millisecond. Raw ordering preserves use of
+// the existing (user_id, created_at, id) index instead of sorting an expression.
+const cursorTimestamp = sql<string>`to_char(${notifications.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
 function notificationSearchPattern(query: string): string {
   // Treat SQL wildcard characters as ordinary search text. Notification search
@@ -37,7 +30,7 @@ function notificationSearchPattern(query: string): string {
 function notificationFeedConditions(
   userId: string,
   query: Pick<ListNotificationsQuery, "includeRead" | "agentOnly" | "mentionsOnly" | "boardId" | "actorId" | "q">,
-  options?: { includeRead?: boolean; cursor?: { createdAt: Date; id: string } | null },
+  options?: { includeRead?: boolean; cursor?: { timestamp: string; id: string | null } | null },
 ): SQL[] {
   const includeRead = options?.includeRead ?? query.includeRead;
   const recentReadCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -53,8 +46,10 @@ function notificationFeedConditions(
   if (query.q) {
     const pattern = notificationSearchPattern(query.q);
     const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.q.trim());
-    const historicalKeyMatch = keyMatch
-      ? sql`(${cards.number} = ${Number(keyMatch[2])} and exists (
+    // Search text remains valid even when a key-like suffix exceeds the int4 card-number domain.
+    const keyNumber = keyMatch ? Number(keyMatch[2]) : 0;
+    const historicalKeyMatch = keyMatch && Number.isInteger(keyNumber) && keyNumber <= 2147483647
+      ? sql`(${cards.number} = ${keyNumber} and exists (
           select 1 from ${cardKeyPrefixReservations} notification_key_alias
           where notification_key_alias.workspace_id = ${cards.workspaceId}
             and notification_key_alias.prefix = ${keyMatch[1]!.toUpperCase()}
@@ -72,10 +67,11 @@ function notificationFeedConditions(
     )!);
   }
   if (options?.cursor) {
+    const boundary = sql`${options.cursor.timestamp}::timestamptz`;
     conditions.push(
-      or(
-        lt(notifications.createdAt, options.cursor.createdAt),
-        and(eq(notifications.createdAt, options.cursor.createdAt), lt(notifications.id, options.cursor.id)),
+      options.cursor.id === null ? lt(notifications.createdAt, boundary) : or(
+        lt(notifications.createdAt, boundary),
+        and(eq(notifications.createdAt, boundary), lt(notifications.id, options.cursor.id)),
       )!,
     );
   }
@@ -85,7 +81,7 @@ function notificationFeedConditions(
 
 function notificationFeedQueryJoins() {
   return db
-    .select({ id: notifications.id, createdAt: notifications.createdAt })
+    .select({ id: notifications.id, createdAt: notifications.createdAt, cursorTimestamp })
     .from(notifications)
     .leftJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
     .leftJoin(cards, eq(cards.id, notifications.cardId))
@@ -104,7 +100,7 @@ export async function listNotificationsPage({
   includeRead?: boolean;
 }): Promise<NotificationsPage> {
   const query = dto.listNotificationsQuery.parse(rawQuery ?? {});
-  const cursor = query.cursor ? decodeNotificationCursor(query.cursor) : null;
+  const cursor = query.cursor ? dto.decodeNotificationCursor(query.cursor) : null;
   const conditions = notificationFeedConditions(userId, query, { includeRead, cursor });
 
   // The badge count is independent of paging and notification hydration.

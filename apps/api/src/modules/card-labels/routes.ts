@@ -19,7 +19,7 @@ export async function cardLabelRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.post("/workspaces/:wsId/card-labels", async (req, reply) => {
-    const { wsId: workspaceId } = req.params as { wsId: string };
+    const { wsId: workspaceId } = dto.uuidParams("wsId").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createCardLabelBody.parse(req.body);
 
@@ -50,7 +50,7 @@ export async function cardLabelRoutes(app: FastifyInstance) {
   });
 
   app.patch("/card-labels/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateCardLabelBody.parse(req.body);
     const [current] = await db.select().from(cardLabels).where(eq(cardLabels.id, id)).limit(1);
     if (!current) throw notFound();
@@ -80,7 +80,7 @@ export async function cardLabelRoutes(app: FastifyInstance) {
   });
 
   app.delete("/card-labels/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select().from(cardLabels).where(eq(cardLabels.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
@@ -99,7 +99,7 @@ export async function cardLabelRoutes(app: FastifyInstance) {
   });
 
   app.post("/card-labels/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveCardLabelBody.parse(req.body);
     const [current] = await db.select().from(cardLabels).where(eq(cardLabels.id, id)).limit(1);
     if (!current) throw notFound();

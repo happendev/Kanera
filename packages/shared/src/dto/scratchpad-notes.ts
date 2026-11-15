@@ -1,4 +1,6 @@
+import { isoTimestamp } from "./_dates.js";
 import { z } from "zod";
+import { NOTE_CONTENT_MAX_LENGTH } from "./name-limits.js";
 import type { ScratchpadNoteAttachment } from "../schema/scratchpad-note-attachment.js";
 
 export const createScratchpadNoteBody = z.object({
@@ -17,8 +19,8 @@ export type CreateScratchpadNoteBody = z.infer<typeof createScratchpadNoteBody>;
  */
 export const updateScratchpadNoteBody = z.object({
   title: z.string().max(200).optional(),
-  content: z.string().optional(),
-  baseUpdatedAt: z.iso.datetime().optional(),
+  content: z.string().max(NOTE_CONTENT_MAX_LENGTH).optional(),
+  baseUpdatedAt: isoTimestamp.optional(),
 }).refine(
   (value) => value.title !== undefined || value.content !== undefined,
   "provide at least one scratchpad note field to update",

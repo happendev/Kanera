@@ -62,13 +62,13 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
   });
 
   app.get("/workspaces/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const { role } = await assertWorkspaceAccess(req.auth, id);
     return loadWorkspaceSettings({ auth: req.auth, workspaceId: id, role });
   });
 
   app.patch("/workspaces/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     await assertWorkspaceAccess(req.auth, id, "admin");
     const body = dto.updateWorkspaceBody.parse(req.body);
     const result = await updateWorkspace({ auth: req.auth, workspaceId: id, body });
@@ -78,7 +78,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
   });
 
   app.delete("/workspaces/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.deleteWorkspaceBody.parse(req.body);
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     const [workspace] = await db.select({ name: workspaces.name }).from(workspaces).where(eq(workspaces.id, id)).limit(1);
@@ -90,20 +90,20 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
   });
 
   app.get("/workspaces/:id/members", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     const { clientId } = await assertWorkspaceAccess(req.auth, id);
     return listWorkspaceMembers({ workspaceId: id, clientId, directory });
   });
 
   app.get("/workspaces/:id/member-candidates", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     return listWorkspaceMemberCandidates({ clientId });
   });
 
   app.post("/workspaces/:id/members", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     const body = dto.addWorkspaceMemberBody.parse(req.body);
     const payload = await addWorkspaceMember({ auth: req.auth, workspaceId: id, clientId, body });
@@ -112,7 +112,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
   });
 
   app.patch("/workspaces/:id/members/:userId", async (req) => {
-    const { id, userId } = req.params as { id: string; userId: string };
+    const { id, userId } = dto.uuidParams("id", "userId").parse(req.params);
     if (userId === req.auth.sub) throw badRequest("cannot change your own role");
     await assertWorkspaceAccess(req.auth, id, "admin");
     const body = dto.updateWorkspaceMemberBody.parse(req.body);
@@ -123,7 +123,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
   });
 
   app.delete("/workspaces/:id/members/:userId", async (req, reply) => {
-    const { id, userId } = req.params as { id: string; userId: string };
+    const { id, userId } = dto.uuidParams("id", "userId").parse(req.params);
     if (userId === req.auth.sub) throw badRequest("cannot remove yourself");
     await assertWorkspaceAccess(req.auth, id, "admin");
     const cleanup = await removeWorkspaceMember({ auth: req.auth, workspaceId: id, userId });
@@ -132,7 +132,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
   });
 
   app.get("/workspaces/:id/boards", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     await assertWorkspaceAccess(req.auth, id);
     const rows = await db.select().from(boards).where(and(eq(boards.workspaceId, id), isNull(boards.archivedAt))).orderBy(asc(boards.position));
@@ -140,44 +140,40 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
   });
 
   app.get("/workspaces/:id/guests", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     return listWorkspaceGuests({ workspaceId: id, clientId });
   });
 
   app.post("/workspaces/:id/guests/seat-preview", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     await assertGuestsAllowed(clientId);
-    const raw = req.body as { boardId?: unknown; email?: unknown } | null;
-    if (!raw || typeof raw.boardId !== "string") throw badRequest("boardId is required");
-    const body = dto.createBoardInvitationBody.parse(req.body);
-    return previewGuestInvitationSeat({ workspaceId: id, clientId, boardId: raw.boardId, body });
+    const body = dto.createWorkspaceGuestInvitationBody.parse(req.body);
+    return previewGuestInvitationSeat({ workspaceId: id, clientId, boardId: body.boardId, body });
   });
 
   app.post("/workspaces/:id/guests/invitations", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     // Free-tier hosted orgs cannot use guests at all. Paid/trial/self-hosted fall through to the
     // per-org guest board allowance below.
     await assertGuestsAllowed(clientId);
-    const raw = req.body as { boardId?: unknown } | null;
-    if (!raw || typeof raw.boardId !== "string") throw badRequest("boardId is required");
-    const body = dto.createBoardInvitationBody.parse(req.body);
-    const result = await inviteWorkspaceGuest({ auth: req.auth, workspaceId: id, clientId, boardId: raw.boardId, body });
+    const body = dto.createWorkspaceGuestInvitationBody.parse(req.body);
+    const result = await inviteWorkspaceGuest({ auth: req.auth, workspaceId: id, clientId, boardId: body.boardId, body });
     await emitInviteWorkspaceGuest({ auth: req.auth, mailer: app.mailer, locale: requestLocale(req), result });
     return reply.status(201).send(result.response);
   });
 
   app.delete("/workspaces/:id/guests/invitations/:invitationId", async (req, reply) => {
-    const { id, invitationId } = req.params as { id: string; invitationId: string };
+    const { id, invitationId } = dto.uuidParams("id", "invitationId").parse(req.params);
     await assertWorkspaceAccess(req.auth, id, "admin");
     await revokeWorkspaceGuestInvitation({ workspaceId: id, invitationId });
     return reply.status(204).send();
   });
 
   app.delete("/workspaces/:id/guests/:boardId/:userId", async (req, reply) => {
-    const { id, boardId, userId } = req.params as { id: string; boardId: string; userId: string };
+    const { id, boardId, userId } = dto.uuidParams("id", "boardId", "userId").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     const { cleanup, guestSeat } = await removeWorkspaceGuest({ auth: req.auth, workspaceId: id, clientId, boardId, userId });
     await emitRemoveWorkspaceGuest({ boardId, userId, cleanup });

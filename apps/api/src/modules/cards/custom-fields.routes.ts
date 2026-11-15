@@ -15,7 +15,7 @@ import {
  */
 export function cardCustomFieldRoutes(app: FastifyInstance) {
   app.put("/cards/:id/custom-fields/:fieldId", async (req) => {
-    const { id, fieldId } = req.params as { id: string; fieldId: string };
+    const { id, fieldId } = dto.uuidParams("id", "fieldId").parse(req.params);
     const body = dto.setCustomFieldValueBody.parse(req.body);
     const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
@@ -25,7 +25,7 @@ export function cardCustomFieldRoutes(app: FastifyInstance) {
   });
 
   app.delete("/cards/:id/custom-fields/:fieldId", async (req, reply) => {
-    const { id, fieldId } = req.params as { id: string; fieldId: string };
+    const { id, fieldId } = dto.uuidParams("id", "fieldId").parse(req.params);
     const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
     const result = await clearCardCustomFieldValue({ auth: req.auth, card, ctx, fieldId });

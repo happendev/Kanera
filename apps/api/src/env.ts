@@ -2,6 +2,22 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import "./load-env.js";
 
+// `true` trusts every hop, so the client IP is whatever the left-most X-Forwarded-For entry says.
+// That is only safe when the outermost proxy overwrites the header. A number is the count of
+// proxies you run in front of Node (1 for the bundled nginx alone, 2 for Traefik plus nginx):
+// the client IP is then read that many hops from the right, which a client cannot forge.
+const trustProxySetting = z
+  .union([z.string(), z.boolean(), z.number()])
+  .transform((v) => {
+    if (v === true || v === "true") return true;
+    const hops = typeof v === "number" ? v : /^\d+$/.test(String(v).trim()) ? Number(String(v).trim()) : 0;
+    if (!Number.isSafeInteger(hops) || hops <= 0 || hops > 16) return false;
+    // Fastify's hop-count form, written as its trust function: hop 0 is the socket peer. A plain
+    // number would make the setting's type `boolean | number`, which Fastify's typings read as HTTP/2.
+    return (_address: string, hop: number) => hop < hops;
+  })
+  .default(false);
+
 const HOSTED_MODE_TOKEN_SHA256 = "c436db886c499ec84d0d0fe42fc9ba99a2f7c7d7456e45f216e998a8c10d2544";
 const emptyToUndefined = (value: unknown) => (value === "" ? undefined : value);
 const commaSeparatedEmails = (value: unknown) => {
@@ -43,10 +59,7 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   KANERA_ENVIRONMENT: z.enum(["development", "test", "staging", "production"]).optional(),
   API_PORT: z.coerce.number().int().positive().default(3000),
   WORKER_PORT: z.coerce.number().int().positive().default(3003),
-  API_TRUST_PROXY: z
-    .union([z.string(), z.boolean()])
-    .transform((v) => v === true || v === "true")
-    .default(false),
+  API_TRUST_PROXY: trustProxySetting,
   PUBLIC_API_PORT: z.coerce.number().int().positive().default(3001),
   PUBLIC_API_OAUTH_ISSUER: z.url().default("http://localhost:3001"),
   MCP_PUBLIC_URL: z.url().default("http://localhost:3002/mcp"),
@@ -72,12 +85,10 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   // the MCP bridge's MCP_UPSTREAM_TIMEOUT_MS (15s) so a queued tool call does not time out upstream.
   PUBLIC_API_RATE_LIMIT_QUEUE_SIZE: z.coerce.number().int().nonnegative().default(10),
   PUBLIC_API_RATE_LIMIT_QUEUE_MAX_WAIT_MS: z.coerce.number().int().nonnegative().default(10_000),
-  PUBLIC_API_TRUST_PROXY: z
-    .union([z.string(), z.boolean()])
-    .transform((v) => v === true || v === "true")
-    .default(false),
+  PUBLIC_API_TRUST_PROXY: trustProxySetting,
   KANERA_DEPLOYMENT_MODE: z.enum(["self_hosted", "hosted"]).default("self_hosted"),
   KANERA_HOSTED_MODE_TOKEN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  // Self-hosted receivers only; browser-push endpoints retain HTTPS even with this opt-in.
   KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS: z
     .union([z.string(), z.boolean()])
     .transform((v) => v === true || v === "true")
@@ -235,10 +246,7 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   // absent so a fresh deploy is not silently left with no way in.
   ADMIN_EMAIL: z.preprocess(emptyToUndefined, z.email().optional()),
   ADMIN_PASSWORD: z.preprocess(emptyToUndefined, z.string().min(8).optional()),
-  ADMIN_TRUST_PROXY: z
-    .union([z.string(), z.boolean()])
-    .transform((v) => v === true || v === "true")
-    .default(false),
+  ADMIN_TRUST_PROXY: trustProxySetting,
   // Optional admin-only override. Use when the tenant app and admin portal live on sibling hostnames,
   // e.g. tenant cookie domain kanera.example.com and admin origin admin.example.com.
   ADMIN_COOKIE_DOMAIN: z.preprocess(emptyToUndefined, z.string().optional()),

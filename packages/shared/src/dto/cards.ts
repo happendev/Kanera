@@ -1,3 +1,4 @@
+import { calendarDate } from "./_dates.js";
 import { z } from "zod";
 import { CARD_TITLE_MAX_LENGTH } from "../card-value-limits.js";
 import { CARD_DUE_DATE_SLOTS } from "../schema/card.js";
@@ -8,7 +9,7 @@ import { separatorAnchorItem } from "./separators.js";
 export const dueDateSlot = z.enum(CARD_DUE_DATE_SLOTS);
 export type DueDateSlot = z.infer<typeof dueDateSlot>;
 
-const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const localDate = calendarDate;
 
 /**
  * A request may name both ends of a card's schedule; when it does, they must be in order. A start
@@ -109,7 +110,7 @@ export const bulkSetCardCompletionBody = bulkCardSelectionBody.extend({
 export type BulkSetCardCompletionBody = z.infer<typeof bulkSetCardCompletionBody>;
 
 export const bulkSetCardDueDateBody = bulkCardSelectionBody.extend({
-  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  dueDateLocalDate: calendarDate.nullable(),
   dueDateSlot: dueDateSlot.nullable().optional(),
 });
 export type BulkSetCardDueDateBody = z.infer<typeof bulkSetCardDueDateBody>;
@@ -246,7 +247,7 @@ export const CHECKLIST_TREE_ITEMS_PER_REQUEST_MAX = 500;
 
 const checklistTitle = z.string().trim().min(1).max(CARD_TITLE_MAX_LENGTH);
 const checklistItemText = z.string().trim().min(1).max(CHECKLIST_ITEM_TEXT_MAX_LENGTH);
-const checklistLocalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const checklistLocalDate = calendarDate;
 
 // Sub-checklists are exactly one level deep and their items are leaves that carry only text and
 // completion. The schemas below are strict on purpose: a description, assignee, due date, or
@@ -404,7 +405,7 @@ export const updateChecklistItemBody = z.strictObject({
   description: z.string().max(50000).nullable().optional(),
   completed: z.boolean().optional(),
   assigneeId: z.uuid().nullable().optional(),
-  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  dueDateLocalDate: calendarDate.nullable().optional(),
   dueDateSlot: dueDateSlot.nullable().optional(),
 }).refine(
   (v) =>
@@ -440,7 +441,7 @@ export type UpdateChecklistItemsBody = z.infer<typeof updateChecklistItemsBody>;
 // `itemIds` must be rejected rather than stripped into an update of the whole checklist.
 export const bulkUpdateChecklistItemsBody = z.strictObject({
   assigneeId: z.uuid().nullable().optional(),
-  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  dueDateLocalDate: calendarDate.nullable().optional(),
   dueDateSlot: dueDateSlot.nullable().optional(),
 }).refine(
   (v) =>

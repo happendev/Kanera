@@ -265,7 +265,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
   });
 
   app.post("/ops/push-queue/:id/retry", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select({ status: pushQueue.status }).from(pushQueue).where(eq(pushQueue.id, id)).limit(1);
     if (!current) throw notFound("push notification not found");
     if (current.status !== PUSH_QUEUE_STATUS.error) throw badRequest("only failed push notifications can be retried");
@@ -281,7 +281,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
   });
 
   app.post("/ops/push-queue/:id/cancel", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select({ status: pushQueue.status }).from(pushQueue).where(eq(pushQueue.id, id)).limit(1);
     if (!current) throw notFound("push notification not found");
     if (current.status !== PUSH_QUEUE_STATUS.queued && current.status !== PUSH_QUEUE_STATUS.immediate) {
@@ -330,7 +330,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
   });
 
   app.post("/ops/email-queue/:id/retry", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select({ status: emailQueue.status }).from(emailQueue).where(eq(emailQueue.id, id)).limit(1);
     if (!current) throw notFound("email not found");
     if (current.status !== EMAIL_QUEUE_STATUS.error) throw badRequest("only failed emails can be retried");
@@ -347,7 +347,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
   });
 
   app.post("/ops/email-queue/:id/cancel", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select({ status: emailQueue.status }).from(emailQueue).where(eq(emailQueue.id, id)).limit(1);
     if (!current) throw notFound("email not found");
     if (current.status !== EMAIL_QUEUE_STATUS.queued && current.status !== EMAIL_QUEUE_STATUS.immediate) throw badRequest("only pending emails can be cancelled");
@@ -395,7 +395,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
   });
 
   app.post("/ops/webhook-deliveries/:id/retry", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select({ status: webhookDeliveries.status }).from(webhookDeliveries).where(eq(webhookDeliveries.id, id)).limit(1);
     if (!current) throw notFound("delivery not found");
     if (current.status !== "failed") throw badRequest("only failed webhook deliveries can be retried");
@@ -411,7 +411,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
   });
 
   app.post("/ops/webhook-deliveries/:id/cancel", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select({ status: webhookDeliveries.status }).from(webhookDeliveries).where(eq(webhookDeliveries.id, id)).limit(1);
     if (!current) throw notFound("delivery not found");
     if (current.status !== "queued" && current.status !== "delivering") throw badRequest("only pending webhook deliveries can be cancelled");
@@ -462,7 +462,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
   });
 
   app.post("/ops/event-outbox/:id/retry", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select({ realtimeDispatched: eventOutbox.realtimeDispatched, webhooksEnqueued: eventOutbox.webhooksEnqueued }).from(eventOutbox).where(eq(eventOutbox.id, id)).limit(1);
     if (!current) throw notFound("outbox event not found");
     if (current.realtimeDispatched && current.webhooksEnqueued) throw badRequest("only pending outbox events can be retried");
@@ -479,7 +479,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
   });
 
   app.post("/ops/event-outbox/:id/cancel", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select({ realtimeDispatched: eventOutbox.realtimeDispatched, webhooksEnqueued: eventOutbox.webhooksEnqueued }).from(eventOutbox).where(eq(eventOutbox.id, id)).limit(1);
     if (!current) throw notFound("outbox event not found");
     if (current.realtimeDispatched && current.webhooksEnqueued) throw badRequest("only pending outbox events can be cancelled");

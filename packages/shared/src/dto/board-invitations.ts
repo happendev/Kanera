@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BOARD_ROLES } from "../schema/member-roles.js";
 
 export const createBoardInvitationBody = z.object({
-  email: z.email(),
+  email: z.email().max(254),
   role: z.enum(BOARD_ROLES).default("editor"),
   assignedItemsOnly: z.boolean().default(false),
   expiresInDays: z.number().int().positive().max(365).nullable().optional(),
@@ -45,3 +45,5 @@ export const pendingBoardInvitationSummary = z.object({
   })),
 });
 export type PendingBoardInvitationSummary = z.infer<typeof pendingBoardInvitationSummary>;
+
+export const createWorkspaceGuestInvitationBody = createBoardInvitationBody.extend({ boardId: z.uuid() });

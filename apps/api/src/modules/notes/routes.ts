@@ -29,7 +29,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   app.addHook("preHandler", app.authenticate);
 
   app.get("/workspaces/:wsId/notes", async (req) => {
-    const { wsId: workspaceId } = req.params as { wsId: string };
+    const { wsId: workspaceId } = dto.uuidParams("wsId").parse(req.params);
     const query = dto.listNotesQuery.parse(req.query);
     const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     await assertWorkspaceAccess(req.auth, workspaceId, "member");
@@ -48,7 +48,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   });
 
   app.get("/boards/:boardId/notes", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const query = dto.listNotesQuery.parse(req.query);
     const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     const { workspaceId } = await assertBoardAccess(req.auth, boardId, "observer");
@@ -65,14 +65,14 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   });
 
   app.get("/notes/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const note = await loadOrFail(id);
     await authoriseRead(req.auth, note);
     return shapeNote(note, req.auth.cid);
   });
 
   app.get("/notes/:id/backlinks", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const note = await loadOrFail(id);
     await authoriseRead(req.auth, note);
     // Healing with the viewer's claims can reveal links the author could not record, but its
@@ -84,7 +84,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   });
 
   app.post("/workspaces/:wsId/notes", async (req, reply) => {
-    const { wsId: workspaceId } = req.params as { wsId: string };
+    const { wsId: workspaceId } = dto.uuidParams("wsId").parse(req.params);
     const body = dto.createNoteBody.parse(req.body);
     // Creation passes at plain member for both scopes (team notes are shared with every workspace
     // member), so gate read-scoped credentials explicitly.
@@ -98,7 +98,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   });
 
   app.post("/boards/:boardId/notes", async (req, reply) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.createNoteBody.parse(req.body);
     // Same read-scope gate as the workspace create route: personal scope passes at observer.
     assertWriteCapableCredential(req.auth);
@@ -111,7 +111,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   });
 
   app.patch("/notes/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateNoteBody.parse(req.body);
     const note = await loadOrFail(id);
     await authoriseWrite(req.auth, note);
@@ -122,7 +122,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   });
 
   app.post("/notes/:id/duplicate", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.duplicateNoteBody.parse(req.body ?? {});
     const source = await loadOrFail(id);
     const { clientId: ownerClientId } = await authoriseWrite(req.auth, source);
@@ -137,7 +137,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   });
 
   app.patch("/notes/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveNoteBody.parse(req.body);
     const note = await loadOrFail(id);
     await authoriseWrite(req.auth, note);
@@ -148,7 +148,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   });
 
   app.get("/notes/:id/attachments", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const note = await loadOrFail(id);
     await authoriseRead(req.auth, note);
 
@@ -156,8 +156,8 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   });
 
   app.post("/notes/:id/attachments", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const query = req.query as { source?: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
+    const query = dto.noteAttachmentUploadQuery.parse(req.query);
     const sourceParam = query.source;
     if (sourceParam !== undefined && !isNoteAttachmentSource(sourceParam)) {
       throw badRequest("invalid source");
@@ -183,7 +183,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
 
   if (allowDeletes) {
     app.delete("/notes/:id/attachments/:attachmentId", async (req, reply) => {
-      const { id, attachmentId } = req.params as { id: string; attachmentId: string };
+      const { id, attachmentId } = dto.uuidParams("id", "attachmentId").parse(req.params);
       const note = await loadOrFail(id);
       await authoriseWrite(req.auth, note);
 
@@ -193,7 +193,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     });
 
     app.delete("/notes/:id", async (req, reply) => {
-      const { id } = req.params as { id: string };
+      const { id } = dto.uuidParams("id").parse(req.params);
       const note = await loadOrFail(id);
       await authoriseWrite(req.auth, note);
 
@@ -205,14 +205,14 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   }
 
   app.post("/notes/:id/lock", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const note = await loadOrFail(id);
     await authoriseWrite(req.auth, note);
     return lockNote({ auth: req.auth, note });
   });
 
   app.post("/notes/:id/unlock", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const note = await loadOrFail(id);
     await authoriseWrite(req.auth, note);
     await unlockNote({ auth: req.auth, note });

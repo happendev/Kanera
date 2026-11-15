@@ -1,3 +1,4 @@
+import { offsetTimestamp } from "./_dates.js";
 import { z } from "zod";
 
 /**
@@ -6,7 +7,7 @@ import { z } from "zod";
  * time as an ISO instant, so the server never interprets a time zone itself.
  */
 export const setCardReminderBody = z.strictObject({
-  remindAt: z.iso.datetime({ offset: true }),
+  remindAt: offsetTimestamp,
 });
 export type SetCardReminderBody = z.infer<typeof setCardReminderBody>;
 

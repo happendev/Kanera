@@ -39,11 +39,13 @@ export const createAgentConnectionBody = z.object({
 export type CreateAgentConnectionBody = z.infer<typeof createAgentConnectionBody>;
 
 export const webhookEventType = z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH);
+// Stored as one jsonb value and returned with every endpoint listing; capped and deduplicated.
+const webhookEventTypes = z.array(webhookEventType).max(200).transform((types) => [...new Set(types)]);
 
 export const createWebhookEndpointBody = z.object({
   name: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH),
   url: z.url().max(2000),
-  eventTypes: z.array(webhookEventType).default([]),
+  eventTypes: webhookEventTypes.default([]),
   enabled: z.boolean().default(true),
 });
 export type CreateWebhookEndpointBody = z.infer<typeof createWebhookEndpointBody>;
@@ -51,7 +53,7 @@ export type CreateWebhookEndpointBody = z.infer<typeof createWebhookEndpointBody
 export const updateWebhookEndpointBody = z.object({
   name: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
   url: z.url().max(2000).optional(),
-  eventTypes: z.array(webhookEventType).optional(),
+  eventTypes: webhookEventTypes.optional(),
   enabled: z.boolean().optional(),
 }).refine(
   (v) => v.name !== undefined || v.url !== undefined || v.eventTypes !== undefined || v.enabled !== undefined,

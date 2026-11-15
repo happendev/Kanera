@@ -1,11 +1,15 @@
 import type { PushSubscriptionBody } from "@kanera/shared/dto";
 import { clients, pushSubscriptions, SYSTEM_CONFIG_ROW_ID, systemConfigs } from "@kanera/shared/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import webPush from "web-push";
 import type { Db } from "../db.js";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { AppError } from "./errors.js";
+import { ECDH } from "node:crypto";
+import { dto } from "@kanera/shared";
+import { assertPushEndpointAllowed, resolveOutboundTarget } from "./ssrf.js";
+import { outboundHttpClient } from "./outbound-http.js";
+import { AppError, badRequest, conflict, notFound } from "./errors.js";
 import { decryptSecret, encryptSecret } from "./secrets.js";
 
 const WEB_PUSH_DISABLED_MESSAGE = "web push is not configured";
@@ -30,12 +34,21 @@ export const webPushClient = {
   generateVAPIDKeys() {
     return webPush.generateVAPIDKeys();
   },
-  sendNotification(
+  async sendNotification(
     subscription: webPush.PushSubscription,
     payload: string,
     options?: webPush.RequestOptions,
   ) {
-    return webPush.sendNotification(subscription, payload, options);
+    assertPushEndpointAllowed(subscription.endpoint);
+    const request = webPush.generateRequestDetails(subscription, payload, options);
+    const response = await outboundHttpClient.fetch(request.endpoint, {
+      method: request.method, headers: request.headers,
+      body: request.body,
+    }, { policy: "push", timeoutMs: options?.timeout ?? 10_000, maxResponseBytes: 64 * 1024 });
+    const body = await response.text();
+    const headers = Object.fromEntries(response.headers.entries());
+    if (!response.ok) throw new webPush.WebPushError("push provider rejected the request", response.status, headers, body, subscription.endpoint);
+    return { statusCode: response.status, headers, body };
   },
 };
 
@@ -223,6 +236,30 @@ export async function getWebPushPublicConfig(clientId: string) {
   };
 }
 
+// The browser UI is not a trust boundary: validate capability targets and actual
+// P-256 material before a subscription can be stored or rotated.
+function validatePushSubscription(subscription: Pick<PushSubscriptionBody, "endpoint" | "keys">) {
+  assertPushEndpointAllowed(subscription.endpoint);
+  const keys = dto.pushSubscriptionBody.shape.keys.parse(subscription.keys);
+  try {
+    ECDH.convertKey(Buffer.from(keys.p256dh, "base64url"), "prime256v1");
+  } catch {
+    // Use the shared translated validation envelope without exposing crypto internals.
+    dto.pushSubscriptionBody.shape.keys.shape.p256dh.refine(() => false).parse(keys.p256dh);
+  }
+}
+
+// Registration-time DNS check. A name that does not resolve (or a resolver that times out) is the
+// caller's bad endpoint, not a server fault; delivery resolves and pins again on every send.
+async function assertPushEndpointResolves(endpoint: string): Promise<void> {
+  try {
+    await resolveOutboundTarget(endpoint, "push", AbortSignal.timeout(10_000));
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw badRequest("invalid notification destination url");
+  }
+}
+
 export async function upsertPushSubscriptionForUser(args: {
   clientId: string;
   userId: string;
@@ -232,10 +269,12 @@ export async function upsertPushSubscriptionForUser(args: {
   // A browser endpoint belongs to the global identity, not the organisation selected in this tab.
   // Registration only needs the deployment-wide VAPID config; per-org push policy is enforced when
   // an event from that organisation is delivered.
+  validatePushSubscription(args.subscription);
   await ensureWebPushConfigured();
+  await assertPushEndpointResolves(args.subscription.endpoint);
 
   const now = new Date();
-  await db
+  const [stored] = await db
     .insert(pushSubscriptions)
     .values({
       clientId: args.clientId,
@@ -255,6 +294,13 @@ export async function upsertPushSubscriptionForUser(args: {
     })
     .onConflictDoUpdate({
       target: pushSubscriptions.endpoint,
+      // Knowing a capability URL alone must not let another identity replace the
+      // browser's keys. A real shared-browser sign-in can prove possession of its
+      // current keypair; ordinary re-registration by the same identity is unchanged.
+      setWhere: or(eq(pushSubscriptions.userId, args.userId), and(
+        eq(pushSubscriptions.keyP256dh, args.subscription.keys.p256dh),
+        eq(pushSubscriptions.keyAuth, args.subscription.keys.auth),
+      )),
       set: {
         clientId: args.clientId,
         userId: args.userId,
@@ -270,7 +316,10 @@ export async function upsertPushSubscriptionForUser(args: {
         failureCount: 0,
         updatedAt: now,
       },
-    });
+    }).returning({ id: pushSubscriptions.id });
+  // Another identity owns this endpoint and the keys do not match. Answer like the refresh route's
+  // wrong-auth case, so a capability URL alone does not reveal who else registered it.
+  if (!stored) throw notFound("subscription not found");
 }
 
 export async function deletePushSubscriptionForUser(args: {
@@ -300,6 +349,7 @@ export async function refreshPushSubscription(args: {
   expirationTime?: number | null;
   contentEncoding?: string | null;
 }): Promise<boolean> {
+  validatePushSubscription(args);
   const now = new Date();
   const [existing] = await db
     .select({ id: pushSubscriptions.id })
@@ -311,8 +361,10 @@ export async function refreshPushSubscription(args: {
     .limit(1);
 
   if (!existing) return false;
+  await assertPushEndpointResolves(args.endpoint);
 
-  await db
+  try {
+    await db
     .update(pushSubscriptions)
     .set({
       endpoint: args.endpoint,
@@ -327,6 +379,14 @@ export async function refreshPushSubscription(args: {
       updatedAt: now,
     })
     .where(eq(pushSubscriptions.id, existing.id));
+  } catch (error) {
+    // A valid rotation may name an already registered endpoint. The unique
+    // constraint is authoritative, including concurrent rotations, and SQL keeps
+    // the old subscription intact when that statement fails.
+    const cause = error instanceof Error && error.cause ? error.cause : error;
+    if (cause && typeof cause === "object" && "code" in cause && cause.code === "23505") throw conflict();
+    throw error;
+  }
 
   return true;
 }

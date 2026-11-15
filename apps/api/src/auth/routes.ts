@@ -17,7 +17,7 @@ import {
   workspaces,
   mfaCredentials,
 } from "@kanera/shared/schema";
-import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db.js";
@@ -324,8 +324,8 @@ export async function authRoutes(app: FastifyInstance) {
     }
   }
 
-  // Verify and consume the newest valid code for (email, purpose[, userId]). On a wrong
-  // code we increment attempts as a standalone write — this must persist even when the
+  // Verify and consume the newest valid code for (email, purpose[, userId]). Every check
+  // spends an attempt as a standalone write — this must persist even when the
   // caller's surrounding transaction later rolls back, otherwise the attempt cap is
   // defeated. Consuming (marking used) is conditional so a concurrent request cannot
   // redeem the same code twice. Throws badRequest on any failure.
@@ -336,7 +336,7 @@ export async function authRoutes(app: FastifyInstance) {
     userId?: string | null;
   }) {
     const [row] = await db
-      .select({ id: emailVerificationCodes.id, codeHash: emailVerificationCodes.codeHash, attempts: emailVerificationCodes.attempts })
+      .select({ id: emailVerificationCodes.id })
       .from(emailVerificationCodes)
       .where(
         and(
@@ -350,16 +350,15 @@ export async function authRoutes(app: FastifyInstance) {
       .orderBy(desc(emailVerificationCodes.createdAt))
       .limit(1);
     if (!row) throw badRequest("invalid or expired verification code");
-    if (row.attempts >= MAX_VERIFICATION_ATTEMPTS) {
-      throw badRequest("too many attempts; request a new code");
-    }
-    if (row.codeHash !== hashOpaqueToken(params.code)) {
-      await db
-        .update(emailVerificationCodes)
-        .set({ attempts: row.attempts + 1 })
-        .where(eq(emailVerificationCodes.id, row.id));
-      throw badRequest("invalid or expired verification code");
-    }
+    // Spend an attempt before comparing, in one statement. Reading the counter and writing it back
+    // let concurrent guesses all see the same value and try far more codes than the cap allows.
+    const [claimed] = await db
+      .update(emailVerificationCodes)
+      .set({ attempts: sql`${emailVerificationCodes.attempts} + 1` })
+      .where(and(eq(emailVerificationCodes.id, row.id), lt(emailVerificationCodes.attempts, MAX_VERIFICATION_ATTEMPTS)))
+      .returning({ codeHash: emailVerificationCodes.codeHash });
+    if (!claimed) throw badRequest("too many attempts; request a new code");
+    if (claimed.codeHash !== hashOpaqueToken(params.code)) throw badRequest("invalid or expired verification code");
     const consumed = await db
       .update(emailVerificationCodes)
       .set({ consumedAt: new Date() })
@@ -924,7 +923,8 @@ export async function authRoutes(app: FastifyInstance) {
     const body = dto.refreshBody.parse(req.body ?? {});
     const raw = req.cookies[REFRESH_COOKIE];
     if (!raw) {
-      req.log.warn({ refreshCookiePresent: false }, "refresh token missing");
+      // Anonymous startup probes for an httpOnly refresh cookie it cannot inspect.
+      req.log.debug({ refreshCookiePresent: false }, "refresh token missing");
       throw unauthorized();
     }
 
@@ -1070,7 +1070,8 @@ export async function authRoutes(app: FastifyInstance) {
 
   // Step 2: confirm the code and move the account to the new address. The unique-violation
   // catch guards the race where the address was taken between request and confirm.
-  app.post("/auth/me/email", { preHandler: app.authenticate }, async (req) => {
+  // Throttled like the other code-checking routes: the code is short and this is where it is guessed.
+  app.post("/auth/me/email", { preHandler: [app.authenticate, authRateLimit("confirm-email-change")] }, async (req) => {
     const body = dto.confirmEmailChangeBody.parse(req.body);
     const [me] = await db.select({ email: users.email }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
     if (!me) throw unauthorized();

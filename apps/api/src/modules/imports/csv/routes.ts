@@ -1,3 +1,4 @@
+import { assertStorageSafeInput } from "../../../lib/input-text.js";
 import { requestLocale } from "../../../lib/i18n/request-locale.js";
 import { dto } from "@kanera/shared";
 import type { CsvColumnMapping } from "@kanera/shared/dto";
@@ -18,11 +19,12 @@ import { suggestColumnMapping } from "./suggest.js";
 
 export async function csvImportRoutes(app: FastifyInstance): Promise<void> {
   app.post("/workspaces/:id/imports/csv/analyze", async (req, reply) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     await resolveImportTargetBoard(workspaceId);
     const file = await req.file({ limits: { fileSize: MAX_CSV_IMPORT_BYTES, files: 1 } });
     if (!file) throw badRequest("upload a CSV file");
+    assertStorageSafeInput(file.filename);
     const buffer = await file.toBuffer();
     const source = parseCsv(buffer);
     const hasHeaderRow = detectHeaderRow(source.rows);
@@ -76,7 +78,7 @@ export async function csvImportRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/imports/csv/:importId/columns", async (req) => {
-    const { importId } = req.params as { importId: string };
+    const { importId } = dto.uuidParams("importId").parse(req.params);
     const mapping = dto.csvColumnMapping.parse(req.body);
     const [row] = await db.select().from(csvImports).where(eq(csvImports.id, importId)).limit(1);
     if (!row) throw notFound("import not found");
@@ -103,7 +105,7 @@ export async function csvImportRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/imports/csv/:importId/commit", async (req) => {
-    const { importId } = req.params as { importId: string };
+    const { importId } = dto.uuidParams("importId").parse(req.params);
     const body = dto.commitImportBody.parse(req.body);
     // Only the access check needs the row here; the guarded update below returns the full row
     // (including the parsed `source` jsonb), so avoid reading that blob twice per commit.
@@ -133,8 +135,7 @@ export async function csvImportRoutes(app: FastifyInstance): Promise<void> {
         source: derived.archive,
         body,
         workspaceId: row.workspaceId,
-        clientId: req.auth.cid,
-        actorId: req.auth.sub,
+        auth: req.auth,
         targetBoardId,
         storage,
         sourceLabel: "csv",

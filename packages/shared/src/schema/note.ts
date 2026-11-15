@@ -1,3 +1,4 @@
+import { iconText } from "./_icon-text.js";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { COLOR_TOKENS } from "../lib/colors.js";
@@ -35,7 +36,7 @@ export const notes = pgTable(
     // markdown text body (signed media URLs stripped on write, re-signed on read)
     content: text("content").notNull().default(""),
     // tabler icon slug, e.g. "notebook" (no `ti-` prefix)
-    icon: text("icon").default("file-text"),
+    icon: iconText("icon", "file-text").default("file-text"),
     // shared color-palette token (see lib/colors); tints the note icon in the tree and editor
     color: text("color", { enum: COLOR_TOKENS }),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),

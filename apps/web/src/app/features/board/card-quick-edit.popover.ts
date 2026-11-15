@@ -26,6 +26,10 @@ import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { byPosition } from "../../shared/position-sort";
 
+// Evaluated once: support cannot change for the life of the page. The styles below opt in under the
+// same @supports condition, so CSS and the JS fallback never both size the field.
+const SUPPORTS_FIELD_SIZING = typeof CSS !== "undefined" && CSS.supports("field-sizing", "content");
+
 @Component({
   selector: "k-card-quick-edit",
   standalone: true,
@@ -162,6 +166,15 @@ import { byPosition } from "../../shared/position-sort";
 
       &:focus {
         border-color: var(--accent, var(--text));
+      }
+    }
+
+    /* Grow with the title in CSS where supported; resizeTitleInput() measures scrollHeight only as
+       the fallback. min-height above already undoes the global 64px textarea floor. */
+    @supports (field-sizing: content) {
+      .cqe-title-input {
+        field-sizing: content;
+        height: auto;
       }
     }
 
@@ -393,8 +406,10 @@ export class CardQuickEditPopover implements OnInit, AfterViewInit {
 
   private resizeTitleInput(input = this.titleInput?.nativeElement) {
     if (!input) return;
-    input.style.height = "auto";
-    input.style.height = `${input.scrollHeight}px`;
+    if (!SUPPORTS_FIELD_SIZING) {
+      input.style.height = "auto";
+      input.style.height = `${input.scrollHeight}px`;
+    }
     // The title textarea grows with its content, which changes the panel's height while it is open,
     // so placement has to run again rather than keep the height it was first measured at.
     this.panel.reposition();

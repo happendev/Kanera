@@ -14,6 +14,7 @@ import { enqueueCardAssignedEmails } from "./assignee-email-notifications.js";
 import { applyChecklistTemplates } from "./checklist-templates.js";
 import { dateTimeFormatter, wallClockPartsOrUtc } from "./date-time-formatter.js";
 import { addDays, clampStartToDue, isDueDateOverdue, localDateInTimezone } from "./due-date.js";
+import { COMMENT_BODY_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import { WORKDAY_END_HOUR, WORKDAY_START_HOUR } from "@kanera/shared/time-in-progress";
 import { createMailer } from "./mailer.js";
 import { clearOverdueNotificationsForCards } from "./notifications.js";
@@ -1034,9 +1035,12 @@ async function automationTemplateContext(tx: Tx, ctx: AutomationRunContext): Pro
  * title is not allowed to inject formatting).
  */
 function renderAutomationCommentTemplate(template: string, values: Record<(typeof AUTOMATION_COMMENT_TEMPLATE_VARIABLES)[number], string>): string {
-  return template.replace(/\{\{\s*([a-zA-Z.]+)\s*\}\}/g, (match, name: string) =>
+  const rendered = template.replace(/\{\{\s*([a-zA-Z.]+)\s*\}\}/g, (match, name: string) =>
     (AUTOMATION_COMMENT_TEMPLATE_VARIABLES as readonly string[]).includes(name) ? values[name as keyof typeof values] : match,
   );
+  // The template is capped at save, but each placeholder expands to a card title or name. A
+  // template of repeated placeholders must not post a comment larger than a person could write.
+  return rendered.length > COMMENT_BODY_MAX_LENGTH ? `${rendered.slice(0, COMMENT_BODY_MAX_LENGTH - 1)}…` : rendered;
 }
 
 async function applyPostCommentAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"post_comment">): Promise<AutomationEffect | null> {

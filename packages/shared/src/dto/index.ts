@@ -52,3 +52,5 @@ export * from "./work.js";
 export * from "./user-profiles.js";
 export * from "./workspaces.js";
 export * from "./mcp-events.js";
+export * from "./route-params.js";
+export * from "./boundary-inputs.js";

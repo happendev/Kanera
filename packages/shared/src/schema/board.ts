@@ -1,3 +1,4 @@
+import { iconText } from "./_icon-text.js";
 import { sql } from "drizzle-orm";
 import { boolean, check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { COLOR_TOKENS, GRADIENT_TOKENS } from "../lib/colors.js";
@@ -22,7 +23,7 @@ export const boards = pgTable(
     // Clamp list backfills to the latest resume, so disabled time is never counted retroactively.
     inProgressResumedAt: timestamp("in_progress_resumed_at", { withTimezone: true }),
     description: text("description"),
-    icon: text("icon").default("layout-kanban"),
+    icon: iconText("icon", "layout-kanban").default("layout-kanban"),
     iconColor: text("icon_color", { enum: COLOR_TOKENS }),
     backgroundGradient: text("background_gradient", { enum: GRADIENT_TOKENS }),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),

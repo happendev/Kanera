@@ -22,7 +22,7 @@ import { setCardAssignees } from "./card-assignees.js";
  */
 export function cardUpdateRoutes(app: FastifyInstance) {
   app.post("/boards/:boardId/lists/:id/cards/completion", async (req) => {
-    const { boardId, id: listId } = req.params as { boardId: string; id: string };
+    const { boardId, id: listId } = dto.uuidParams("boardId", "id").parse(req.params);
     const body = dto.setCardCompletionBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const updates = await setListCardsCompletion({ auth: req.auth, ctx, boardId, listId, completed: body.completed });
@@ -38,7 +38,7 @@ export function cardUpdateRoutes(app: FastifyInstance) {
   // below what the running stint already tracked restarts it instead. Only the clock columns are written, so the card trigger does not
   // fire. The audit entry is feed-only: a correction is not news for assignees or watchers.
   app.put("/cards/:id/in-progress-time", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.setInProgressTimeBody.parse(req.body);
     const { card: current, ctx } = await loadEditableCard(req.auth, id);
     await assertWorkspaceAccess(req.auth, ctx.workspaceId, "admin");
@@ -51,7 +51,7 @@ export function cardUpdateRoutes(app: FastifyInstance) {
   });
 
   app.patch("/cards/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateCardBody.parse(req.body);
     const { card: loaded, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(loaded);
@@ -64,7 +64,7 @@ export function cardUpdateRoutes(app: FastifyInstance) {
   });
 
   app.patch("/cards/:id/completion", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.setCardCompletionBody.parse(req.body);
     const { card: current, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(current);
@@ -83,7 +83,7 @@ export function cardUpdateRoutes(app: FastifyInstance) {
   });
 
   app.patch("/cards/:id/archive", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.setCardArchivedBody.parse(req.body);
     const { card, ctx } = await loadEditableCard(req.auth, id);
     if (body.archived === Boolean(card.archivedAt)) {
@@ -94,7 +94,7 @@ export function cardUpdateRoutes(app: FastifyInstance) {
   });
 
   app.put("/cards/:id/labels", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.setCardLabelsBody.parse(req.body);
     const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
@@ -104,7 +104,7 @@ export function cardUpdateRoutes(app: FastifyInstance) {
   });
 
   app.put("/cards/:id/assignees", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.setCardAssigneesBody.parse(req.body);
     const nextUserIds = Array.from(new Set(body.userIds));
     const { card, ctx } = await loadEditableCard(req.auth, id);

@@ -28,7 +28,7 @@ import {
   setChecklistItemDescriptions,
 } from "./card-checklist-items-bulk.js";
 
-type ItemParams = { id: string; checklistId?: string; itemId: string };
+const itemParams = dto.uuidParams("id", "itemId").extend({ checklistId: dto.uuidParams("checklistId").shape.checklistId.optional() });
 
 /**
  * Checklist items: create, update, delete and move, per item, per card and board-wide bulk. Called
@@ -37,7 +37,7 @@ type ItemParams = { id: string; checklistId?: string; itemId: string };
  */
 export function cardChecklistItemRoutes(app: FastifyInstance) {
   app.patch("/boards/:boardId/checklist-items/bulk/descriptions", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkSetChecklistItemDescriptionsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const requestedCardIds = orderedUniqueIds(body.updates.map((update) => update.cardId));
@@ -54,7 +54,7 @@ export function cardChecklistItemRoutes(app: FastifyInstance) {
   });
 
   app.post("/boards/:boardId/checklist-items/bulk/create", async (req, reply) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkCreateChecklistItemsBody.parse(req.body);
     const boardAccess = await assertBoardAccess(req.auth, boardId, "editor");
     const targets = await loadBulkChecklistItemTargets(req.auth, boardAccess, boardId, body.items);
@@ -64,7 +64,7 @@ export function cardChecklistItemRoutes(app: FastifyInstance) {
   });
 
   app.post("/cards/:id/checklists/:checklistId/items", async (req, reply) => {
-    const { id, checklistId } = req.params as { id: string; checklistId: string };
+    const { id, checklistId } = dto.uuidParams("id", "checklistId").parse(req.params);
     const { afterItemId, beforeItemId, ...item } = dto.createChecklistItemBody.parse(req.body);
     const { card, ctx, checklist } = await loadEditableChecklist(req.auth, id, checklistId);
     const result = await createChecklistItems({
@@ -83,7 +83,7 @@ export function cardChecklistItemRoutes(app: FastifyInstance) {
   });
 
   app.post("/cards/:id/checklists/:checklistId/items/batch", async (req, reply) => {
-    const { id, checklistId } = req.params as { id: string; checklistId: string };
+    const { id, checklistId } = dto.uuidParams("id", "checklistId").parse(req.params);
     const body = dto.createChecklistItemsBody.parse(req.body);
     const { card, ctx, checklist } = await loadEditableChecklist(req.auth, id, checklistId);
     // A batch is an explicit plan edit, so each item gets an audit row (without watcher fanout), as
@@ -103,7 +103,7 @@ export function cardChecklistItemRoutes(app: FastifyInstance) {
   });
 
   app.patch("/cards/:id/checklists/:checklistId/items/bulk", async (req) => {
-    const { id, checklistId } = req.params as { id: string; checklistId: string };
+    const { id, checklistId } = dto.uuidParams("id", "checklistId").parse(req.params);
     const body = dto.bulkUpdateChecklistItemsBody.parse(req.body);
     const { card, ctx, checklist } = await loadEditableChecklist(req.auth, id, checklistId);
     const result = await bulkUpdateChecklistItems({ actorId: req.auth.sub, card, ctx, checklist, body });
@@ -112,7 +112,7 @@ export function cardChecklistItemRoutes(app: FastifyInstance) {
   });
 
   async function updateChecklistItemRoute(req: FastifyRequest) {
-    const params = req.params as ItemParams;
+    const params = itemParams.parse(req.params);
     const body = dto.updateChecklistItemBody.parse(req.body);
     const target = await loadChecklistItemTarget(req.auth, params);
     const result = await updateChecklistItem({ actorId: req.auth.sub, target, body });
@@ -128,7 +128,7 @@ export function cardChecklistItemRoutes(app: FastifyInstance) {
   // Selected-item updates: different changes for chosen items on one card, applied atomically (see
   // `updateSelectedChecklistItems`).
   app.patch("/cards/:id/checklist-items", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateChecklistItemsBody.parse(req.body);
     const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
@@ -138,7 +138,7 @@ export function cardChecklistItemRoutes(app: FastifyInstance) {
   });
 
   async function deleteChecklistItemRoute(req: FastifyRequest, reply: FastifyReply) {
-    const params = req.params as ItemParams;
+    const params = itemParams.parse(req.params);
     const target = await loadChecklistItemTarget(req.auth, params);
     await deleteChecklistItem({ target });
     const { card, checklist, current } = target;
@@ -150,7 +150,7 @@ export function cardChecklistItemRoutes(app: FastifyInstance) {
   app.delete("/cards/:id/checklist-items/:itemId", deleteChecklistItemRoute);
 
   async function moveChecklistItemRoute(req: FastifyRequest) {
-    const params = req.params as ItemParams;
+    const params = itemParams.parse(req.params);
     const body = dto.moveChecklistItemBody.parse(req.body);
     const target = await loadChecklistItemTarget(req.auth, params);
     const result = await moveChecklistItem({ target, body });

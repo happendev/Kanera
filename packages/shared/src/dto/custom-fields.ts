@@ -1,3 +1,4 @@
+import { calendarDate } from "./_dates.js";
 import { z } from "zod";
 import { CUSTOM_FIELD_TEXT_MAX_LENGTH, CUSTOM_FIELD_URL_MAX_LENGTH } from "../card-value-limits.js";
 import { CUSTOM_FIELD_TYPES } from "../schema/custom-field.js";
@@ -66,22 +67,28 @@ export const moveCustomFieldOptionBody = z
   );
 export type MoveCustomFieldOptionBody = z.infer<typeof moveCustomFieldOptionBody>;
 
+const customFieldIdList = z.array(z.uuid()).max(500).transform((ids) => [...new Set(ids)]);
+
 // Typed value columns shared by the single-card set body and the bulk set body.
 // One column per custom field type; all optional so a request only carries the
 // column matching the target field's type.
 export const customFieldValueColumns = {
   valueText: z.string().max(CUSTOM_FIELD_TEXT_MAX_LENGTH).nullable().optional(),
-  valueNumber: z.union([z.number(), z.string()]).nullable().optional(),
+  // PostgreSQL numeric accepts special values and rejects arbitrary text. Keep decimal strings
+  // (including exponents and precision) but only finite values usable by calculations and the UI.
+  valueNumber: z.union([z.number(), z.string().trim().max(1000)
+    .regex(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/)
+    .refine(value => Number.isFinite(Number(value)) && Math.abs(Number(value.split(/[eE]/)[1] ?? 0)) <= 1000, "expected a finite decimal number")]).nullable().optional(),
   valueCheckbox: z.boolean().nullable().optional(),
   // Local date string YYYY-MM-DD.
-  valueDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
+  valueDate: calendarDate
     .nullable()
     .optional(),
-  valueUrl: z.url().max(CUSTOM_FIELD_URL_MAX_LENGTH).nullable().optional(),
-  valueOptionIds: z.array(z.uuid()).nullable().optional(),
-  valueUserIds: z.array(z.uuid()).nullable().optional(),
+  valueUrl: z.url({ protocol: /^https?$/ }).max(CUSTOM_FIELD_URL_MAX_LENGTH).nullable().optional(),
+  // Deduplicated and capped: these are stored per card and described in activity, so a repeated
+  // id list would otherwise multiply one request into megabytes of rows.
+  valueOptionIds: customFieldIdList.nullable().optional(),
+  valueUserIds: customFieldIdList.nullable().optional(),
 } as const;
 
 export const setCustomFieldValueBody = z

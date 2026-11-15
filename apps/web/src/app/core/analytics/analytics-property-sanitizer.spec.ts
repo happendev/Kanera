@@ -53,6 +53,18 @@ describe("sanitizeAnalyticsProperties", () => {
     });
   });
 
+  it("keeps the referring domain but not the full referrer on every event", () => {
+    for (const event of ["$pageview", "$identify", "$groupidentify", "unknown_event"]) {
+      const sanitized = sanitizeAnalyticsProperties({
+        token: "phc_project_token",
+        $referring_domain: "www.kanera.app",
+        $referrer: "https://www.kanera.app/pricing?utm_source=reddit",
+      }, event);
+      expect(sanitized["$referring_domain"]).toBe("www.kanera.app");
+      expect(sanitized["$referrer"]).toBeUndefined();
+    }
+  });
+
   it("keeps only the approved registration_started contract", () => {
     expect(sanitizeAnalyticsProperties({
       anonymous_id: "anonymous-id",

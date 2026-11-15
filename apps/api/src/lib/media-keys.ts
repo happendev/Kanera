@@ -105,9 +105,16 @@ export function parseMediaReference(value: string, expectedClientId?: string): {
   const path = pathFromValue(value);
   const media = /^\/api\/media\/([^/]+)\/(.+)$/.exec(path);
   if (media) {
-    const clientId = decodeURIComponent(media[1]!);
-    if (expectedClientId && clientId !== expectedClientId) return null;
-    return { clientId, key: decodeKey(media[2]!) };
+    try {
+      const clientId = decodeURIComponent(media[1]!);
+      if (expectedClientId && clientId !== expectedClientId) return null;
+      return { clientId, key: decodeKey(media[2]!) };
+    } catch (error) {
+      // References can come from user-authored HTML/Markdown or stale URLs. A malformed
+      // escape is an unrecognised reference, not a failure to render the containing item.
+      if (error instanceof URIError) return null;
+      throw error;
+    }
   }
   return null;
 }

@@ -18,13 +18,13 @@ export async function automationRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/workspaces/:wsId/automations", async (req) => {
-    const { wsId: workspaceId } = req.params as { wsId: string };
+    const { wsId: workspaceId } = dto.uuidParams("wsId").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     return loadAutomations(workspaceId);
   });
 
   app.get("/automations/:id/executions", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const query = dto.listAutomationExecutionsQuery.parse(req.query);
     const [current] = await db
       .select({ workspaceId: automations.workspaceId })
@@ -43,7 +43,7 @@ export async function automationRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:wsId/automations", async (req, reply) => {
-    const { wsId: workspaceId } = req.params as { wsId: string };
+    const { wsId: workspaceId } = dto.uuidParams("wsId").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createAutomationBody.parse(req.body);
     const automation = await createAutomation({ auth: req.auth, workspaceId, clientId, body });
@@ -58,7 +58,7 @@ export async function automationRoutes(app: FastifyInstance) {
   });
 
   app.patch("/automations/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateAutomationBody.parse(req.body);
     const current = await loadAutomationRow(id);
     const { clientId } = await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
@@ -74,7 +74,7 @@ export async function automationRoutes(app: FastifyInstance) {
   });
 
   app.put("/automations/:id/actions", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.setAutomationActionsBody.parse(req.body);
     const current = await loadAutomationRow(id);
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
@@ -84,7 +84,7 @@ export async function automationRoutes(app: FastifyInstance) {
   });
 
   app.post("/automations/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveAutomationBody.parse(req.body);
     const current = await loadAutomationRow(id);
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
@@ -97,7 +97,7 @@ export async function automationRoutes(app: FastifyInstance) {
   });
 
   app.delete("/automations/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const current = await loadAutomationRow(id);
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     await deleteAutomation({ auth: req.auth, automation: current });

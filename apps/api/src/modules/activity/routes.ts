@@ -1,4 +1,4 @@
-import type { dto } from "@kanera/shared";
+import { dto } from "@kanera/shared";
 import { activityEvents, cards, comments, users } from "@kanera/shared/schema";
 import { and, asc, desc, eq, getTableColumns, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -19,15 +19,8 @@ function encodeBoardActivityCursor(cursor: BoardActivityCursor) {
 function decodeBoardActivityCursor(value: string | undefined, boardId: string): BoardActivityCursor | null {
   if (!value) return null;
   try {
-    const cursor = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as Partial<BoardActivityCursor>;
-    if (
-      cursor.boardId !== boardId
-      || typeof cursor.createdAt !== "string"
-      || !Number.isFinite(new Date(cursor.createdAt).getTime())
-      || (cursor.priority !== 0 && cursor.priority !== 1)
-      || typeof cursor.id !== "string"
-      || cursor.id.length === 0
-    ) throw badRequest("activity cursor does not match this board");
+    const cursor = dto.activityCursor.parse(JSON.parse(Buffer.from(value, "base64url").toString("utf8")));
+    if (cursor.boardId !== boardId) throw badRequest("activity cursor does not match this board");
     return cursor as BoardActivityCursor;
   } catch (error) {
     if (error instanceof Error && "status" in error) throw error;
@@ -39,10 +32,9 @@ export async function activityRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/boards/:id/activity", async (req) => {
-    const { id } = req.params as { id: string };
-    const q = req.query as { limit?: string; cursor?: string };
-    const limit = Math.min(Number(q.limit ?? 50), 200);
-    if (!Number.isInteger(limit) || limit < 1) throw badRequest("limit must be a positive integer");
+    const { id } = dto.uuidParams("id").parse(req.params);
+    const q = dto.activityQuery.parse(req.query);
+    const limit = q.limit;
     const cursor = decodeBoardActivityCursor(q.cursor, id);
     const publicRequest = req.url.startsWith("/api/v1/");
     const access = await assertBoardAccess(req.auth, id);

@@ -33,7 +33,7 @@ export function cardQueryRoutes(app: FastifyInstance) {
   });
 
   app.get("/cards/:id/detail", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
     // The row is already in hand; passing it skips a redundant re-read of its board_id.
@@ -51,7 +51,7 @@ export function cardQueryRoutes(app: FastifyInstance) {
   });
 
   app.post("/boards/:boardId/cards/content/query", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.selectedCardContentQueryBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId);
     return queryCardContent({ auth: req.auth, boardId, ctx, body });

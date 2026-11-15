@@ -130,7 +130,8 @@ function extraHeaderLines(headers: Record<string, string> | undefined): string[]
 
 function formatAddress(email: string, name?: string): string {
   if (!name) return email;
-  const escaped = name.replace(/["\\]/g, "\\$&");
+  // Sender labels are one MIME header value, including legacy stored configuration.
+  const escaped = name.replace(/[\r\n]+/g, " ").replace(/["\\]/g, "\\$&");
   return `"${escaped}" <${email}>`;
 }
 

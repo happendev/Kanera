@@ -1,3 +1,4 @@
+import { outboundHttpClient } from "./outbound-http.js";
 // Register the shared database reset and resource teardown; env setup alone leaves the
 // PostgreSQL pool open, causing Node's test-file promise to remain pending after this test passes.
 import "../test/integration.js";
@@ -44,10 +45,10 @@ async function seedFixture() {
 
 void test("hosted webhook fanout and delivery require trial or Pro", async () => {
   const previousMode = env.KANERA_DEPLOYMENT_MODE;
-  const originalFetch = globalThis.fetch;
+  const originalFetch = outboundHttpClient.fetch;
   env.KANERA_DEPLOYMENT_MODE = "hosted";
   let calls = 0;
-  globalThis.fetch = async () => {
+  outboundHttpClient.fetch = async () => {
     calls += 1;
     return new Response("ok", { status: 200 });
   };
@@ -78,7 +79,7 @@ void test("hosted webhook fanout and delivery require trial or Pro", async () =>
     }
     assert.equal(calls, 2, "trial and Pro each reached the outbound provider");
   } finally {
-    globalThis.fetch = originalFetch;
+    outboundHttpClient.fetch = originalFetch;
     env.KANERA_DEPLOYMENT_MODE = previousMode;
   }
 });
@@ -101,7 +102,7 @@ void test("webhook payloads omit the revision stamps that serve the web client's
 
 void test("the outbound delivery boundary does not fire stale enabled endpoints for hosted Free", async () => {
   const previousMode = env.KANERA_DEPLOYMENT_MODE;
-  const originalFetch = globalThis.fetch;
+  const originalFetch = outboundHttpClient.fetch;
   env.KANERA_DEPLOYMENT_MODE = "hosted";
   try {
     const { client, workspace, endpoint } = await seedFixture();
@@ -119,7 +120,7 @@ void test("the outbound delivery boundary does not fire stale enabled endpoints 
       },
     }).returning();
     let calls = 0;
-    globalThis.fetch = async () => {
+    outboundHttpClient.fetch = async () => {
       calls += 1;
       return new Response("ok");
     };
@@ -128,7 +129,7 @@ void test("the outbound delivery boundary does not fire stale enabled endpoints 
     assert.equal(result.lastError, "webhooks are unavailable on the current plan");
     assert.equal(calls, 0);
   } finally {
-    globalThis.fetch = originalFetch;
+    outboundHttpClient.fetch = originalFetch;
     env.KANERA_DEPLOYMENT_MODE = previousMode;
   }
 });
@@ -152,11 +153,11 @@ void test("concurrent webhook sweeps do not deliver the same queued row twice", 
     .returning();
   assert.ok(delivery);
 
-  const originalFetch = globalThis.fetch;
+  const originalFetch = outboundHttpClient.fetch;
   let calls = 0;
   let releaseFetch: (() => void) | undefined;
   const fetchStarted = new Promise<void>((resolve) => {
-    globalThis.fetch = async () => {
+    outboundHttpClient.fetch = async () => {
       const callNumber = ++calls;
       resolve();
       // Only the first delivery stays in flight. If a second sweep incorrectly reclaims the
@@ -195,7 +196,7 @@ void test("concurrent webhook sweeps do not deliver the same queued row twice", 
     // makes Node report a file-level pending-promise failure instead of the useful assertion.
     releaseFetch?.();
     await firstSweep?.catch(() => undefined);
-    globalThis.fetch = originalFetch;
+    outboundHttpClient.fetch = originalFetch;
   }
 });
 
@@ -317,9 +318,9 @@ void test("card events enqueue a formatted chat snapshot alongside generic webho
 // The SSRF check covers only the configured URL, so delivery must refuse to follow redirects that
 // could bounce the request to a private or metadata address.
 void test("webhook delivery never follows redirects", async () => {
-  const originalFetch = globalThis.fetch;
+  const originalFetch = outboundHttpClient.fetch;
   let captured: RequestInit | undefined;
-  globalThis.fetch = async (_input, init) => {
+  outboundHttpClient.fetch = async (_input, init) => {
     captured = init;
     return new Response("ok", { status: 200 });
   };
@@ -335,7 +336,7 @@ void test("webhook delivery never follows redirects", async () => {
     assert.equal(result.status, "success");
     assert.equal(captured?.redirect, "error");
   } finally {
-    globalThis.fetch = originalFetch;
+    outboundHttpClient.fetch = originalFetch;
   }
 });
 
@@ -343,7 +344,7 @@ void test("a Telegram success whose echoed message overflows the stored excerpt 
   // Telegram echoes the sent message in its JSON. The body is truncated to 2000 characters for
   // storage; judging `ok` on that excerpt turned a delivered long message into a retried one, so
   // the destination received the same message up to eight times.
-  const originalFetch = globalThis.fetch;
+  const originalFetch = outboundHttpClient.fetch;
   try {
     const { workspace, endpoint: generic } = await seedFixture();
     const [telegram] = await db.insert(webhookEndpoints).values({
@@ -380,7 +381,7 @@ void test("a Telegram success whose echoed message overflows the stored excerpt 
 
     let calls = 0;
     let echoedLength = 0;
-    globalThis.fetch = async (_input, init) => {
+    outboundHttpClient.fetch = async (_input, init) => {
       calls += 1;
       const sent = JSON.parse(init?.body as string) as { text: string };
       // Realistic sendMessage response: the message text comes back JSON-escaped, so the body is
@@ -396,6 +397,6 @@ void test("a Telegram success whose echoed message overflows the stored excerpt 
     assert.equal(result.lastError, null);
     assert.ok(result.responseBody && result.responseBody.length <= 2000);
   } finally {
-    globalThis.fetch = originalFetch;
+    outboundHttpClient.fetch = originalFetch;
   }
 });

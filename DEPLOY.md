@@ -387,11 +387,20 @@ Then point your HTTPS reverse proxy at:
 - `http://127.0.0.1:3002` for the MCP server, if you use it
 
 The app API has Valkey-backed per-IP auth limits for login, signup, and password
-reset. Set `API_TRUST_PROXY=true` when Node is behind a trusted reverse proxy
+reset. Set `API_TRUST_PROXY` when Node is behind a trusted reverse proxy
 such as nginx, Traefik, or an ingress that sends the real client IP; leave it
 `false` only when Node is directly internet-facing or directly Cloudflare-facing.
 Without this, a non-Cloudflare proxy collapses all users into the proxy socket IP
 and the auth limit can lock out legitimate users.
+
+Prefer the number of proxies you run in front of Node over `true`: `1` when the
+bundled `web` nginx is the public entry point, `2` when Traefik (or another
+proxy) sits in front of it. `true` trusts the whole `X-Forwarded-For` header, so
+it is only safe when your outermost proxy replaces that header instead of
+appending to it. The bundled nginx appends, so with `true` and nginx directly
+internet-facing, a client can send its own `X-Forwarded-For` and get a fresh
+rate-limit bucket per request. `PUBLIC_API_TRUST_PROXY` and `ADMIN_TRUST_PROXY`
+accept the same values.
 
 The public API has Valkey-backed rate limits for helper routes, API-key requests,
 and attachment uploads. Set `PUBLIC_API_TRUST_PROXY=true` only when the service
@@ -700,7 +709,7 @@ staff, demo, seed, test, and load-test organisations.
 | `MFA_ENCRYPTION_KEY` | yes | Stable, dedicated key for encrypted TOTP secrets and MFA challenges. Rotating it invalidates enrolled authenticators. |
 | `MEDIA_SIGNING_SECRET` | yes | Stable random secret for signed media URLs. |
 | `SECRETS_ENCRYPTION_KEY` | recommended | Stable random secret for encrypted stored secrets. |
-| `KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS` | no | Self-hosted only. Set `true` to let personal ntfy, Gotify, and webhook channels use HTTP/private-network receivers. Defaults to `false`; metadata, link-local, reserved destinations, and redirects stay blocked. |
+| `KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS` | no | Self-hosted only. Set `true` to let personal ntfy, Gotify, and webhook channels use HTTP/private-network receivers and browser push use private HTTPS endpoints. Defaults to `false`; metadata, link-local, reserved destinations, and notification redirects stay blocked. |
 | `ADMIN_JWT_SECRET` | required to run the admin-api | Stable random secret for the management portal's own sessions. Must differ from `JWT_SECRET` (enforced at startup). |
 | `ADMIN_WEB_ORIGIN` | required to run the admin-api | Public origin of the admin console, for example `https://admin.kanera.example.com`. Also the CORS origin and the base for admin invite links. |
 | `ADMIN_COOKIE_DOMAIN` | no | Admin refresh-cookie domain override. Set this when the admin portal hostname is outside `COOKIE_DOMAIN`, for example `kanera-admin.example.com` while `COOKIE_DOMAIN=kanera.example.com`. |
@@ -709,7 +718,7 @@ staff, demo, seed, test, and load-test organisations.
 | `ADMIN_JWT_ACCESS_TTL` | no | Defaults to `15m`. |
 | `ADMIN_JWT_REFRESH_TTL_DAYS` | no | Defaults to `7`. |
 | `ADMIN_LOGIN_RATE_LIMIT_MAX` / `ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS` | no | Per-IP admin login throttle. Default `5` attempts per `300000`ms. |
-| `ADMIN_TRUST_PROXY` | no | Set `true` when the admin-api sits behind a reverse proxy, so login rate limiting sees the real client IP. |
+| `ADMIN_TRUST_PROXY` | no | Set to the number of reverse proxies in front of the admin-api (or `true` if the outermost one replaces `X-Forwarded-For`), so login rate limiting sees the real client IP. |
 | `ADMIN_AUDIT_LOG_RETENTION_DAYS` | no | Defaults to `1095` (3 years). |
 | `REDIS_URL` | yes | Valkey Redis-protocol connection URL. The bundled compose file sets this to `redis://valkey:6379/0`; API boot fails if Valkey is unavailable. |
 | `API_REPLICAS` | no | Number of app API processes Compose keeps running. Defaults to `2`; raise on larger machines. Keep `worker` at `1`. |

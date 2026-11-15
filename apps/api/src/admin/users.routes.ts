@@ -213,7 +213,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   app.get("/users/:userId", async (req) => {
-    const { userId } = req.params as { userId: string };
+    const { userId } = dto.uuidParams("userId").parse(req.params);
     const [row] = await db
       .select({
         id: users.id,
@@ -306,7 +306,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   app.patch("/users/:userId/role", async (req) => {
-    const { userId } = req.params as { userId: string };
+    const { userId } = dto.uuidParams("userId").parse(req.params);
     const body = dto.adminUpdateUserRoleBody.parse(req.body);
     const target = await loadUserOr404(userId, body.clientId);
 
@@ -336,8 +336,8 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   app.post("/users/:userId/suspend", async (req) => {
-    const { userId } = req.params as { userId: string };
-    const target = await loadUserOr404(userId, (req.query as { clientId?: string }).clientId);
+    const { userId } = dto.uuidParams("userId").parse(req.params);
+    const target = await loadUserOr404(userId, dto.adminUserScopeQuery.parse(req.query).clientId);
     await db.transaction(async (tx) => {
       await tx.update(clientMembers).set({ suspendedAt: new Date() }).where(and(eq(clientMembers.clientId, target.clientId), eq(clientMembers.userId, userId)));
       await repointActiveOrganisation(userId, target.clientId, tx);
@@ -351,8 +351,8 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   app.post("/users/:userId/unsuspend", async (req) => {
-    const { userId } = req.params as { userId: string };
-    const target = await loadUserOr404(userId, (req.query as { clientId?: string }).clientId);
+    const { userId } = dto.uuidParams("userId").parse(req.params);
+    const target = await loadUserOr404(userId, dto.adminUserScopeQuery.parse(req.query).clientId);
     await db.transaction(async (tx) => {
       await tx.update(clientMembers).set({ suspendedAt: null }).where(and(eq(clientMembers.clientId, target.clientId), eq(clientMembers.userId, userId)));
       await writeAdminAudit(tx, { adminUserId: req.adminAuth.sub, action: "user.unsuspend", targetType: "user", targetClientId: target.clientId, targetUserId: userId });
@@ -363,7 +363,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   // Issues a standard tenant password-reset token + email. We never surface or set a plaintext password;
   // the user completes the reset through the normal tenant flow.
   app.post("/users/:userId/reset-password", async (req) => {
-    const { userId } = req.params as { userId: string };
+    const { userId } = dto.uuidParams("userId").parse(req.params);
     const target = await loadUserOr404(userId);
 
     const token = newOpaqueToken();
@@ -391,7 +391,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   app.post("/users/:userId/force-reverify", async (req) => {
-    const { userId } = req.params as { userId: string };
+    const { userId } = dto.uuidParams("userId").parse(req.params);
     const target = await loadUserOr404(userId);
     await db.transaction(async (tx) => {
       await tx.update(users).set({ emailVerifiedAt: null, updatedAt: new Date() }).where(eq(users.id, userId));
@@ -402,7 +402,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   app.post("/users/:userId/reset-mfa", async (req) => {
     requireSuperadmin(req);
-    const { userId } = req.params as { userId: string };
+    const { userId } = dto.uuidParams("userId").parse(req.params);
     const user = await loadUserOr404(userId);
     await db.transaction(async (tx) => {
       await resetMfa({ kind: "user", id: userId }, tx);
@@ -416,7 +416,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   // is retained so historical authorship stays valid. Superadmin only; last-owner guarded.
   app.delete("/users/:userId", async (req) => {
     requireSuperadmin(req);
-    const { userId } = req.params as { userId: string };
+    const { userId } = dto.uuidParams("userId").parse(req.params);
     const target = await loadUserOr404(userId);
     await db.transaction(async (tx) => {
       for (const membership of target.memberships.filter((item) => item.role === "owner" && !item.removedAt)) {

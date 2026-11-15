@@ -1,3 +1,4 @@
+import { isoTimestamp } from "./_dates.js";
 import { z } from "zod";
 import { ADMIN_ROLES } from "../schema/admin-roles.js";
 import { CLIENT_ROLES } from "../schema/client-roles.js";
@@ -21,7 +22,7 @@ const direction = z.enum(["asc", "desc"]).default("desc");
 
 // --- Auth ---
 export const adminLoginBody = z.object({
-  email: z.email(),
+  email: z.email().max(254),
   password: z.string().min(1),
 });
 export type AdminLoginBody = z.infer<typeof adminLoginBody>;
@@ -33,7 +34,7 @@ export const adminMfaEnrollmentConfirmBody = z.object({ challengeToken: z.string
 export const adminRoleEnum = z.enum(ADMIN_ROLES);
 
 export const adminCreateInviteBody = z.object({
-  email: z.email(),
+  email: z.email().max(254),
   displayName: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH),
   // Least-privilege by default: an invite grants `staff` (read + non-destructive) unless the inviting
   // superadmin explicitly elevates it. The accepted account inherits this exact role.
@@ -67,7 +68,7 @@ export const adminUpdateOrgPlanBody = z
     // Nullable: clearing the interval is a valid state (e.g. moving back to free with no subscription).
     billingInterval: adminBillingIntervalEnum.nullable().optional(),
     storageQuotaBytes: z.number().int().nonnegative().nullable().optional(),
-    currentPeriodEnd: z.coerce.date().nullable().optional(),
+    currentPeriodEnd: isoTimestamp.transform(value => new Date(value)).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "no fields to update" });
 export type AdminUpdateOrgPlanBody = z.infer<typeof adminUpdateOrgPlanBody>;

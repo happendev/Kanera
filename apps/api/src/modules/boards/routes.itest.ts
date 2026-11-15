@@ -869,7 +869,7 @@ void test("a workspace admin adds a same-org member, changes their role, and can
   // PATCH on a user with no board_member row is a 404.
   const missing = await app.inject({
     method: "PATCH",
-    url: `/boards/${board.id}/members/00000000-0000-0000-0000-0000000009f9`,
+    url: `/boards/${board.id}/members/00000000-0000-4000-8000-0000000009f9`,
     headers: auth,
     payload: { role: "editor" },
   });
