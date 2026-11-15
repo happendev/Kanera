@@ -1,3 +1,4 @@
+import { dto } from "@kanera/shared";
 import type { FastifyInstance } from "fastify";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { Server } from "socket.io";
@@ -282,6 +283,10 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
       .catch((err: unknown) => app.log.warn({ err, socketId: socket.id }, "failed to join socket cross-org board rooms"));
 
     socket.on(CLIENT_EVENTS.BOARD_JOIN, async (boardId, ack) => {
+      if (!dto.uuidParams("boardId").safeParse({ boardId }).success || typeof ack !== "function") {
+        if (typeof ack === "function") ack(false);
+        return;
+      }
       try {
         const access = await assertBoardAccess(claims, boardId);
         await socket.join(boardVisibleWorkspaceRoom(access.workspaceId));
@@ -297,10 +302,17 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
     });
 
     socket.on(CLIENT_EVENTS.BOARD_LEAVE, async (boardId) => {
+      if (!dto.uuidParams("boardId").safeParse({ boardId }).success) {
+        return;
+      }
       await socket.leave(`board:${boardId}`);
     });
 
     socket.on(CLIENT_EVENTS.WORKSPACE_JOIN, async (workspaceId, ack) => {
+      if (!dto.uuidParams("workspaceId").safeParse({ workspaceId }).success || typeof ack !== "function") {
+        if (typeof ack === "function") ack(false);
+        return;
+      }
       if (isOrgAdmin(claims)) {
         const [ws] = await db
           .select({ id: workspaces.id })
@@ -356,6 +368,9 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
     });
 
     socket.on(CLIENT_EVENTS.WORKSPACE_LEAVE, async (workspaceId) => {
+      if (!dto.uuidParams("workspaceId").safeParse({ workspaceId }).success) {
+        return;
+      }
       await socket.leave(`workspace:${workspaceId}`);
       await socket.leave(boardVisibleWorkspaceRoom(workspaceId));
       const event = await presence?.markOffline(workspaceId, socket.data.userId, socket.id);

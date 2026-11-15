@@ -1,4 +1,5 @@
 import type { APIResponse } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { users } from "./support/env";
 import { expect, test } from "./support/fixtures";
 
@@ -68,4 +69,48 @@ test("media renewal preserves personal note and scratchpad privacy", async ({ ap
     expect((await owner.get("/api/media/resign", { params })).status()).toBe(200);
     expect((await otherAdmin.get("/api/media/resign", { params })).status()).toBe(404);
   }
+});
+
+test("archive copies enforce private-file ownership while accessible expired attachments still import", async ({ apiAs, testWorkspace, uniqueName }) => {
+  const owner = await apiAs("amelia");
+  const importer = await apiAs("marcus");
+  await result(await owner.patch(`/api/workspaces/${testWorkspace.id}`, { data: { notesEnabled: true } }));
+  const card = await result<{ id: string }>(await owner.post(`/api/boards/${testWorkspace.boardId}/lists/${testWorkspace.lists.get("Backlog")}/cards`, { data: { title: "Archive attachment access" } }));
+  const note = await result<{ id: string }>(await owner.post(`/api/boards/${testWorkspace.boardId}/notes`, { data: { title: "Private import source", scope: "personal" } }));
+  const scratchpad = await result<{ id: string }>(await owner.post("/api/scratchpad/notes", { data: { title: "Private import source" } }));
+  const attachmentSources = [
+    { route: `/api/cards/${card.id}/attachments`, name: "accessible.txt", body: "accessible card bytes", allowed: true },
+    { route: `/api/notes/${note.id}/attachments`, name: "personal-note.txt", body: "private note bytes", allowed: false },
+    { route: `/api/scratchpad/notes/${scratchpad.id}/attachments`, name: "scratchpad.txt", body: "private scratchpad bytes", allowed: false },
+  ];
+  const attachments = [];
+  for (const source of attachmentSources) {
+    const file = await result<{ url: string }>(await owner.post(source.route, {
+      multipart: { file: { name: source.name, mimeType: "text/plain", buffer: Buffer.from(source.body) } },
+    }));
+    // Restore must work after an export's capability expires, but only with current authority.
+    const stale = new URL(file.url);
+    stale.search = "?e=1&t=expired";
+    expect((await importer.get("/api/media/resign", { params: { u: stale.toString() } })).status()).toBe(source.allowed ? 200 : 404);
+    attachments.push({ id: randomUUID(), cardId: card.id, url: stale.toString(), mimeType: "text/plain", fileName: source.name });
+  }
+  const archive = await result<{ lists: { id: string }[] }>(await owner.get(`/api/boards/${testWorkspace.boardId}/export`));
+  const analyzed = await result<{ importId: string }>(await importer.post(`/api/workspaces/${testWorkspace.id}/imports/kanera-board/analyze`, {
+    multipart: { file: { name: "attachment-access.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({ ...archive, attachments })) } },
+  }));
+  const imported = await result<{ createdBoardId: string; attachments: { imported: number; skipped: number }; warnings: string[] }>(await importer.post(`/api/imports/kanera-board/${analyzed.importId}/commit`, {
+    data: {
+      board: { name: uniqueName("Authorized attachment import") },
+      lists: Object.fromEntries(archive.lists.map(list => [list.id, { action: "map", targetListId: list.id }])),
+      labels: {}, customFields: {}, members: {},
+      options: { includeArchived: true, importComments: false, importCustomFields: false, attachmentCopyMode: "copy" },
+    },
+  }));
+  expect(imported.attachments).toEqual({ imported: 1, skipped: 2 });
+  expect(imported.warnings).toHaveLength(2);
+  const restored = await result<{ attachments: { fileName: string; url: string }[] }>(await importer.get(`/api/boards/${imported.createdBoardId}/export`));
+  expect(restored.attachments.map(file => file.fileName)).toEqual(["accessible.txt"]);
+  const copied = await importer.get(restored.attachments[0]!.url);
+  expect(copied.status()).toBe(200);
+  expect(await copied.text()).toBe("accessible card bytes");
 });

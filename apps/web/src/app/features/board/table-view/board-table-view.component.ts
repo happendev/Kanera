@@ -57,6 +57,7 @@ import {
   buildWorkbookExport,
   IN_PROGRESS_COLUMN_ID,
   IN_PROGRESS_EXPORT_LABEL,
+  neutraliseSpreadsheetFormula,
   sanitizeExportFileName,
   styledSheetData,
   timestampForFileName,
@@ -2842,7 +2843,7 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   private csvCell(value: string): string {
-    return `"${value.replaceAll('"', '""')}"`;
+    return `"${neutraliseSpreadsheetFormula(value).replaceAll('"', '""')}"`;
   }
 
   /**

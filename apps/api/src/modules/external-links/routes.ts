@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { boards, cardAttachments, cardChecklistItems, cardChecklists, cards, comments, externalLinks } from "@kanera/shared/schema";
-import { and, desc, eq, type SQL } from "drizzle-orm";
+import { and, desc, eq, notLike, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
@@ -77,7 +77,7 @@ export async function externalLinkRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/workspaces/:id/external-links", async (req): Promise<dto.ExternalLinkRow[]> => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     const query = dto.listExternalLinksQuery.parse(req.query ?? {});
     await assertWorkspaceAccess(req.auth, workspaceId);
 
@@ -97,7 +97,7 @@ export async function externalLinkRoutes(app: FastifyInstance) {
   });
 
   app.get("/workspaces/:workspaceId/external-links/:linkId", async (req): Promise<dto.ExternalLinkRow> => {
-    const { workspaceId, linkId } = req.params as { workspaceId: string; linkId: string };
+    const { workspaceId, linkId } = dto.uuidParams("workspaceId", "linkId").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId);
     const [row] = await db
       .select()
@@ -109,7 +109,7 @@ export async function externalLinkRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:id/external-links", async (req): Promise<dto.ExternalLinkRow> => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     const body = dto.upsertExternalLinkBody.parse(req.body);
     await assertExternalLinkWriteAccess(req.auth, workspaceId);
     // Built-in mirror links are worker-owned idempotency metadata. Reserving the namespace prevents
@@ -120,11 +120,13 @@ export async function externalLinkRoutes(app: FastifyInstance) {
   });
 
   app.delete("/workspaces/:workspaceId/external-links/:linkId", async (req, reply) => {
-    const { workspaceId, linkId } = req.params as { workspaceId: string; linkId: string };
+    const { workspaceId, linkId } = dto.uuidParams("workspaceId", "linkId").parse(req.params);
     await assertExternalLinkWriteAccess(req.auth, workspaceId);
     const [row] = await db
       .delete(externalLinks)
-      .where(and(eq(externalLinks.id, linkId), eq(externalLinks.workspaceId, workspaceId)))
+      // Mirror links are the worker's idempotency and tombstone records; deleting one makes the
+      // next converge duplicate or resurrect cards. They read as not found, like the upsert guard.
+      .where(and(eq(externalLinks.id, linkId), eq(externalLinks.workspaceId, workspaceId), notLike(externalLinks.provider, "mirror:%")))
       .returning({ id: externalLinks.id });
     if (!row) throw notFound("external link not found");
     return reply.status(204).send();

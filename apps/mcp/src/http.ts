@@ -60,8 +60,13 @@ function readBody(req: IncomingMessage, maxBytes: number): Promise<unknown> {
   });
 }
 
+/** Null for a request target the URL parser rejects (`//`, `//[`), which must not reach routing. */
 export function mcpRequestPathname(url: string | undefined) {
-  return new URL(url ?? "/", "http://localhost").pathname;
+  try {
+    return new URL(url ?? "/", "http://localhost").pathname;
+  } catch {
+    return null;
+  }
 }
 
 type RateLimitEntry = { count: number; resetAt: number };
@@ -199,6 +204,14 @@ export function createMcpHttpHandler(options: {
     res.setHeader("cache-control", "no-store");
     res.setHeader("x-kanera-mcp-version", mcpPackage.version);
     const pathname = mcpRequestPathname(req.url);
+    if (pathname === null) {
+      // This handler is async and Node does not catch its rejections: an unparseable request
+      // target has to be answered here, or one unauthenticated request ends the process.
+      finishActiveRequest();
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "bad request" }));
+      return;
+    }
     const metricRoute = pathname === "/mcp" || pathname === "/health" || pathname === "/metrics"
       ? pathname
       : pathname.startsWith("/.well-known/") ? "/.well-known/*" : "unmatched";
@@ -340,9 +353,21 @@ export function createMcpHttpHandler(options: {
 
 export function startMcpHttpServer() {
   const distributedRateLimiter = new McpDistributedRateLimiter(env.REDIS_URL);
-  const httpServer = createServer(createMcpHttpHandler({
+  const handler = createMcpHttpHandler({
     rateLimitCheck: (key, limit, windowMs, now) => distributedRateLimiter.check(key, limit, windowMs, now),
-  }));
+  });
+  // Node ignores the promise an async request listener returns, so anything the handler does not
+  // answer itself would surface as an unhandled rejection and end the process for every client.
+  const httpServer = createServer((req, res) => {
+    handler(req, res).catch((error: unknown) => {
+      console.error("MCP HTTP request failed", error);
+      if (res.headersSent) res.destroy();
+      else {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "internal error" }));
+      }
+    });
+  });
   httpServer.requestTimeout = env.MCP_REQUEST_TIMEOUT_MS;
   httpServer.headersTimeout = env.MCP_HEADERS_TIMEOUT_MS;
   httpServer.keepAliveTimeout = env.MCP_KEEP_ALIVE_TIMEOUT_MS;

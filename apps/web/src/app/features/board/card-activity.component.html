@@ -224,7 +224,7 @@
           (click)="preview.mediaType ? openActivityAttachment(preview, $event) : null"
         >
           @if (preview.thumbnailUrl; as thumb) {
-          <img [src]="thumb" [alt]="preview.fileName" />
+          <img [src]="thumb" [alt]="preview.fileName" loading="lazy" decoding="async" />
           } @else {
           <div class="activity-file-fallback"><i aria-hidden="true" class="ti" [class]="preview.iconClass"></i></div>
           }
@@ -233,7 +233,7 @@
         } @else {
         <div class="activity-file-preview">
           @if (preview.thumbnailUrl; as thumb) {
-          <img [src]="thumb" [alt]="preview.fileName" />
+          <img [src]="thumb" [alt]="preview.fileName" loading="lazy" decoding="async" />
           } @else {
           <div class="activity-file-fallback"><i aria-hidden="true" class="ti" [class]="preview.iconClass"></i></div>
           }

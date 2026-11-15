@@ -49,7 +49,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.post("/workspaces/:wsId/custom-fields", async (req, reply) => {
-    const { wsId: workspaceId } = req.params as { wsId: string };
+    const { wsId: workspaceId } = dto.uuidParams("wsId").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createCustomFieldBody.parse(req.body);
     await assertUniqueCustomFieldName(workspaceId, body.name);
@@ -91,7 +91,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
   });
 
   app.patch("/custom-fields/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateCustomFieldBody.parse(req.body);
     const [current] = await db.select().from(customFields).where(eq(customFields.id, id)).limit(1);
     if (!current) throw notFound();
@@ -128,7 +128,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
   });
 
   app.delete("/custom-fields/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select().from(customFields).where(eq(customFields.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
@@ -159,7 +159,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
   });
 
   app.post("/custom-fields/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveCustomFieldBody.parse(req.body);
     const [current] = await db.select().from(customFields).where(eq(customFields.id, id)).limit(1);
     if (!current) throw notFound();
@@ -197,7 +197,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
   // --- Select field options ---
 
   app.post("/custom-fields/:id/options", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.createCustomFieldOptionBody.parse(req.body);
     const [field] = await db.select().from(customFields).where(eq(customFields.id, id)).limit(1);
     if (!field) throw notFound("custom field not found");
@@ -232,7 +232,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
   });
 
   app.patch("/options/:optionId", async (req) => {
-    const { optionId } = req.params as { optionId: string };
+    const { optionId } = dto.uuidParams("optionId").parse(req.params);
     const body = dto.updateCustomFieldOptionBody.parse(req.body);
     const { field, workspaceId } = await loadOptionField(optionId);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
@@ -263,7 +263,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
   });
 
   app.delete("/options/:optionId", async (req, reply) => {
-    const { optionId } = req.params as { optionId: string };
+    const { optionId } = dto.uuidParams("optionId").parse(req.params);
     const { field, workspaceId } = await loadOptionField(optionId);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     // Keep the option for historic card values, but disable selected-value triggers before it is
@@ -294,7 +294,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
   });
 
   app.post("/options/:optionId/move", async (req) => {
-    const { optionId } = req.params as { optionId: string };
+    const { optionId } = dto.uuidParams("optionId").parse(req.params);
     const body = dto.moveCustomFieldOptionBody.parse(req.body);
     const { field, workspaceId, option: current } = await loadOptionField(optionId);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");

@@ -17,6 +17,9 @@ test("isBlockedAddress flags loopback, private, link-local and metadata ranges",
     "fe80::1", // IPv6 link-local
     "::ffff:127.0.0.1", // IPv4-mapped loopback must not bypass the IPv4 checks
     "::ffff:10.0.0.1",
+    "64:ff9b::a9fe:a9fe", // NAT64 metadata target
+    "2002:a9fe:a9fe::1", // 6to4 metadata target
+    "fec0::1", // deprecated site-local
   ]) {
     assert.equal(isBlockedAddress(ip), true, `${ip} should be blocked`);
   }
@@ -34,7 +37,7 @@ test("isBlockedAddress fails closed on unparseable input", () => {
 });
 
 test("private notification opt-in still blocks metadata, link-local, multicast, and reserved ranges", () => {
-  for (const ip of ["169.254.169.254", "::ffff:169.254.169.254", "0.0.0.0", "224.0.0.1", "192.0.2.1", "fe80::1", "ff02::1", "2001:db8::1"]) {
+  for (const ip of ["169.254.169.254", "::ffff:169.254.169.254", "0.0.0.0", "224.0.0.1", "192.0.2.1", "fe80::1", "ff02::1", "2001:db8::1", "64:ff9b::a9fe:a9fe", "2002:a9fe:a9fe::1", "fec0::1"]) {
     assert.equal(isAlwaysBlockedNotificationAddress(ip), true, `${ip} should always be blocked`);
   }
   for (const ip of ["127.0.0.1", "10.1.2.3", "172.20.0.5", "192.168.1.1", "100.64.0.1", "::1", "fd00::1"]) {

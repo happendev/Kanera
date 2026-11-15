@@ -20,7 +20,7 @@ import { hasPaidPlanEntitlement } from "./entitlements.js";
 import { AppError } from "./errors.js";
 import { notificationDeliveryDuration, notificationDeliveryTotal, notificationQueueWaitDuration } from "./metrics.js";
 import { decryptSecret } from "./secrets.js";
-import { assertResolvedNotificationDestinationAllowed } from "./ssrf.js";
+import { outboundHttpClient } from "./outbound-http.js";
 import { forEachConcurrent } from "./concurrent-delivery.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 import { DEFAULT_PUSH_TTL, ensureWebPushReady, handleSubscriptionError, toPushSubscription, webPushClient } from "./web-push.js";
@@ -42,6 +42,16 @@ const DEFAULT_PUSH_ICON = "/assets/favicon/android-chrome-192x192.png";
 const DEFAULT_PUSH_BADGE = "/assets/favicon/notification-badge.png";
 const DEFAULT_PUSH_TAG = "kanera:notifications";
 const MAX_PUSH_BODY_LENGTH = 240;
+
+/**
+ * ntfy takes the title as an HTTP header, and header values are Latin-1: a card title with an
+ * emoji, a dash or any CJK text made the request throw and the push never arrive. ntfy decodes
+ * RFC 2047 encoded-words, so anything outside printable ASCII is sent that way.
+ */
+export function ntfyHeaderText(value: string): string {
+  const text = value.replace(/[\r\n]+/g, " ");
+  return /^[\x20-\x7e]*$/.test(text) ? text : `=?UTF-8?B?${Buffer.from(text, "utf8").toString("base64")}?=`;
+}
 
 export interface PushQueueDeps {
   db: Db;
@@ -181,12 +191,10 @@ function appendPath(baseUrl: string, segment: string): string {
 }
 
 async function checkedFetch(url: string, init: RequestInit): Promise<Response> {
-  await assertResolvedNotificationDestinationAllowed(url);
-  return fetch(url, {
+  return outboundHttpClient.fetch(url, {
     ...init,
     redirect: "error",
-    signal: AbortSignal.timeout(PERSONAL_DELIVERY_TIMEOUT_MS),
-  });
+  }, { policy: "notification", timeoutMs: PERSONAL_DELIVERY_TIMEOUT_MS });
 }
 
 async function requireSuccess(response: Response, channel: string): Promise<void> {
@@ -242,7 +250,7 @@ async function deliverPersonalNotificationRow(
       method: "POST",
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
-        Title: payload.title,
+        Title: ntfyHeaderText(payload.title),
         ...(payload.url ? { Click: payload.url } : {}),
         ...(settings.encryptedNtfyToken ? { Authorization: `Bearer ${decryptSecret(settings.encryptedNtfyToken)}` } : {}),
       },
@@ -425,16 +433,16 @@ async function processPushQueueRow({ db, log }: PushQueueDeps, row: PushQueue): 
     const attempted = result.delivered + result.disabled + result.failed;
     const now = new Date();
     if (attempted === 0) {
-      // A removed subscription must not make a push look successful; there was no delivery attempt
-      // for the provider to accept, including when a partial-delivery retry target disappeared.
+      // Devices can unsubscribe after enqueue (including between partial-delivery retries).
+      // This is a terminal skip, not a provider failure or a successful delivery.
       await db.update(pushQueue).set({
-        status: PUSH_QUEUE_STATUS.error,
+        status: PUSH_QUEUE_STATUS.cancelled,
         lastError: "no active push subscriptions",
         processingLeaseExpiresAt: null,
         updatedAt: now,
       }).where(eq(pushQueue.id, row.id));
-      outcome = "error";
-      log.warn({ pushQueueId: row.id, userId: row.userId, reason: row.reason }, "push queue row had no active subscriptions");
+      outcome = "cancelled";
+      log.info({ pushQueueId: row.id, userId: row.userId, reason: row.reason }, "push queue row had no active subscriptions");
       return;
     }
 

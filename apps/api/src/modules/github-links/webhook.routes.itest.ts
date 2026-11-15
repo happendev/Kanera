@@ -14,6 +14,7 @@ import { signupOwner } from "../../test/api-fixtures.js";
  * Failure modes these cover. E2E has no GitHub to deliver signed webhooks, so the receiver is
  * exercised here:
  * - an unsigned or forged delivery moves a card's pull request state;
+ * - a signed numeric overflow reaches int4 storage and fails after entering the write path;
  * - a pull request from a fork of a public repository links itself to the organisation's cards;
  * - a card key resolves in another organisation that happens to use the same prefix;
  * - GitHub's redeliveries and out-of-order deliveries duplicate activity or roll a merged pull
@@ -131,6 +132,15 @@ void test("a signed pull request links the card it names, ignores redeliveries a
     assert.equal((await pullActivity(card.id)).length, 0);
 
     const opened = pullPayload({ installationId: "9101", repo, headRef: branch, updatedAt: "2026-10-27T10:00:00Z" });
+    // Signed provider data still has to fit the local storage domain. Unreadable deliveries
+    // are acknowledged without writes so retries cannot repeatedly fail the same integer cast.
+    for (const field of ["number", "additions", "deletions"] as const) {
+      const overflow = { ...opened, pull_request: { ...opened.pull_request, [field]: 2147483648 } };
+      const rejected = await deliver(app, "pull_request", overflow);
+      assert.equal(rejected.statusCode, 202, rejected.body);
+      assert.equal((await pullActivity(card.id)).length, 0);
+      assert.equal(await db.$count(cardGitHubPulls, eq(cardGitHubPulls.cardId, card.id)), 0);
+    }
     assert.equal((await deliver(app, "pull_request", opened)).statusCode, 202);
     assert.equal((await deliver(app, "pull_request", opened)).statusCode, 202);
     assert.deepEqual((await pullActivity(card.id)).map((row) => row.action), ["githubPull:linked"]);

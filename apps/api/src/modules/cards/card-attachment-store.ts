@@ -73,19 +73,39 @@ export async function storeCardAttachment(
   let coverImageColor: string | null = null;
 
   if (isProcessableImage(file.mimeType)) {
-    const thumb = await generateThumbnail(buffer, file.mimeType);
-    thumbnailFileKey = attachmentThumbnailStorageKey(fileKey, thumb.ext);
-    await putAttachmentFile(storage, thumbnailFileKey, thumb.buffer, thumb.mimeType);
-    thumbnailUrl = unsignedMediaUrl(auth.cid, thumbnailFileKey);
-    coverImageColor = thumb.dominantColor;
-
-    if (!card.coverAttachmentId && source !== "comment") {
-      const cover = await generateCoverImage(buffer, file.mimeType);
-      coverImageFileKey = attachmentCoverStorageKey(fileKey, cover.ext);
-      await putAttachmentFile(storage, coverImageFileKey, cover.buffer, cover.mimeType);
-      coverImageUrl = unsignedMediaUrl(auth.cid, coverImageFileKey);
-      coverImageWidth = cover.width;
-      coverImageHeight = cover.height;
+    // No row exists yet and quota is counted from rows: whatever happens below, a failed upload
+    // must remove what it stored, or each one leaves a free file behind.
+    const removeStored = () => Promise.allSettled([
+      storage.delete(fileKey),
+      thumbnailFileKey ? storage.delete(thumbnailFileKey) : Promise.resolve(),
+      coverImageFileKey ? storage.delete(coverImageFileKey) : Promise.resolve(),
+    ]);
+    // The image type is the uploader's claim, so the bytes may not decode. Only a decode failure
+    // is the uploader's fault; a storage failure below stays a server error.
+    let thumb: Awaited<ReturnType<typeof generateThumbnail>>;
+    let cover: Awaited<ReturnType<typeof generateCoverImage>> | null = null;
+    try {
+      thumb = await generateThumbnail(buffer, file.mimeType);
+      if (!card.coverAttachmentId && source !== "comment") cover = await generateCoverImage(buffer, file.mimeType);
+    } catch {
+      await removeStored();
+      throw badRequest("unsupported file type");
+    }
+    try {
+      thumbnailFileKey = attachmentThumbnailStorageKey(fileKey, thumb.ext);
+      await putAttachmentFile(storage, thumbnailFileKey, thumb.buffer, thumb.mimeType);
+      thumbnailUrl = unsignedMediaUrl(auth.cid, thumbnailFileKey);
+      coverImageColor = thumb.dominantColor;
+      if (cover) {
+        coverImageFileKey = attachmentCoverStorageKey(fileKey, cover.ext);
+        await putAttachmentFile(storage, coverImageFileKey, cover.buffer, cover.mimeType);
+        coverImageUrl = unsignedMediaUrl(auth.cid, coverImageFileKey);
+        coverImageWidth = cover.width;
+        coverImageHeight = cover.height;
+      }
+    } catch (error) {
+      await removeStored();
+      throw error;
     }
   }
 

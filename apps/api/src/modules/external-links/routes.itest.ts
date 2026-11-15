@@ -206,3 +206,24 @@ void test("external links require write scope and target entities from the same 
     await publicApi.close();
   }
 });
+
+// Failure this catches: mirror links are the sync worker's idempotency records; deleting one
+// through this route makes the next converge duplicate or resurrect cards.
+void test("worker-owned mirror links cannot be deleted through the external-links route", async () => {
+  const { app, accessToken, workspace, card } = await setupWorkspace();
+  const [mirrorLink] = await db.insert(externalLinks).values({
+    workspaceId: workspace.id,
+    provider: "mirror:00000000-0000-7000-8000-000000000001",
+    externalType: "card",
+    externalId: "source-card",
+    entityType: "card",
+    entityId: card.id,
+  }).returning();
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/workspaces/${workspace.id}/external-links/${mirrorLink!.id}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(response.statusCode, 404, response.body);
+  assert.equal((await db.select().from(externalLinks).where(eq(externalLinks.id, mirrorLink!.id))).length, 1);
+});

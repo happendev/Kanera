@@ -85,7 +85,7 @@ export async function scratchpadRoutes(
 
   app.patch("/scratchpad/notes/:id", async (req) => {
     assertWriteCapableCredential(req.auth);
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateScratchpadNoteBody.parse(req.body);
 
     const updated = await updateScratchpadNote({ auth: req.auth, id, body });
@@ -97,7 +97,7 @@ export async function scratchpadRoutes(
 
   app.patch("/scratchpad/notes/:id/move", async (req) => {
     assertWriteCapableCredential(req.auth);
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveScratchpadNoteBody.parse(req.body ?? {});
     const note = await loadOwned(id, req.auth);
 
@@ -109,7 +109,7 @@ export async function scratchpadRoutes(
 
   if (allowDeletes) app.delete("/scratchpad/notes/:id", async (req, reply) => {
     assertWriteCapableCredential(req.auth);
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
 
     await deleteScratchpadNote({ auth: req.auth, id });
 
@@ -122,7 +122,7 @@ export async function scratchpadRoutes(
 
   if (exposeAttachments) app.post("/scratchpad/notes/:id/attachments", async (req, reply) => {
     assertWriteCapableCredential(req.auth);
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const { uploadEntitlements } = await prepareScratchpadUpload({ auth: req.auth, id });
     const { file, ext, buffer } = await readAttachmentUpload(req, uploadEntitlements.maxFileBytes);
     const attachment = await storeScratchpadAttachment({
@@ -135,7 +135,7 @@ export async function scratchpadRoutes(
 
   if (exposeAttachments) app.delete("/scratchpad/notes/:id/attachments/:attachmentId", async (req, reply) => {
     assertWriteCapableCredential(req.auth);
-    const { id, attachmentId } = req.params as { id: string; attachmentId: string };
+    const { id, attachmentId } = dto.uuidParams("id", "attachmentId").parse(req.params);
 
     const { updated } = await deleteScratchpadAttachment({ auth: req.auth, id, attachmentId });
 

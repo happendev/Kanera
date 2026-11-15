@@ -1,6 +1,6 @@
 import type { AddBoardMemberBody, UpdateBoardMemberBody } from "@kanera/shared/dto";
-import { boardMembers, clientGuestSeats, clientMembers, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { boardMembers, boards, clientGuestSeats, clientMembers, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { and, eq, exists, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
@@ -48,9 +48,33 @@ export async function addBoardMember({
       isNull(clientMembers.suspendedAt),
       isNull(clientMembers.removedAt),
     ))
-    .where(eq(users.id, body.userId))
+    .where(and(eq(users.id, body.userId), isNull(users.deletedAt)))
     .limit(1);
   if (!user) throw notFound("user not found");
+  // A direct grant needs an existing relationship with the host organisation: an organisation
+  // member, a member of this workspace, or a guest already on one of its boards. Anyone else is
+  // reached by email invitation, which they accept themselves. Without this, a known user id from
+  // any organisation could be attached to a board and their profile read back from the response.
+  if (!user.membershipClientId) {
+    const [known] = await db
+      .select({ userId: users.id })
+      .from(users)
+      .where(and(
+        eq(users.id, body.userId),
+        or(
+          exists(db.select({ one: sql`1` }).from(workspaceMembers).where(and(
+            eq(workspaceMembers.workspaceId, ctx.workspaceId),
+            eq(workspaceMembers.userId, body.userId),
+          ))),
+          exists(db.select({ one: sql`1` }).from(boardMembers)
+            .innerJoin(boards, eq(boards.id, boardMembers.boardId))
+            .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+            .where(and(eq(boardMembers.userId, body.userId), eq(workspaces.clientId, ctx.clientId)))),
+        ),
+      ))
+      .limit(1);
+    if (!known) throw notFound("user not found");
+  }
   const [workspace] = await db
     .select({ kind: workspaces.kind })
     .from(workspaces)

@@ -81,14 +81,14 @@ export async function notificationsRoutes(app: FastifyInstance) {
   });
 
   app.put("/notifications/settings/workspaces/:workspaceId", async (req) => {
-    const rawWorkspaceId = (req.params as { workspaceId: string }).workspaceId;
+    const rawWorkspaceId = (dto.uuidParams("workspaceId").parse(req.params)).workspaceId;
     const workspaceId = dto.notificationWorkspaceRule.shape.workspaceId.parse(rawWorkspaceId);
     const body = dto.putNotificationWorkspaceRuleBody.parse(req.body);
     return putNotificationWorkspaceRule({ auth: req.auth, workspaceId, body });
   });
 
   app.delete("/notifications/settings/workspaces/:workspaceId", async (req, reply) => {
-    const rawWorkspaceId = (req.params as { workspaceId: string }).workspaceId;
+    const rawWorkspaceId = (dto.uuidParams("workspaceId").parse(req.params)).workspaceId;
     const workspaceId = dto.notificationWorkspaceRule.shape.workspaceId.parse(rawWorkspaceId);
     await deleteNotificationWorkspaceRule({ auth: req.auth, workspaceId });
     return reply.status(204).send();
@@ -186,7 +186,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
   });
 
   app.post("/notifications/cards/:cardId/read", async (req) => {
-    const { cardId } = req.params as { cardId: string };
+    const { cardId } = dto.uuidParams("cardId").parse(req.params);
     const [card] = await db
       .select({ id: cards.id, boardId: cards.boardId })
       .from(cards)
@@ -198,7 +198,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
   });
 
   app.post("/notifications/boards/:boardId/read", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     await assertBoardAccess(req.auth, boardId);
     return markBoardNotificationsRead({ userId: req.auth.sub, boardId });
   });
@@ -233,7 +233,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
   });
 
   app.get("/boards/:id/watchers", async (req): Promise<WatcherUser[]> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     await assertBoardAccess(req.auth, id);
     const rows = await db
       .select({ userId: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, userClientId: users.clientId })
@@ -248,7 +248,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
   });
 
   app.get("/cards/:id/watchers", async (req): Promise<WatcherUser[]> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [card] = await db
       .select({ id: cards.id, boardId: cards.boardId })
       .from(cards)

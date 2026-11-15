@@ -1,3 +1,4 @@
+import { dto } from "@kanera/shared";
 import type { FastifyInstance } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { clientMembers, users } from "@kanera/shared/schema";
@@ -10,8 +11,9 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
   // Host-side invitation management lives under /workspaces/:id/guests. These routes are only
   // recipient actions, which keeps guest access policy in one place.
   app.get("/board-invitations/lookup", { preHandler: enforceUnauthenticatedLookupRateLimit }, async (req) => {
-    const token = (req.query as { token?: string }).token;
-    if (!token) throw notFound();
+    const query = dto.invitationLookupQuery.safeParse(req.query);
+    if (!query.success) throw notFound();
+    const { token } = query.data;
 
     // Shares the redemption lib's validity predicate and grants fallback so this page can never
     // advertise boards (e.g. archived ones) that acceptance would then silently skip.
@@ -44,7 +46,7 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
     authed.addHook("preHandler", authed.authenticate);
 
     authed.post("/board-invitations/:id/accept", async (req, reply) => {
-      const { id } = req.params as { id: string };
+      const { id } = dto.uuidParams("id").parse(req.params);
       const invitation = await loadRedeemableBoardInvitation({ id });
       if (!invitation) throw notFound();
 

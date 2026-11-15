@@ -1,3 +1,4 @@
+import { offsetTimestamp } from "./_dates.js";
 import { z } from "zod";
 import { ianaTimeZone } from "./_time-zone.js";
 import type { ActivityEvent } from "../schema/activity-event.js";
@@ -151,11 +152,23 @@ export const personalNotificationTestResponse = z.object({
 });
 export type PersonalNotificationTestResponse = z.infer<typeof personalNotificationTestResponse>;
 
+// Accept previously issued timestamp-only and empty-id cursors, but never pass an
+// empty string into a PostgreSQL UUID comparison. Keep the wire value opaque.
+const notificationCursor = z.string().min(1).max(200).superRefine((raw, ctx) => {
+  const parts = raw.split("|");
+  if (parts.length > 2 || !offsetTimestamp.safeParse(parts[0]).success
+    || (parts[1] && !z.uuid().safeParse(parts[1]).success)) {
+    ctx.addIssue({ code: "custom" });
+  }
+});
+
+export function decodeNotificationCursor(raw: string): { createdAt: Date; timestamp: string; id: string | null } {
+  const [timestamp, id] = notificationCursor.parse(raw).split("|");
+  return { createdAt: new Date(timestamp!), timestamp: timestamp!, id: id || null };
+}
+
 export const listNotificationsQuery = z.object({
-  // Opaque keyset cursor of the form `<createdAt ISO>|<notification id>`. Kept
-  // as a free string (not a bare datetime) so pagination can tie-break on id;
-  // see encode/decodeCursor in the notifications routes.
-  cursor: z.string().min(1).optional(),
+  cursor: notificationCursor.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
   includeRead: z.preprocess((value) => value === "true" ? true : value === "false" ? false : value, z.boolean()).default(false),
   // The drawer's Agent tab: only notifications whose activity was performed by an AI agent acting
@@ -173,7 +186,7 @@ export type ListNotificationsQuery = z.infer<typeof listNotificationsQuery>;
 // Public-API inbox for agents that poll instead of holding a socket or webhook. It reads forward from
 // an opaque cursor (oldest first), so a poll loop never misses or repeats a row.
 export const notificationInboxQuery = z.object({
-  since: z.string().min(1).max(200).optional(),
+  since: notificationCursor.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   includeSelf: z.preprocess((value) => value === "true" ? true : value === "false" ? false : value, z.boolean()).default(false),
 });

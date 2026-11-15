@@ -18,7 +18,7 @@ export async function adminSupportRoutes(app: FastifyInstance) {
   // Start a cross-tenant support session that acts as the target org's owner and return the enter URL.
   app.post("/orgs/:clientId/support-session", async (req) => {
     requireSuperadmin(req);
-    const { clientId } = req.params as { clientId: string };
+    const { clientId } = dto.uuidParams("clientId").parse(req.params);
     const body = dto.adminStartSupportSessionBody.parse(req.body);
 
     // The admin claims carry only sub/role; load the email for the immutable audit snapshot + support claim.
@@ -102,7 +102,7 @@ export async function adminSupportRoutes(app: FastifyInstance) {
   // tenant side; this is the admin-side revoke).
   app.post("/support-sessions/:id/end", async (req) => {
     requireSuperadmin(req);
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [row] = await db.select({ targetClientId: supportSessions.targetClientId, targetUserId: supportSessions.targetUserId }).from(supportSessions).where(eq(supportSessions.id, id)).limit(1);
     if (!row) throw notFound("support session not found");
 

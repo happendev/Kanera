@@ -271,6 +271,17 @@ void test("POST /billing/seats rejects trial capacity changes, invoices active i
       // The proration invoice was paid immediately (no SCA), so the increase persists.
       subscriptions: { retrieve: async () => ({ id: "sub_seats", latest_invoice: { status: "paid" } }) },
     } as unknown as Stripe);
+    // The normal E2E stack is self-hosted, where the billing mode guard intentionally wins.
+    // Hosted requests must reject int4 overflow before invoking a payment provider or mutating seats.
+    for (const url of ["/billing/seats", "/billing/checkout"]) {
+      const overflow = await app.inject({ method: "POST", url, headers: auth, payload: { seatLimit: 2147483648, interval: "monthly" } });
+      assert.equal(overflow.statusCode, 400, overflow.body);
+      assert.equal(overflow.json<{ code: string }>().code, "VALIDATION");
+    }
+    assert.equal(updateQuantity, undefined);
+    const [beforeValidBump] = await db.select({ seatLimit: clients.seatLimit }).from(clients).where(eq(clients.id, clientId));
+    assert.equal(beforeValidBump?.seatLimit, 5);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "seat_billed")), 0);
     const activeBump = await app.inject({ method: "POST", url: "/billing/seats", headers: auth, payload: { seatLimit: 10 } });
     assert.equal(activeBump.statusCode, 200, activeBump.body);
     assert.equal(activeBump.json<{ seatLimit: number }>().seatLimit, 10);

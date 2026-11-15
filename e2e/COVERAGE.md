@@ -10,6 +10,11 @@ concurrent request bursts do not replace deterministic database race tests.
 
 | Spec | Coverage |
 |---|---|
+| [input-validation](input-validation.spec.ts) | Malformed app/public inputs, production-error regressions for missing IDs, misplaced card keys and oversized card numbers, corrupt JPEG rejection with stored-file cleanup, notification cursor compatibility and exact/submillisecond pagination, checklist history keys, invalid Socket.IO packets, rejected-write realtime isolation, unsafe scalar/import/text/depth inputs, prototype-key import mappings, imported timestamp fallback, embedded links, safe search snippets and sender-header/protocol validation. |
+| [import-input-validation](import-input-validation.spec.ts) | Rejects malformed archive timezones, option positions, reaction types and edited timestamps at analysis and legacy-plan commit; valid scalars and older option defaults round-trip without breaking overdue queries. |
+| [search-input-validation](search-input-validation.spec.ts) | Direct completed-card, notification and work-history search requests treat oversized card-key suffixes as text without PostgreSQL integer errors. |
+| [outbound-input-validation](outbound-input-validation.spec.ts) | Direct push destination/crypto validation, endpoint ownership proof and rotation conflicts without rejected-write mutation. |
+| [content-sanitization](content-sanitization.spec.ts) | Direct API content cannot inject app-overlay classes, active controls or scripts; legacy stored icon classes fall back safely, and supported formatting remains visible at desktop and phone widths. |
 | [shutdown](shutdown.spec.ts) | All four services exiting after SIGTERM with real Valkey, Valkey connection loss, API presence cleanup, and worker recovery after an idle PostgreSQL session is terminated. |
 | [account-settings-pages](account-settings-pages.spec.ts) | Security and Preferences navigation, direct reloads, Profile section boundaries, and phone layout. |
 | [agent-files](agent-files.spec.ts) | Agent scratchpad capture and uploaded files reaching an open browser through realtime. |
@@ -118,4 +123,4 @@ Check their failure-mode comments before removing or replacing tests.
 - [Hosted analytics](analytics/attribution.browser.ts), via `pnpm test:analytics`: consent, visitor identity and first-touch signup attribution in a separate production-configured build.
 - [Production bundles](../benchmarks/web/bundle-loading.config.cjs), via `pnpm test:web:bundles`: cache headers, deferred views/icons, service-worker registration and cold offline reload against the seeded local API and Nginx.
 
-- `security-media-export.spec.ts`: guest board exports exclude unrelated workspace members; media renewal enforces revoked board access and resolves cross-organisation guest storage, and preserves personal note/scratchpad privacy.
+- `security-media-export.spec.ts`: guest board exports exclude unrelated workspace members; media renewal enforces revoked board access and resolves cross-organisation guest storage, and preserves personal note/scratchpad privacy. Archive copying enforces the same private-file ownership while still restoring accessible attachments from expired URLs.

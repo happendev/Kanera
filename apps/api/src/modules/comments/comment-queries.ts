@@ -1,4 +1,4 @@
-import type { dto } from "@kanera/shared";
+import { dto } from "@kanera/shared";
 import { activityEvents, comments, externalLinks, users } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../../db.js";
@@ -26,15 +26,15 @@ function decodedCursor(raw: string | undefined): CommentCursor | CardFeedCursor 
     if (
       (parsed.kind !== "cardComments" && parsed.kind !== "cardFeed")
       || typeof parsed.createdAt !== "string"
-      || !Number.isFinite(new Date(parsed.createdAt).getTime())
+      || !dto.activityCursor.shape.createdAt.safeParse(parsed.createdAt).success
       || typeof parsed.id !== "string"
-      || !/^[0-9a-f-]{36}$/i.test(parsed.id)
+      || !dto.uuidParams("id").shape.id.safeParse(parsed.id).success
       || (parsed.kind === "cardFeed" && parsed.priority !== 0 && parsed.priority !== 1)
     ) throw new Error();
     return parsed as CommentCursor | CardFeedCursor;
   } catch {
     // Preserve cursors issued by older clients while making every newly issued cursor lossless.
-    if (Number.isFinite(new Date(raw).getTime())) return { kind: "cardComments", createdAt: raw, id: "ffffffff-ffff-ffff-ffff-ffffffffffff" };
+    if (Number.isFinite(new Date(raw).getTime()) && new Date(raw).getUTCFullYear() >= 1) return { kind: "cardComments", createdAt: raw, id: "ffffffff-ffff-ffff-ffff-ffffffffffff" };
     throw badRequest("invalid card feed cursor");
   }
 }

@@ -27,14 +27,17 @@ import {
 import type { ActivityEvent, Board, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import type { TxOnly as Tx } from "../../db.js";
+import { db, type TxOnly as Tx } from "../../db.js";
+import type { AuthClaims } from "../../auth/plugin.js";
+import { authoriseMedia } from "../media/authorise-media.js";
 import { recordActivity } from "../../lib/activity.js";
 import { allocateCardKeys } from "../../lib/card-keys.js";
 import { clampStartToDue } from "../../lib/due-date.js";
+import { getUploadEntitlements } from "../../lib/entitlements.js";
 import { env } from "../../env.js";
 import { badRequest } from "../../lib/errors.js";
 import { parseMediaReference, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
-import { assertResolvedHostAllowed } from "../../lib/ssrf.js";
+import { outboundHttpClient } from "../../lib/outbound-http.js";
 import { between, positionAtIndex } from "../../lib/position.js";
 import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
@@ -83,6 +86,7 @@ export interface KaneraBoardImportResult {
 }
 
 interface ImportContext {
+  auth: AuthClaims;
   locale: Locale;
   tx: Tx;
   source: BoardExportArchive;
@@ -319,23 +323,27 @@ const REMOTE_ATTACHMENT_TIMEOUT_MS = 30_000;
 // those straight out of the tenant's storage namespace with no HTTP at all. Anything else (an
 // archive from another Kanera deployment) goes over HTTP with the same guards as webhook delivery:
 // http(s) only, no loopback/private/metadata targets (checked after DNS resolution), no redirect
-// following, a timeout, and the deployment's attachment byte cap.
-async function readArchiveAttachment(ctx: ImportContext, rawUrl: string): Promise<Buffer> {
+// following, a timeout, and the organisation's per-file byte cap.
+async function readArchiveAttachment(ctx: ImportContext, rawUrl: string, maxBytes: number, authorisedLocalUrls: Set<string>): Promise<Buffer> {
   const local = parseMediaReference(rawUrl, ctx.clientId);
-  if (local) return ctx.storage.get(local.key);
+  if (local) {
+    if (!authorisedLocalUrls.has(rawUrl)) throw new Error("attachment not accessible");
+    const copy = await ctx.storage.get(local.key);
+    if (copy.byteLength > maxBytes) throw new Error("attachment too large");
+    return copy;
+  }
 
   const url = new URL(rawUrl);
   if (url.protocol !== "https:" && !(env.NODE_ENV !== "production" && url.protocol === "http:")) {
     throw new Error("attachment url must use https");
   }
   if (url.username || url.password) throw new Error("attachment url must not contain credentials");
-  await assertResolvedHostAllowed(url.toString());
-  const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(REMOTE_ATTACHMENT_TIMEOUT_MS) });
+  const response = await outboundHttpClient.fetch(url, {}, { timeoutMs: REMOTE_ATTACHMENT_TIMEOUT_MS, maxResponseBytes: maxBytes });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const declared = Number(response.headers.get("content-length") ?? "0");
-  if (declared > env.ATTACHMENT_MAX_BYTES) throw new Error("attachment too large");
+  if (declared > maxBytes) throw new Error("attachment too large");
   const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.byteLength > env.ATTACHMENT_MAX_BYTES) throw new Error("attachment too large");
+  if (buffer.byteLength > maxBytes) throw new Error("attachment too large");
   return buffer;
 }
 
@@ -356,11 +364,38 @@ async function copyAttachments(ctx: ImportContext, cardIdBySourceId: Map<string,
   const candidates = ctx.source.attachments
     .map((attachment) => ({ attachment, cardId: cardIdBySourceId.get(attachment.cardId) }))
     .filter((candidate): candidate is { attachment: BoardExportArchive["attachments"][number]; cardId: string } => !!candidate.cardId);
+  // Imported files count against the organisation like any upload: the plan's per-file size and
+  // its storage quota both apply. A file that does not fit is skipped with a warning, as an
+  // unreachable one is, rather than failing the whole import.
+  const entitlements = candidates.length ? await getUploadEntitlements(db, ctx.clientId) : null;
+  const maxFileBytes = Math.min(env.ATTACHMENT_MAX_BYTES, entitlements?.maxFileBytes ?? env.ATTACHMENT_MAX_BYTES);
+  // Knowing a storage key (or an expired signed URL) grants no access. Storage is
+  // organisation-scoped, but board membership and personal-file ownership are narrower. These
+  // checks read committed rows through the shared pool while this import holds its transaction
+  // connection, so run them one at a time: concurrent copies would each take another connection.
+  const authorisedLocalUrls = new Set<string>();
+  for (const { attachment } of candidates) {
+    const local = parseMediaReference(attachment.url, ctx.clientId);
+    if (!local || authorisedLocalUrls.has(attachment.url)) continue;
+    try {
+      await authoriseMedia(ctx.auth, local);
+      authorisedLocalUrls.add(attachment.url);
+    } catch {
+      // Unauthorised files are skipped with the ordinary per-attachment warning below.
+    }
+  }
+  let acceptedBytes = 0;
   const prepared = await mapWithConcurrency(candidates, ATTACHMENT_COPY_CONCURRENCY, async ({ attachment, cardId }): Promise<Prepared> => {
     const ext = getAllowedAttachmentExtension(attachment.mimeType, attachment.fileName);
     if (!ext) return { warning: importText(ctx.locale, "attachmentUnsupported", { name: attachment.fileName }) };
     try {
-      const buffer = await readArchiveAttachment(ctx, attachment.url);
+      const buffer = await readArchiveAttachment(ctx, attachment.url, maxFileBytes, authorisedLocalUrls);
+      // Checked and reserved without an await in between, so concurrent copies cannot both claim
+      // the last of the quota.
+      if (entitlements?.limited && entitlements.quotaBytes !== null && entitlements.usedBytes + acceptedBytes + buffer.byteLength > entitlements.quotaBytes) {
+        throw new Error("storage quota exceeded");
+      }
+      acceptedBytes += buffer.byteLength;
       const fileKey = cardAttachmentStorageKey(cardId, ext);
       await ctx.storage.put(fileKey, buffer, attachment.mimeType);
       return { attachment, cardId, fileKey, byteSize: buffer.byteLength };
@@ -410,8 +445,8 @@ async function copyAttachments(ctx: ImportContext, cardIdBySourceId: Map<string,
   return { rows, coverUpdates };
 }
 
-export async function runKaneraBoardImport(tx: Tx, args: { locale?: Locale; source: BoardExportArchive; body: CommitImportBody; workspaceId: string; clientId: string; actorId: string; targetBoardId?: string | null; storage: StorageProvider; sourceLabel?: "kanera" | "csv" }): Promise<KaneraBoardImportResult> {
-  const ctx: ImportContext = { tx, locale: SOURCE_LOCALE, warnings: [], actorName: "Importer", actorAvatarUrl: null, targetBoardId: null, sourceLabel: "kanera", ...args };
+export async function runKaneraBoardImport(tx: Tx, args: { auth: AuthClaims; locale?: Locale; source: BoardExportArchive; body: CommitImportBody; workspaceId: string; targetBoardId?: string | null; storage: StorageProvider; sourceLabel?: "kanera" | "csv" }): Promise<KaneraBoardImportResult> {
+  const ctx: ImportContext = { tx, locale: SOURCE_LOCALE, warnings: [], actorName: "Importer", actorAvatarUrl: null, targetBoardId: null, sourceLabel: "kanera", ...args, clientId: args.auth.cid, actorId: args.auth.sub };
   const [workspaceUserRows, actorRow] = await Promise.all([
     tx.select({ userId: workspaceMembers.userId }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, ctx.workspaceId)),
     tx.select({ displayName: users.displayName, avatarUrl: users.avatarUrl, homeClientId: users.clientId }).from(users).where(eq(users.id, ctx.actorId)).limit(1),

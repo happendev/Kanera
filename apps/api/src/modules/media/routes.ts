@@ -1,3 +1,4 @@
+import { dto } from "@kanera/shared";
 import type { FastifyInstance } from "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { getStorageForClient } from "../../lib/storage/index.js";
@@ -39,11 +40,13 @@ export async function mediaRoutes(app: FastifyInstance) {
 }
 
 async function resignMedia(req: FastifyRequest, reply: FastifyReply) {
-  const query = req.query as { u?: string };
+  const parsedQuery = dto.resignMediaQuery.safeParse(req.query);
+  if (!parsedQuery.success) throw notFound();
+  const query = parsedQuery.data;
   const reference = query.u;
   if (!reference) throw notFound();
   const parsed = parseMediaReference(reference);
-  if (!parsed) throw notFound();
+  if (!parsed || !dto.uuidParams("clientId").safeParse(parsed).success) throw notFound();
   await authoriseMedia(req.auth, parsed);
   // signMediaReference is deterministic within a window, so this returns the
   // same cacheable URL the board/detail views already use — not a per-request one.
@@ -51,12 +54,21 @@ async function resignMedia(req: FastifyRequest, reply: FastifyReply) {
 }
 
 async function serveMedia(req: FastifyRequest, reply: FastifyReply) {
-    const params = req.params as { clientId: string; "*": string };
-    const query = req.query as { t?: string; e?: string; s?: string; fn?: string };
+    const parsedParams = dto.mediaParams.safeParse(req.params);
+    const parsedQuery = dto.signedMediaQuery.safeParse(req.query);
+    if (!parsedParams.success || !parsedQuery.success) throw notFound();
+    const params = parsedParams.data;
+    const query = parsedQuery.data;
     const clientId = decodeURIComponent(params.clientId);
     // Storage providers own their final key handling; the route only normalizes
     // unsafe characters within path segments while preserving nested keys.
-    const key = params["*"].split("/").map((part) => decodeURIComponent(part).replace(/[^a-zA-Z0-9._-]/g, "_")).join("/");
+    let key: string;
+    try {
+      key = params["*"].split("/").map((part) => decodeURIComponent(part).replace(/[^a-zA-Z0-9._-]/g, "_")).join("/");
+    } catch (error) {
+      if (error instanceof URIError) throw notFound();
+      throw error;
+    }
     // The character allowlist above keeps "." and "..", and Fastify does not collapse dot
     // segments, so a raw request can carry a traversing key into the storage layer. The
     // HMAC token already prevents forging one, but refuse it here as defence in depth.

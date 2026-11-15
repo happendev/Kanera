@@ -1,3 +1,4 @@
+import { iconText } from "./_icon-text.js";
 import { sql } from "drizzle-orm";
 import { boolean, check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { COLOR_TOKENS } from "../lib/colors.js";
@@ -28,7 +29,7 @@ export const workspaces = pgTable(
     // invariant is enforced in routes because a boards constraint cannot reference workspace.kind;
     // kind stays flippable so a future conversion can expose the workspace without restructuring it.
     kind: text("kind", { enum: WORKSPACE_KINDS }).notNull().default("standard"),
-    icon: text("icon").default("rocket"),
+    icon: iconText("icon", "rocket").default("rocket"),
     accentColor: text("accent_color", { enum: COLOR_TOKENS }),
     completedCardsActiveDays: integer("completed_cards_active_days").notNull().default(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS),
     inactiveCardsDays: integer("inactive_cards_days").notNull().default(DEFAULT_INACTIVE_CARDS_DAYS),

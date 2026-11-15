@@ -33,7 +33,8 @@ export async function resolveCardKey(tx: Tx, organisationKey: string, rawKey: st
   const match = /^([A-Z][A-Z0-9]{1,9})-([1-9][0-9]*)$/.exec(rawKey.toUpperCase());
   if (!match) return null;
   const number = Number(match[2]);
-  if (!Number.isSafeInteger(number)) return null;
+  // Card numbers live in an int4 column; a larger suffix can never resolve and would fail SQL.
+  if (!Number.isInteger(number) || number > 2147483647) return null;
   const [card] = await tx
     .select({
       id: cards.id,

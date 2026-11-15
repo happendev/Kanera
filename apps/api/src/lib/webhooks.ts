@@ -23,7 +23,7 @@ import { hasPaidPlanEntitlement } from "./entitlements.js";
 import { decryptSecret } from "./secrets.js";
 import { forEachConcurrent } from "./concurrent-delivery.js";
 import { startSweepScheduler, type SweepScheduler } from "./sweep-scheduler.js";
-import { assertResolvedHostAllowed } from "./ssrf.js";
+import { outboundHttpClient } from "./outbound-http.js";
 import { signWebhookPayload } from "./webhook-signing.js";
 import { buildChatRequest, chatContentExcerpt } from "./chat-destinations.js";
 import { cleanupMcpEvents, enqueueMcpEventDeliveries, processMcpEventDeliveries } from "./mcp-events.js";
@@ -415,11 +415,7 @@ export async function deliverWebhookDelivery(
         body,
       };
     }
-    await assertResolvedHostAllowed(requestUrl);
-    // `redirect: "error"`: the SSRF check above only covers the configured URL, so following a
-    // 3xx would let a public host bounce the request (and its captured response body) to a
-    // private or metadata address. Receivers must answer at the configured URL directly.
-    const response = await fetch(requestUrl, { ...requestInit, redirect: "error", signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) });
+    const response = await outboundHttpClient.fetch(requestUrl, { ...requestInit, redirect: "error" }, { timeoutMs: DELIVERY_TIMEOUT_MS, oversizedResponse: "truncate" });
     const fullResponseBody = await response.text().catch(() => "");
     // Only an excerpt is stored, but success must be judged on the complete body: Telegram echoes
     // the sent message in its JSON, so a long card title or comment pushes `"ok":true` past the

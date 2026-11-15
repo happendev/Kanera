@@ -33,7 +33,7 @@ export async function agentRunRoutes(app: FastifyInstance) {
   // current from agentRun:* events. Kept off the board-open payload so boards without agents pay
   // nothing extra on their hot path.
   app.get("/boards/:boardId/agent-runs", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const ctx = await assertBoardAccess(req.auth, boardId);
     const rows = await db
       .select(runColumns)
@@ -50,7 +50,7 @@ export async function agentRunRoutes(app: FastifyInstance) {
   });
 
   app.get("/cards/:cardId/agent-runs", async (req) => {
-    const { cardId } = req.params as { cardId: string };
+    const { cardId } = dto.uuidParams("cardId").parse(req.params);
     const query = dto.listAgentRunsQuery.parse(req.query);
     await assertCardAccess(req.auth, cardId);
     const rows = await db
@@ -67,7 +67,7 @@ export async function agentRunRoutes(app: FastifyInstance) {
   });
 
   app.post("/cards/:cardId/agent-runs", async (req, reply) => {
-    const { cardId } = req.params as { cardId: string };
+    const { cardId } = dto.uuidParams("cardId").parse(req.params);
     const body = dto.startAgentRunBody.parse(req.body);
     const [card] = await db.select({ id: cards.id, boardId: cards.boardId }).from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound("card not found");
@@ -90,14 +90,14 @@ export async function agentRunRoutes(app: FastifyInstance) {
   });
 
   app.get("/agent-runs/:runId", async (req) => {
-    const { runId } = req.params as { runId: string };
+    const { runId } = dto.uuidParams("runId").parse(req.params);
     const run = await loadRun(runId);
     await assertCardAccess(req.auth, { id: run.cardId, boardId: run.boardId });
     return toWireAgentRun(run);
   });
 
   app.patch("/agent-runs/:runId", async (req) => {
-    const { runId } = req.params as { runId: string };
+    const { runId } = dto.uuidParams("runId").parse(req.params);
     const body = dto.updateAgentRunBody.parse(req.body);
     const existing = await loadRun(runId);
     await assertCardAccess(req.auth, { id: existing.cardId, boardId: existing.boardId }, "editor");

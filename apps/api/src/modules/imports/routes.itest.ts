@@ -1,3 +1,4 @@
+import { outboundHttpClient } from "../../lib/outbound-http.js";
 import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -446,9 +447,9 @@ void test("POST /imports/:importId/commit copies Trello uploaded attachments whe
   });
 
   const previousKey = env.TRELLO_API_KEY;
-  const previousFetch = globalThis.fetch;
+  const previousFetch = outboundHttpClient.fetch;
   env.TRELLO_API_KEY = "trello-key";
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+  outboundHttpClient.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : input.toString());
     assert.equal(url.hostname, "api.trello.com");
     assert.equal(url.searchParams.get("key"), null);
@@ -495,7 +496,7 @@ void test("POST /imports/:importId/commit copies Trello uploaded attachments whe
     assert.equal(JSON.stringify(importRow?.mappings).includes("trello-token"), false);
   } finally {
     env.TRELLO_API_KEY = previousKey;
-    globalThis.fetch = previousFetch;
+    outboundHttpClient.fetch = previousFetch;
   }
 });
 
@@ -747,7 +748,7 @@ void test("Kanera board import appends mapped-list cards after the workspace-lis
 
   const storage = await getStorageForClient(user.clientId);
   const result = await db.transaction((tx) =>
-    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, clientId: user.clientId, actorId: user.id, storage })
+    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, auth: { sub: user.id, cid: user.clientId, role: "owner" }, storage })
   );
 
   const targetCards = await db
@@ -794,7 +795,7 @@ void test("Kanera board import collapses assignees when source members map to th
   const storage = await getStorageForClient(user.clientId);
 
   const result = await db.transaction((tx) =>
-    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, clientId: user.clientId, actorId: user.id, storage })
+    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, auth: { sub: user.id, cid: user.clientId, role: "owner" }, storage })
   );
 
   const [importedCard] = await db.select().from(cards).where(and(eq(cards.boardId, result.board.id), eq(cards.title, "Shared assignment"))).limit(1);
@@ -843,7 +844,7 @@ void test("Kanera board import round-trips nested checklist detail and item desc
 
   const storage = await getStorageForClient(user.clientId);
   const result = await db.transaction((tx) =>
-    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, clientId: user.clientId, actorId: user.id, storage })
+    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, auth: { sub: user.id, cid: user.clientId, role: "owner" }, storage })
   );
 
   const [importedCard] = await db.select().from(cards).where(and(eq(cards.boardId, result.board.id), eq(cards.title, "Detailed card"))).limit(1);
@@ -904,7 +905,7 @@ void test("Kanera board import collapses label assignments when two source label
   const storage = await getStorageForClient(user.clientId);
 
   const result = await db.transaction((tx) =>
-    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, clientId: user.clientId, actorId: user.id, storage })
+    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, auth: { sub: user.id, cid: user.clientId, role: "owner" }, storage })
   );
 
   const [importedCard] = await db.select().from(cards).where(and(eq(cards.boardId, result.board.id), eq(cards.title, "Doubly labelled"))).limit(1);

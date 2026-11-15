@@ -1,3 +1,5 @@
+import { outboundDns } from "../../lib/ssrf.js";
+import { createECDH, randomBytes } from "node:crypto";
 import "../../test/setup.integration.js";
 import { insertTestNotifications } from "../../test/notification-fixtures.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
@@ -30,7 +32,7 @@ import {
 } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
-import { mock, test } from "node:test";
+import { after, mock, test } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { db } from "../../db.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
@@ -232,6 +234,17 @@ async function seed() {
     otherUnread: otherUnread!,
   };
 }
+
+// Subscription persistence validates DNS; this fake provider has no external DNS
+// service. Keep the policy real while supplying a public, deterministic answer.
+const nativeLookup = outboundDns.lookup;
+const pushDns = mock.method(outboundDns, "lookup", async (hostname: string) => hostname === "push.example.test"
+  ? [{ address: "8.8.8.8", family: 4 }]
+  : nativeLookup(hostname, { all: true }));
+after(() => pushDns.mock.restore());
+
+const pushKeys = { p256dh: createECDH("prime256v1").generateKeys().toString("base64url"), auth: randomBytes(16).toString("base64url") };
+const updatedPushKeys = { p256dh: createECDH("prime256v1").generateKeys().toString("base64url"), auth: randomBytes(16).toString("base64url") };
 
 void test("restricted notifications disappear from the inbox and every aggregate until assigned", async () => {
   const f = await seed();
@@ -1427,8 +1440,8 @@ void test("push subscription routes upsert the authenticated user's endpoint and
       deviceLabel: "Pixel 9",
       contentEncoding: "aes128gcm",
       keys: {
-        p256dh: "member-p256dh",
-        auth: "member-auth",
+        p256dh: pushKeys.p256dh,
+        auth: pushKeys.auth,
       },
     },
   });
@@ -1444,8 +1457,8 @@ void test("push subscription routes upsert the authenticated user's endpoint and
       deviceLabel: "Pixel 9 Pro",
       contentEncoding: "aesgcm",
       keys: {
-        p256dh: "member-p256dh-updated",
-        auth: "member-auth-updated",
+        p256dh: updatedPushKeys.p256dh,
+        auth: updatedPushKeys.auth,
       },
     },
   });
@@ -1457,8 +1470,8 @@ void test("push subscription routes upsert the authenticated user's endpoint and
   assert.equal(rows[0]?.clientId, f.owner.clientId);
   assert.equal(rows[0]?.deviceLabel, "Pixel 9 Pro");
   assert.equal(rows[0]?.contentEncoding, "aesgcm");
-  assert.equal(rows[0]?.keyP256dh, "member-p256dh-updated");
-  assert.equal(rows[0]?.keyAuth, "member-auth-updated");
+  assert.equal(rows[0]?.keyP256dh, updatedPushKeys.p256dh);
+  assert.equal(rows[0]?.keyAuth, updatedPushKeys.auth);
 
   const [registrationOrg] = await db.insert(clients).values({ name: "Registration org" }).returning();
   await db.update(pushSubscriptions).set({ clientId: registrationOrg!.id }).where(eq(pushSubscriptions.endpoint, endpoint));
@@ -1497,7 +1510,7 @@ void test("push registration is identity-wide even when the active organisation 
     headers: { authorization: `Bearer ${f.memberToken}` },
     payload: {
       endpoint: "https://push.example.test/subscriptions/org-disabled-registration",
-      keys: { p256dh: "registration-p256dh", auth: "registration-auth" },
+      keys: { p256dh: pushKeys.p256dh, auth: pushKeys.auth },
     },
   });
 
@@ -1518,7 +1531,7 @@ void test("subscription rotation requires the old push auth secret and updates t
   const payload = {
     oldEndpoint: "https://push.example.test/subscriptions/rotating-old",
     endpoint: "https://push.example.test/subscriptions/rotating-new",
-    keys: { p256dh: "new-p256dh", auth: "new-auth" },
+    keys: { p256dh: updatedPushKeys.p256dh, auth: updatedPushKeys.auth },
   };
 
   const rejected = await f.app.inject({
@@ -1538,8 +1551,8 @@ void test("subscription rotation requires the old push auth secret and updates t
     pushSubscriptions.endpoint,
     "https://push.example.test/subscriptions/rotating-new",
   ));
-  assert.equal(subscription?.keyP256dh, "new-p256dh");
-  assert.equal(subscription?.keyAuth, "new-auth");
+  assert.equal(subscription?.keyP256dh, updatedPushKeys.p256dh);
+  assert.equal(subscription?.keyAuth, updatedPushKeys.auth);
 });
 
 void test("subscription rotation is throttled per IP before the subscription lookup", async () => {
@@ -1549,7 +1562,7 @@ void test("subscription rotation is throttled per IP before the subscription loo
     oldEndpoint: "https://push.example.test/subscriptions/unknown",
     oldAuth: "unknown-auth",
     endpoint: "https://push.example.test/subscriptions/unknown-new",
-    keys: { p256dh: "new-p256dh", auth: "new-auth" },
+    keys: { p256dh: updatedPushKeys.p256dh, auth: updatedPushKeys.auth },
   };
   const remoteAddress = "198.51.100.70";
   for (let attempt = 1; attempt <= 30; attempt += 1) {
@@ -1574,8 +1587,8 @@ void test("push test sends the authenticated user's active subscriptions", async
         clientId: f.owner.clientId,
         userId: f.member.id,
         endpoint: "https://push.example.test/subscriptions/member-delivery",
-        keyP256dh: "member-p256dh",
-        keyAuth: "member-auth",
+        keyP256dh: pushKeys.p256dh,
+        keyAuth: pushKeys.auth,
         contentEncoding: "aes128gcm",
       },
       {
@@ -1659,8 +1672,8 @@ void test("push test disables subscriptions rejected as gone", async () => {
         clientId: f.owner.clientId,
         userId: f.member.id,
         endpoint: "https://push.example.test/subscriptions/member-gone",
-        keyP256dh: "member-p256dh",
-        keyAuth: "member-auth",
+        keyP256dh: pushKeys.p256dh,
+        keyAuth: pushKeys.auth,
       })
       .returning();
 

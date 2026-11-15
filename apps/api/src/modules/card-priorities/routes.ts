@@ -50,13 +50,13 @@ export async function cardPriorityRoutes(app: FastifyInstance) {
   app.get("/work/priorities", async (req) => loadPriorityQueues(req.auth));
 
   app.get("/work/priorities/:userId", async (req) => {
-    const { userId: targetUserId } = req.params as { userId: string };
+    const { userId: targetUserId } = dto.uuidParams("userId").parse(req.params);
     const query = dto.cardPrioritiesQuery.parse(req.query ?? {});
     return loadPriorities(req.auth, targetUserId, query);
   });
 
   app.post("/work/priorities/:userId/cards", async (req, reply) => {
-    const { userId: targetUserId } = req.params as { userId: string };
+    const { userId: targetUserId } = dto.uuidParams("userId").parse(req.params);
     const body = dto.createCardPriorityBody.parse(req.body);
     const ctx = await assertPriorityWriteAccess(req.auth, body.cardId, targetUserId);
     await addPriority({ auth: req.auth, targetUserId, workspaceId: ctx.workspaceId, body });
@@ -68,7 +68,7 @@ export async function cardPriorityRoutes(app: FastifyInstance) {
   });
 
   app.post("/card-priorities/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveCardPriorityBody.parse(req.body);
     const [current] = await db.select().from(cardPriorities).where(eq(cardPriorities.id, id)).limit(1);
     if (!current) throw notFound();
@@ -84,7 +84,7 @@ export async function cardPriorityRoutes(app: FastifyInstance) {
   });
 
   app.delete("/card-priorities/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select().from(cardPriorities).where(eq(cardPriorities.id, id)).limit(1);
     if (!current) throw notFound();
     const ctx = await assertPriorityWriteAccess(req.auth, current.cardId, current.targetUserId);

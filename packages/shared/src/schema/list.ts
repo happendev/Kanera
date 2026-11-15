@@ -1,3 +1,4 @@
+import { iconText } from "./_icon-text.js";
 import { sql } from "drizzle-orm";
 import { boolean, check, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { COLOR_TOKENS } from "../lib/colors.js";
@@ -12,7 +13,7 @@ export const lists = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    icon: text("icon").default("list"),
+    icon: iconText("icon", "list").default("list"),
     color: text("color", { enum: COLOR_TOKENS }),
     // Marks the workspace's "work is actively happening" lists. Cards entering one start their
     // time-in-progress clock when the organisation, workspace and board all enable tracking

@@ -42,7 +42,7 @@ export async function clientRoutes(app: FastifyInstance) {
 
   app.patch("/clients/me/standalone-boards/:boardId/group", async (req) => {
     assertOrgRole(req.auth, "admin");
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.assignStandaloneBoardGroupBody.parse(req.body);
     const result = await assignStandaloneBoardGroup({ auth: req.auth, boardId, body });
     await emitStandaloneBoardGroupAssigned({ auth: req.auth, result });

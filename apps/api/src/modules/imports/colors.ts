@@ -25,9 +25,9 @@ const FIELD_TYPE_MAP: Record<string, CustomFieldTypeName> = {
 export function trelloColorToToken(color: string | null | undefined): ColorToken {
   if (!color) return "gray";
   const normalized = color.replace(/_(dark|light)$/u, "");
-  return COLOR_MAP[normalized] ?? "gray";
+  return Object.hasOwn(COLOR_MAP, normalized) ? COLOR_MAP[normalized]! : "gray";
 }
 
 export function trelloCustomFieldTypeToKanera(type: string | null | undefined): CustomFieldTypeName {
-  return type ? FIELD_TYPE_MAP[type] ?? "text" : "text";
+  return type && Object.hasOwn(FIELD_TYPE_MAP, type) ? FIELD_TYPE_MAP[type]! : "text";
 }

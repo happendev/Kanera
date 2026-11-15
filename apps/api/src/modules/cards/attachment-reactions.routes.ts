@@ -31,7 +31,7 @@ export async function cardAttachmentReactionRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.post("/attachments/:id/reactions", async (req, reply) => {
-    const { id: attachmentId } = req.params as { id: string };
+    const { id: attachmentId } = dto.uuidParams("id").parse(req.params);
     const body = dto.addReactionBody.parse(req.body);
 
     const { attachment, card } = await loadReactableAttachment(attachmentId);
@@ -79,7 +79,7 @@ export async function cardAttachmentReactionRoutes(app: FastifyInstance) {
   });
 
   app.delete("/attachments/:id/reactions/:type", async (req, reply) => {
-    const { id: attachmentId, type: typeParam } = req.params as { id: string; type: string };
+    const { id: attachmentId, type: typeParam } = dto.reactionParams.parse(req.params);
     const type = dto.reactionTypeSchema.parse(typeParam);
 
     const { attachment, card } = await loadReactableAttachment(attachmentId);
