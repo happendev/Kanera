@@ -1,3 +1,4 @@
+import { offsetTimestamp, calendarDate } from "./_dates.js";
 import { z } from "zod";
 import { EVENT_OUTBOX_ACTOR_KINDS } from "../schema/event-outbox.js";
 
@@ -30,8 +31,10 @@ export const mcpPriorityEventArguments = z.strictObject({});
 // Always the connected user's own day; same empty shape as the queue event.
 export const mcpMyDayEventArguments = mcpPriorityEventArguments;
 const callbackUrl = z.url().max(2048).refine((url) => {
-  const parsed = new URL(url);
-  return parsed.protocol === "https:" && !parsed.username && !parsed.password && !parsed.hash;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password && !parsed.hash;
+  } catch { return false; }
 }, "callback must be HTTPS without credentials or fragment");
 export const mcpSigningSecret = z.string().min(38).max(94).regex(/^whsec_[A-Za-z0-9+/]+={0,2}$/u).refine((s) => {
   const encoded = s.slice(6);
@@ -80,8 +83,8 @@ export const mcpEventData = z.strictObject({
   // schedule.* only.
   blockerCardId: z.uuid().optional().describe("schedule.conflict_*: the open blocker planned to finish on or after this card's start."),
   days: z.number().int().optional().describe("schedule.conflict_detected: working days the card would have to move right; schedule.critical_path_slipped: working days the projected finish moved."),
-  projectedFinish: z.iso.date().optional().describe("schedule.critical_path_slipped: the chain's new projected finish."),
-  previousProjectedFinish: z.iso.date().optional(),
+  projectedFinish: calendarDate.optional().describe("schedule.critical_path_slipped: the chain's new projected finish."),
+  previousProjectedFinish: calendarDate.optional(),
   slipDays: z.number().int().optional().describe("schedule.critical_path_slipped: working days the projected finish lands after the latest due date."),
 });
 // Deliberately content-free, like the web app's `cardPriority:invalidated` ping: the queue is a
@@ -96,7 +99,7 @@ export const mcpPriorityEventData = z.strictObject({
 // under its own credentials, so access is decided at read time, never at enqueue time.
 export const mcpMyDayEventData = z.strictObject({
   targetUserId: z.uuid().describe("The connected user. Read their day with work.my_day."),
-  localDate: z.iso.date().describe("The user's local date (YYYY-MM-DD) this ping is for."),
+  localDate: calendarDate.describe("The user's local date (YYYY-MM-DD) this ping is for."),
   timeZone: z.string().describe("The user's profile time zone; pass it to work.my_day."),
   actor: mcpEventActor,
 });
@@ -107,7 +110,7 @@ export const mcpReminderEventData = z.strictObject({
   targetUserId: z.uuid().describe("The connected user, who set the reminder."),
   reminderId: z.uuid(),
   cardId: z.uuid().describe("The reminded card. Read it with cards.get."),
-  remindAt: z.iso.datetime({ offset: true }).describe("The instant the reminder was scheduled for."),
+  remindAt: offsetTimestamp.describe("The instant the reminder was scheduled for."),
   url: z.url().optional().describe("Canonical web link to the card."),
   actor: mcpEventActor,
 });

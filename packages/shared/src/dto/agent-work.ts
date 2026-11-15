@@ -1,3 +1,4 @@
+import { isoTimestamp } from "./_dates.js";
 import { z } from "zod";
 import type { WireChecklistAssignment } from "../events/index.js";
 import { ianaTimeZoneName } from "./_time-zone.js";
@@ -17,8 +18,8 @@ export const agentWorkHistoryQueryBody = z.object({
   /** Defaults to the connected user; another user must be visible inside the selected work scope. */
   userId: z.uuid().optional(),
   preset: z.enum(AGENT_WORK_HISTORY_PRESETS).optional(),
-  from: z.iso.datetime().optional(),
-  to: z.iso.datetime().optional(),
+  from: isoTimestamp.optional(),
+  to: isoTimestamp.optional(),
   timeZone: ianaTimeZoneName.optional(),
   scope: workScopeSchema.optional(),
   q: z.string().trim().min(1).max(200).optional(),

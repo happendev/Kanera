@@ -1,3 +1,4 @@
+import { isoTimestamp, calendarDate } from "./_dates.js";
 import { z } from "zod";
 import type { CompactCardSummary, WireChecklistAssignment, WireCustomField, WireGlobalWorkSeparator } from "../events/index.js";
 import type { ColorToken } from "../lib/colors.js";
@@ -92,19 +93,19 @@ export const workFiltersSchema = z.object({
   // Open cards with a visible open blocker that is overdue or due after them: the Dependencies
   // view's "at risk". Hidden blockers do not count, since judging them would reveal their dates.
   atRiskOnly: z.boolean().default(false),
-  dueFrom: z.iso.date().nullable().default(null),
-  dueTo: z.iso.date().nullable().default(null),
+  dueFrom: calendarDate.nullable().default(null),
+  dueTo: calendarDate.nullable().default(null),
   overdueOnly: z.boolean().default(false),
   overdueChecklistOnly: z.boolean().default(false),
   unreadOnly: z.boolean().default(false),
   prioritySetOnly: z.boolean().default(false),
   archived: z.boolean().default(false),
-  completedFrom: z.iso.datetime().nullable().default(null),
-  completedTo: z.iso.datetime().nullable().default(null),
+  completedFrom: isoTimestamp.nullable().default(null),
+  completedTo: isoTimestamp.nullable().default(null),
   // Agent/reporting projections use these to find stale work without enumerating card histories.
   // They remain optional on the app surface and compose with the existing card filters.
-  lastActivityBefore: z.iso.datetime().nullable().default(null),
-  lastMovedBefore: z.iso.datetime().nullable().default(null),
+  lastActivityBefore: isoTimestamp.nullable().default(null),
+  lastMovedBefore: isoTimestamp.nullable().default(null),
 });
 export type WorkFilters = z.infer<typeof workFiltersSchema>;
 
@@ -190,8 +191,8 @@ export const globalWorkDoneQueryBody = z.object({
   lens: z.enum(["my", "team"]),
   scope: workScopeSchema.optional(),
   filters: workFiltersSchema.optional(),
-  from: z.iso.datetime(),
-  to: z.iso.datetime(),
+  from: isoTimestamp,
+  to: isoTimestamp,
   // Needed because the window may now span several days: move coalescing is closed at each local
   // day boundary so a card moved on two days reads as two rows. See lib/work-done.ts.
   timeZone: ianaTimeZone,
@@ -203,8 +204,8 @@ export const globalWorkDoneSummaryQueryBody = z.object({
   lens: z.enum(["my", "team"]),
   scope: workScopeSchema.optional(),
   filters: workFiltersSchema.optional(),
-  from: z.iso.datetime(),
-  to: z.iso.datetime(),
+  from: isoTimestamp,
+  to: isoTimestamp,
   timeZone: ianaTimeZone,
 });
 export type GlobalWorkDoneSummaryQuery = z.infer<typeof globalWorkDoneSummaryQueryBody>;

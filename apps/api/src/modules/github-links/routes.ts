@@ -43,25 +43,31 @@ function parseGitHubUrl(raw: string): ParsedGitHubUrl | null {
   } catch {
     return null;
   }
-  if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "github.com") return null;
+  if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "github.com" || url.username || url.password || url.port) return null;
 
   const path = url.pathname;
   const pull = PULL_PATH_RE.exec(path);
   if (pull) {
     const [, owner, repo, number] = pull;
+    if (!Number.isSafeInteger(Number(number)) || Number(number) < 1) return null;
     return { kind: "pull", owner: owner!, repo: repo!, number: Number(number), href: url.href };
   }
 
   const issue = ISSUE_PATH_RE.exec(path);
   if (issue) {
     const [, owner, repo, number] = issue;
+    if (!Number.isSafeInteger(Number(number)) || Number(number) < 1) return null;
     return { kind: "issue", owner: owner!, repo: repo!, number: Number(number), href: url.href };
   }
 
   const release = RELEASE_TAG_PATH_RE.exec(path);
   if (release) {
     const [, owner, repo, tag] = release;
-    return { kind: "release", owner: owner!, repo: repo!, tag: decodeURIComponent(tag!), href: url.href };
+    try {
+      return { kind: "release", owner: owner!, repo: repo!, tag: decodeURIComponent(tag!), href: url.href };
+    } catch {
+      return null;
+    }
   }
 
   const commit = COMMIT_PATH_RE.exec(path);
@@ -496,7 +502,7 @@ export async function githubLinkRoutes(app: FastifyInstance) {
   });
 
   app.get("/cards/:id/github-pulls", async (req): Promise<dto.CardGitHubPullsResponse> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     await assertCardAccess(req.auth, id);
     const pulls = await db
       .select({

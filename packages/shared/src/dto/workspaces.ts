@@ -1,3 +1,4 @@
+import { calendarDate } from "./_dates.js";
 import { z } from "zod";
 import { WORKSPACE_ROLES } from "../schema/member-roles.js";
 import { WORKSPACE_KINDS } from "../schema/workspace.js";
@@ -66,7 +67,7 @@ const initialPopulateCustomFieldValue = z.union([
   z.object({
     kind: z.literal("date"),
     source: z.literal("fixed"),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"),
+    date: calendarDate,
   }),
   z.object({ kind: z.literal("date"), source: z.literal("current") }),
   z.object({ kind: z.literal("checkbox"), checked: z.boolean() }),

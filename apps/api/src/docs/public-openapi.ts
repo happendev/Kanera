@@ -2169,7 +2169,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       responses: authedResponses({ "200": ok(arrayOf(ref("AccessibleBoard"))) }),
     })),
     "/boards/{id}": {
-      get: operation({ tags: ["Boards"], summary: "Get a board", description: "Returns the lightweight board row without hydrating cards or workspace settings.", operationId: "getBoard", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("Board")) }) }),
+      get: operation({ tags: ["Boards"], summary: "Get a board", description: "Returns the lightweight board row. Set includeCards=false to include workspace configuration without hydrating cards.", operationId: "getBoard", parameters: [idParam(), queryParam("includeCards", { type: "boolean" })], responses: authedResponses({ "200": ok({ oneOf: [ref("Board"), ref("BoardDetail")] }) }) }),
       patch: operation({ tags: ["Boards"], summary: "Update a board", description: "For a standalone board, name, icon, and icon color are also mirrored onto its hidden workspace.", operationId: "updateBoard", parameters: [idParam()], requestBody: jsonBody(ref("UpdateBoardBody")), responses: authedResponses({ "200": ok(ref("Board")) }) }),
       delete: operation({ tags: ["Boards"], summary: "Delete a board", description: "Deleting a standalone board also deletes its hidden workspace and all workspace-scoped configuration. Deleting a standard board leaves its workspace intact.", operationId: "deleteBoard", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
     },
@@ -2182,10 +2182,12 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         idParam(),
         queryParam("includeCompleted", { type: "boolean" }, "Include completed cards."),
         queryParam("archived", { type: "boolean" }, "Return archived cards."),
+        queryParam("completedFrom", { oneOf: [{ type: "string", format: "date" }, dateTime] }),
+        queryParam("completedTo", { oneOf: [{ type: "string", format: "date" }, dateTime] }),
         queryParam("includeCards", { type: "boolean", default: true }, "Set false to omit cards and skip card hydration. Otherwise listId and cardLimit are required."),
         queryParam("listId", uuid, "Return cards only from this workflow list."),
         queryParam("cardLimit", { type: "integer", minimum: 1, maximum: 100 }, "Maximum cards returned in this page."),
-        queryParam("cardOffset", { type: "integer", minimum: 0, default: 0 }, "Card row offset within the selected list."),
+        queryParam("cardOffset", { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER, default: 0 }, "Card row offset within the selected list."),
       ],
       responses: authedResponses({ "200": ok(ref("BoardDetail")) }),
     })),
@@ -2669,7 +2671,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         responses: authedResponses({ "201": created(ref("CardAttachment")) }),
       }),
     },
-    "/cards/{id}/cover": pathItem("patch", operation({ tags: ["Attachments"], summary: "Set or clear a card cover image", operationId: "setCardCover", parameters: [idParam()], requestBody: jsonBody({ type: "object", properties: { attachmentId: nullable(uuid) } }), responses: authedResponses({ "200": ok(ref("CardDetail")) }) })),
+    "/cards/{id}/cover": pathItem("patch", operation({ tags: ["Attachments"], summary: "Set or clear a card cover image", operationId: "setCardCover", parameters: [idParam()], requestBody: jsonBody({ type: "object", required: ["attachmentId"], properties: { attachmentId: nullable(uuid) } }), responses: authedResponses({ "200": ok(ref("CardDetail")) }) })),
     "/cards/{id}/attachments/{attachmentId}": pathItem("delete", operation({ tags: ["Attachments"], summary: "Delete a card attachment", operationId: "deleteCardAttachment", parameters: [idParam(), idParam("attachmentId")], responses: authedResponses({ "204": noContent }) })),
     "/workspaces/{wsId}/custom-fields": pathItem("post", operation({ tags: ["Custom Fields"], summary: "Create a custom field", operationId: "createCustomField", parameters: [idParam("wsId")], requestBody: jsonBody(ref("CreateCustomFieldBody")), responses: authedResponses({ "201": created(ref("CustomField")) }) })),
     "/custom-fields/{id}": {
@@ -2814,7 +2816,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       description: "Reads your notification inbox forward from a cursor, oldest first: the same rows as the web inbox, so replies, mentions, assignments, and changes on cards you watch or are assigned (including cards your AI agent created). The first call without `since` returns the latest rows as a baseline; pass the returned `cursor` as `since` on every later call, and repeat while `hasMore` is true. Rows appear a few seconds after the event. An OAuth agent connection does not see notifications caused by its own writes unless `includeSelf=true`. Needs a personal API key or OAuth connection.",
       operationId: "pollNotifications",
       parameters: [
-        queryParam("since", { type: "string" }),
+        queryParam("since", { type: "string", minLength: 1, maxLength: 200 }, "Opaque notification cursor: ISO timestamp with optional UUID tiebreaker. Previously issued timestamp-only and empty-id cursors remain accepted."),
         queryParam("limit", { type: "integer", minimum: 1, maximum: 100, default: 50 }),
         queryParam("includeSelf", { type: "boolean", default: false }),
       ],
@@ -2936,7 +2938,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       }),
     },
     "/comments/{id}/reactions/{type}": pathItem("delete", operation({ tags: ["Comments"], summary: "Remove a comment reaction", operationId: "removeCommentReaction", parameters: [idParam(), { name: "type", in: "path", required: true, schema: { type: "string" } }], responses: authedResponses({ "204": noContent }) })),
-    "/boards/{id}/activity": pathItem("get", operation({ tags: ["Activity"], summary: "List recent board activity", description: "Returns a cursor-paginated board-wide feed of activity and comments.", operationId: "listBoardActivity", parameters: [idParam(), ...cursorPaginationParams], responses: authedResponses({ "200": ok(ref("CardFeedPage")) }) })),
+    "/boards/{id}/activity": pathItem("get", operation({ tags: ["Activity"], summary: "List recent board activity", description: "Returns a cursor-paginated board-wide feed of activity and comments.", operationId: "listBoardActivity", parameters: [idParam(), queryParam("limit", { type: "integer", minimum: 1, maximum: 200, default: 50 }), queryParam("cursor", { type: "string", minLength: 1, maxLength: 2048 })], responses: authedResponses({ "200": ok(ref("CardFeedPage")) }) })),
   },
 };
 

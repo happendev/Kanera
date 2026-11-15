@@ -1,3 +1,4 @@
+import { environment } from "../../../environments/environment";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -50,7 +51,7 @@ const ALLOWED_TAGS = [
 
 // `start` keeps an ordered list's numbering when a nested-looking bullet list splits it in two: the
 // editor saves the continuation as `2. …`, which marked renders as `<ol start="2">`.
-const ALLOWED_ATTR = ["href", "title", "src", "alt", "target", "rel", "class", "style", "data-user-id", "type", "checked", "disabled", "start"];
+const ALLOWED_ATTR = ["href", "title", "src", "alt", "target", "rel", "class", "style", "align", "data-user-id", "type", "checked", "disabled", "start"];
 const MENTION_RE = /@\[([^\]]+)\]\(kanera-user:([0-9a-fA-F-]{36})\)/g;
 
 type MentionUser = Pick<WireBoardMemberUser, "userId" | "displayName" | "avatarUrl">;
@@ -770,10 +771,11 @@ export class DescriptionViewerComponent {
       this.renderMentionChip(label, userId),
     );
     const raw = marked.parse(withMentions, { async: false }) as string;
-    return DOMPurify.sanitize(raw, {
+    const clean = DOMPurify.sanitize(raw, {
       ALLOWED_TAGS,
       ALLOWED_ATTR,
     });
+    return this.constrainDocumentFormatting(clean);
   });
 
   readonly html = computed(() => {
@@ -1024,7 +1026,11 @@ export class DescriptionViewerComponent {
       anchor.classList.add("internal-link-chip", link.kind === "card" ? "is-card" : link.kind === "note" ? "is-note" : "is-board");
       anchor.setAttribute("href", link.href);
       anchor.setAttribute("title", this.internalLinkTitle(link));
-      const iconSlug = link.kind === "card" ? (link.boardIcon || "cardboards") : (link.icon || (link.kind === "note" ? "file-text" : "layout-board"));
+      const fallbackIcon = link.kind === "card" ? "cardboards" : link.kind === "note" ? "file-text" : "layout-board";
+      const candidateIcon = link.kind === "card" ? link.boardIcon : link.icon;
+      // This decoration happens after DOMPurify. Escaping quotes does not stop
+      // whitespace from introducing a second application CSS class.
+      const iconSlug = candidateIcon && /^[a-z0-9-]{1,60}$/.test(candidateIcon) ? candidateIcon : fallbackIcon;
       const iconColor = link.kind === "card" ? link.boardIconColor : link.kind === "board" ? link.iconColor : link.color;
       if (iconColor) anchor.setAttribute("style", `--internal-link-color: var(--color-${this.escapeAttr(iconColor)})`);
       const hint = this.internalLinkHint(link);
@@ -1157,6 +1163,45 @@ export class DescriptionViewerComponent {
     return new DOMParser().parseFromString(html, "text/html");
   }
 
+  private constrainDocumentFormatting(html: string): string {
+    const doc = this.parseHtml(html);
+    if (!doc) return html;
+    // DOMPurify removes script-capable markup, but intentionally does not sanitize
+    // CSS. Markdown must not borrow application overlay classes or fixed-position
+    // styles to impersonate app chrome. Keep only formatting our renderer emits;
+    // trusted link decorators and sanitized Mermaid SVG are added after this pass.
+    const classesByTag: Record<string, Set<string>> = {
+      SPAN: new Set(["mention-chip", "mention-chip-avatar"]),
+      UL: new Set(["contains-task-list"]),
+      LI: new Set(["task-list-item"]),
+    };
+    for (const node of Array.from(doc.querySelectorAll<HTMLElement>("[class]"))) {
+      const classes = Array.from(node.classList).filter((name) => classesByTag[node.tagName]?.has(name)
+        || node.tagName === "CODE" && /^language-[A-Za-z0-9_-]+$/.test(name));
+      if (classes.length) node.className = classes.join(" ");
+      else node.removeAttribute("class");
+    }
+    for (const node of Array.from(doc.querySelectorAll<HTMLElement>("[style], [align]"))) {
+      // Marked emits an align attribute for Markdown table cells. Normalize it
+      // to the same tiny CSS allowlist as HTML table input.
+      const alignment = node.style.textAlign || node.getAttribute("align") || "";
+      const background = node.style.getPropertyValue("--mention-avatar-bg").trim();
+      const foreground = node.style.getPropertyValue("--mention-avatar-fg").trim();
+      node.removeAttribute("style");
+      node.removeAttribute("align");
+      if ((node.tagName === "TD" || node.tagName === "TH") && ["left", "center", "right"].includes(alignment)) node.style.textAlign = alignment;
+      if (node.classList.contains("mention-chip")) {
+        if (/^var\(--avatar-color-\d{1,2}-bg\)$/.test(background)) node.style.setProperty("--mention-avatar-bg", background);
+        if (/^var\(--avatar-color-\d{1,2}-fg\)$/.test(foreground)) node.style.setProperty("--mention-avatar-fg", foreground);
+      }
+    }
+    for (const node of Array.from(doc.querySelectorAll("input"))) {
+      if (node.type !== "checkbox") node.remove();
+      else node.disabled = true;
+    }
+    return doc.body.innerHTML;
+  }
+
   private isKaneraInternalHref(href: string): boolean {
     if (!href) return false;
     try {
@@ -1201,7 +1246,11 @@ export class DescriptionViewerComponent {
 
   private isKaneraMediaHref(href: string): boolean {
     try {
-      return new URL(href, window.location.origin).pathname.startsWith("/api/media/");
+      const url = new URL(href, window.location.origin);
+      // Only our own media is an attachment. A link to another site that merely uses the same path
+      // must stay an ordinary link, not a file chip that downloads or previews inside Kanera.
+      const apiOrigin = new URL(environment.apiUrl, window.location.origin).origin;
+      return (url.origin === apiOrigin || this.isAllowedInternalOrigin(url.origin)) && url.pathname.startsWith("/api/media/");
     } catch {
       return false;
     }

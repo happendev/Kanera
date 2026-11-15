@@ -31,6 +31,11 @@ void test("server analytics uses the shared PostHog capture configuration", () =
     env.POSTHOG_API_HOST = "https://eu.i.posthog.com";
     assert.equal(serverAnalyticsEnabled(), true);
 
+    // Self-hosted installs never send product analytics, even when fully configured.
+    env.KANERA_DEPLOYMENT_MODE = "self_hosted";
+    assert.equal(serverAnalyticsEnabled(), false);
+    env.KANERA_DEPLOYMENT_MODE = "hosted";
+
     env.POSTHOG_PROJECT_KEY = undefined;
     assert.equal(serverAnalyticsEnabled(), false);
   } finally {

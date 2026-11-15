@@ -109,8 +109,12 @@ fi
   done
   printf 'WEB_ORIGIN=%s\nCOOKIE_DOMAIN=%s\nCOOKIE_SECURE=%s\n' "$origin" "$domain" "$secure"
   printf 'KANERA_DEPLOYMENT_MODE=self_hosted\nKANERA_ENVIRONMENT=production\nANALYTICS_ENABLED=false\n'
-  # nginx is always in front of the APIs, including in localhost mode.
-  printf 'API_TRUST_PROXY=true\nPUBLIC_API_TRUST_PROXY=true\n'
+  # nginx is always in front of the APIs, including in localhost mode; production adds Caddy or
+  # the existing reverse proxy in front of nginx. The value is that proxy count, not "true": nginx
+  # appends to X-Forwarded-For, so trusting the whole header would let a client choose its own IP
+  # and escape the per-IP sign-in limits.
+  if [[ "$mode" == production ]]; then trusted_proxies=2; else trusted_proxies=1; fi
+  printf 'API_TRUST_PROXY=%s\nPUBLIC_API_TRUST_PROXY=%s\n' "$trusted_proxies" "$trusted_proxies"
   printf 'PUBLIC_API_OAUTH_ISSUER=%s/public-api\n' "$origin"
   printf 'MCP_SERVER_PUBLIC_URL=%s/mcp\nMCP_PUBLIC_URL=%s/mcp\n' "$origin" "$origin"
 } > "$stage/.env"

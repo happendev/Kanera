@@ -30,20 +30,7 @@ function encodeAgentWorkCursor(cursor: AgentWorkCursor): string {
 function decodeAgentWorkCursor(raw: string | undefined): AgentWorkCursor | null {
   if (!raw) return null;
   try {
-    const value = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as Partial<AgentWorkCursor>;
-    if (
-      value.kind !== "agentWorkHistory"
-      || typeof value.signature !== "string"
-      || typeof value.from !== "string"
-      || !Number.isFinite(new Date(value.from).getTime())
-      || typeof value.to !== "string"
-      || !Number.isFinite(new Date(value.to).getTime())
-      || typeof value.timeZone !== "string"
-      || typeof value.at !== "string"
-      || !Number.isFinite(new Date(value.at).getTime())
-      || typeof value.id !== "string"
-    ) throw new Error();
-    return value as AgentWorkCursor;
+    return dto.agentHistoryCursor.parse(JSON.parse(Buffer.from(raw, "base64url").toString("utf8")));
   } catch {
     throw badRequest("invalid work-history cursor");
   }

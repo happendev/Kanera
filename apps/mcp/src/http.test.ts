@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer, type IncomingMessage } from "node:http";
+import { connect } from "node:net";
 import { createRequire } from "node:module";
 import { createMcpHttpHandler, McpTokenExchangeError, mcpAuthorizationChallenge, mcpClientIp, mcpRequestPathname } from "./http.js";
 import { env } from "./env.js";
@@ -284,5 +285,24 @@ void test("HTTP MCP endpoint honors a shared replica-wide rate-limit result", as
   }, {
     ipRateLimitPerMinute: 1,
     rateLimitCheck: async (_key, _limit, _windowMs, now) => ({ count: 2, resetAt: now + 60_000 }),
+  });
+});
+
+// Failure this catches: an unparseable request target threw inside the async handler, which Node
+// does not catch, so one unauthenticated request ended the process.
+void test("HTTP handler answers an unparseable request target instead of throwing", async () => {
+  assert.equal(mcpRequestPathname("//"), null);
+  assert.equal(mcpRequestPathname("//["), null);
+  await withHttpServer(async (baseUrl) => {
+    const { port } = new URL(baseUrl);
+    const status = await new Promise<number>((resolve, reject) => {
+      const socket = connect(Number(port), "127.0.0.1", () => socket.write("GET // HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"));
+      let data = "";
+      socket.on("data", (chunk) => { data += chunk.toString(); });
+      socket.on("end", () => resolve(Number(data.split(" ")[1])));
+      socket.on("error", reject);
+    });
+    assert.equal(status, 400);
+    assert.equal((await fetch(`${baseUrl}/health`)).status, 200);
   });
 });

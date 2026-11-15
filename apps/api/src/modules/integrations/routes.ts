@@ -228,7 +228,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   app.delete("/me/api-keys/:keyId", async (req, reply) => {
     // Same credential-manages-credential rule as the create route above.
     if (req.auth.authKind !== "user") throw forbidden();
-    const { keyId } = req.params as { keyId: string };
+    const { keyId } = dto.uuidParams("keyId").parse(req.params);
     // Scope the revoke by owner + kind so a user can only ever revoke their own personal keys.
     const [row] = await db
       .update(workspaceApiKeys)
@@ -245,7 +245,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.get("/workspaces/:id/api-keys", async (req) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const rows = await db
       .select(workspaceApiKeyColumns)
@@ -257,7 +257,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:id/api-keys", async (req, reply) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     await assertServiceAgentsAllowed(clientId);
     const body = dto.createWorkspaceApiKeyBody.parse(req.body);
@@ -290,7 +290,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.patch("/workspaces/:workspaceId/api-keys/:keyId", async (req) => {
-    const { workspaceId, keyId } = req.params as { workspaceId: string; keyId: string };
+    const { workspaceId, keyId } = dto.uuidParams("workspaceId", "keyId").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.updateWorkspaceApiKeyBody.parse(req.body);
     const [row] = await db
@@ -316,7 +316,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.delete("/workspaces/:workspaceId/api-keys/:keyId", async (req, reply) => {
-    const { workspaceId, keyId } = req.params as { workspaceId: string; keyId: string };
+    const { workspaceId, keyId } = dto.uuidParams("workspaceId", "keyId").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const [row] = await db
       .update(workspaceApiKeys)
@@ -328,7 +328,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.get("/workspaces/:id/agent-connections", async (req) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     return db.select({
       clientId: oauthClients.clientId,
@@ -344,7 +344,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:id/agent-connections", async (req, reply) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     await assertServiceAgentsAllowed(clientId);
     const body = dto.createAgentConnectionBody.parse(req.body);
@@ -386,7 +386,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.delete("/workspaces/:workspaceId/agent-connections/:clientId", async (req, reply) => {
-    const { workspaceId, clientId } = req.params as { workspaceId: string; clientId: string };
+    const { workspaceId, clientId } = dto.serviceConnectionParams.parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const [connection] = await db.update(oauthClients).set({ revokedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(oauthClients.clientId, clientId), eq(oauthClients.workspaceId, workspaceId), isNull(oauthClients.revokedAt))).returning();
@@ -403,7 +403,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   await app.register(webhookEndpointRoutes);
 
   app.get("/workspaces/:id/chat-destinations", async (req) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const rows = await db
       .select({
@@ -419,7 +419,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:id/chat-destinations", async (req, reply) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     await assertWebhooksAllowed(clientId);
     const body = dto.createChatDestinationBody.parse(req.body);
@@ -449,7 +449,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.patch("/workspaces/:workspaceId/chat-destinations/:endpointId", async (req) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const { workspaceId, endpointId } = dto.uuidParams("workspaceId", "endpointId").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.updateChatDestinationBody.parse(req.body);
     const [current] = await db.select().from(webhookEndpoints)
@@ -485,7 +485,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.delete("/workspaces/:workspaceId/chat-destinations/:endpointId", async (req, reply) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const { workspaceId, endpointId } = dto.uuidParams("workspaceId", "endpointId").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const deleted = await db.delete(webhookEndpoints).where(and(
       eq(webhookEndpoints.id, endpointId),
@@ -497,7 +497,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.get("/workspaces/:workspaceId/chat-destinations/:endpointId/deliveries", async (req) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const { workspaceId, endpointId } = dto.uuidParams("workspaceId", "endpointId").parse(req.params);
     const query = dto.listWebhookDeliveriesQuery.parse(req.query ?? {});
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const [endpoint] = await db.select({ id: webhookEndpoints.id }).from(webhookEndpoints).where(and(
@@ -511,7 +511,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:workspaceId/chat-destinations/:endpointId/test", async (req, reply) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const { workspaceId, endpointId } = dto.uuidParams("workspaceId", "endpointId").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     await assertWebhooksAllowed(clientId);
     const [[endpoint], [workspace]] = await Promise.all([
@@ -536,7 +536,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:workspaceId/chat-destinations/:endpointId/deliveries/:deliveryId/retry", async (req) => {
-    const { workspaceId, endpointId, deliveryId } = req.params as { workspaceId: string; endpointId: string; deliveryId: string };
+    const { workspaceId, endpointId, deliveryId } = dto.uuidParams("workspaceId", "endpointId", "deliveryId").parse(req.params);
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     await assertWebhooksAllowed(clientId);
     const [endpoint] = await db.select().from(webhookEndpoints).where(and(

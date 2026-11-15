@@ -1,3 +1,4 @@
+import { dto } from "@kanera/shared";
 import type { AttachmentSource } from "@kanera/shared/dto";
 import { ATTACHMENT_SOURCES } from "@kanera/shared/dto";
 import { cardAttachments, cards } from "@kanera/shared/schema";
@@ -27,7 +28,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
   app.addHook("preHandler", app.authenticate);
 
   app.get("/cards/:id/attachments", async (req) => {
-    const { id: cardId } = req.params as { id: string };
+    const { id: cardId } = dto.uuidParams("id").parse(req.params);
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
     await assertCardAccess(req.auth, card);
@@ -44,7 +45,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
    * (up to 1200px) and `thumbnail` (400px) let an agent look at a large photo cheaply.
    */
   app.get("/cards/:id/attachments/:attachmentId/content", async (req, reply) => {
-    const { id: cardId, attachmentId } = req.params as { id: string; attachmentId: string };
+    const { id: cardId, attachmentId } = dto.uuidParams("id", "attachmentId").parse(req.params);
     const { variant: variantParam = "original" } = req.query as { variant?: string };
     const variant = parseAttachmentContentVariant(variantParam);
     const { contentType, range, object } = await loadCardAttachmentContent({
@@ -71,8 +72,8 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
   });
 
   app.post("/cards/:id/attachments", async (req, reply) => {
-    const { id: cardId } = req.params as { id: string };
-    const query = req.query as { source?: string; commentId?: string };
+    const { id: cardId } = dto.uuidParams("id").parse(req.params);
+    const query = dto.attachmentUploadQuery.parse(req.query);
     const sourceParam = query.source;
     if (sourceParam !== undefined && !isAttachmentSource(sourceParam)) {
       throw badRequest("invalid source");
@@ -84,13 +85,13 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
   });
 
   app.patch("/cards/:id/cover", async (req) => {
-    const { id: cardId } = req.params as { id: string };
-    const { attachmentId } = req.body as { attachmentId: string | null };
+    const { id: cardId } = dto.uuidParams("id").parse(req.params);
+    const { attachmentId } = dto.setCardCoverBody.parse(req.body);
     return setCardCover({ auth: req.auth, cardId, attachmentId });
   });
 
   app.delete("/cards/:id/attachments/:attachmentId", async (req, reply) => {
-    const { id: cardId, attachmentId } = req.params as { id: string; attachmentId: string };
+    const { id: cardId, attachmentId } = dto.uuidParams("id", "attachmentId").parse(req.params);
 
     const [attachment] = await db
       .select()

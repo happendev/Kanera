@@ -1,6 +1,6 @@
+import { assertStorageSafeInput } from "../../lib/input-text.js";
 import { requestLocale } from "../../lib/i18n/request-locale.js";
 import { dto } from "@kanera/shared";
-import type { BoardExportArchive } from "@kanera/shared/dto";
 import { MAX_KANERA_BOARD_IMPORT_BYTES, MAX_TRELLO_IMPORT_BYTES } from "@kanera/shared/dto";
 import { kaneraBoardImports, trelloImports } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
@@ -34,7 +34,7 @@ export async function importRoutes(app: FastifyInstance) {
   }));
 
   app.get("/imports/:importId/status", async (req) => {
-    const { importId } = req.params as { importId: string };
+    const { importId } = dto.uuidParams("importId").parse(req.params);
     const [row] = await db.select().from(trelloImports).where(eq(trelloImports.id, importId)).limit(1);
     if (!row) throw notFound("import not found");
     await assertWorkspaceAccess(req.auth, row.workspaceId, "admin");
@@ -50,7 +50,7 @@ export async function importRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:id/imports/trello/analyze", async (req, reply) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     await resolveImportTargetBoard(workspaceId);
     // Fastify rejects duplicate multipart parser registration across the app
@@ -64,6 +64,8 @@ export async function importRoutes(app: FastifyInstance) {
     } catch (error) {
       throw badRequest(`could not parse Trello JSON: ${jsonErrorMessage(error)}`);
     }
+    assertStorageSafeInput(raw);
+    assertStorageSafeInput(file.filename);
     const parsed = parseTrelloExport(raw);
     if (parsed.manifest.lists.length === 0) throw badRequest("Trello export did not contain any lists");
 
@@ -88,7 +90,7 @@ export async function importRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:id/imports/kanera-board/analyze", async (req, reply) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     await resolveImportTargetBoard(workspaceId);
     const file = await req.file({ limits: { fileSize: MAX_KANERA_BOARD_IMPORT_BYTES, files: 1 } });
@@ -100,6 +102,8 @@ export async function importRoutes(app: FastifyInstance) {
     } catch (error) {
       throw badRequest(`could not parse Kanera JSON: ${jsonErrorMessage(error)}`);
     }
+    assertStorageSafeInput(raw);
+    assertStorageSafeInput(file.filename);
     const parsed = parseKaneraBoardExport(raw);
     if (parsed.manifest.lists.length === 0) throw badRequest("Kanera export did not contain any lists");
 
@@ -124,7 +128,7 @@ export async function importRoutes(app: FastifyInstance) {
   });
 
   app.post("/imports/:importId/commit", async (req) => {
-    const { importId } = req.params as { importId: string };
+    const { importId } = dto.uuidParams("importId").parse(req.params);
     const body = dto.commitImportBody.parse(req.body);
     const [current] = await db.select().from(trelloImports).where(eq(trelloImports.id, importId)).limit(1);
     if (!current) throw notFound("import not found");
@@ -182,12 +186,16 @@ export async function importRoutes(app: FastifyInstance) {
   });
 
   app.post("/imports/kanera-board/:importId/commit", async (req) => {
-    const { importId } = req.params as { importId: string };
+    const { importId } = dto.uuidParams("importId").parse(req.params);
     const body = dto.commitImportBody.parse(req.body);
     const [current] = await db.select().from(kaneraBoardImports).where(eq(kaneraBoardImports.id, importId)).limit(1);
     if (!current) throw notFound("import not found");
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     const targetBoardId = await resolveImportTargetBoard(current.workspaceId);
+
+    // Plans can predate today's validation rules; revalidate before claiming or writing them.
+    assertStorageSafeInput(current.source);
+    const source = parseKaneraBoardExport(current.source).source;
 
     const [row] = await db.update(kaneraBoardImports)
       .set({ status: "importing", mappings: body, error: null, updatedAt: new Date() })
@@ -200,11 +208,10 @@ export async function importRoutes(app: FastifyInstance) {
       const result = await db.transaction((tx) =>
         runKaneraBoardImport(tx, {
           locale: requestLocale(req),
-          source: row.source as BoardExportArchive,
+          source,
           body,
           workspaceId: row.workspaceId,
-          clientId: req.auth.cid,
-          actorId: req.auth.sub,
+          auth: req.auth,
           targetBoardId,
           storage,
         })

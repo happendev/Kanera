@@ -13,7 +13,7 @@ import { loadEditableCard } from "./route-support.js";
  */
 export function cardMoveRoutes(app: FastifyInstance, options: { allowGlobalWorkLayoutMoves?: boolean }) {
   app.post("/cards/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveCardBody.parse(req.body);
     if (body.globalWorkUserId && !options.allowGlobalWorkLayoutMoves) {
       // Public integrations operate on real board lanes only. The personal Global Work anchor mode
@@ -33,7 +33,7 @@ export function cardMoveRoutes(app: FastifyInstance, options: { allowGlobalWorkL
   });
 
   app.post("/cards/:id/move-to-board", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveCardToBoardBody.parse(req.body);
 
     const { source, dstCtx, targetListId } = await authorizeCardMoveToBoard({ auth: req.auth, cardId: id, body });

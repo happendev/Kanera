@@ -105,7 +105,7 @@ async function findScopedEndpoint(workspaceId: string, endpointId: string, scope
 
 export async function webhookEndpointRoutes(app: FastifyInstance) {
   app.get("/workspaces/:id/webhooks", async (req) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     const scope = await resolveWebhookManagementScope(req.auth, workspaceId);
     const rows = await db
       .select({
@@ -124,7 +124,7 @@ export async function webhookEndpointRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:id/webhooks", async (req, reply) => {
-    const { id: workspaceId } = req.params as { id: string };
+    const { id: workspaceId } = dto.uuidParams("id").parse(req.params);
     const scope = await resolveWebhookManagementScope(req.auth, workspaceId);
     await assertWebhooksAllowed(scope.clientId);
     const body = dto.createWebhookEndpointBody.parse(req.body);
@@ -155,7 +155,7 @@ export async function webhookEndpointRoutes(app: FastifyInstance) {
   });
 
   app.patch("/workspaces/:workspaceId/webhooks/:endpointId", async (req) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const { workspaceId, endpointId } = dto.uuidParams("workspaceId", "endpointId").parse(req.params);
     const scope = await resolveWebhookManagementScope(req.auth, workspaceId);
     const body = dto.updateWebhookEndpointBody.parse(req.body);
     if (body.url !== undefined) assertWebhookUrlAllowed(body.url);
@@ -178,7 +178,7 @@ export async function webhookEndpointRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:workspaceId/webhooks/:endpointId/secret", async (req) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const { workspaceId, endpointId } = dto.uuidParams("workspaceId", "endpointId").parse(req.params);
     const scope = await resolveWebhookManagementScope(req.auth, workspaceId);
     const secret = newWebhookSecret();
     const [row] = await db
@@ -191,14 +191,14 @@ export async function webhookEndpointRoutes(app: FastifyInstance) {
   });
 
   app.delete("/workspaces/:workspaceId/webhooks/:endpointId", async (req, reply) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const { workspaceId, endpointId } = dto.uuidParams("workspaceId", "endpointId").parse(req.params);
     const scope = await resolveWebhookManagementScope(req.auth, workspaceId);
     await db.delete(webhookEndpoints).where(and(eq(webhookEndpoints.id, endpointId), scopeCondition(workspaceId, scope)));
     return reply.status(204).send();
   });
 
   app.get("/workspaces/:workspaceId/webhooks/:endpointId/deliveries", async (req) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const { workspaceId, endpointId } = dto.uuidParams("workspaceId", "endpointId").parse(req.params);
     const query = dto.listWebhookDeliveriesQuery.parse(req.query ?? {});
     const scope = await resolveWebhookManagementScope(req.auth, workspaceId);
     await findScopedEndpoint(workspaceId, endpointId, scope);
@@ -211,7 +211,7 @@ export async function webhookEndpointRoutes(app: FastifyInstance) {
   });
 
   app.post("/workspaces/:workspaceId/webhooks/:endpointId/deliveries/:deliveryId/retry", async (req) => {
-    const { workspaceId, endpointId, deliveryId } = req.params as { workspaceId: string; endpointId: string; deliveryId: string };
+    const { workspaceId, endpointId, deliveryId } = dto.uuidParams("workspaceId", "endpointId", "deliveryId").parse(req.params);
     const scope = await resolveWebhookManagementScope(req.auth, workspaceId);
     await assertWebhooksAllowed(scope.clientId);
     const endpoint = await findScopedEndpoint(workspaceId, endpointId, scope);

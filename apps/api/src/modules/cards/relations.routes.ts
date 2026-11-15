@@ -64,7 +64,7 @@ export function cardRelationRoutes(app: FastifyInstance) {
   // Relations on their own, so an open card re-reads them on `card:links:changed` without a full
   // /detail fetch (which the realtime revision guard would discard).
   app.get("/cards/:id/relations", async (req): Promise<CardRelationsResponse> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [card] = await db.select({ id: cards.id, boardId: cards.boardId }).from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
     await assertCardAccess(req.auth, card);
@@ -72,7 +72,7 @@ export function cardRelationRoutes(app: FastifyInstance) {
   });
 
   app.post("/cards/:id/relations", async (req, reply): Promise<CardRelationSummary> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.addCardRelationBody.parse(req.body);
     if (body.targetCardId === id) throw badRequest("a card cannot be related to itself");
 
@@ -200,7 +200,7 @@ export function cardRelationRoutes(app: FastifyInstance) {
   });
 
   app.delete("/cards/:id/relations/:relationId", async (req, reply) => {
-    const { id, relationId } = req.params as { id: string; relationId: string };
+    const { id, relationId } = dto.uuidParams("id", "relationId").parse(req.params);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
     const ctx = await assertCardAccess(req.auth, card, "editor");

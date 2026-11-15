@@ -106,8 +106,10 @@ export interface LoadWorkDoneOptions {
 /** Matches titles, current keys, and exact historical key aliases for every board history query. */
 function cardSearchPredicate(query: string): SQL {
   const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.trim());
-  const historicalKeyMatch = keyMatch
-    ? sql`(${cards.number} = ${Number(keyMatch[2])} and exists (
+  // Search text remains valid even when a key-like suffix exceeds the int4 card-number domain.
+  const keyNumber = keyMatch ? Number(keyMatch[2]) : 0;
+  const historicalKeyMatch = keyMatch && Number.isInteger(keyNumber) && keyNumber <= 2147483647
+    ? sql`(${cards.number} = ${keyNumber} and exists (
         select 1 from ${cardKeyPrefixReservations} work_done_key_alias
         where work_done_key_alias.workspace_id = ${cards.workspaceId}
           and work_done_key_alias.prefix = ${keyMatch[1]!.toUpperCase()}

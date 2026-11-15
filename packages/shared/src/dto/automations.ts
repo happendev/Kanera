@@ -1,3 +1,4 @@
+import { calendarDate } from "./_dates.js";
 import { z } from "zod";
 export { AUTOMATION_ACTION_LIMIT } from "../automation-limits.js";
 import { AUTOMATION_ACTION_LIMIT } from "../automation-limits.js";
@@ -32,7 +33,7 @@ const populateCustomFieldValue = z.union([
   z.object({
     kind: z.literal("date"),
     source: z.literal("fixed"),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"),
+    date: calendarDate,
   }),
   z.object({ kind: z.literal("date"), source: z.literal("current") }),
   z.object({ kind: z.literal("checkbox"), checked: z.boolean() }),
@@ -56,8 +57,8 @@ export const automationTriggerCustomFieldValue = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("text").describe("Text-field value kind."), text: z.string().max(20000).describe("Exact text to match.") }),
   z.object({ kind: z.literal("number").describe("Number-field value kind."), number: z.number().describe("Exact number to match.") }),
   z.object({ kind: z.literal("checkbox").describe("Checkbox-field value kind."), checked: z.boolean().describe("Checked state to match.") }),
-  z.object({ kind: z.literal("date").describe("Date-field value kind."), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD").describe("Exact local date in YYYY-MM-DD format.") }),
-  z.object({ kind: z.literal("url").describe("URL-field value kind."), url: z.url().max(20000).describe("Exact URL to match.") }),
+  z.object({ kind: z.literal("date").describe("Date-field value kind."), date: calendarDate.describe("Exact local date in YYYY-MM-DD format.") }),
+  z.object({ kind: z.literal("url").describe("URL-field value kind."), url: z.url({ protocol: /^https?$/ }).max(20000).describe("Exact URL to match.") }),
   z.object({ kind: z.literal("select").describe("Select-field value kind."), optionId: z.uuid().describe("Selected option UUID to match; multi-select fields match when this option is present.") }),
   z.object({ kind: z.literal("user").describe("User-field value kind."), userId: z.uuid().describe("Workspace-member UUID to match; multi-user fields match when this member is present.") }),
 ]);

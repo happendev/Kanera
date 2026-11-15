@@ -43,7 +43,7 @@ export async function internalLinkRoutes(app: FastifyInstance) {
   // full /detail fetch — which would race the realtime revision guard and be discarded. App-only:
   // public API clients read the same list from card detail.
   app.get("/cards/:id/linked-items", async (req): Promise<CardLinkedItemsResponse> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [card] = await db.select({ id: cards.id, boardId: cards.boardId }).from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
     const ctx = await assertCardAccess(req.auth, card);

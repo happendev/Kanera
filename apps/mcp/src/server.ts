@@ -12,7 +12,7 @@ import { hasRelativeDates, RelativeDateError, resolveRelativeDates, type DateCon
 const uuid = z.uuid();
 // Shared vocabularies are loaded with dynamic imports for the same reason as the others below: the
 // MCP typecheck stays scoped to this package while the CLI build still bundles the runtime sources.
-const { AGENT_WORK_HISTORY_PRESETS, SEARCH_RESULT_TYPES, WORK_COMPLETION_FILTERS, WORK_CUSTOM_FIELD_CONDITION_OPS, WORK_SORT_VALUES, colorTokenSchema, createCardBody } = await import("@kanera/shared/dto");
+const { AGENT_WORK_HISTORY_PRESETS, SEARCH_RESULT_TYPES, WORK_COMPLETION_FILTERS, WORK_CUSTOM_FIELD_CONDITION_OPS, WORK_SORT_VALUES, colorTokenSchema, createCardBody, customFieldValueColumns } = await import("@kanera/shared/dto");
 const { CUSTOM_FIELD_TYPES, NOTE_SCOPES } = await import("@kanera/shared/schema");
 const pageLimit = z.number().int().min(1).max(100).default(25);
 // Date inputs take ISO values or the phrases relative-dates.ts reads; the tool wrapper resolves
@@ -542,7 +542,7 @@ const inputParameterDescriptions: Record<string, string> = {
   valueNumber: "Finite numeric value as a number or numeric string, or null to clear it.",
   valueOptionIds: "Select-option UUIDs, or null to clear the value.",
   valueText: "Text value up to 20,000 characters, or null to clear it.",
-  valueUrl: "Absolute URL value, or null to clear it.",
+  valueUrl: "HTTP(S) URL value, or null to clear it.",
   valueUserIds: "User UUIDs, or null to clear the value.",
   workspaceId: "Standard-workspace UUID returned by workspaces.list.",
 };
@@ -2037,10 +2037,10 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     fieldId: uuid,
     mode: z.enum(["setAll", "fillEmpty", "add", "remove", "clear"]),
     valueText: z.string().max(20000).nullable().optional(),
-    valueNumber: z.union([z.number(), z.string()]).nullable().optional(),
+    valueNumber: customFieldValueColumns.valueNumber,
     valueCheckbox: z.boolean().nullable().optional(),
     valueDate: localDateInput.nullable().optional(),
-    valueUrl: z.url().max(2000).nullable().optional(),
+    valueUrl: customFieldValueColumns.valueUrl,
     valueOptionIds: z.array(uuid).nullable().optional(),
     valueUserIds: z.array(uuid).nullable().optional(),
   }, async (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/custom-fields`, {
@@ -2682,10 +2682,10 @@ function customFieldValueSchema() {
     fieldId: uuid,
     value: z.discriminatedUnion("type", [
       z.strictObject({ type: z.literal("text").describe("Text field discriminator."), value: z.string().max(20000).nullable().describe("Text value, or null to clear it.") }),
-      z.strictObject({ type: z.literal("number").describe("Number field discriminator."), value: z.union([z.number(), z.string()]).nullable().describe("Number or numeric string, or null to clear it.") }),
+      z.strictObject({ type: z.literal("number").describe("Number field discriminator."), value: customFieldValueColumns.valueNumber.unwrap().describe("Finite number or decimal string, or null to clear it.") }),
       z.strictObject({ type: z.literal("checkbox").describe("Checkbox field discriminator."), value: z.boolean().nullable().describe("Boolean value, or null to clear it.") }),
       z.strictObject({ type: z.literal("date").describe("Date field discriminator."), value: localDateInput.nullable().describe("YYYY-MM-DD or a phrase such as \"next friday\", or null to clear it.") }),
-      z.strictObject({ type: z.literal("url").describe("URL field discriminator."), value: z.url().max(2000).nullable().describe("Absolute URL, or null to clear it.") }),
+      z.strictObject({ type: z.literal("url").describe("URL field discriminator."), value: customFieldValueColumns.valueUrl.unwrap().describe("HTTP(S) URL, or null to clear it.") }),
       z.strictObject({ type: z.literal("select").describe("Select field discriminator."), value: z.array(uuid).nullable().describe("Option UUIDs, or null to clear them.") }),
       z.strictObject({ type: z.literal("user").describe("User field discriminator."), value: z.array(uuid).nullable().describe("User UUIDs, or null to clear them.") }),
     ]),
@@ -2725,6 +2725,8 @@ function registerResources(server: McpServer, ctx: KaneraMcpContext) {
   registerResource(server, "note", "kanera://note/{noteId}", "Personal or team note visible to the current credential.", (vars, api) => api.get(`/api/v1/notes/${vars.noteId}`), ctx);
 }
 
+const resourceVariables = z.record(z.string(), uuid);
+
 function registerResource(
   server: McpServer,
   name: string,
@@ -2735,7 +2737,11 @@ function registerResource(
 ) {
   // Resource reads return live, credential-scoped data: never cacheable or shareable.
   server.registerResource(name, new ResourceTemplate(template, { list: undefined }), { description, mimeType: "application/json", cacheHint: { ttlMs: 0, cacheScope: "private" } }, async (uri, vars, handlerCtx) => {
-    const data = await read(vars as Record<string, string>, client(ctx, { signal: handlerCtx.mcpReq.signal }));
+    // Template variables are raw URI text, not tool arguments: nothing has validated them yet,
+    // and they are interpolated into an API path. Anything but a UUID ("..\\x?y") would let a
+    // resource read reach a different API route with the user's credential.
+    const ids = resourceVariables.parse(vars);
+    const data = await read(ids, client(ctx, { signal: handlerCtx.mcpReq.signal }));
     return { contents: [{ uri: uri.toString(), mimeType: "application/json", text: JSON.stringify(data, null, 2) }] };
   });
 }

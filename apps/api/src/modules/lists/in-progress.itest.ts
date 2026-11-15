@@ -361,8 +361,7 @@ void test("Kanera export and import keep in-progress lists and each card's start
     source: archive,
     body: { board: { name: "Imported", icon: "layout-kanban" }, lists, labels: {}, customFields: {}, members: {}, options },
     workspaceId,
-    clientId: user.clientId,
-    actorId: user.id,
+    auth: { sub: user.id, cid: user.clientId, role: "owner" },
     storage,
   }));
 

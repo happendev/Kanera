@@ -29,17 +29,17 @@ export async function followRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (req) => assertPersonalCredential(req.auth));
 
   app.get("/cards/:id/follow", async (req): Promise<CardFollowState> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const card = await loadCard(id);
     await assertCardAccess(req.auth, card);
     return followState(req.auth.sub, id);
   });
 
-  app.put("/cards/:id/watch", async (req): Promise<CardFollowState> => setCardWatch(req.auth, (req.params as { id: string }).id, true));
-  app.delete("/cards/:id/watch", async (req): Promise<CardFollowState> => setCardWatch(req.auth, (req.params as { id: string }).id, false));
+  app.put("/cards/:id/watch", async (req): Promise<CardFollowState> => setCardWatch(req.auth, (dto.uuidParams("id").parse(req.params)).id, true));
+  app.delete("/cards/:id/watch", async (req): Promise<CardFollowState> => setCardWatch(req.auth, (dto.uuidParams("id").parse(req.params)).id, false));
 
   app.put("/boards/:id/watch", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     assertWriteCapableCredential(req.auth);
     const access = await assertBoardAccess(req.auth, id);
     await db.insert(boardWatchers).values({ boardId: id, userId: req.auth.sub }).onConflictDoNothing();
@@ -48,7 +48,7 @@ export async function followRoutes(app: FastifyInstance) {
   });
 
   app.delete("/boards/:id/watch", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     assertWriteCapableCredential(req.auth);
     const access = await assertBoardAccess(req.auth, id);
     await db.delete(boardWatchers).where(and(eq(boardWatchers.boardId, id), eq(boardWatchers.userId, req.auth.sub)));
@@ -57,7 +57,7 @@ export async function followRoutes(app: FastifyInstance) {
   });
 
   app.put("/cards/:id/reminder", async (req): Promise<CardFollowState> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.setCardReminderBody.parse(req.body);
     assertWriteCapableCredential(req.auth);
     const card = await loadCard(id);
@@ -87,7 +87,7 @@ export async function followRoutes(app: FastifyInstance) {
   });
 
   app.delete("/cards/:id/reminder", async (req): Promise<CardFollowState> => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     assertWriteCapableCredential(req.auth);
     const card = await loadCard(id);
     await assertCardAccess(req.auth, card);

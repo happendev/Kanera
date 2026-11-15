@@ -2,13 +2,13 @@ import { dto } from "@kanera/shared";
 import type { NotificationInboxItem, NotificationInboxPage, NotificationRow } from "@kanera/shared/dto";
 import { summariseActivityChange } from "@kanera/shared/activity-summary";
 import { activityEvents, cards, notifications } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, inArray, isNotNull, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lte, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { agentActorName } from "../../lib/agent-actor-name.js";
-import { badRequest, forbidden } from "../../lib/errors.js";
+import { forbidden } from "../../lib/errors.js";
 import { assertAgentAccessAllowed } from "../../lib/mcp-policy.js";
 import { enrichNotifications, inboxVisibleNotificationCondition } from "../../lib/notifications.js";
 import { absoluteCardUrl } from "../../lib/wire-card.js";
@@ -25,14 +25,6 @@ const createdAtMs = sql<Date>`date_trunc('milliseconds', ${notifications.created
 
 function encodeCursor(row: { createdAt: Date; id: string }): string {
   return `${row.createdAt.toISOString()}|${row.id}`;
-}
-
-function decodeCursor(raw: string): { createdAt: Date; id: string } {
-  const sep = raw.indexOf("|");
-  const createdAt = new Date(sep === -1 ? raw : raw.slice(0, sep));
-  if (Number.isNaN(createdAt.getTime())) throw badRequest("since must be a cursor returned by a previous call");
-  // An empty id sorts before every uuid, so a timestamp-only cursor includes rows at that instant.
-  return { createdAt, id: sep === -1 ? "" : raw.slice(sep + 1) };
 }
 
 function commentExcerpt(body: string | null): string | null {
@@ -88,7 +80,7 @@ export async function notificationInboxRoutes(app: FastifyInstance) {
     }
     assertAgentAccessAllowed(req.auth);
     const query = dto.notificationInboxQuery.parse(req.query ?? {});
-    const since = query.since ? decodeCursor(query.since) : null;
+    const since = query.since ? dto.decodeNotificationCursor(query.since) : null;
     const settledBefore = new Date(Date.now() - SETTLE_MS);
 
     // Scope to boards this credential can read now. That drops organisations whose AI agent access is
@@ -111,7 +103,7 @@ export async function notificationInboxRoutes(app: FastifyInstance) {
       conditions.push(sql`${activityEvents.agentGrantId} is distinct from ${req.auth.agentGrantId}`);
     }
     if (since) {
-      conditions.push(or(
+      conditions.push(since.id === null ? gte(createdAtMs, since.createdAt) : or(
         gt(createdAtMs, since.createdAt),
         and(eq(createdAtMs, since.createdAt), gt(notifications.id, since.id)),
       )!);

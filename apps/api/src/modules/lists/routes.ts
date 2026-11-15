@@ -34,7 +34,7 @@ export async function listRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.post("/workspaces/:wsId/lists", async (req, reply) => {
-    const { wsId: workspaceId } = req.params as { wsId: string };
+    const { wsId: workspaceId } = dto.uuidParams("wsId").parse(req.params);
     const body = dto.createListBody.parse(req.body);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
 
@@ -69,7 +69,7 @@ export async function listRoutes(app: FastifyInstance) {
   });
 
   app.patch("/lists/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateListBody.parse(req.body);
     const [current] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!current) throw notFound();
@@ -114,7 +114,7 @@ export async function listRoutes(app: FastifyInstance) {
   });
 
   app.get("/lists/:id/deletion-impact", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select({ workspaceId: lists.workspaceId }).from(lists).where(eq(lists.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
@@ -127,7 +127,7 @@ export async function listRoutes(app: FastifyInstance) {
   });
 
   app.delete("/lists/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
@@ -171,7 +171,7 @@ export async function listRoutes(app: FastifyInstance) {
   });
 
   app.post("/lists/:id/cards/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveListCardsBody.parse(req.body);
     const [source] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!source) throw notFound();
@@ -302,7 +302,7 @@ export async function listRoutes(app: FastifyInstance) {
   });
 
   app.patch("/lists/:id/cards/archive", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.archiveListCardsBody.parse(req.body ?? {});
     const [current] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!current) throw notFound();
@@ -361,7 +361,7 @@ export async function listRoutes(app: FastifyInstance) {
   });
 
   app.post("/lists/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveListBody.parse(req.body);
     const [current] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!current) throw notFound();

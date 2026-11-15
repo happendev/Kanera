@@ -1,3 +1,4 @@
+import { assertStorageSafeInput } from "../../../lib/input-text.js";
 import { MAX_CSV_IMPORT_COLUMNS, MAX_CSV_IMPORT_ROWS } from "@kanera/shared/dto";
 import Papa from "papaparse";
 import { badRequest } from "../../../lib/errors.js";
@@ -14,6 +15,7 @@ export interface CsvSource {
 
 export function parseCsv(buffer: Buffer): CsvSource {
   const decoded = decodeCsvBuffer(buffer);
+  assertStorageSafeInput(decoded.text);
   const result = Papa.parse<string[]>(decoded.text, {
     delimiter: "",
     delimitersToGuess: [",", ";", "\t", "|"],

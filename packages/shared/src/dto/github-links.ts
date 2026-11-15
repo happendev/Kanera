@@ -1,3 +1,4 @@
+import { offsetTimestamp } from "./_dates.js";
 import { z } from "zod";
 import type { CardGitHubPull } from "../schema/card-github-pull.js";
 import type { GitHubAppInstallation } from "../schema/github-app-installation.js";
@@ -132,16 +133,16 @@ export const githubPullRequestWebhook = z.object({
   installation: z.object({ id: z.number().int() }),
   repository: githubWebhookRepository,
   pull_request: z.object({
-    number: z.number().int().positive(),
+    number: z.number().int().positive().max(2147483647),
     title: z.string(),
     body: z.string().nullable().optional(),
     html_url: z.url(),
     state: z.enum(["open", "closed"]),
     draft: z.boolean().optional(),
     merged_at: z.string().nullable().optional(),
-    updated_at: z.iso.datetime({ offset: true }),
-    additions: z.number().int().nullable().optional(),
-    deletions: z.number().int().nullable().optional(),
+    updated_at: offsetTimestamp,
+    additions: z.number().int().nonnegative().max(2147483647).nullable().optional(),
+    deletions: z.number().int().nonnegative().max(2147483647).nullable().optional(),
     // `head.repo` is null when the fork a pull request came from has been deleted.
     head: z.object({ ref: z.string(), repo: githubWebhookRepository.nullable() }),
     base: z.object({ repo: githubWebhookRepository }),

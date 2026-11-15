@@ -21,7 +21,7 @@ type BoardAccessContext = Awaited<ReturnType<typeof assertBoardAccess>>;
  */
 export function cardCreateRoutes(app: FastifyInstance, options: { allowGlobalWorkLayoutMoves?: boolean }) {
   app.post("/boards/:boardId/lists/:id/cards", async (req, reply) => {
-    const { boardId, id: listId } = req.params as { boardId: string; id: string };
+    const { boardId, id: listId } = dto.uuidParams("boardId", "id").parse(req.params);
     const body = dto.createCardBody.parse(req.body);
     const prepared = await prepareCardCreate({ auth: req.auth, boardId, listId, body, allowGlobalWorkLayoutMoves: options.allowGlobalWorkLayoutMoves });
     if (prepared.kind === "replayed") return reply.status(201).send(toWireCard(prepared.card, req.auth.cid));
@@ -30,7 +30,7 @@ export function cardCreateRoutes(app: FastifyInstance, options: { allowGlobalWor
   });
 
   app.post("/boards/:boardId/cards/bulk/create", async (req, reply) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkCreateCardsBody.parse(req.body);
     const plans = await prepareBulkCardCreate({ auth: req.auth, boardId, body, allowGlobalWorkLayoutMoves: options.allowGlobalWorkLayoutMoves });
     // Each card commits on its own, like bulk duplicate: one card's automations and emits never
@@ -44,7 +44,7 @@ export function cardCreateRoutes(app: FastifyInstance, options: { allowGlobalWor
   });
 
   app.post("/boards/:boardId/cards/bulk/duplicate", async (req, reply) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkDuplicateCardsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const targetBoardId = body.boardId ?? boardId;
@@ -62,7 +62,7 @@ export function cardCreateRoutes(app: FastifyInstance, options: { allowGlobalWor
   });
 
   app.post("/cards/:id/duplicate", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.duplicateCardBody.parse(req.body ?? {});
 
     const [source] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);

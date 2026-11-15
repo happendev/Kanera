@@ -1,3 +1,4 @@
+import { registerInputTextValidation } from "./lib/input-text.js";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -119,6 +120,7 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
   await app.register(adminAuthPlugin);
   await app.register(mailerPlugin);
 
+  registerInputTextValidation(app);
   registerErrorHandler(app, { service: "admin-api" });
   app.get("/health", async () => ({ ok: true, service: "admin-api" }));
 

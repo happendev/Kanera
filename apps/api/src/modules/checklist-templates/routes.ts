@@ -77,7 +77,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.post("/workspaces/:wsId/checklist-templates", async (req, reply) => {
-    const { wsId: workspaceId } = req.params as { wsId: string };
+    const { wsId: workspaceId } = dto.uuidParams("wsId").parse(req.params);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createChecklistTemplateBody.parse(req.body);
 
@@ -113,7 +113,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
   });
 
   app.patch("/checklist-templates/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateChecklistTemplateBody.parse(req.body);
     const [current] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, id)).limit(1);
     if (!current) throw notFound();
@@ -145,7 +145,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
   });
 
   app.delete("/checklist-templates/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [current] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
@@ -173,7 +173,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
   });
 
   app.post("/checklist-templates/:id/move", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.moveChecklistTemplateBody.parse(req.body);
     const [current] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, id)).limit(1);
     if (!current) throw notFound();

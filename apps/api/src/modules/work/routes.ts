@@ -151,26 +151,26 @@ export async function workRoutes(app: FastifyInstance) {
   });
 
   app.patch("/work-views/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.updateWorkViewBody.parse(req.body);
     return updateWorkView({ auth: req.auth, id, body });
   });
 
   app.delete("/work-views/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     await deleteWorkView({ auth: req.auth, id });
     return reply.status(204).send();
   });
 
   app.post("/work-views/:id/shares", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const { userId } = dto.shareWorkViewBody.parse(req.body);
     await shareWorkView({ auth: req.auth, id, userId });
     return reply.status(204).send();
   });
 
   app.delete("/work-views/:id/shares/:userId", async (req, reply) => {
-    const { id, userId } = req.params as { id: string; userId: string };
+    const { id, userId } = dto.uuidParams("id", "userId").parse(req.params);
     await unshareWorkView({ auth: req.auth, id, userId });
     return reply.status(204).send();
   });

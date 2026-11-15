@@ -427,10 +427,10 @@ function extractPushError(err: unknown): string {
   return err instanceof Error ? err.message : $localize`:Push notification error:Something went wrong while updating browser push.`;
 }
 
-function getSupportedContentEncoding(): string | undefined {
+function getSupportedContentEncoding(): PushSubscriptionBody["contentEncoding"] {
   if (typeof PushManager === "undefined") return undefined;
   const ctor = PushManager as typeof PushManager & { supportedContentEncodings?: string[] };
-  return ctor.supportedContentEncodings?.[0];
+  return ctor.supportedContentEncodings?.find((encoding): encoding is "aes128gcm" | "aesgcm" => encoding === "aes128gcm" || encoding === "aesgcm");
 }
 
 function isLocalHostname(hostname: string): boolean {

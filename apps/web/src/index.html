@@ -39,8 +39,12 @@
   <noscript><link rel="manifest" href="/assets/favicon/manifest.json" /></noscript>
 
   <meta name="msapplication-config" content="/assets/favicon/browserconfig.xml" />
+  <!-- The media-keyed defaults below only describe the OS preference. The pre-paint script and
+       ThemeService rewrite all three to the chosen theme, so a Dark pick on a light OS also darkens
+       the browser/PWA title bar and the controls painted before styles.css arrives. -->
+  <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#0b111b" media="(prefers-color-scheme: dark)" />
-  <meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#e8ecf2" media="(prefers-color-scheme: light)" />
 
   <!-- Set the theme and accent before first paint so the app never flashes the wrong colours and
        the OS preference is honored on first load (Angular boots after parse, too late to avoid the
@@ -54,6 +58,10 @@
           t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
         }
         document.documentElement.dataset.theme = t;
+        // Each theme's --bg in styles.scss; ThemeService reads the live token once styles load.
+        var bg = { light: '#e8ecf2', paper: '#edeae4', dark: '#0b111b', carbon: '#0d1117' }[t];
+        document.querySelector('meta[name="color-scheme"]').content = t === 'dark' || t === 'carbon' ? 'dark' : 'light';
+        document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.content = bg; });
         var a = localStorage.getItem('kanera-accent');
         if (['default', 'blue', 'green', 'violet', 'pink', 'graphite'].indexOf(a) === -1) a = 'default';
         // Blue and Green are one slot whose occupant depends on the theme (THEME_COOL_ACCENT in

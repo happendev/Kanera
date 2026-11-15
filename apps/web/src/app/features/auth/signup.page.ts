@@ -14,6 +14,7 @@ import { ThemePickerComponent } from "../../shared/theme-picker.component";
 import { ThemeService, type Theme } from "../../core/theme/theme.service";
 import { signupAcquisition } from "../../core/analytics/signup-attribution";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
+import { CookieConsentService } from "../../core/consent/cookie-consent.service";
 
 // Pre-filled for a brand-new organisation; the person can rename it here or later in settings.
 const DEFAULT_ORG_NAME = $localize`:Default name for a new organisation:Private`;
@@ -51,6 +52,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly analytics = inject(AnalyticsService);
+  private readonly consent = inject(CookieConsentService);
   protected readonly theme = inject(ThemeService);
 
   readonly inviteToken = signal<string | null>(null);
@@ -307,7 +309,9 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   }
 
   private async createAccount(code?: string) {
-    const acquisition = signupAcquisition();
+    // Consent is only "available" once the runtime config proves this is the hosted production
+    // app, so self-hosted signups never send acquisition data, even if a stale cookie exists.
+    const acquisition = this.consent.analyticsAllowed() ? signupAcquisition() : undefined;
     const res = await this.publicAuth.post("/auth/signup", {
       orgName: this.orgName().trim(),
       email: this.email().trim(),

@@ -1,3 +1,4 @@
+import { dto } from "@kanera/shared";
 import { badRequest } from "./errors.js";
 
 export interface CompletedCardsCursor {
@@ -13,10 +14,8 @@ export function encodeCompletedCardsCursor(card: { completedAt: Date | string | 
 export function decodeCompletedCardsCursor(cursor: string | undefined): CompletedCardsCursor | null {
   if (!cursor) return null;
   try {
-    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as { completedAt?: unknown; id?: unknown };
-    if (typeof parsed.completedAt !== "string" || typeof parsed.id !== "string") throw new Error("invalid cursor");
+    const parsed = dto.completedCardsCursor.parse(JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")));
     const completedAt = new Date(parsed.completedAt);
-    if (Number.isNaN(completedAt.getTime())) throw new Error("invalid cursor date");
     return { completedAt, id: parsed.id };
   } catch {
     throw badRequest("invalid completed cards cursor");

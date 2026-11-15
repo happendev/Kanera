@@ -36,8 +36,10 @@ type BoardMemberUser = {
 
 function completedCardSearchPredicate(query: string): SQL {
   const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.trim());
-  const historicalKeyMatch = keyMatch
-    ? sql`(${cardSummaryView.number} = ${Number(keyMatch[2])} and exists (
+  // Search text remains valid even when a key-like suffix exceeds the int4 card-number domain.
+  const keyNumber = keyMatch ? Number(keyMatch[2]) : 0;
+  const historicalKeyMatch = keyMatch && Number.isInteger(keyNumber) && keyNumber <= 2147483647
+    ? sql`(${cardSummaryView.number} = ${keyNumber} and exists (
         select 1 from ${cardKeyPrefixReservations} completed_key_alias
         where completed_key_alias.workspace_id = ${cardSummaryView.workspaceId}
           and completed_key_alias.prefix = ${keyMatch[1]!.toUpperCase()}

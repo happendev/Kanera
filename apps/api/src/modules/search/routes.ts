@@ -1,3 +1,4 @@
+import { escapeHtml } from "../../lib/html-escape.js";
 import { dto } from "@kanera/shared";
 import type {
   AgentSearchResponse,
@@ -32,8 +33,7 @@ import { absoluteCardUrl } from "../../lib/wire-card.js";
 
 const DEFAULT_LIMIT = 8;
 
-// ts_headline options: wrap matches in <mark>, keep snippets short. Postgres
-// HTML-escapes the source text, so the only markup introduced is <mark>.
+// ts_headline leaves some source HTML intact; escape its output below before exposing snippets.
 const HEADLINE_OPTS = "StartSel=<mark>,StopSel=</mark>,MaxFragments=2,MaxWords=18,MinWords=5";
 
 interface AccessScope {
@@ -124,7 +124,7 @@ const noteUrl = (note: { id: string; boardId: string | null; workspaceId: string
 };
 
 function plainSnippet(snippet: string): string {
-  // ts_headline HTML-escapes source text. Agent results deliberately return plain context so hosts
+  // searchData escapes headline output. Agent results deliberately return plain context so hosts
   // do not need to render or sanitize snippets before supplying them to a model.
   return snippet
     .replaceAll("<mark>", "")
@@ -152,8 +152,10 @@ async function searchData(
 
   const tsq = sql`websearch_to_tsquery('english', ${q})`;
   const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(q.trim());
-  const exactCardKeyMatch = keyMatch
-    ? sql`(${cards.number} = ${Number(keyMatch[2])} and exists (
+  const keyNumber = keyMatch ? Number(keyMatch[2]) : 0;
+  // Card numbers are Postgres int4; oversized key-looking text remains an ordinary text search.
+  const exactCardKeyMatch = keyMatch && Number.isInteger(keyNumber) && keyNumber <= 2147483647
+    ? sql`(${cards.number} = ${keyNumber} and exists (
         select 1 from card_key_prefix_reservation key_alias
         where key_alias.workspace_id = ${cards.workspaceId}
           and key_alias.prefix = ${keyMatch[1]!.toUpperCase()}
@@ -284,6 +286,11 @@ async function searchData(
       .limit(take) : Promise.resolve([]),
   ]);
 
+  for (const row of [...cardRows, ...noteRows, ...commentRows, ...attachmentRows]) {
+    // Only attribute-free highlight tags are HTML. Author content (including malformed tags)
+    // stays text for every API consumer, independently of Angular's additional sanitization.
+    row.snippet = escapeHtml(row.snippet).replaceAll("&lt;mark&gt;", "<mark>").replaceAll("&lt;/mark&gt;", "</mark>");
+  }
   return { cardRows, noteRows, commentRows, attachmentRows };
 }
 

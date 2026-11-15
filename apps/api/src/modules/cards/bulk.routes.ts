@@ -18,7 +18,7 @@ import { loadBulkBoardCards, activeBulkCards, emitCardLabels, emitCardAssignees,
  */
 export function cardBulkRoutes(app: FastifyInstance) {
   app.patch("/boards/:boardId/cards/bulk/completion", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkSetCardCompletionBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
@@ -33,7 +33,7 @@ export function cardBulkRoutes(app: FastifyInstance) {
   });
 
   app.patch("/boards/:boardId/cards/bulk/due-date", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkSetCardDueDateBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
@@ -47,7 +47,7 @@ export function cardBulkRoutes(app: FastifyInstance) {
   });
 
   app.patch("/boards/:boardId/cards/bulk/labels", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkPatchCardLabelsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
@@ -60,7 +60,7 @@ export function cardBulkRoutes(app: FastifyInstance) {
   });
 
   app.patch("/boards/:boardId/cards/bulk/assignees", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkPatchCardAssigneesBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
@@ -73,7 +73,7 @@ export function cardBulkRoutes(app: FastifyInstance) {
   });
 
   app.post("/boards/:boardId/cards/bulk/move", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkMoveCardsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     // Lists are workspace-scoped, so any list in this board's workspace is a valid target.
@@ -91,7 +91,7 @@ export function cardBulkRoutes(app: FastifyInstance) {
   });
 
   app.patch("/boards/:boardId/cards/bulk/archive", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkArchiveCardsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
@@ -115,7 +115,7 @@ export function cardBulkRoutes(app: FastifyInstance) {
   // per changed card we upsert/delete the value, then emit card:customFieldValue:set|cleared
   // (one event per card, reconciled by BoardState) plus a coalesced bulk activity entry.
   app.patch("/boards/:boardId/cards/bulk/custom-fields", async (req) => {
-    const { boardId } = req.params as { boardId: string };
+    const { boardId } = dto.uuidParams("boardId").parse(req.params);
     const body = dto.bulkSetCardCustomFieldBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const field = await loadBulkCustomField(ctx, body);

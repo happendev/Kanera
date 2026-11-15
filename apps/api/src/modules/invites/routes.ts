@@ -19,8 +19,9 @@ import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 
 export async function inviteRoutes(app: FastifyInstance) {
   app.get("/invites/lookup", { preHandler: enforceUnauthenticatedLookupRateLimit }, async (req) => {
-    const token = (req.query as { token?: string }).token;
-    if (!token) throw notFound();
+    const query = dto.invitationLookupQuery.safeParse(req.query);
+    if (!query.success) throw notFound();
+    const { token } = query.data;
     const [invite] = await db
       .select({
         id: inviteTokens.id,
@@ -347,7 +348,7 @@ export async function inviteRoutes(app: FastifyInstance) {
 
     authed.delete("/invites/:id", async (req, reply) => {
       assertOrgRole(req.auth, "admin");
-      const { id } = req.params as { id: string };
+      const { id } = dto.uuidParams("id").parse(req.params);
       const [invite] = await db.select().from(inviteTokens).where(eq(inviteTokens.id, id)).limit(1);
       if (!invite) throw notFound();
       if (invite.clientId !== req.auth.cid) throw forbidden();

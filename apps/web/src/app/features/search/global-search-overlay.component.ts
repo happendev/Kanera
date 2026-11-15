@@ -120,7 +120,7 @@ type FlatResult =
                     </span>
                     <span class="row-main">
                       <span class="row-title">{{ c.cardTitle }}@if (showCardKeys()) { <span class="card-key"> {{ c.cardKey }}</span> }</span>
-                      <!-- innerHTML is safe: Postgres ts_headline escapes the source text and only emits <mark> tags. -->
+                      <!-- innerHTML is safe: The API escapes source HTML and permits only attribute-free <mark> highlights. -->
                       <span class="snippet" [innerHTML]="c.snippet"></span>
                       <span class="meta">{{ c.boardName }} · {{ c.listName }}</span>
                     </span>

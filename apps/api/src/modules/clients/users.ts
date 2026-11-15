@@ -165,7 +165,7 @@ export async function clientUserRoutes(app: FastifyInstance) {
 
   app.patch("/clients/me/users/:userId", async (req) => {
     assertOrgRole(req.auth, "admin");
-    const { userId } = req.params as { userId: string };
+    const { userId } = dto.uuidParams("userId").parse(req.params);
     const body = dto.updateOrgUserBody.parse(req.body);
 
     const [target] = await db
@@ -299,7 +299,7 @@ export async function clientUserRoutes(app: FastifyInstance) {
 
   app.delete("/clients/me/users/:userId", async (req, reply) => {
     assertOrgRole(req.auth, "admin");
-    const { userId } = req.params as { userId: string };
+    const { userId } = dto.uuidParams("userId").parse(req.params);
     if (userId === req.auth.sub) throw badRequest("use the leave organisation action to remove yourself");
     await removeMembership({ clientId: req.auth.cid, userId, actorId: req.auth.sub, actorRole: req.auth.role, self: false });
     return reply.status(204).send();
@@ -307,7 +307,7 @@ export async function clientUserRoutes(app: FastifyInstance) {
 
   app.delete("/clients/:clientId/members/me", async (req, reply) => {
     if (req.auth.authKind !== "user") throw forbidden();
-    const { clientId } = req.params as { clientId: string };
+    const { clientId } = dto.uuidParams("clientId").parse(req.params);
     await removeMembership({ clientId, userId: req.auth.sub, actorId: req.auth.sub, actorRole: req.auth.role, self: true });
     return reply.status(204).send();
   });

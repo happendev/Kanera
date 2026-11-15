@@ -112,7 +112,7 @@ export class ThemeService {
       if (event.key === STORAGE_KEYS.THEME && this.isTheme(event.newValue)) {
         this._theme.set(event.newValue);
         this.remember(event.newValue);
-        document.documentElement.dataset["theme"] = event.newValue;
+        this.stampTheme(event.newValue);
         return;
       }
       if (event.key === STORAGE_KEYS.ACCENT && this.isAccent(event.newValue)) {
@@ -249,8 +249,22 @@ export class ThemeService {
   }
 
   private apply(t: Theme) {
-    document.documentElement.dataset["theme"] = t;
+    this.stampTheme(t);
     localStorage.setItem(STORAGE_KEYS.THEME, t);
+  }
+
+  // The theme is an explicit choice that can disagree with the OS, but the theme-color and
+  // color-scheme metas in index.html default to the OS preference. Rewrite them with the theme so
+  // browser chrome (address bar, installed PWA title bar, pre-stylesheet form controls) matches
+  // the page instead of the system setting.
+  private stampTheme(t: Theme) {
+    const root = document.documentElement;
+    root.dataset["theme"] = t;
+    const colorScheme = document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]');
+    if (colorScheme) colorScheme.content = isDarkTheme(t) ? "dark" : "light";
+    const bg = getComputedStyle(root).getPropertyValue("--bg").trim();
+    if (!bg) return;
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = bg;
   }
 
   private applyAccent(a: Accent) {

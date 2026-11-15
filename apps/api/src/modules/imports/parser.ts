@@ -1,3 +1,4 @@
+import { customFieldValueColumns } from "@kanera/shared/dto";
 import type { TrelloImportManifest } from "@kanera/shared/dto";
 import { trelloColorToToken, trelloCustomFieldTypeToKanera } from "./colors.js";
 import type {
@@ -41,7 +42,16 @@ function byPos<T extends { pos: number }>(a: T, b: T): number {
 
 function normalizeCustomFieldValue(value: unknown): unknown {
   const record = asRecord(value);
-  return record.value ?? value;
+  const normalized = record.value ?? value;
+  const fields = asRecord(normalized);
+  // Trello scalar values later reach native Postgres columns, so arbitrary numeric text or an
+  // impossible calendar date must not be kept. Drop just that value, as other unusable external
+  // data is dropped, rather than rejecting the whole export over one card's field.
+  const badNumber = typeof fields.number === "string" && !customFieldValueColumns.valueNumber.safeParse(fields.number).success;
+  const badDate = typeof fields.date === "string" && !customFieldValueColumns.valueDate.safeParse(fields.date.slice(0, 10)).success;
+  if (!badNumber && !badDate) return normalized;
+  const { number, date, ...rest } = fields;
+  return { ...rest, ...(badNumber ? {} : { number }), ...(badDate ? {} : { date }) };
 }
 
 export function parseTrelloExport(raw: unknown): ParsedTrelloImport {

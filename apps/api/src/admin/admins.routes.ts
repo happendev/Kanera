@@ -104,7 +104,7 @@ export async function adminManagementRoutes(app: FastifyInstance) {
   });
 
   app.post("/admins/invites/:id/resend", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const raw = randomBytes(32).toString("base64url");
     const [invite] = await db.update(adminInvites).set({ tokenHash: hashOpaqueToken(raw), expiresAt: new Date(Date.now() + INVITE_TTL_MS), updatedAt: new Date() })
       .where(and(eq(adminInvites.id, id), isNull(adminInvites.acceptedAt), isNull(adminInvites.revokedAt))).returning();
@@ -115,7 +115,7 @@ export async function adminManagementRoutes(app: FastifyInstance) {
   });
 
   app.delete("/admins/invites/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [invite] = await db.update(adminInvites).set({ revokedAt: new Date(), updatedAt: new Date() }).where(and(eq(adminInvites.id, id), isNull(adminInvites.acceptedAt), isNull(adminInvites.revokedAt))).returning();
     if (!invite) throw notFound("pending invitation not found");
     await writeAdminAudit(db, { adminUserId: req.adminAuth.sub, action: "admin.invite.revoke", targetType: "admin_user", details: { inviteId: id, email: invite.email } });
@@ -123,7 +123,7 @@ export async function adminManagementRoutes(app: FastifyInstance) {
   });
 
   app.post("/admins/:id/disable", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     if (id === req.adminAuth.sub) throw badRequest("you cannot disable your own account");
     await db.transaction(async (tx) => {
       // Serialize all disable decisions so two requests cannot both observe another active superadmin.
@@ -145,7 +145,7 @@ export async function adminManagementRoutes(app: FastifyInstance) {
   });
 
   app.post("/admins/:id/enable", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const [target] = await db.update(adminUsers).set({ disabledAt: null, updatedAt: new Date() }).where(eq(adminUsers.id, id)).returning();
     if (!target) throw notFound("administrator not found");
     await writeAdminAudit(db, { adminUserId: req.adminAuth.sub, action: "admin.enable", targetType: "admin_user", details: { adminUserId: id, email: target.email } });
@@ -153,7 +153,7 @@ export async function adminManagementRoutes(app: FastifyInstance) {
   });
 
   app.post("/admins/:id/reset-mfa", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     if (id === req.adminAuth.sub) throw badRequest("you cannot reset your own MFA");
     const [target] = await db.select().from(adminUsers).where(eq(adminUsers.id, id)).limit(1);
     if (!target) throw notFound("administrator not found");

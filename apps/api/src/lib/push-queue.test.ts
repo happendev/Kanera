@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { toPushQueuePayload } from "./push-queue.js";
+import { ntfyHeaderText, toPushQueuePayload } from "./push-queue.js";
 
 void test("browser push payload keeps Angular's nested notification and deep-link contract", () => {
   assert.deepEqual(toPushQueuePayload({
@@ -57,4 +57,16 @@ void test("browser push payload caps long bodies at 240 characters and preserves
     toPushQueuePayload({ kind: "assigned", title: "Card assigned", body: longBody }).notification.body,
     `${"x".repeat(239)}…`,
   );
+});
+
+// Failure this catches: a card title outside Latin-1 made the ntfy request throw while building
+// its headers, so the push silently never arrived.
+void test("ntfy titles outside printable ASCII are sent as encoded-words a header can carry", () => {
+  assert.equal(ntfyHeaderText("Plain title"), "Plain title");
+  for (const title of ["Launch — phase 2", "リリース準備", "Ship it 🚀", "café", "two\r\nlines"]) {
+    const header = ntfyHeaderText(title);
+    assert.doesNotThrow(() => new Headers({ Title: header }), title);
+  }
+  const encoded = ntfyHeaderText("リリース準備");
+  assert.equal(Buffer.from(encoded.slice("=?UTF-8?B?".length, -2), "base64").toString("utf8"), "リリース準備");
 });

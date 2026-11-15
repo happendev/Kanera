@@ -75,6 +75,12 @@ export const postMcpWebhook: McpWebhookRequest = async (url, body, headers) => {
     req.on("error", (error: NodeJS.ErrnoException) => reject(new McpCallbackError(
       deadline.aborted ? "timeout" : error.code === "ECONNREFUSED" ? "connection_refused" : error.code?.includes("CERT") || error.code?.includes("TLS") ? "tls_error" : "connection_refused",
     )));
+    // A 101 bypasses the response callback and detaches Node's abort listener. Without
+    // settling here, one subscriber can keep the shared webhook sweep pending forever.
+    req.once("upgrade", (_response, socket) => {
+      socket.destroy();
+      reject(new McpCallbackError("challenge_failed"));
+    });
     req.end(body);
   });
 };

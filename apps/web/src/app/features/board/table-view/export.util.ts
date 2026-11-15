@@ -527,6 +527,16 @@ function totalFormula(input: {
   return `${fn}(${quotedSheet(input.summarySheet.name)}!$${valueColumn}:$${valueColumn},${criteria.join(",")})`;
 }
 
+/**
+ * Spreadsheet apps run a CSV cell that starts with =, +, - or @ as a formula, and card titles,
+ * names and field values are written by anyone on the board. A leading apostrophe makes the cell
+ * plain text. Plain numbers ("-5", "+2.5") are left alone so they still sort and sum.
+ */
+export function neutraliseSpreadsheetFormula(value: string): string {
+  if (!/^[=+\-@\t\r]/.test(value) || /^[+-]?\d+(?:[.,]\d+)?$/.test(value)) return value;
+  return `'${value}`;
+}
+
 function quotedSheet(name: string): string {
   return `'${name.replace(/'/g, "''")}'`;
 }

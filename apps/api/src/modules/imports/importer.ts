@@ -1,3 +1,4 @@
+import { colorTokenSchema, customFieldValueColumns } from "@kanera/shared/dto";
 import { SOURCE_LOCALE, type Locale } from "@kanera/shared/locales";
 import { importText } from "../../lib/i18n/messages/imports.js";
 import { formatBytes } from "../../lib/i18n/format.js";
@@ -29,6 +30,7 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { TxOnly as Tx } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
 import { allocateCardKeys } from "../../lib/card-keys.js";
+import { downloadTrelloAttachment } from "./trello-attachment-download.js";
 import { badRequest } from "../../lib/errors.js";
 import { localDateParts } from "../../lib/local-date.js";
 import type { UploadEntitlements } from "../../lib/entitlements.js";
@@ -41,6 +43,7 @@ import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmen
 import { assertBoardLimit } from "../../lib/tier-limits.js";
 import type { NormalizedTrelloBoard, TrelloAttachmentSource, TrelloCardSource, TrelloChecklistSource, TrelloCustomFieldSource } from "./types.js";
 import { insertMany, mapWithConcurrency, toWireImportedCard } from "./shared.js";
+import { trelloCustomFieldTypeToKanera } from "./colors.js";
 import { requestScheduleRecheckForBoards } from "../../lib/schedule-events.js";
 
 export type TrelloAttachmentImportProgress = {
@@ -105,10 +108,16 @@ interface ImportContext {
 
 const ATTACHMENT_COPY_CONCURRENCY = 5;
 
+// External IDs are arbitrary strings. An absent "constructor"/"toString" mapping must not
+// inherit Object.prototype and become an implicit create action or a bogus assignee UUID.
+function ownMapping<T>(mappings: Record<string, T>, id: string): T | undefined {
+  return Object.hasOwn(mappings, id) ? mappings[id] : undefined;
+}
+
 function dueParts(iso: string | null, timezone: string) {
   if (!iso) return { dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null };
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return { dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null };
+  if (Number.isNaN(date.getTime()) || date.getUTCFullYear() < 1) return { dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null };
   const local = localDateParts(date, timezone);
   return {
     dueDateLocalDate: local.date,
@@ -154,7 +163,7 @@ function trelloDownloadUrlFor(cardId: string, attachment: TrelloAttachmentSource
   try {
     const url = new URL(attachment.url);
     const host = url.hostname.toLowerCase();
-    if ((host === "trello.com" || host === "api.trello.com" || host.endsWith(".trello.com")) && url.pathname.includes("/attachments/") && url.pathname.includes("/download/")) {
+    if (url.protocol === "https:" && !url.username && !url.password && (!url.port || url.port === "443") && (host === "trello.com" || host === "www.trello.com" || host === "api.trello.com") && url.pathname.includes("/attachments/") && url.pathname.includes("/download/")) {
       return trelloAttachmentUrl(url.toString());
     }
   } catch {
@@ -280,7 +289,7 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
     else if (!downloadUrl) outcome = { warning: importText(ctx.locale, "badUrl", { name: attachment.name }), reason: importText(ctx.locale, "reasonUrl") };
     else {
       try {
-        const response = await fetch(downloadUrl, { headers: { Authorization: trelloAuthorizationHeader(ctx.trelloApiKey!, ctx.trelloToken!) } });
+        const response = await downloadTrelloAttachment(downloadUrl, trelloAuthorizationHeader(ctx.trelloApiKey!, ctx.trelloToken!), entitlements.maxFileBytes);
         if (!response.ok) {
           const reason = importText(ctx.locale, "reasonHttp", { status: response.status });
           outcome = { warning: importText(ctx.locale, "httpFailed", { name: attachment.name, reason }), reason };
@@ -412,11 +421,14 @@ function customFieldValueFor(
   }
   if (field.type === "date") {
     const date = typeof value.date === "string" ? value.date.slice(0, 10) : null;
-    return date && /^\d{4}-\d{2}-\d{2}$/u.test(date) ? { valueDate: date } : null;
+    // Plans stored before analyze validated these values can still hold one; skip it, not the import.
+    const parsed = date ? customFieldValueColumns.valueDate.safeParse(date) : null;
+    return parsed?.success && parsed.data ? { valueDate: parsed.data } : null;
   }
   if (field.type === "number") {
     const numberValue = typeof value.number === "string" ? value.number : null;
-    return numberValue !== null && numberValue.trim() ? { valueNumber: numberValue } : null;
+    const parsed = numberValue !== null && numberValue.trim() ? customFieldValueColumns.valueNumber.safeParse(numberValue) : null;
+    return parsed?.success && parsed.data != null ? { valueNumber: String(parsed.data) } : null;
   }
   if (field.type === "text") {
     const text = typeof value.text === "string" ? value.text : null;
@@ -482,7 +494,7 @@ async function mapLists(ctx: ImportContext): Promise<{ map: Map<string, string>;
   const map = new Map<string, string>();
 
   for (const sourceList of ctx.source.lists) {
-    const mapping = ctx.body.lists[sourceList.id] ?? { action: "skip" as const };
+    const mapping = ownMapping(ctx.body.lists, sourceList.id) ?? { action: "skip" as const };
     if (mapping.action === "skip") continue;
     if (mapping.action === "map") {
       if (!existingIds.has(mapping.targetListId!)) throw badRequest("list mapping target not found in workspace");
@@ -519,7 +531,7 @@ async function mapLabels(ctx: ImportContext): Promise<{ map: Map<string, string>
   const sourceIds: string[] = [];
   const map = new Map<string, string>();
   for (const sourceLabel of ctx.source.labels) {
-    const mapping = ctx.body.labels[sourceLabel.id] ?? { action: "skip" as const };
+    const mapping = ownMapping(ctx.body.labels, sourceLabel.id) ?? { action: "skip" as const };
     if (mapping.action === "skip") continue;
     if (mapping.action === "map") {
       if (!existingIds.has(mapping.targetLabelId!)) throw badRequest("label mapping target not found in workspace");
@@ -556,18 +568,20 @@ async function mapCustomFields(ctx: ImportContext): Promise<{ map: Map<string, C
   const sourceIds: string[] = [];
   const map = new Map<string, CustomField>();
   for (const sourceField of ctx.source.customFields) {
-    const mapping = ctx.body.customFields[sourceField.id] ?? { action: "skip" as const };
+    const mapping = ownMapping(ctx.body.customFields, sourceField.id) ?? { action: "skip" as const };
     if (mapping.action === "skip") continue;
     if (mapping.action === "map") {
       const field = existingById.get(mapping.targetFieldId!);
       if (!field) throw badRequest("custom field mapping target not found");
-      if (field.type !== sourceField.suggestedType) {
+      if (field.type !== trelloCustomFieldTypeToKanera(sourceField.type)) {
         ctx.warnings.push(importText(ctx.locale, "fieldType", { name: sourceField.name, type: field.type }));
       }
       map.set(sourceField.id, field);
       continue;
     }
-    const type = mapping.type ?? sourceField.suggestedType;
+    // Older plans may contain a missing/object suggestion from prototype-key lookup; derive
+    // the supported type again from the external token before writing native columns.
+    const type = mapping.type ?? trelloCustomFieldTypeToKanera(sourceField.type);
     const position = between(prev, null).position;
     prev = position;
     sourceIds.push(sourceField.id);
@@ -619,7 +633,7 @@ async function mapCustomFields(ctx: ImportContext): Promise<{ map: Map<string, C
       optionRows.push({
         fieldId: field.id,
         label: option.label,
-        color: option.color,
+        color: colorTokenSchema.safeParse(option.color).data ?? null,
         position: positionAtIndex(index),
       });
     }
@@ -745,7 +759,7 @@ export async function runTrelloImport(
       if (mappedLabelId) labelAssignments.push({ cardId, labelId: mappedLabelId });
     }
     for (const memberId of new Set(card.memberIds)) {
-      const userId = ctx.body.members[memberId];
+      const userId = ownMapping(ctx.body.members, memberId);
       if (!userId) {
         ctx.warnings.push(importText(ctx.locale, "assignee", { name: card.name }));
         continue;
@@ -761,7 +775,7 @@ export async function runTrelloImport(
     for (const item of card.customFieldItems) {
       const field = fieldMapping.map.get(item.fieldId);
       const sourceField = ctx.source.customFields.find((candidate) => candidate.id === item.fieldId);
-      if (!field || !sourceField || field.type !== sourceField.suggestedType) continue;
+      if (!field || !sourceField || field.type !== trelloCustomFieldTypeToKanera(sourceField.type)) continue;
       const value = customFieldValueFor(field, sourceField, item, fieldMapping.optionMap);
       if (!value) continue;
       fieldValues.push({ cardId, fieldId: field.id, ...value });
@@ -794,7 +808,7 @@ export async function runTrelloImport(
         checklistId,
         text: item.name,
         position: positionAtIndex(itemIndex),
-        assigneeId: item.idMember ? ctx.body.members[item.idMember] ?? null : null,
+        assigneeId: item.idMember ? ownMapping(ctx.body.members, item.idMember) ?? null : null,
         dueDateLocalDate: due.dueDateLocalDate,
         dueDateSlot: due.dueDateSlot,
         dueDateTimezone: due.dueDateTimezone,
@@ -810,15 +824,19 @@ export async function runTrelloImport(
     for (const comment of ctx.source.comments) {
       const cardId = cardIdByTrelloId.get(comment.cardId);
       if (!cardId) continue;
-      const mappedAuthorId = comment.memberId ? ctx.body.members[comment.memberId] ?? null : null;
+      const mappedAuthorId = comment.memberId ? ownMapping(ctx.body.members, comment.memberId) ?? null : null;
       const body = commentBody(comment.text, comment.memberName, !mappedAuthorId);
       if (!body) continue;
+      const createdAt = new Date(comment.date);
+      // JavaScript accepts astronomical year zero, but Drizzle writes ISO timestamps and
+      // PostgreSQL rejects that spelling. Keep the importer's existing invalid-date fallback.
+      const usableDate = !Number.isNaN(createdAt.getTime()) && createdAt.getUTCFullYear() >= 1;
       commentRows.push({
         cardId,
         authorId: mappedAuthorId ?? ctx.actorId,
         authorKind: "user" as const,
         body,
-        createdAt: Number.isNaN(Date.parse(comment.date)) ? new Date() : new Date(comment.date),
+        createdAt: usableDate ? createdAt : new Date(),
       });
     }
   }

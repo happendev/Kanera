@@ -37,7 +37,7 @@ export async function uploadLinkRoutes(app: FastifyInstance) {
 
   app.post("/cards/:id/attachments/upload-links", async (req, reply) => {
     assertWriteCapableCredential(req.auth);
-    const { id: cardId } = req.params as { id: string };
+    const { id: cardId } = dto.uuidParams("id").parse(req.params);
     const body = dto.createAttachmentUploadLinkBody.parse(req.body ?? {});
     const mimeType = body.mimeType ?? inferAttachmentMimeType(body.fileName);
     if (!mimeType || !getAllowedAttachmentExtension(mimeType, body.fileName)) {

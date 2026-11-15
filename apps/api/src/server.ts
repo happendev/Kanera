@@ -1,3 +1,4 @@
+import { registerInputTextValidation } from "./lib/input-text.js";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -238,6 +239,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await mkdir(uploadsRoot, { recursive: true });
   await bootstrapHostedPushMessaging(app.log);
 
+  registerInputTextValidation(app);
   registerErrorHandler(app);
 
   app.get("/health", { config: { logLevel: "silent" } }, async () => ({ ok: true }));

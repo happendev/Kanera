@@ -33,7 +33,7 @@ export function cardChecklistRoutes(app: FastifyInstance) {
   // card detail. With checklistId it returns that checklist plus, for a top-level checklist, the
   // sub-checklists owned by its items, so one call yields everything needed to edit that tree.
   app.get("/cards/:id/checklists", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const query = dto.listCardChecklistsQuery.parse(req.query);
     const [card] = await db.select({ id: cards.id, boardId: cards.boardId }).from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
@@ -49,7 +49,7 @@ export function cardChecklistRoutes(app: FastifyInstance) {
   });
 
   app.post("/cards/:id/checklists", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.createChecklistBody.parse(req.body);
     const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
@@ -59,7 +59,7 @@ export function cardChecklistRoutes(app: FastifyInstance) {
   });
 
   app.post("/cards/:id/checklist-templates/apply", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = dto.uuidParams("id").parse(req.params);
     const body = dto.applyChecklistTemplatesBody.parse(req.body);
     const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
@@ -72,7 +72,7 @@ export function cardChecklistRoutes(app: FastifyInstance) {
   });
 
   app.patch("/cards/:id/checklists/:checklistId", async (req) => {
-    const { id, checklistId } = req.params as { id: string; checklistId: string };
+    const { id, checklistId } = dto.uuidParams("id", "checklistId").parse(req.params);
     const body = dto.updateChecklistBody.parse(req.body);
     const { card, ctx, checklist: current } = await loadEditableChecklist(req.auth, id, checklistId);
     const { checklist, activity } = await renameChecklist({ actorId: req.auth.sub, card, ctx, current, title: body.title });
@@ -84,7 +84,7 @@ export function cardChecklistRoutes(app: FastifyInstance) {
   });
 
   app.delete("/cards/:id/checklists/:checklistId", async (req, reply) => {
-    const { id, checklistId } = req.params as { id: string; checklistId: string };
+    const { id, checklistId } = dto.uuidParams("id", "checklistId").parse(req.params);
     const { card, ctx, checklist: current } = await loadEditableChecklist(req.auth, id, checklistId);
     const result = await deleteChecklist({ actorId: req.auth.sub, card, ctx, current });
     await emitDeletedChecklist(result);
@@ -92,7 +92,7 @@ export function cardChecklistRoutes(app: FastifyInstance) {
   });
 
   app.post("/cards/:id/checklists/:checklistId/move", async (req) => {
-    const { id, checklistId } = req.params as { id: string; checklistId: string };
+    const { id, checklistId } = dto.uuidParams("id", "checklistId").parse(req.params);
     const body = dto.moveChecklistBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
