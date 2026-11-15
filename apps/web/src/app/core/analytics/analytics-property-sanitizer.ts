@@ -69,8 +69,14 @@ const allowedTransportProperties = new Set([
   "$process_person_profile",
 ]);
 
+// The referring hostname (never the full referrer URL, which can carry query strings) lets
+// PostHog assign each session a channel. Without it every board.kanera.app session is "Unknown".
+// It must ride on every event type, because a session's first event may be $identify or
+// $groupidentify rather than a $pageview.
+const allowedSessionContextProperties = new Set(["$referring_domain"]);
+
 function isAllowedTransportProperty(property: string): boolean {
-  return allowedTransportProperties.has(property);
+  return allowedTransportProperties.has(property) || allowedSessionContextProperties.has(property);
 }
 
 function privacySafeCurrentUrl(properties: Properties): string | null {
