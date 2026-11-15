@@ -10,13 +10,14 @@ import { isMfaEnrollmentRequired, MFA_ENROLLMENT_HANDOFF_KEY, parseAuthResponse 
 import { appLocale } from "../../core/i18n/locale";
 import { LogoComponent } from "../../shared/logo.component";
 import { LocaleSwitcherComponent } from "./locale-switcher.component";
-import { ThemePickerComponent } from "../../shared/theme-picker.component";
-import { ThemeService, type Theme } from "../../core/theme/theme.service";
 import { signupAcquisition } from "../../core/analytics/signup-attribution";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
+import type { SignupStep } from "../../core/analytics/analytics-events";
 import { CookieConsentService } from "../../core/consent/cookie-consent.service";
 
-// Pre-filled for a brand-new organisation; the person can rename it here or later in settings.
+// Signup asks only for what an account needs. A new organisation takes this default name, renamed
+// later in settings, and the theme follows the device until changed; each extra field visibly cost
+// signups on phones, where the form pushed Continue below the fold.
 const DEFAULT_ORG_NAME = $localize`:Default name for a new organisation:Private`;
 
 interface InviteSummaryResponse {
@@ -41,7 +42,7 @@ const ANALYTICS_EVENT_VERSION = 1;
 @Component({
   selector: "k-signup",
   standalone: true,
-  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent, ThemePickerComponent],
+  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./signup.page.html",
   styleUrl: "./signup.page.scss",
@@ -53,40 +54,24 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly analytics = inject(AnalyticsService);
   private readonly consent = inject(CookieConsentService);
-  protected readonly theme = inject(ThemeService);
 
   readonly inviteToken = signal<string | null>(null);
   readonly boardInviteToken = signal<string | null>(null);
   readonly signupModel = signal({
-    orgName: DEFAULT_ORG_NAME,
     displayName: "",
     email: "",
     password: "",
-    confirmPassword: "",
   });
   readonly signupForm = form(this.signupModel, (signup) => {
-    validate(signup.orgName, ({ value }) => validationError(
-      this.inviteToken() || this.boardInviteToken() ? null : validateText(value().trim(), 120, {
-        required: $localize`Organisation name is required.`,
-        tooLong: (max) => $localize`Organisation name must be ${max}:max: characters or fewer.`,
-      }),
-    ));
     validate(signup.displayName, ({ value }) => validationError(validateText(value().trim(), 120, {
       required: $localize`Your name is required.`,
       tooLong: (max) => $localize`Your name must be ${max}:max: characters or fewer.`,
     })));
     validate(signup.email, ({ value }) => validationError(validateEmail(value().trim())));
     validate(signup.password, ({ value }) => validationError(validatePassword(value())));
-    validate(signup.confirmPassword, (context) => {
-      const message = validatePassword(context.value(), "confirm")
-        ?? (context.value() === context.valueOf(signup.password) ? null : $localize`Passwords do not match.`);
-      return validationError(message);
-    });
-    disabled(signup.orgName, { when: ({ state }) => state.submitting() });
     disabled(signup.displayName, { when: ({ state }) => state.submitting() });
     disabled(signup.email, { when: ({ state }) => state.submitting() });
     disabled(signup.password, { when: ({ state }) => state.submitting() });
-    disabled(signup.confirmPassword, { when: ({ state }) => state.submitting() });
   });
   readonly verificationModel = signal({ code: "" });
   readonly verificationForm = form(this.verificationModel, (verification) => {
@@ -95,11 +80,9 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     ));
     disabled(verification.code, { when: ({ state }) => state.submitting() });
   });
-  readonly orgName = this.signupForm.orgName().value;
   readonly displayName = this.signupForm.displayName().value;
   readonly email = this.signupForm.email().value;
   readonly password = this.signupForm.password().value;
-  readonly confirmPassword = this.signupForm.confirmPassword().value;
   readonly code = this.verificationForm.code().value;
   private readonly workflowError = signal<string | null>(null);
   readonly error = computed(() => this.workflowError() ?? (
@@ -109,7 +92,6 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   readonly showPassword = signal(false);
   protected readonly showPasswordLabel = $localize`:Button — reveal the typed password:Show password`;
   protected readonly hidePasswordLabel = $localize`:Button — mask the typed password:Hide password`;
-  readonly showConfirmPassword = signal(false);
   readonly invite = signal<InviteSummaryResponse | null>(null);
   readonly boardInvite = signal<BoardInvitationLookupResponse | null>(null);
   readonly boardInviteNotice = signal<string | null>(null);
@@ -149,10 +131,6 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   readonly resendCooldown = signal(0);
   private resendTimer: ReturnType<typeof setInterval> | null = null;
   private registrationStartedTracked = false;
-
-  setTheme(theme: Theme) {
-    this.theme.setTheme(theme);
-  }
 
   constructor() {
     const token = this.route.snapshot.queryParamMap.get("invite");
@@ -240,11 +218,12 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
           }
         }
       }
+      this.trackStep("details_submitted");
       if (!this.emailVerificationEnabled()) {
         await this.createAccount();
         return undefined;
       }
-      const sent = await this.requestCode(this.email().trim());
+      const sent = await this.requestCode(this.email().trim(), "code_requested");
       if (!sent) return undefined;
       this.verificationForm().reset({ code: "" });
       this.step.set("code");
@@ -261,6 +240,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     this.workflowError.set(null);
     return submit(this.verificationForm, async () => {
       if (!this.emailVerificationEnabled() && !this.turnstile.ensureSolved()) return undefined;
+      this.trackStep("code_submitted");
       await this.createAccount(this.code().trim());
       return undefined;
     });
@@ -272,7 +252,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     if (!this.turnstile.ensureSolved()) return;
     this.resendBusy.set(true);
     try {
-      await this.requestCode(this.email().trim());
+      await this.requestCode(this.email().trim(), "code_resent");
     } finally {
       this.resendBusy.set(false);
     }
@@ -284,9 +264,19 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     this.verificationForm().reset();
   }
 
+  // Signup funnel steps between opening the form and the server's registration_completed. Without
+  // them a visitor who leaves cannot be told apart from one who gave up at the emailed code.
+  private trackStep(step: SignupStep, errorCode?: string) {
+    this.analytics.track("signup_step", {
+      step,
+      ...(errorCode ? { error_code: errorCode } : {}),
+      event_version: ANALYTICS_EVENT_VERSION,
+    });
+  }
+
   // Shared by the initial send and resend. Returns true when the API accepted the request.
   // A short cooldown discourages hammering the rate-limited endpoint.
-  private async requestCode(email: string): Promise<boolean> {
+  private async requestCode(email: string, step: "code_requested" | "code_resent"): Promise<boolean> {
     this.workflowError.set(null);
     const res = await this.publicAuth.post("/auth/request-email-verification", {
       email,
@@ -298,11 +288,13 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     });
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => null);
+      this.trackStep("code_request_failed", analyticsErrorCode(body, res.status));
       if (await this.redirectExistingInviteAccount(body)) return false;
       this.workflowError.set(errorMessage(body) ?? $localize`Could not send verification code`);
       this.turnstile.reset();
       return false;
     }
+    this.trackStep(step);
     this.startResendCooldown();
     this.turnstile.reset();
     return true;
@@ -313,7 +305,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     // app, so self-hosted signups never send acquisition data, even if a stale cookie exists.
     const acquisition = this.consent.analyticsAllowed() ? signupAcquisition() : undefined;
     const res = await this.publicAuth.post("/auth/signup", {
-      orgName: this.orgName().trim(),
+      orgName: DEFAULT_ORG_NAME,
       email: this.email().trim(),
       password: this.password(),
       displayName: this.displayName().trim(),
@@ -327,6 +319,8 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     });
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => null);
+      // A wrong or expired emailed code lands here, as does any other rejected signup.
+      this.trackStep("account_creation_failed", analyticsErrorCode(body, res.status));
       const code = body && typeof body === "object" ? (body as Record<string, unknown>)["code"] : null;
       if (await this.redirectExistingInviteAccount(body)) {
         this.turnstile.reset();
@@ -409,6 +403,13 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
 
 }
 
+// Only the API's stable machine code (e.g. RATE_LIMITED) reaches analytics, never the localized
+// message, which could echo what the visitor typed.
+function analyticsErrorCode(body: unknown, status: number): string {
+  const code = body && typeof body === "object" ? (body as Record<string, unknown>)["code"] : null;
+  return typeof code === "string" && /^[A-Z_]{1,40}$/.test(code) ? code : `HTTP_${status}`;
+}
+
 function errorMessage(body: unknown): string | null {
   if (!body || typeof body !== "object" || !("message" in body)) return null;
   const message = body.message;
@@ -480,13 +481,7 @@ function validateEmail(email: string): string | null {
   return null;
 }
 
-function validatePassword(password: string, field: "password" | "confirm" = "password"): string | null {
-  if (field === "confirm") {
-    if (!password) return $localize`Confirm password is required.`;
-    if (password.length < 8) return $localize`Confirm password must be at least 8 characters.`;
-    if (password.length > 200) return $localize`Confirm password must be 200 characters or fewer.`;
-    return null;
-  }
+function validatePassword(password: string): string | null {
   if (!password) return $localize`Password is required.`;
   if (password.length < 8) return $localize`Password must be at least 8 characters.`;
   if (password.length > 200) return $localize`Password must be 200 characters or fewer.`;

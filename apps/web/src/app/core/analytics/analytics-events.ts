@@ -20,6 +20,16 @@ export interface PlanLimitAnalyticsProperties {
   upgrade_source: UpgradeSource;
 }
 
+// Steps of the two-step signup form, in order. A wrong emailed code reports as
+// account_creation_failed after code_submitted.
+export type SignupStep =
+  | "details_submitted"
+  | "code_requested"
+  | "code_resent"
+  | "code_request_failed"
+  | "code_submitted"
+  | "account_creation_failed";
+
 export interface AnalyticsEventMap {
   registration_started: {
     anonymous_id: string;
@@ -31,6 +41,7 @@ export interface AnalyticsEventMap {
     term?: string;
     event_version: number;
   };
+  signup_step: { step: SignupStep; error_code?: string; event_version: number };
   import_started: { import_source: ImportSource };
   premium_feature_attempted: PlanLimitAnalyticsProperties & { premium_feature: PremiumFeature };
   plan_limit_warning_seen: PlanLimitAnalyticsProperties;

@@ -8,11 +8,9 @@ import { TEST_PASSWORD, webOrigin } from "./env";
 export async function signUp(page: Page, name: string): Promise<string> {
   const email = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@kanera.test`;
   await page.goto("/signup");
-  await page.locator("#cname").fill(name);
   await page.locator("#dn").fill(name);
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(TEST_PASSWORD);
-  await page.locator("#confirm-password").fill(TEST_PASSWORD);
   await page.locator("form").getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/onboarding/);
   return email;

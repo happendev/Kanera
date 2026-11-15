@@ -4,6 +4,10 @@ All notable changes to Kanera are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Shorter signup:** creating an account asks only for your name, email and password. Your organisation starts as "Private" and can be renamed in settings, and the theme follows your device until you pick one.
+
 ### Fixed
 
 - Security hardening: malformed IDs, dates, numbers and import data return validation errors, outbound integrations and push reject unsafe destinations, rich text, search results and CSV exports cannot inject markup or formulas, and self-hosted trust-proxy settings accept a proxy count.

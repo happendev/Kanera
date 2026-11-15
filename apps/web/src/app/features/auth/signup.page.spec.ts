@@ -3,6 +3,7 @@ import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { ActivatedRoute, Router } from "@angular/router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { AuthService } from "../../core/auth/auth.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { SignupPage } from "./signup.page";
@@ -22,6 +23,7 @@ describe("SignupPage", () => {
   let boardLookupStatus: number | null;
   let accountExists: boolean;
   let boardInviteRedirect: string | null;
+  let signupRejection: Response | null;
 
   const authResponse = {
     accessToken: "access-token",
@@ -60,6 +62,7 @@ describe("SignupPage", () => {
     boardLookupStatus = null;
     accountExists = false;
     boardInviteRedirect = null;
+    signupRejection = null;
     setSession = vi.fn();
     navigateByUrl = vi.fn();
     fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -90,6 +93,7 @@ describe("SignupPage", () => {
         return response({ ok: true });
       }
       if (url.endsWith("/auth/signup")) {
+        if (signupRejection) return signupRejection;
         if (accountExists) return response({ code: "ACCOUNT_EXISTS", message: "Sign in to accept the invite." }, false, 409);
         return response({ ...authResponse, user: { ...authResponse.user, boardInviteRedirect } });
       }
@@ -126,11 +130,9 @@ describe("SignupPage", () => {
 
   function fillValidForm() {
     const page = fixture.componentInstance;
-    page.orgName.set("Acme");
     page.displayName.set("Owner");
     page.email.set("owner@example.com");
     page.password.set("Abc12345");
-    page.confirmPassword.set("Abc12345");
   }
 
   it("requires a challenge before emailing a code and preserves signup readiness after resetting it", async () => {
@@ -192,14 +194,40 @@ describe("SignupPage", () => {
     expect(element.querySelector(".legal-consent")).toBeNull();
   });
 
-  it("shows the same device-scoped appearance control as account settings", async () => {
+  it("asks only for name, email and password and names the new organisation by default", async () => {
     await createPage();
 
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.textContent).toContain("Appearance");
-    expect(element.textContent).toContain("Choose the theme used on this device.");
-    // Grouped by family, dark pair first — signup and account settings must offer the same set.
-    expect([...element.querySelectorAll('k-theme-picker [role="radio"]')].map((b) => b.textContent?.trim())).toEqual(["Dark", "Carbon", "Light", "Paper"]);
+    expect([...element.querySelectorAll("form input")].map((input) => input.id)).toEqual(["dn", "email", "password"]);
+    expect(element.querySelector("k-theme-picker")).toBeNull();
+
+    fillValidForm();
+    await fixture.componentInstance.submit(submitEvent());
+    const signupCall = fetchMock.mock.calls.find(([input]) => urlFromRequest(input as RequestInfo | URL).endsWith("/auth/signup"));
+    expect((JSON.parse((signupCall?.[1] as RequestInit).body as string) as { orgName?: string }).orgName).toBe("Private");
+  });
+
+  it("reports each signup step with only the API's error code", async () => {
+    emailVerificationEnabled = true;
+    await createPage();
+    const track = vi.spyOn(TestBed.inject(AnalyticsService), "track");
+    await vi.waitFor(() => expect(fixture.componentInstance.emailVerificationEnabled()).toBe(true));
+    fillValidForm();
+
+    await fixture.componentInstance.submit(submitEvent());
+    fixture.componentInstance.resendCooldown.set(0);
+    await fixture.componentInstance.resend();
+    signupRejection = response({ code: "BAD_REQUEST", message: "Invalid code for owner@example.com" }, false, 400);
+    fixture.componentInstance.code.set("123456");
+    await fixture.componentInstance.confirm(submitEvent());
+
+    expect(track.mock.calls.filter(([event]) => event === "signup_step").map(([, properties]) => properties)).toEqual([
+      { step: "details_submitted", event_version: 1 },
+      { step: "code_requested", event_version: 1 },
+      { step: "code_resent", event_version: 1 },
+      { step: "code_submitted", event_version: 1 },
+      { step: "account_creation_failed", error_code: "BAD_REQUEST", event_version: 1 },
+    ]);
   });
 
   it("shows the environment banner for non-production environments", async () => {

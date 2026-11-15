@@ -5726,7 +5726,6 @@
   "@5694529784730717795": {
     "x-files": [
       "src/app/features/account-settings/org/org.page.html",
-      "src/app/features/auth/signup.page.html",
       "src/app/features/shell/organisation-action.dialog.ts"
     ]
   },
@@ -6049,8 +6048,7 @@
   "@8671234314555525900": {
     "description": "Settings section heading",
     "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
+      "src/app/features/account-settings/profile/profile.page.html"
     ]
   },
   "3334708804868032865": "Choose the theme, accent colour and density used on this device.",
@@ -7409,8 +7407,7 @@
   "@3782563238994348625": {
     "description": "Field label",
     "x-files": [
-      "src/app/features/auth/reset-password.page.html",
-      "src/app/features/auth/signup.page.html"
+      "src/app/features/auth/reset-password.page.html"
     ]
   },
   "7064955130591581296": "Password reset. Sending you back to login.",
@@ -7429,8 +7426,7 @@
   "1543538730036692975": "Passwords do not match.",
   "@1543538730036692975": {
     "x-files": [
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
+      "src/app/features/auth/reset-password.page.ts"
     ]
   },
   "41109818476485334": "Reset link is missing a token.",
@@ -7454,22 +7450,19 @@
   "2790219900662105495": "Confirm password is required.",
   "@2790219900662105495": {
     "x-files": [
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
+      "src/app/features/auth/reset-password.page.ts"
     ]
   },
   "8348478964203310086": "Confirm password must be at least 8 characters.",
   "@8348478964203310086": {
     "x-files": [
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
+      "src/app/features/auth/reset-password.page.ts"
     ]
   },
   "137023682150214263": "Confirm password must be 200 characters or fewer.",
   "@137023682150214263": {
     "x-files": [
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
+      "src/app/features/auth/reset-password.page.ts"
     ]
   },
   "5906359199564086241": "Password must be at least 8 characters.",
@@ -7510,16 +7503,6 @@
       "src/app/features/auth/signup.page.html"
     ]
   },
-  "3686284950598311784": "Private",
-  "@3686284950598311784": {
-    "description": "Default name for a new organisation",
-    "x-files": [
-      "src/app/features/auth/signup.page.html",
-      "src/app/features/auth/signup.page.ts",
-      "src/app/features/global-work/save-view.popover.ts",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
   "284984515138746555": "Jane Smith",
   "@284984515138746555": {
     "description": "Example person name",
@@ -7536,18 +7519,6 @@
   "596523127347801881": "Min. 8 characters",
   "@596523127347801881": {
     "description": "Password field placeholder",
-    "x-files": [
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "7941159538449463077": "Re-enter your password",
-  "@7941159538449463077": {
-    "x-files": [
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "5351878947515429455": "Choose the theme used on this device.",
-  "@5351878947515429455": {
     "x-files": [
       "src/app/features/auth/signup.page.html"
     ]
@@ -7616,16 +7587,13 @@
       "src/app/features/auth/signup.page.html"
     ]
   },
-  "3963463457405156297": "Organisation name is required.",
-  "@3963463457405156297": {
+  "3686284950598311784": "Private",
+  "@3686284950598311784": {
+    "description": "Default name for a new organisation",
     "x-files": [
-      "src/app/features/auth/signup.page.ts"
-    ]
-  },
-  "4258975407910381744": "Organisation name must be {$max} characters or fewer.",
-  "@4258975407910381744": {
-    "x-files": [
-      "src/app/features/auth/signup.page.ts"
+      "src/app/features/auth/signup.page.ts",
+      "src/app/features/global-work/save-view.popover.ts",
+      "src/app/features/notes/note-editor.component.ts"
     ]
   },
   "4968369344159400023": "Your name is required.",

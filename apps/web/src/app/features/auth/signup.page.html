@@ -38,13 +38,6 @@
       </div>
       }
 
-      @if (!inviteToken() && !boardInviteToken()) {
-      <div class="field">
-        <label for="cname"><i aria-hidden="true" class="ti ti-building"></i> <ng-container i18n="Field label">Organisation name</ng-container></label>
-        <input id="cname" placeholder="Private" i18n-placeholder="Default name for a new organisation" [formField]="signupForm.orgName" />
-      </div>
-      }
-
       <div class="field">
         <label for="dn"><i aria-hidden="true" class="ti ti-user"></i> <ng-container i18n="Field label">Your name</ng-container></label>
         <input id="dn" placeholder="Jane Smith" i18n-placeholder="Example person name" [formField]="signupForm.displayName" autocomplete="name" />
@@ -68,22 +61,6 @@
             <i aria-hidden="true" [class]="showPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>
         </div>
-      </div>
-
-      <div class="field">
-        <label for="confirm-password"><i aria-hidden="true" class="ti ti-lock-check"></i> <ng-container i18n="Field label">Confirm password</ng-container></label>
-        <div class="input-wrap">
-          <input id="confirm-password" [type]="showConfirmPassword() ? 'text' : 'password'" placeholder="Re-enter your password" i18n-placeholder [formField]="signupForm.confirmPassword" autocomplete="new-password" />
-          <button type="button" class="reveal-btn" tabindex="-1" (click)="showConfirmPassword.set(!showConfirmPassword())" [attr.aria-label]="showConfirmPassword() ? hidePasswordLabel : showPasswordLabel">
-            <i aria-hidden="true" [class]="showConfirmPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
-          </button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label><i aria-hidden="true" class="ti ti-palette"></i> <ng-container i18n="Field label: theme picker">Appearance</ng-container></label>
-        <p class="field-help" i18n>Choose the theme used on this device.</p>
-        <k-theme-picker [value]="theme.theme()" (picked)="setTheme($event)" />
       </div>
 
       @if (turnstileSiteKey()) {

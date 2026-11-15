@@ -18,11 +18,9 @@ function emailFor(name: string) {
 
 async function signUpOwner(page: Page, name: string) {
   await page.goto("/signup");
-  await page.locator("#cname").fill(name);
   await page.locator("#dn").fill(name);
   await page.locator("#email").fill(emailFor(name));
   await page.locator("#password").fill(TEST_PASSWORD);
-  await page.locator("#confirm-password").fill(TEST_PASSWORD);
   await page.locator("form").getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/onboarding/);
 }
@@ -88,7 +86,6 @@ test("joining an organisation that requires MFA through an invite withholds the 
     await newcomer.locator("#dn").fill(newcomerName);
     await newcomer.locator("#email").fill(emailFor(newcomerName));
     await newcomer.locator("#password").fill(TEST_PASSWORD);
-    await newcomer.locator("#confirm-password").fill(TEST_PASSWORD);
     await newcomer.locator("form").getByRole("button", { name: "Continue" }).click();
 
     await expectEnrollmentRequired(newcomer);
