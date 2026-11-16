@@ -20,6 +20,7 @@ import {
   refreshPushSubscription,
 } from "../../lib/web-push.js";
 import { verifyLifecycleUnsubscribeToken } from "../../lib/lifecycle-emails.js";
+import { verifyNotificationUnsubscribeToken } from "../../lib/notification-unsubscribe.js";
 import { markAllNotificationsRead, markBoardNotificationsRead, markCardNotificationsRead, markNotificationsRead, markNotificationsUnread } from "./mark-notifications-read.js";
 import { boardUnreadCounts, cardUnreadCounts, feedCounts, listNotificationsPage, notificationGroupCounts, orgUnreadCounts } from "./notification-feed.js";
 import { visibleWorkspaceRuleResponses } from "./notification-rules.js";
@@ -296,10 +297,11 @@ export async function pushPublicRoutes(app: FastifyInstance) {
 }
 
 /**
- * Unauthenticated unsubscribe for lifecycle (onboarding/check-in) emails. The signed token is the only
- * authority: it names one user and can only clear that user's lifecycle flag, so a leaked link cannot
- * read anything or touch card notification preferences. Bare GETs never unsubscribe, so inbox link
- * scanners that prefetch URLs cannot opt someone out.
+ * Unauthenticated unsubscribe for lifecycle (onboarding/check-in) and card notification emails. The
+ * signed token is the only authority: a lifecycle token names one user and clears only their
+ * lifecycle flag; a notification token names one address and turns off only its email
+ * notifications. Neither can read anything. Bare GETs never unsubscribe, so inbox link scanners that
+ * prefetch URLs cannot opt someone out.
  */
 export async function emailPreferencePublicRoutes(app: FastifyInstance) {
   // RFC 8058 one-click requests arrive as a form post. Scoped to this plugin, like the OAuth parser.
@@ -310,7 +312,7 @@ export async function emailPreferencePublicRoutes(app: FastifyInstance) {
   // The web app's /email/unsubscribe page posts here after an explicit click.
   app.post("/email/unsubscribe", async (req, reply) => {
     const body = dto.emailUnsubscribeBody.parse(req.body);
-    await unsubscribeFromLifecycleEmail(body.token);
+    await unsubscribeFromEmail(body.token);
     return reply.status(204).send();
   });
 
@@ -318,12 +320,24 @@ export async function emailPreferencePublicRoutes(app: FastifyInstance) {
   // with the token in the URL, from their own "Unsubscribe" control and without a session.
   app.post("/email/unsubscribe/one-click", async (req, reply) => {
     const query = dto.emailUnsubscribeBody.parse(req.query);
-    await unsubscribeFromLifecycleEmail(query.token);
+    await unsubscribeFromEmail(query.token);
     return reply.status(200).send({ ok: true });
   });
 }
 
-async function unsubscribeFromLifecycleEmail(token: string): Promise<void> {
+async function unsubscribeFromEmail(token: string): Promise<void> {
+  const notificationEmail = verifyNotificationUnsubscribeToken(token);
+  if (notificationEmail) {
+    const [user] = await db.select({ id: users.id }).from(users).where(and(eq(users.email, notificationEmail), isNull(users.deletedAt))).limit(1);
+    // An address that changed or was deleted since the email went out has nothing left to turn off.
+    if (!user) return;
+    // The provider's "Unsubscribe" means "stop these emails": the email switch, which the
+    // notification settings page shows and can turn back on. Security and billing mail ignore it.
+    await db.insert(notificationSettings)
+      .values({ userId: user.id, emailEnabled: false })
+      .onConflictDoUpdate({ target: notificationSettings.userId, set: { emailEnabled: false, updatedAt: new Date() } });
+    return;
+  }
   const userId = verifyLifecycleUnsubscribeToken(token);
   if (!userId) throw badRequest("unsubscribe link is invalid");
   const [user] = await db.select({ id: users.id }).from(users).where(and(eq(users.id, userId), isNull(users.deletedAt))).limit(1);

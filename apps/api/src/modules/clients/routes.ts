@@ -65,6 +65,7 @@ export async function clientRoutes(app: FastifyInstance) {
       auth: req.auth,
       body,
       log: req.log,
+      mailer: app.mailer,
       request: { id: req.id, method: req.method, url: req.url },
     });
     if (!nextContext.active) {

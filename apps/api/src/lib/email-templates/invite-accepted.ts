@@ -33,7 +33,7 @@ export function inviteAcceptedEmail(params: InviteAcceptedEmailParams): string {
     const b = m.board;
     return emailLayout({
       locale,
-      subject: m.subject,
+      subject: b.subject({ name: acceptedByName, board: params.boardName }),
       preheader: b.preheader({ name: acceptedByName, board: params.boardName }),
       body: `
         ${heading(b.heading)}
@@ -50,7 +50,7 @@ export function inviteAcceptedEmail(params: InviteAcceptedEmailParams): string {
 
   return emailLayout({
     locale,
-    subject: m.subject,
+    subject: o.subject({ name: acceptedByName, org: orgName }),
     preheader: o.preheader({ name: acceptedByName, org: orgName }),
     body: `
       ${heading(o.heading)}

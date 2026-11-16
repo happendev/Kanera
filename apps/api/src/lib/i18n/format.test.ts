@@ -22,7 +22,7 @@ void test("storage sizes use the recipient's decimal separator", () => {
 void test("every supported locale has a complete catalog", () => {
   for (const locale of LOCALES) {
     const messages = serverMessages(locale);
-    assert.equal(typeof messages.email.cardAssigned.subject, "string", locale);
+    assert.equal(typeof messages.email.cardAssigned.heading, "string", locale);
     assert.equal(typeof messages.activity.list, "function", locale);
   }
 });

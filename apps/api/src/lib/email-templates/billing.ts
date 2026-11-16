@@ -1,6 +1,6 @@
 import type { Locale } from "@kanera/shared/locales";
 import type { BillingEmailQueueData, BillingImpactSummary } from "@kanera/shared/schema";
-import { button, divider, emailLayout, fallbackLink, heading, mutedHtml, paragraph, text } from "./layout.js";
+import { button, divider, emailLayout, fallbackLink, heading, mutedHtml, paragraph, sectionLabel, text } from "./layout.js";
 import { escapeHtml } from "../html-escape.js";
 import { serverMessages } from "../i18n/messages/index.js";
 import type { BillingImpactKey, BillingMessages } from "../i18n/messages/types.js";
@@ -274,8 +274,8 @@ function billingLayout(options: {
 }) {
   const body = `
     ${heading(options.title)}
-    ${paragraph(options.intro)}
-    ${options.lines.filter(Boolean).map((line) => paragraph(line!, "0 0 14px 0")).join("")}
+    ${paragraph(options.intro, "0 0 16px 0")}
+    ${options.lines.filter(Boolean).map((line) => paragraph(line!, "0 0 16px 0")).join("")}
     ${options.detailsPeriodLabel ? renderBillingDetails(options.params, options.detailsPeriodLabel) : ""}
     ${options.impactMode ? renderImpact(options.params, options.impactMode) : ""}
     ${button({ href: options.params.settingsUrl, label: options.cta })}
@@ -315,7 +315,7 @@ function renderImpact(params: BillingEmailParams, mode: "forecast" | "applied" |
   const empty = mode === "forecast" ? m.forecastEmpty : m.appliedEmpty;
   return `
     ${divider("18px 0 18px 0")}
-    ${paragraph(title, "0 0 8px 0")}
+    ${sectionLabel(title)}
     ${visibleLimits ? mutedHtml(text(m.freeLimits({
       boards: visibleLimits.maxBoards,
       members: visibleLimits.maxOrgMembers,

@@ -16,7 +16,7 @@ const enUS: ServerMessages = {
 
   layout: {
     ...enGB.layout,
-    footerLifecycle: "You're receiving this onboarding and account tip because you own a Kanera organization.",
+    footerLifecycle: "You're receiving this because you manage a Kanera organization.",
   },
 
   email: {
@@ -54,8 +54,8 @@ const enUS: ServerMessages = {
     storageWarning: {
       ...email.storageWarning,
       whenFull: "When it's full, nobody in the organization can upload attachments or paste images until space is freed.",
-      howToFree: "You can free space yourself under Settings → Organization → Storage. Its Clean up files list shows your organization's largest and oldest files, including ones on archived cards that nobody sees anymore, and lets you filter them by size, age and workspace, then delete up to 100 at a time.",
-      footer: "You're receiving this because you're an owner or admin of this organization. We send it once each time usage approaches the limit.",
+      howToFree: "To free up space, open Settings → Organization → Storage and use Clean up files. It lists your largest and oldest files, including attachments on archived cards, so you can delete what you no longer need.",
+      footer: "You're receiving this because you're an owner or admin of this organization. We send it once each time usage nears the limit.",
     },
     lifecycle: {
       ...lifecycle,
@@ -72,6 +72,13 @@ const enUS: ServerMessages = {
           body: "That's fine. You can export any board from its menu, or delete your organization from organization settings.",
         },
       },
+    },
+    organisationDeleted: {
+      ...email.organisationDeleted,
+      heading: "Organization deleted",
+      introSelf: ({ firstName, org, when }) => `Hi ${firstName}, you deleted the organization ${org} on ${when}.`,
+      introOther: ({ firstName, actor, org, when }) => `Hi ${firstName}, ${actor} deleted the organization ${org} on ${when}. You no longer have access to it.`,
+      accountKept: "Your Kanera account itself has not been deleted, and you keep access to any other organizations you belong to.",
     },
     smtpTest: {
       ...email.smtpTest,

@@ -1528,6 +1528,16 @@
   gap: 8px;
 }
 
+.invite-email-field {
+  flex: 1 1 240px;
+  min-width: 0;
+
+  input {
+    font-size: var(--text-base);
+    font-weight: 400;
+  }
+}
+
 .ws-grant-label {
   font-size: var(--text-sm);
   font-weight: 600;
@@ -1978,6 +1988,11 @@
   // ── Invite form ── stack the email + role row.
   .invite-form-top {
     flex-direction: column;
+  }
+
+  // Stacked, the row's 240px basis would become a height.
+  .invite-email-field {
+    flex: none;
   }
 
   // ── GitHub App ── keep status and actions aligned without squeezing names.

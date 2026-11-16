@@ -3,7 +3,7 @@
 } @else {
 <div class="settings-section">
   <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-user-plus"></i><span i18n="Settings section heading">Invite people</span></h3>
-  <p class="settings-section-help" i18n>Create an invite link to join {{ settings.user()?.orgName // i18n(ph="organisation") }}.</p>
+  <p class="settings-section-help" i18n>Email an invite or create a link to join {{ settings.user()?.orgName // i18n(ph="organisation") }}.</p>
   <k-docs-link path="managing-users" label="Learn more about managing users" i18n-label />
   @if (settings.isHosted()) {
   <div class="user-seat-pool" [class.user-seat-pool--full]="settings.planTier() !== 'trial' && settings.availableSeats() === 0">
@@ -36,6 +36,10 @@
   }
   <form class="invite-form" (submit)="settings.createInvite($event)">
     <div class="invite-form-top">
+      <label class="inline-label invite-email-field">
+        <span i18n="Field label: optional address to email the invite to">Email (optional)</span>
+        <input type="email" name="inviteEmail" autocomplete="off" maxlength="320" placeholder="name@company.com" i18n-placeholder="Placeholder: example email address" [value]="settings.inviteEmail()" (input)="settings.inviteEmail.set($any($event.target).value)" />
+      </label>
       <label class="inline-label">
         <span i18n="Field label">Organisation role</span>
         <select name="orgRole" [value]="settings.inviteOrgRole()" (input)="settings.inviteOrgRole.set($any($event.target).value)">
@@ -109,8 +113,13 @@
   </form>
   @if (settings.createdInviteUrl()) {
   <p class="settings-section-help invite-hint">
+    @if (settings.inviteSentTo(); as sentTo) {
+    <i aria-hidden="true" class="ti ti-mail-check"></i>
+    <ng-container i18n>Invite emailed to {{ sentTo // i18n(ph="email") }}. You can also share the link below.</ng-container>
+    } @else {
     <i aria-hidden="true" class="ti ti-shield-check"></i>
     <ng-container i18n>Give this secure link to users to sign up to {{ settings.user()?.orgName // i18n(ph="organisation") }}.</ng-container>
+    }
   </p>
   <div class="board-tile invite-url-tile">
     <i aria-hidden="true" class="ti ti-link board-icon"></i>

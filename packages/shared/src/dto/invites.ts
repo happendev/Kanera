@@ -24,6 +24,9 @@ export const createInviteBody = z.object({
   workspaces: z.array(inviteWorkspaceGrantInput).default([]),
   boards: z.array(inviteBoardGrantInput).max(500).default([]),
   expiresInDays: z.number().int().positive().max(365).nullable().optional(),
+  // Optional: when given, the invite link is also emailed to this address. The link still works for
+  // whoever holds it; the address is a label on the pending invite, not a restriction.
+  email: z.email().max(320).optional(),
 });
 export type CreateInviteBody = z.infer<typeof createInviteBody>;
 

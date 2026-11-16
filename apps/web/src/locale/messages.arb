@@ -5614,8 +5614,8 @@
       "src/app/features/account-settings/notifications/notifications.page.html"
     ]
   },
-  "1141883496104078420": "A few emails to organisation owners about setting up and getting more from Kanera. They never include your card content.",
-  "@1141883496104078420": {
+  "4519054980874959397": "A few emails to organisation owners and admins about setting up and getting more from Kanera. They never include your card content.",
+  "@4519054980874959397": {
     "x-files": [
       "src/app/features/account-settings/notifications/notifications.page.html"
     ]
@@ -7113,8 +7113,8 @@
       "src/app/features/account-settings/users/users.page.html"
     ]
   },
-  "869291787459254998": "Create an invite link to join {$ORGANISATION}.",
-  "@869291787459254998": {
+  "4983286110047750379": "Email an invite or create a link to join {$ORGANISATION}.",
+  "@4983286110047750379": {
     "x-files": [
       "src/app/features/account-settings/users/users.page.html"
     ]
@@ -7178,6 +7178,20 @@
   "5619283413881445755": "Manage seats",
   "@5619283413881445755": {
     "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html"
+    ]
+  },
+  "3581015042077473122": "Email (optional)",
+  "@3581015042077473122": {
+    "description": "Field label: optional address to email the invite to",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html"
+    ]
+  },
+  "3397063315237339310": "name@company.com",
+  "@3397063315237339310": {
+    "description": "Placeholder: example email address",
     "x-files": [
       "src/app/features/account-settings/users/users.page.html"
     ]
@@ -7273,6 +7287,12 @@
   "1721676999015334756": "Create invite",
   "@1721676999015334756": {
     "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html"
+    ]
+  },
+  "6909175212548521735": "Invite emailed to {$EMAIL}. You can also share the link below.",
+  "@6909175212548521735": {
     "x-files": [
       "src/app/features/account-settings/users/users.page.html"
     ]

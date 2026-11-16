@@ -3,6 +3,10 @@ import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { dto } from "@kanera/shared";
 import { boardInvitations, boardMembers, boards, clientGuestSeats, clientMembers, clients, inviteBoardGrants, inviteTokens, inviteWorkspaceGrants, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { db } from "../../db.js";
+import { env } from "../../env.js";
+import { formatDate } from "../../lib/i18n/format.js";
+import { serverMessages } from "../../lib/i18n/messages/index.js";
+import { requestLocale } from "../../lib/i18n/request-locale.js";
 import { assertOrgRole } from "../../lib/access.js";
 import { badRequest, conflict, forbidden, notFound, unauthorized } from "../../lib/errors.js";
 import { enforceUnauthenticatedLookupRateLimit } from "../../lib/lookup-rate-limit.js";
@@ -282,7 +286,7 @@ export async function inviteRoutes(app: FastifyInstance) {
             clientId: req.auth.cid,
             tokenHash: token.hash,
             orgRole: body.orgRole,
-            email: null,
+            email: body.email?.toLowerCase() ?? null,
             expiresAt,
             createdById: req.auth.sub,
           })
@@ -303,6 +307,25 @@ export async function inviteRoutes(app: FastifyInstance) {
         }
         return row!;
       });
+
+      if (body.email) {
+        const [context] = await db
+          .select({ orgName: clients.name, inviterName: users.displayName })
+          .from(clients)
+          .innerJoin(users, eq(users.id, req.auth.sub))
+          .where(eq(clients.id, req.auth.cid))
+          .limit(1);
+        // The invitee may have no account, so the email uses the inviter's on-screen language.
+        const locale = requestLocale(req);
+        await app.mailer.sendOrgInvite(body.email, {
+          locale,
+          orgName: context?.orgName ?? "",
+          invitedByName: context?.inviterName ?? serverMessages(locale).common.fallbackInviterName,
+          orgRole: body.orgRole,
+          acceptUrl: `${env.WEB_ORIGIN}/signup?invite=${encodeURIComponent(token.raw)}`,
+          expiresAtLabel: expiresAt ? formatDate(locale, expiresAt, { dateStyle: "long", timeZone: "UTC" }) : null,
+        });
+      }
 
       emitToClient(req.auth.cid, "client:invite:created", {
         id: invite.id,

@@ -2988,14 +2988,14 @@
     "apps/api/src/public-api-server.ts": "17f9b99badc006e2f1e6e3d11bc95c11bd404c99eef9eced78a1daead8282f59",
     "apps/api/src/server.ts": "191cece49a40bc9e2342273027ee03220af83ae5188bdea65bd6c80eea48a4e4",
     "apps/api/src/admin/plugin.ts": "285e7dd8ce6eefcd51458f4ab7c68423c884d81645526e6d806616a33a2139da",
-    "apps/api/src/auth/routes.ts": "76d9ee7e197fd424753777a5165e870c23ac4ebb8b9ab545b4910d2a7fdead45",
+    "apps/api/src/auth/routes.ts": "27f1021f5640dcddf55d72197b9596df74d374f8b1b29a7d1312c75951ec0528",
     "apps/api/src/admin/auth.routes.ts": "b42ac02979a883eeca671cb2b989567c2978db84310b7063730b8de54d44bee2",
     "apps/api/src/admin/admins.routes.ts": "8c696e83e8a8973d169c86578d2958c9a64033a590ace0bbcddf4628080b6210",
     "apps/api/src/admin/demo.routes.ts": "836d012412288b1782684208dc7d9748fdf60dde451038d5514a3d604237fa97",
     "apps/api/src/admin/ops.routes.ts": "d7cce16b4c0e8a672c20639c67e4dc260e650d27d4c0207d195f09eb7b39fbe9",
     "apps/api/src/admin/orgs.routes.ts": "a0fb04be464994f8ce290c49efc6bb784c963bd917552a5eb937d65515f30578",
     "apps/api/src/admin/support.routes.ts": "3034a49114bddbf1f0a7616de7796814be716afe18d43543fe5984cc5237e7f1",
-    "apps/api/src/admin/users.routes.ts": "72a4fe8295828bd023c00289bf653e5e5c378f253393deac136eab8a66776ca9",
+    "apps/api/src/admin/users.routes.ts": "3248b86cb0d3d0878485dac585704c910e4168f4a6d50b08bac64f1ab41cdd03",
     "apps/api/src/lib/i18n/request-locale.ts": "a5bf81b607ea84983113e24589ea43e510943a4b821623c3a0be47713e15527f",
     "apps/api/src/lib/metrics.ts": "a8eae9cd2ca233c2f6f73833e6d7578c32607d2527c4aab90d56f3b3f75232c5",
     "apps/api/src/modules/activity/routes.ts": "4397ad747fff972d1eec7a7c9416107cac149699978bf650287ae4b9a2e2e0ca",
@@ -3026,7 +3026,7 @@
     "apps/api/src/modules/cards/update.routes.ts": "c73412b126218727ccf08fd2dcf57b6a8449b5dd87a80ad5056a7c69d7d01629",
     "apps/api/src/modules/cards/upload-links.routes.ts": "8ed8a7aa9012e97c7c51fa57655cc5db3d38ad30b2f503e8599a4d8919a1654e",
     "apps/api/src/modules/checklist-templates/routes.ts": "4d33fa9b84d01cf7424e9c0b5fec8d9c96b800880f5f1322f9a86d6bdf8195e2",
-    "apps/api/src/modules/clients/routes.ts": "fa371b3e409cc27fa6a716febc8fefd4163fe5379575c0e726b4efa895bdfadc",
+    "apps/api/src/modules/clients/routes.ts": "32ea1b6f1f891717fa5c09ec9a3467f131fd7be6dae692aa2b7117f5a5d0505f",
     "apps/api/src/modules/clients/storage.ts": "83ca11d4eadc29c6307f5812f6d7be354add723ea34a524a0cda58fcc3b8b47d",
     "apps/api/src/modules/clients/users.ts": "b40fe28bb8cc067c0844f648b7449d66fc85ebe966ad15920f80d9ca36fc0252",
     "apps/api/src/modules/comments/routes.ts": "0cb3eb034ff960dec961bc6552784600e19a1d1ea5ed05bde7496f2ef49bac88",
@@ -3044,13 +3044,13 @@
     "apps/api/src/modules/integrations/routes.ts": "1da7fd65e5976af831fc4bf766918201fb1d93068bd4d5cebcad19a83ca61df7",
     "apps/api/src/modules/integrations/webhook-endpoint.routes.ts": "49a859431c0139634b24bb556938887bad63bf712e929ab42a5d2630aef44d3c",
     "apps/api/src/modules/internal-links/routes.ts": "8016a7a045dfa5a380e985fd6a11978563a4315aab261f3f5fca5ca96ee00779",
-    "apps/api/src/modules/invites/routes.ts": "af26cbfcb0c2dbc751c88eaa38b596f88373d0ace1ff9c36d0046bfa99b4ae2e",
+    "apps/api/src/modules/invites/routes.ts": "666880180fa11db8c0edbbc11d11b3941cc4b54bd77ba4ad6b7acbbf2bc06cdd",
     "apps/api/src/modules/lists/routes.ts": "e0f954a9dd74f67ddab3f8322541fa99d890938cdb7efd7ea054970f8c8040cf",
     "apps/api/src/modules/media/routes.ts": "f75c31cfcd20c3d80272b7f829237d90dae4c1a6e0a5cdb812a1f5df3d86929d",
     "apps/api/src/modules/notes/routes.ts": "6a36cea7ae8bb4347fe4aa17c8740156b4a9f5a62d460a8ad378a1df4662d2a5",
     "apps/api/src/modules/notifications/follow.routes.ts": "93cd89342e89b5cf5ab456e478d9ecb7d012ad7a979fa3b86c4ccd8a28dffd1e",
     "apps/api/src/modules/notifications/inbox.routes.ts": "a28be9e73bbb2cd585826f61bf6f1aedba66a79ec65e745ae6ebd542a0247f49",
-    "apps/api/src/modules/notifications/routes.ts": "54acd861136928ad85c7c88fcb967bc3c302a52f39d271084839fd3ccf07c6bd",
+    "apps/api/src/modules/notifications/routes.ts": "1086e876f711206b00c22e18bd2bfa76d474cc7ee300dfac5f55610d9b6284c0",
     "apps/api/src/modules/notifications/notification-feed.ts": "c1a16174f506f060499c0efe84ae4b64fcdfdb1cf2df6873f2d60cab0956f972",
     "apps/api/src/modules/scratchpad/routes.ts": "76d4bf7615529f1f9149ecd92de5f7b833da07acabae48292e7716afc10de4a2",
     "apps/api/src/modules/search/routes.ts": "aa0513518edbf7e8bc662d28ce469531e02821cb6320b52c062be75359bac175",
@@ -3100,7 +3100,7 @@
     "packages/shared/src/dto/imports.ts": "a1334d43800886036dcf1865e7b5b6608ba586c07d0e35188e2cf075bcd3dcbf",
     "packages/shared/src/dto/index.ts": "2cb21fdcd1d9b519ec09aed78c22a871fbd8bc04bbc30668e7d75b9ec5013184",
     "packages/shared/src/dto/internal-links.ts": "efc5d2f210c878566baa2961f11de4470da808c74da38ecf6a256dd02b2e720f",
-    "packages/shared/src/dto/invites.ts": "3eea6edeb634b185c4e13208ec4c11879231e99b246af1019417998ebe56cb8f",
+    "packages/shared/src/dto/invites.ts": "5792f134ce0e7bbd9cc6b58748ffbe7e78cd7a8dc8b2bd3e0ec23ce5c5e65588",
     "packages/shared/src/dto/lists.ts": "59dd5e41a6b349186e013f23db13406be9ce4d69dee9c9511fa881a9560dc608",
     "packages/shared/src/dto/mcp-events.ts": "283aa514fa3740a63eefa19a453402f45d41bf92978a685e8cd6e2b1e46d1f37",
     "packages/shared/src/dto/name-limits.ts": "b8af469bf8ac4935efa894113c84083a6ae74d755aface053b2ef5873e6fa2b4",
@@ -3142,7 +3142,7 @@
     "apps/api/src/lib/web-push.ts": "44983fd2d0d27ffdfe31ffe971236e618ce0a7b766ca531b64750d2b1e3416fd",
     "apps/api/src/lib/push-queue.ts": "f2a85b1551dbb73d06fdabe5fff3c6ad384dcb0d0e7753e864b448d3073f84ba",
     "apps/api/src/lib/webhooks.ts": "2e7edab3496c8957a3ce90327574032f4b4382f306ada59b39aa892d15d3a08e",
-    "apps/api/src/lib/smtp.ts": "6e6b83392a8070ab4d867d072d634ed6831c5d4b8d32e1e85bdeac4d2f55d2ec",
+    "apps/api/src/lib/smtp.ts": "9a77858522de3b423f86123089fc205236230ad68322155be4ecc59da1d26e9b",
     "apps/api/src/modules/imports/importer.ts": "0fd22ec46f147cf3ab1e4587494b78a8962ebdc1b0b75569b2914a0b6527a16e",
     "apps/api/src/modules/imports/kanera-importer.ts": "fbde2a7a1c80cf5ebb198510685611b1fb00a699a8e73140a09fcc32e7c0def7",
     "apps/api/src/modules/imports/csv/derive.ts": "d07b049f10bb3c19f290b623982543bf069ebb5785330db3d64728bea6df18b9",
@@ -3555,7 +3555,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/admin/users.routes.ts#http:POST /users/:userId/reset-mfa": {
-      "handlerSha256": "4cb98f5e6877f320f17752756f864c72cd90810b45a2d2a0d2a43003c7c2bb59",
+      "handlerSha256": "ee412306be4f0785e34a7941376904ed06bb2440b9cd2d56aa4865ff3d980518",
       "params": "va2650a86b218",
       "query": "v322750628d67",
       "body": "v322750628d67",
@@ -3595,7 +3595,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:DELETE /auth/mfa": {
-      "handlerSha256": "f9e3d940884f59624befdbed7d7dc34819e07ddb0bd71ff09ec49398f109565a",
+      "handlerSha256": "1f1b68993a1f3ea329b8ec31d4f0623c06d2a65674c70c0dc979002c2c54d6da",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v2ec6c7d38d5a",
@@ -3635,7 +3635,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/change-password": {
-      "handlerSha256": "afc0d0b49919fef647d763227cdb4659290f13dadb760f13537e79525f3aacf5",
+      "handlerSha256": "e6d19b559e90a8f7bcf1c5d9b4af95c882ad853ec37a184676aa795cb604a0ef",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "vf8e104d95ff9",
@@ -3675,7 +3675,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/me/email": {
-      "handlerSha256": "ee740f5ce42b8980d951cf9aaf2a7804323d733184b50c659100bcc422b1ab67",
+      "handlerSha256": "6078ec26eb041ee68a93dbaa3f86abaa193374665e1373695bdd34684bbb3079",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v6c378f67a181",
@@ -3699,7 +3699,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/mfa/enroll/confirm": {
-      "handlerSha256": "9ee82cca23eb173b2f88ca9636f1cbe6da19b022d12e4f199677d3815fd675a9",
+      "handlerSha256": "c65e5d91df88b4b37ffc6b2c656268719b1a4f05d70b3fd0af142de7bf625141",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v5a7b4bb3eb33",
@@ -3707,7 +3707,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/mfa/recovery-codes": {
-      "handlerSha256": "50dffa2a8b25ae6b70f2a98106710b1698200eb40a474b8f8a0544b9586023e6",
+      "handlerSha256": "2c83dc9497120a9a8825f16e8443ddb6510fce4f8908ebbf6f9c5a641aa1628c",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v2ec6c7d38d5a",
@@ -3731,7 +3731,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/mfa/required/enroll/confirm": {
-      "handlerSha256": "ea1c794c691fc95832069445c0603daee5ddfa32375463b50dafaaa5203a4f59",
+      "handlerSha256": "a61e07a9379c89bca161d9a76706d158af055aaa7b09e3f5620562aea4f28ebb",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v4f7f6507ac08",
@@ -3763,7 +3763,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/reset-password": {
-      "handlerSha256": "e038056e5330445269c676ea3ab17fe9a1a25bdf8fac77fbe2f058ef722e8e50",
+      "handlerSha256": "2120bc179c899d77cb65725d2b77ba54457ca506823f35f9a4cab72704d3ab34",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v86f6401993d2",
@@ -4884,7 +4884,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/clients/routes.ts#http:DELETE /clients/me": {
-      "handlerSha256": "08b9bc7fe71f93aeb7a15858c170b2ba1b0d2e4b4f91d888012adffc1ef16cb7",
+      "handlerSha256": "8fb1557bddaca8b16c2b2db44e9e7e36f87106f29f852c8247a7b8ba3f5d9b39",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v52cec4ccace4",
@@ -5701,7 +5701,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/invites/routes.ts#http:POST /clients/me/invites": {
-      "handlerSha256": "63dcad6248a340340a3caa136b729be69a805a90f3e12071f69138d9bbb2f993",
+      "handlerSha256": "b1e3a1b85a692698355323749f784305b7316404d0b92585fa99b3aafcae6ef4",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "vbdc027a967ac",
@@ -6157,7 +6157,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/notifications/routes.ts#http:POST /email/unsubscribe": {
-      "handlerSha256": "482478256e89602ff43fe7fd54cb6df1316004f0bee9c6ea1f29ad0672f0b3d1",
+      "handlerSha256": "b95e68afd625ec4ed48d03c688b84ac1395e21527bcb3edebecaed1ebc3e4f25",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v001008dfcabb",
@@ -6165,7 +6165,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/notifications/routes.ts#http:POST /email/unsubscribe/one-click": {
-      "handlerSha256": "ddf1510cf73424739aa9ed771e120ca49337e74a94f77e7f8a76e22f5660753b",
+      "handlerSha256": "08e294f386d10f588469a5cf47b50d89f1cc8b49696e97d11f6451442e49e4c9",
       "params": "v322750628d67",
       "query": "v422792240fa2",
       "body": "v322750628d67",

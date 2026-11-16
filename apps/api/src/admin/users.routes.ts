@@ -1,3 +1,4 @@
+import { notifyAccountSecurityChange } from "../lib/account-security-notices.js";
 import { dto } from "@kanera/shared";
 import { boardMembers, boards, clientGuestSeats, clientMembers, clients, passwordResetTokens, refreshTokens, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
@@ -409,6 +410,9 @@ export async function adminUserRoutes(app: FastifyInstance) {
       await revokeUserRefreshTokens(tx, userId);
       await writeAdminAudit(tx, { adminUserId: req.adminAuth.sub, action: "user.mfa.reset", targetType: "user", details: { userId, email: user.email } });
     });
+    // Support removed the factor (usually for a locked-out user); the owner still hears about it in
+    // case the request did not come from them.
+    await notifyAccountSecurityChange(app.mailer, { userId, event: "mfa_disabled", log: req.log });
     return { ok: true };
   });
 

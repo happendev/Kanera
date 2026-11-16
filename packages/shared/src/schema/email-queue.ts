@@ -45,6 +45,9 @@ export const EMAIL_QUEUE_TYPES = [
   "lifecycle_inactive",
   "lifecycle_active_checkin",
   "lifecycle_checkout_abandoned",
+  "account_security",
+  "organisation_deleted",
+  "org_invite",
 ] as const;
 export type EmailQueueType = (typeof EMAIL_QUEUE_TYPES)[number];
 export type LifecycleEmailQueueType = Extract<EmailQueueType, `lifecycle_${string}`>;
@@ -280,6 +283,8 @@ export type InviteAcceptedEmailQueueData = {
 
 export type BoardInviteEmailQueueData = {
   boards?: Array<{ boardName: string; role: string }>;
+  /** Already formatted in the inviter's locale; absent on older rows and when it never expires. */
+  expiresAtLabel?: string | null;
   boardName?: string;
   role?: string;
   orgName: string;
@@ -371,6 +376,47 @@ export type StorageWarningEmailQueueData = {
   upgradeQuotaLabel: string | null;
 };
 
+/** Security-relevant changes to a person's own account, each confirmed by email. */
+export const ACCOUNT_SECURITY_EVENTS = [
+  "password_changed",
+  "password_reset",
+  "email_changed",
+  "mfa_enabled",
+  "mfa_disabled",
+  "recovery_codes_regenerated",
+] as const;
+export type AccountSecurityEvent = (typeof ACCOUNT_SECURITY_EVENTS)[number];
+
+export type AccountSecurityEmailQueueData = {
+  displayName: string;
+  event: AccountSecurityEvent;
+  /** When the change happened, already formatted in the recipient's locale and time zone. */
+  occurredAtLabel: string;
+  /** email_changed only: the address the account moved to (this notice goes to the old one). */
+  newEmail?: string | null;
+  securityUrl: string;
+  /** Where a person who did not make the change asks for help; null on self-hosted installs. */
+  supportEmail?: string | null;
+};
+
+export type OrganisationDeletedEmailQueueData = {
+  displayName: string;
+  orgName: string;
+  /** Null when the recipient deleted it themselves. */
+  deletedByName: string | null;
+  deletedAtLabel: string;
+  supportEmail?: string | null;
+};
+
+export type OrgInviteEmailQueueData = {
+  orgName: string;
+  invitedByName: string;
+  orgRole: string;
+  acceptUrl: string;
+  /** Already formatted in the inviter's locale; null when the link never expires. */
+  expiresAtLabel: string | null;
+};
+
 /** Which single next workflow the early-success email introduces. */
 export type LifecycleNextStep = "automations" | "my_cards";
 
@@ -428,7 +474,10 @@ export type EmailQueueData =
   | { type: "lifecycle_early_success"; data: LifecycleEmailQueueData }
   | { type: "lifecycle_inactive"; data: LifecycleEmailQueueData }
   | { type: "lifecycle_active_checkin"; data: LifecycleEmailQueueData }
-  | { type: "lifecycle_checkout_abandoned"; data: LifecycleEmailQueueData };
+  | { type: "lifecycle_checkout_abandoned"; data: LifecycleEmailQueueData }
+  | { type: "account_security"; data: AccountSecurityEmailQueueData }
+  | { type: "organisation_deleted"; data: OrganisationDeletedEmailQueueData }
+  | { type: "org_invite"; data: OrgInviteEmailQueueData };
 
 export const emailQueue = pgTable(
   "email_queue",

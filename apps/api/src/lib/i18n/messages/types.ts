@@ -49,11 +49,23 @@ export interface CommonMessages {
   dueSlots: { morning: string; afternoon: string; endOfWorkDay: string };
   /** A due date with its slot: "27 May 2026, end of workday". */
   dueDateWithSlot: (p: { date: string; slot: string }) => string;
+  /** Button under the card in card notification emails. */
+  openCard: string;
 }
 
 export interface LayoutMessages {
   /** Footer line on transactional mail. */
   footerAccount: string;
+  /** Footer line on card notification mail, followed by the manage link. */
+  footerNotifications: string;
+  /** Link to the recipient's notification settings. */
+  manageNotifications: string;
+  /** Footer line on invitations sent to an address that may have no account yet. */
+  footerInvite: (p: { inviter: string }) => string;
+  /** Footer line on verification codes (signup and email change: no account may exist yet). */
+  footerVerification: string;
+  /** Footer line on security notices, which ignore the email notification switch. */
+  footerSecurity: string;
   /** Footer line on optional onboarding/lifecycle mail, followed by the unsubscribe link. */
   footerLifecycle: string;
   unsubscribe: string;
@@ -100,7 +112,8 @@ export interface EmailMessages {
     expiry: (p: { duration: string }) => string;
   };
   dailyDigest: {
-    subject: string;
+    /** `date` is the digest's day, so each day's email is its own inbox thread. */
+    subject: (p: { date: string }) => string;
     preheader: (p: { count: number }) => string;
     heading: string;
     intro: (p: { firstName: string; date: string }) => string;
@@ -155,7 +168,7 @@ export interface EmailMessages {
     footnote: string;
   };
   cardAssigned: {
-    subject: string;
+    subject: (p: { card: string }) => string;
     preheader: (p: { actor: string; card: string }) => string;
     heading: string;
     intro: (p: { firstName: string; actor: string; board: string }) => string;
@@ -178,7 +191,8 @@ export interface EmailMessages {
     subjectBlockedBy: (p: { card: string; other: string }) => string;
     subjectBlocking: (p: { card: string; other: string }) => string;
     preheader: (p: { actor: string; card: string; board: string }) => string;
-    heading: string;
+    headingBlockedBy: string;
+    headingBlocking: string;
     introBlockedBy: (p: { firstName: string; actor: string; card: string; board: string; other: string }) => string;
     introBlocking: (p: { firstName: string; actor: string; card: string; board: string; other: string }) => string;
   };
@@ -198,13 +212,13 @@ export interface EmailMessages {
     introReblocked: (p: { firstName: string; card: string; board: string; other: string }) => string;
   };
   commentMentioned: {
-    subject: (p: { card: string }) => string;
+    subject: (p: { actor: string; card: string }) => string;
     preheader: (p: { actor: string; card: string; board: string }) => string;
     heading: string;
     intro: (p: { firstName: string; actor: string; card: string; board: string }) => string;
   };
   cardDueDateChanged: {
-    subject: string;
+    subject: (p: { card: string }) => string;
     preheader: (p: { actor: string; card: string }) => string;
     heading: string;
     intro: (p: { firstName: string; actor: string }) => string;
@@ -213,7 +227,7 @@ export interface EmailMessages {
     clearedFrom: (p: { from: string }) => string;
     cleared: string;
     /** The same email when only the planned start moved; a due-date email names a dragged start too. */
-    startSubject: string;
+    startSubject: (p: { card: string }) => string;
     startPreheader: (p: { actor: string; card: string }) => string;
     startHeading: string;
     startIntro: (p: { firstName: string; actor: string }) => string;
@@ -222,26 +236,26 @@ export interface EmailMessages {
     startClearedFrom: (p: { from: string }) => string;
   };
   cardOverdue: {
-    subject: string;
+    subject: (p: { card: string }) => string;
     preheader: (p: { card: string }) => string;
     heading: string;
     intro: (p: { firstName: string; due: string | null }) => string;
   };
   cardReminder: {
-    subject: string;
+    subject: (p: { card: string }) => string;
     preheader: (p: { card: string }) => string;
     heading: string;
     intro: (p: { firstName: string }) => string;
   };
   checklistItemOverdue: {
-    subject: string;
+    subject: (p: { item: string }) => string;
     preheader: (p: { item: string }) => string;
     heading: string;
     intro: (p: { firstName: string; item: string; due: string | null }) => string;
   };
   inviteAccepted: {
-    subject: string;
     org: {
+      subject: (p: { name: string; org: string }) => string;
       preheader: (p: { name: string; org: string }) => string;
       heading: string;
       intro: (p: { firstName: string; name: string; org: string }) => string;
@@ -250,6 +264,7 @@ export interface EmailMessages {
       button: string;
     };
     board: {
+      subject: (p: { name: string; board: string }) => string;
       preheader: (p: { name: string; board: string }) => string;
       heading: string;
       intro: (p: { firstName: string; name: string; board: string; org: string }) => string;
@@ -260,13 +275,16 @@ export interface EmailMessages {
   };
   boardInvite: {
     /** `boardName` is the only board when `boardCount` is 1. */
-    subject: (p: { boardCount: number; boardName: string }) => string;
+    subject: (p: { inviter: string; boardCount: number; boardName: string }) => string;
     preheader: (p: { inviter: string; boardCount: number; boardName: string; org: string }) => string;
     heading: string;
     intro: (p: { inviter: string; boardCount: number; org: string }) => string;
     /** One line per board; `board` is rendered bold. */
     grant: (p: { board: string; role: string }) => string;
     button: string;
+    /** `date` is rendered bold. */
+    expiry: (p: { date: string }) => string;
+    ignore: string;
   };
   boardAccessGranted: {
     subject: (p: { board: string }) => string;
@@ -305,6 +323,50 @@ export interface EmailMessages {
     footer: string;
   };
   lifecycle: LifecycleMessages;
+  /** Sent to the account owner after a security-relevant change, even when email notifications are off. */
+  accountSecurity: {
+    passwordChanged: SecurityNotice;
+    passwordReset: SecurityNotice;
+    /** Sent to the previous address; `newEmail` is the address the account moved to. */
+    emailChanged: Omit<SecurityNotice, "intro"> & { intro: (p: { firstName: string; newEmail: string; when: string }) => string };
+    mfaEnabled: SecurityNotice;
+    mfaDisabled: SecurityNotice;
+    recoveryCodesRegenerated: SecurityNotice;
+    /** `email` is rendered as a link. */
+    notYouWithSupport: (p: { email: string }) => string;
+    notYouWithoutSupport: string;
+    /** For an email change, a password reset would go to the new address, so only support can help. */
+    notYouEmailWithSupport: (p: { email: string }) => string;
+    notYouEmailWithoutSupport: string;
+    button: string;
+  };
+  /** Sent to every member of an organisation when it is deleted. */
+  organisationDeleted: {
+    subject: (p: { org: string }) => string;
+    preheader: (p: { org: string }) => string;
+    heading: string;
+    introSelf: (p: { firstName: string; org: string; when: string }) => string;
+    introOther: (p: { firstName: string; actor: string; org: string; when: string }) => string;
+    permanent: string;
+    accountKept: string;
+    /** `email` is rendered as a link. */
+    notYouWithSupport: (p: { email: string }) => string;
+    notYouWithoutSupport: string;
+  };
+  /** An organisation invite emailed to an address that may have no account yet; in the inviter's language. */
+  orgInvite: {
+    subject: (p: { inviter: string; org: string }) => string;
+    preheader: (p: { org: string }) => string;
+    heading: (p: { org: string }) => string;
+    /** `org` is rendered bold. */
+    intro: (p: { inviter: string; org: string }) => string;
+    /** `role` is rendered bold. */
+    role: (p: { role: string }) => string;
+    button: string;
+    /** `date` is rendered bold. */
+    expiry: (p: { date: string }) => string;
+    ignore: string;
+  };
   smtpTest: {
     subject: string;
     preheader: string;
@@ -482,8 +544,15 @@ export interface LeadLine {
   body: string;
 }
 
+/** One security notice: what happened, when, in the recipient's time zone. */
+export interface SecurityNotice {
+  subject: string;
+  preheader: string;
+  heading: string;
+  intro: (p: { firstName: string; when: string }) => string;
+}
+
 export interface LifecycleMessages {
-  footerNote: string;
   noBoard: {
     subject: string;
     preheader: string;

@@ -184,7 +184,7 @@ void test("the digest lists the recipient's cards that missed their planned star
   assert.equal(await runDailyDigestSweep(deps(), new Date("2026-05-26T07:15:00Z")), 1);
   const [row] = await db.select().from(emailQueue).where(eq(emailQueue.type, "daily_digest"));
   const data = row!.data as DailyDigestEmailQueueData;
-  assert.deepEqual(data.lateStarts?.map((item) => [item.title, item.dueLabel]), [["Late", "Planned start 20 May"]]);
+  assert.deepEqual(data.lateStarts?.map((item) => [item.title, item.dueLabel]), [["Late", "Planned to start 20 May"]]);
 
   // Without an in-progress list nothing can be known to have started, so the section stays empty.
   await db.update(lists).set({ inProgress: false }).where(eq(lists.id, working!.id));

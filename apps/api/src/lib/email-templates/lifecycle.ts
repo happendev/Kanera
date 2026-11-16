@@ -1,9 +1,8 @@
 import type { Locale } from "@kanera/shared/locales";
 import type { LifecycleEmailQueueData, LifecycleEmailQueueType } from "@kanera/shared/schema";
-import { escapeHtml } from "../html-escape.js";
 import { serverMessages } from "../i18n/messages/index.js";
 import type { LeadLine } from "../i18n/messages/types.js";
-import { button, emailLayout, fallbackLink, heading, mutedHtml, paragraph, paragraphHtml, richHtml, strong, text } from "./layout.js";
+import { button, emailLayout, fallbackLink, heading, mailtoLink, paragraph, paragraphHtml, richHtml, strong, text } from "./layout.js";
 
 export type LifecycleEmailParams = LifecycleEmailQueueData & { locale: Locale };
 
@@ -78,7 +77,7 @@ export function lifecycleInactiveEmail(params: LifecycleEmailParams): string {
       leadLine(m.setup),
       leadLine(m.timing),
       `${strong(m.somethingWrong.lead)} ${feedbackEmail
-        ? richHtml((s) => m.somethingWrong.withFeedback(s), { email: feedbackLink(feedbackEmail) })
+        ? richHtml((s) => m.somethingWrong.withFeedback(s), { email: mailtoLink(feedbackEmail) })
         : text(m.somethingWrong.withoutFeedback)}`,
       leadLine(m.wrongTool),
     ],
@@ -98,7 +97,7 @@ export function lifecycleActiveCheckinEmail(params: LifecycleEmailParams): strin
       leadLine(m.tip),
       leadLine(params.onFreePlan ? m.freePlan : m.growing),
       feedbackEmail
-        ? `${strong(m.feedback.lead)} ${richHtml((s) => m.feedback.body(s), { email: feedbackLink(feedbackEmail) })}`
+        ? `${strong(m.feedback.lead)} ${richHtml((s) => m.feedback.body(s), { email: mailtoLink(feedbackEmail) })}`
         : null,
     ],
     cta: m.cta,
@@ -119,7 +118,7 @@ export function lifecycleCheckoutAbandonedEmail(params: LifecycleEmailParams): s
     intro: m.intro({ firstName: firstName(params.displayName), org: params.orgName }),
     linesHtml: [
       `${strong(m.question.lead)} ${feedbackEmail
-        ? richHtml((s) => m.question.withFeedback(s), { email: feedbackLink(feedbackEmail) })
+        ? richHtml((s) => m.question.withFeedback(s), { email: mailtoLink(feedbackEmail) })
         : text(m.question.withoutFeedback)}`,
       text(m.resume),
     ],
@@ -137,28 +136,28 @@ function lifecycleLayout(params: LifecycleEmailParams, options: {
   linesHtml?: Array<string | null>;
   cta: string;
 }): string {
-  const lines = options.lines?.map((line) => paragraph(line, "0 0 14px 0")).join("") ?? "";
-  const linesHtml = options.linesHtml?.filter((line): line is string => line !== null).map((line) => paragraphHtml(line, "0 0 14px 0")).join("") ?? "";
+  const lines = options.lines?.map((line) => paragraph(line, "0 0 16px 0")).join("") ?? "";
+  const linesHtml = options.linesHtml?.filter((line): line is string => line !== null).map((line) => paragraphHtml(line, "0 0 16px 0")).join("") ?? "";
   const body = `
     ${heading(options.title)}
-    ${paragraph(options.intro)}
+    ${paragraph(options.intro, "0 0 16px 0")}
     ${lines}
     ${linesHtml}
     ${button({ href: params.ctaUrl, label: options.cta })}
     ${fallbackLink(params.ctaUrl, params.locale)}
-    ${mutedHtml(text(serverMessages(params.locale).email.lifecycle.footerNote), "18px 0 0 0")}
   `;
-  return emailLayout({ locale: params.locale, subject: options.subject, preheader: options.preheader, body, unsubscribeUrl: params.unsubscribeUrl });
+  return emailLayout({
+    locale: params.locale,
+    subject: options.subject,
+    preheader: options.preheader,
+    body,
+    unsubscribeUrl: params.unsubscribeUrl,
+  });
 }
 
 /** A bold lead-in and the rest of the paragraph, both escaped. */
 function leadLine(line: LeadLine): string {
   return `${strong(line.lead)} ${text(line.body)}`;
-}
-
-function feedbackLink(email: string): string {
-  const safe = escapeHtml(email);
-  return `<a href="mailto:${safe}" class="email-link" style="color:#0d9488;font-weight:600;text-decoration:underline;">${safe}</a>`;
 }
 
 function firstName(displayName: string): string {

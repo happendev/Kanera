@@ -1,3 +1,4 @@
+import { notifyAccountSecurityChange } from "../lib/account-security-notices.js";
 import { dto } from "@kanera/shared";
 import type { Locale } from "@kanera/shared/locales";
 import {
@@ -882,7 +883,9 @@ export async function authRoutes(app: FastifyInstance) {
     try { challenge = readMfaChallenge(body.challengeToken, "user", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
     const credential = await getMfaCredential(challenge);
     if (!credential || credential.enabledAt || !(await verifyMfaCode(credential, body.code, false))) throw unauthorized("invalid verification code");
-    return { status: "recovery_codes_required" as const, recoveryCodes: await enableMfa(credential.id) };
+    const recoveryCodes = await enableMfa(credential.id);
+    await notifyAccountSecurityChange(app.mailer, { userId: challenge.id, event: "mfa_enabled", log: req.log });
+    return { status: "recovery_codes_required" as const, recoveryCodes };
   });
 
   app.post("/auth/mfa/required/enroll/acknowledge", { preHandler: authRateLimit("mfa-enroll") }, async (req, reply) => {
@@ -919,7 +922,9 @@ export async function authRoutes(app: FastifyInstance) {
     const body = dto.mfaEnrollmentConfirmBody.parse(req.body);
     const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
     if (!credential || credential.enabledAt || !(await verifyMfaCode(credential, body.code, false))) throw badRequest("invalid verification code");
-    return { recoveryCodes: await enableMfa(credential.id) };
+    const recoveryCodes = await enableMfa(credential.id);
+    await notifyAccountSecurityChange(app.mailer, { userId: req.auth.sub, event: "mfa_enabled", log: req.log });
+    return { recoveryCodes };
   });
 
   // These actions are password-gated, but they must share login's IP throttle and credential
@@ -929,7 +934,9 @@ export async function authRoutes(app: FastifyInstance) {
     const [user] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
     const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
     if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized();
-    return { recoveryCodes: await regenerateRecoveryCodes(credential.id) };
+    const recoveryCodes = await regenerateRecoveryCodes(credential.id);
+    await notifyAccountSecurityChange(app.mailer, { userId: req.auth.sub, event: "recovery_codes_regenerated", log: req.log });
+    return { recoveryCodes };
   });
 
   app.delete("/auth/mfa", { preHandler: [app.authenticate, authRateLimit("mfa")] }, async (req) => {
@@ -942,6 +949,7 @@ export async function authRoutes(app: FastifyInstance) {
     // host org) mandates MFA — they would only be forced to re-enroll on next login anyway.
     if (!active || await requiresMfaForAccess(req.auth.sub, active.clientId, active.requireMfa)) throw forbidden("MFA is required by your organisation");
     await resetMfa({ kind: "user", id: req.auth.sub });
+    await notifyAccountSecurityChange(app.mailer, { userId: req.auth.sub, event: "mfa_disabled", log: req.log });
     return { ok: true };
   });
 
@@ -1123,6 +1131,9 @@ export async function authRoutes(app: FastifyInstance) {
       if (isUniqueViolation(err)) throw conflict("email already registered");
       throw err;
     }
+    // To the previous address: if someone else made this change, the real owner can no longer read
+    // mail at the new one.
+    await notifyAccountSecurityChange(app.mailer, { userId: req.auth.sub, event: "email_changed", toEmail: me.email, newEmail: body.email, log: req.log });
     return meResponseFor(req.auth.sub, req.auth.cid);
   });
 
@@ -1204,6 +1215,7 @@ export async function authRoutes(app: FastifyInstance) {
         .where(eq(users.id, row.id));
       await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.userId, row.id));
     });
+    await notifyAccountSecurityChange(app.mailer, { userId: row.id, event: "password_changed", log: req.log });
 
     return { ok: true };
   });
@@ -1248,7 +1260,7 @@ export async function authRoutes(app: FastifyInstance) {
     const body = dto.resetPasswordBody.parse(req.body);
     const tokenHash = hashOpaqueToken(body.token);
 
-    await db.transaction(async (tx) => {
+    const userId = await db.transaction(async (tx) => {
       const [reset] = await tx
         .update(passwordResetTokens)
         .set({ usedAt: new Date() })
@@ -1267,7 +1279,9 @@ export async function authRoutes(app: FastifyInstance) {
         .set({ passwordHash: await hashPassword(body.password), updatedAt: new Date() })
         .where(eq(users.id, reset.userId));
       await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.userId, reset.userId));
+      return reset.userId;
     });
+    await notifyAccountSecurityChange(app.mailer, { userId, event: "password_reset", log: req.log });
     return { ok: true };
   });
 }

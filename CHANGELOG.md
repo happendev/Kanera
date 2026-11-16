@@ -8,10 +8,13 @@ All notable changes to Kanera are documented here.
 
 - **Invite people straight onto boards:** an organisation invite can now grant specific boards as Editor or Observer, so the person lands on them when they join, and an invite no longer needs a workspace. Owners and admins can create one from a board's members menu, or, once they've created their first board or workspace, as an optional step in setup that also names the organisation.
 - **Example cards in templates:** boards created from a template start with a few example cards in its lists, so there is something to move and edit straight away. Blank and Hiring Pipeline start empty.
+- **Security emails:** Kanera now emails you when your password is changed or reset, two-factor authentication is turned on or off, recovery codes are regenerated, or your email address changes (sent to the old address). Members are also emailed when an organisation is deleted.
+- **Emailed organisation invites:** add an address when creating an invite in Users and Kanera sends the invite link to it. The link still works however you share it.
 
 ### Changed
 
 - **Shorter signup:** creating an account asks only for your name, email and password. Your organisation starts as "Private" and can be renamed in settings, and the theme follows your device until you pick one.
+- **Clearer emails:** subjects name the card or person, card emails have an Open card button, footers say why you got the email, and every email includes a plain-text version.
 - On phones, setup keeps its Create board and Continue buttons in view instead of below every template.
 
 ### Fixed

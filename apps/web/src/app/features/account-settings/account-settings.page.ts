@@ -322,6 +322,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   });
   readonly inviteOrgRole = signal<"member" | "admin">("member");
   readonly inviteExpiresInDays = signal<number | null>(7);
+  /** Optional: when filled, the API also emails the invite link to this address. */
+  readonly inviteEmail = signal("");
+  /** The address the last created invite was emailed to, for the confirmation under the form. */
+  readonly inviteSentTo = signal<string | null>(null);
   readonly inviteWorkspaces = signal<InviteWorkspaceSelection[]>([]);
   // Workspace membership alone opens no board, so the invite can also name the boards the person
   // will work on. Admin invites skip this: organisation admins already open every board.
@@ -477,7 +481,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly isHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "hosted");
   // Lifecycle emails are a hosted-only sweep addressed to organisation owners, so the opt-out is
   // shown only to the people who can receive them.
-  readonly lifecycleEmailAvailable = computed(() => this.isHosted() && this.auth.isOrgOwner());
+  // Owners get the lifecycle sweep; admins can get the abandoned-checkout follow-up after starting a
+  // checkout, so both need the switch the email's footer points to.
+  readonly lifecycleEmailAvailable = computed(() => this.isHosted() && this.auth.isOrgAdmin());
   readonly isSelfHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "self_hosted");
   // Plan/trial state for the hosted-mode Account section. Derived from the org-wide entitlements on
   // /me; the actual purchase + upgrade flow will live in this section later.
@@ -1571,8 +1577,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.inviteBusy.set(true);
     try {
       const orgRole = this.inviteOrgRole();
+      const email = this.inviteEmail().trim();
       const body = {
         orgRole,
+        ...(email ? { email } : {}),
         expiresInDays: this.inviteExpiresInDays(),
         workspaces: this.inviteWorkspaces()
           .filter((w) => w.selected)
@@ -1584,6 +1592,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       const res = await this.api.post<{ id: string; token: string }>("/clients/me/invites", body);
       const inviteUrl = `${location.origin}/signup?invite=${res.token}`;
       this.createdInviteUrl.set(inviteUrl);
+      this.inviteSentTo.set(email || null);
+      this.inviteEmail.set("");
       this.inviteCopied.set(false);
       await navigator.clipboard.writeText(inviteUrl).then(() => this.inviteCopied.set(true)).catch(() => { });
       this.inviteWorkspaces.update((rows) => rows.map((r) => ({ ...r, selected: false })));
