@@ -29,6 +29,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [billing-realtime](billing-realtime.spec.ts) | Committed plan conversions updating live navigation through separate processes; rolled-back conversions emitting nothing. |
 | [planning-mounting](planning-mounting.spec.ts) | Calendar panel measurement, crowded-day expansion and drag/drop; dependency chain windowing, scroll restoration, keyboard focus and phone Steps. |
 | [board](board.spec.ts) | Card persistence, board and workspace-list fanout, reload convergence, and late cards beyond the lane render cap. |
+| [board-invite-link](board-invite-link.spec.ts) | A board-only owner creating an invite link from the board members menu (phone and desktop), the newcomer signing up onto the board, and the open roster updating live. |
 | [board-overview](board-overview.spec.ts) | Exact counts, inactivity preferences, completed-card exclusion, filter drill-downs and phone access. |
 | [card-dependencies](card-dependencies.spec.ts) | Dependency editing, blocked completion, cross-board fanout, archive/restore, notifications, ready automations, and relationship search. |
 | [card-detail-layout](card-detail-layout.spec.ts) | Reachable drawer/editor controls, overflow, title/close separation and picker placement in desktop panel/modal and phone layouts. |
@@ -56,6 +57,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [i18n](i18n.spec.ts) | Persisted account/chat languages, translated dates/errors/import warnings, request language headers, and localized PWA metadata. |
 | [in-progress-alert](in-progress-alert.spec.ts) | Age alerts clearing live, imported clocks, progress filters, and searchable/persisted working-hours time zones. |
 | [in-progress-lists](in-progress-lists.spec.ts) | List flagging and moves updating clocks live; organisation/board switches stopping, preserving, and restoring tracking across views. |
+| [invite-board-access](invite-board-access.spec.ts) | A standalone-board owner with no workspace creating an invite that grants the board, the newcomer signing up onto it, and the owner's open roster updating live. |
 | [keyboard-shortcuts](keyboard-shortcuts.spec.ts) | Dialog focus containment, title focus, input-safe navigation sequences, and drawer-scoped shortcuts. |
 | [lane-insert](lane-insert.spec.ts) | Card/separator insertion anchors, precise live ordering, reload persistence, and tied positions across boards in My Cards. |
 | [lightbox-touch](lightbox-touch.spec.ts) | Real multi-touch pinch and double-tap zoom without backdrop dismissal. |

@@ -100,6 +100,7 @@ export const ERROR_MESSAGES = [
   "board membership not found",
   "board mirror not found",
   "board not found",
+  "board not in your organisation",
   "board not in same workspace",
   "board ordering anchor not found",
   "boardId is required",
@@ -151,6 +152,7 @@ export const ERROR_MESSAGES = [
   "delivery not found",
   "dependencies are disabled for this workspace",
   "destination credentials are required",
+  "duplicate board in invite",
   "email already registered",
   "email not found",
   "enable the destination before sending a test",
@@ -256,6 +258,7 @@ export const ERROR_MESSAGES = [
   "only user sessions can delete an organisation",
   "option not found",
   "options are only valid for select fields",
+  "organisation admins already have access to every board",
   "organisation is unavailable for billing",
   "organisation membership is not active",
   "organisation membership not found",
@@ -457,6 +460,13 @@ export const ERROR_MESSAGES = [
   "remindAt must be within {days} days",
   "this attachment has no {variant} image",
   "work-done history is limited to the last {days} days",
+  "This sign-in has expired. Start again.",
+  "This sign-in can't create an account.",
+  "This sign-in can't be linked to your account.",
+  "Set a password or connect another sign-in method before removing this one.",
+  "confirm with your current password",
+  "sign-in provider not available",
+  "sign-in method not found",
 ] as const;
 
 export type ErrorMessageKey = (typeof ERROR_MESSAGES)[number];

@@ -1,9 +1,11 @@
 import type { Locale } from "@kanera/shared/locales";
 import { serverMessages } from "../i18n/messages/index.js";
-import { cardSummary, emailLayout, heading, paragraph, quoteBlock } from "./layout.js";
+import { cardBlock, emailLayout, heading, paragraph, quoteBlock } from "./layout.js";
 
 export interface ReactionAddedEmailParams {
   locale: Locale;
+  /** Added when rendered: the notification settings page the footer links to. */
+  notificationSettingsUrl?: string;
   displayName: string;
   actorName: string;
   cardTitle: string;
@@ -15,7 +17,7 @@ export interface ReactionAddedEmailParams {
   fileName: string | null;
 }
 
-export function reactionAddedEmail({ locale, displayName, actorName, cardTitle, boardName, cardUrl, commentExcerpt, fileName }: ReactionAddedEmailParams): string {
+export function reactionAddedEmail({ locale, notificationSettingsUrl, displayName, actorName, cardTitle, boardName, cardUrl, commentExcerpt, fileName }: ReactionAddedEmailParams): string {
   const m = serverMessages(locale).email.reactionAdded;
   const firstName = displayName.split(" ")[0] ?? displayName;
   const intro = fileName
@@ -23,13 +25,14 @@ export function reactionAddedEmail({ locale, displayName, actorName, cardTitle, 
     : m.introComment({ firstName, actor: actorName, card: cardTitle, board: boardName });
   return emailLayout({
     locale,
+    manageUrl: notificationSettingsUrl,
     subject: m.subject({ actor: actorName, card: cardTitle }),
     preheader: m.preheader({ actor: actorName, card: cardTitle, board: boardName }),
     body: `
       ${heading(m.heading)}
-      ${paragraph(intro, "0 0 20px 0")}
+      ${paragraph(intro, "0 0 16px 0")}
       ${commentExcerpt ? quoteBlock(commentExcerpt) : ""}
-      ${cardSummary({ title: cardTitle, subtitle: boardName, href: cardUrl })}
+      ${cardBlock({ title: cardTitle, subtitle: boardName, href: cardUrl, locale })}
     `,
   });
 }

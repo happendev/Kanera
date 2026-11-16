@@ -122,7 +122,7 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     .where(eq(users.email, firstBody.primaryEmail))
     .limit(1);
   assert.ok(owner);
-  assert.equal(await verifyPassword(owner.passwordHash, demoPassword), true);
+  assert.equal(await verifyPassword(owner.passwordHash!, demoPassword), true);
 
   const ownerStorage = await getStorageForClient(owner.clientId);
   const avatarKey = storageKeyFromMediaUrl(owner.avatarUrl, owner.clientId);
@@ -220,7 +220,7 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     .limit(1);
   assert.ok(newOwner);
   assert.equal(newOwner.passwordHash, owner.passwordHash, "blank reset reuses the existing one-way credential hash");
-  assert.equal(await verifyPassword(newOwner.passwordHash, demoPassword), true);
+  assert.equal(await verifyPassword(newOwner.passwordHash!, demoPassword), true);
   assert.equal(await db.$count(adminAuditLogs, eq(adminAuditLogs.action, "demo.reset.started")), 2);
   assert.equal(await db.$count(adminAuditLogs, eq(adminAuditLogs.action, "demo.reset")), 2);
 });

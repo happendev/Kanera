@@ -126,7 +126,7 @@ async function resetDemo(req: FastifyRequest, password?: string): Promise<AdminD
       .from(users)
       .where(eq(users.email, DEMO_SEED_PRIMARY_EMAIL))
       .limit(1);
-    if (!password && !existingCredential) {
+    if (!password && !existingCredential?.passwordHash) {
       // Resolve the reusable credential before audit/storage/database mutation: a blank first-time
       // reset must fail without partially deleting or creating any demo state.
       throw badRequest("enter a demo password because no existing demo password is available");
@@ -182,7 +182,7 @@ async function resetDemo(req: FastifyRequest, password?: string): Promise<AdminD
       requireBlankDatabase: false,
       referenceDate,
       password,
-      passwordHash: password ? undefined : existingCredential!.passwordHash,
+      passwordHash: password ? undefined : existingCredential!.passwordHash!,
       paid: true,
       analyticsExcluded: true,
     });

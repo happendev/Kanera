@@ -5,6 +5,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
+import { formatDate } from "../../lib/i18n/format.js";
 import { recipientLocale } from "../../lib/i18n/request-locale.js";
 import { serverMessages } from "../../lib/i18n/messages/index.js";
 import type { Mailer } from "../../lib/mailer.js";
@@ -380,6 +381,7 @@ export async function emitInviteWorkspaceGuest({ auth, mailer, locale, result }:
       orgName: boardRow.clientName,
       invitedByName: result.inviterName ?? serverMessages(locale).common.fallbackInviterName,
       acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(result.acceptToken)}`,
+      expiresAtLabel: result.response.invite.expiresAt ? formatDate(locale, result.response.invite.expiresAt, { dateStyle: "long", timeZone: "UTC" }) : null,
     });
     if (result.kind === "invitationCreated") {
       await captureWorkspaceInvitationCreated({

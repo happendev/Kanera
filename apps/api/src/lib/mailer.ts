@@ -44,11 +44,20 @@ import {
   weeklyAdminRecapEmail,
   importCompletedEmail,
   lifecycleActiveCheckinEmail,
+  lifecycleCheckoutAbandonedEmail,
   lifecycleEarlySuccessEmail,
   lifecycleEmailSubject,
   lifecycleInactiveEmail,
   lifecycleInviteTeamEmail,
   lifecycleNoBoardEmail,
+  accountSecurityEmail,
+  accountSecurityEmailSubject,
+  organisationDeletedEmail,
+  orgInviteEmail,
+  orgInviteEmailSubject,
+  type AccountSecurityEmailParams,
+  type OrganisationDeletedEmailParams,
+  type OrgInviteEmailParams,
   type AdminInviteEmailParams,
   type ImportCompletedEmailParams,
   type PasswordResetEmailParams,
@@ -75,6 +84,7 @@ import {
 } from "./email-templates/index.js";
 import { serverMessages } from "./i18n/messages/index.js";
 import { recipientLocale } from "./i18n/request-locale.js";
+import { notificationUnsubscribeToken } from "./notification-unsubscribe.js";
 import { sendEmail, SmtpReplyError, type SendEmailOptions } from "./smtp.js";
 
 /**
@@ -119,6 +129,9 @@ export interface Mailer {
   sendImportCompleted(to: string, params: ImportCompletedEmailParams): Promise<EmailQueue | null>;
   sendStorageWarning(to: string, params: StorageWarningEmailParams): Promise<EmailQueue | null>;
   sendLifecycle(to: string, type: LifecycleEmailQueueType, params: LifecycleEmailParams): Promise<EmailQueue | null>;
+  sendAccountSecurity(to: string, params: AccountSecurityEmailParams): Promise<EmailQueue | null>;
+  sendOrganisationDeleted(to: string, params: OrganisationDeletedEmailParams): Promise<EmailQueue | null>;
+  sendOrgInvite(to: string, params: OrgInviteEmailParams): Promise<EmailQueue | null>;
 }
 
 export interface MailerDeps {
@@ -201,11 +214,11 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
         .limit(1);
       if (existing) return null;
 
-      return queueEmail(to, mail(params.locale).dailyDigest.subject, "daily_digest", params);
+      return queueEmail(to, mail(params.locale).dailyDigest.subject({ date: params.localDateLabel }), "daily_digest", params);
     },
 
     async sendCardAssigned(to, params) {
-      return queueEmail(to, mail(params.locale).cardAssigned.subject, "card_assigned", params);
+      return queueEmail(to, mail(params.locale).cardAssigned.subject({ card: params.cardTitle }), "card_assigned", params);
     },
 
     async sendCardCommentAdded(to, params) {
@@ -213,7 +226,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
 
     async sendCommentMentioned(to, params) {
-      return queueEmail(to, mail(params.locale).commentMentioned.subject({ card: params.cardTitle }), "comment_mentioned", params);
+      return queueEmail(to, mail(params.locale).commentMentioned.subject({ actor: params.actorName, card: params.cardTitle }), "comment_mentioned", params);
     },
 
     async sendReactionAdded(to, params) {
@@ -236,19 +249,23 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
 
     async sendCardOverdue(to, params) {
-      return queueEmail(to, mail(params.locale).cardOverdue.subject, "card_overdue", params);
+      return queueEmail(to, mail(params.locale).cardOverdue.subject({ card: params.cardTitle }), "card_overdue", params);
     },
 
     async sendCardReminder(to, params) {
-      return queueEmail(to, mail(params.locale).cardReminder.subject, "card_reminder", params);
+      return queueEmail(to, mail(params.locale).cardReminder.subject({ card: params.cardTitle }), "card_reminder", params);
     },
 
     async sendChecklistItemOverdue(to, params) {
-      return queueEmail(to, mail(params.locale).checklistItemOverdue.subject, "checklist_item_overdue", params);
+      return queueEmail(to, mail(params.locale).checklistItemOverdue.subject({ item: params.itemText }), "checklist_item_overdue", params);
     },
 
     async sendInviteAccepted(to, params) {
-      return queueEmail(to, mail(params.locale).inviteAccepted.subject, "invite_accepted", params);
+      const m = mail(params.locale).inviteAccepted;
+      const subject = params.context === "board"
+        ? m.board.subject({ name: params.acceptedByName, board: params.boardName })
+        : m.org.subject({ name: params.acceptedByName, org: params.orgName });
+      return queueEmail(to, subject, "invite_accepted", params);
     },
 
     async sendBoardInvite(to, params) {
@@ -326,6 +343,18 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     async sendLifecycle(to, type, params) {
       return queueEmail(to, lifecycleEmailSubject(type, params), type, params);
     },
+
+    async sendAccountSecurity(to, params) {
+      return queueEmail(to, accountSecurityEmailSubject(params), "account_security", params);
+    },
+
+    async sendOrganisationDeleted(to, params) {
+      return queueEmail(to, mail(params.locale).organisationDeleted.subject({ org: params.orgName }), "organisation_deleted", params);
+    },
+
+    async sendOrgInvite(to, params) {
+      return queueEmail(to, orgInviteEmailSubject(params), "org_invite", params);
+    },
   };
 
   function suppressReservedRecipient(to: string): boolean {
@@ -384,19 +413,46 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
 }
 
 /**
- * Lifecycle emails are optional product mail, so they carry RFC 2369/8058 one-click unsubscribe
- * headers. Mail providers show their own "Unsubscribe" control for these and POST to the API URL
- * directly (no page, no session); the mailto-free HTTPS form is what Gmail and Yahoo require. The
- * web page link stays second for clients that only open URLs. Transactional mail gets no headers.
+ * Card notification mail follows the recipient's notification settings: it is what the email
+ * notification switch turns off, so its footer links there and it carries a one-click unsubscribe
+ * header that flips that switch.
+ */
+const NOTIFICATION_EMAIL_TYPES: ReadonlySet<EmailQueue["type"]> = new Set([
+  "card_assigned",
+  "card_comment_added",
+  "comment_mentioned",
+  "reaction_added",
+  "card_dependency_added",
+  "card_unblocked",
+  "card_due_date_changed",
+  "card_overdue",
+  "card_reminder",
+  "checklist_item_overdue",
+  "daily_digest",
+]);
+
+/**
+ * Lifecycle emails (optional product mail) and card notifications carry RFC 2369/8058 one-click
+ * unsubscribe headers. Mail providers show their own "Unsubscribe" control for these and POST to the
+ * API URL directly (no page, no session); the mailto-free HTTPS form is what Gmail and Yahoo require.
+ * For lifecycle mail the web page link stays second for clients that only open URLs. Account,
+ * billing, security and invitation mail gets no headers.
  */
 export function emailHeaders(row: EmailQueue): Record<string, string> | undefined {
-  if (!row.type.startsWith("lifecycle_")) return undefined;
-  const pageUrl = (row.data as LifecycleEmailParams).unsubscribeUrl;
-  const token = pageUrl ? new URL(pageUrl).searchParams.get("token") : null;
-  if (!token) return undefined;
+  if (row.type.startsWith("lifecycle_")) {
+    const pageUrl = (row.data as LifecycleEmailParams).unsubscribeUrl;
+    const token = pageUrl ? new URL(pageUrl).searchParams.get("token") : null;
+    if (!token) return undefined;
+    return oneClickHeaders(token, pageUrl);
+  }
+  if (NOTIFICATION_EMAIL_TYPES.has(row.type)) return oneClickHeaders(notificationUnsubscribeToken(row.toEmail), null);
+  return undefined;
+}
+
+function oneClickHeaders(token: string, pageUrl: string | null): Record<string, string> {
   const oneClickUrl = `${env.API_PUBLIC_URL}/api/email/unsubscribe/one-click?token=${encodeURIComponent(token)}`;
   return {
-    "List-Unsubscribe": `<${oneClickUrl}>, <${pageUrl}>`,
+    "List-Unsubscribe": pageUrl ? `<${oneClickUrl}>, <${pageUrl}>` : `<${oneClickUrl}>`,
     "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
   };
 }
@@ -412,7 +468,13 @@ function billing(params: { locale: Locale }) {
 export function renderEmail(row: EmailQueue): string {
   // Rows queued before localisation carry no locale; they render in the source language they were
   // queued in (and their stored subject already is).
-  const data = { ...row.data, locale: recipientLocale(row.data.locale) };
+  const data = {
+    ...row.data,
+    locale: recipientLocale(row.data.locale),
+    // Card notification footers link to the settings that sent them; read at render time so a
+    // changed origin applies to queued rows too. Ignored by every other template.
+    notificationSettingsUrl: `${env.WEB_ORIGIN}/settings/notifications`,
+  };
   switch (row.type) {
     case "admin_invite":
       return adminInviteEmail(data as AdminInviteEmailParams);
@@ -494,6 +556,14 @@ export function renderEmail(row: EmailQueue): string {
       return lifecycleInactiveEmail(data as LifecycleEmailParams);
     case "lifecycle_active_checkin":
       return lifecycleActiveCheckinEmail(data as LifecycleEmailParams);
+    case "lifecycle_checkout_abandoned":
+      return lifecycleCheckoutAbandonedEmail(data as LifecycleEmailParams);
+    case "account_security":
+      return accountSecurityEmail(data as AccountSecurityEmailParams);
+    case "organisation_deleted":
+      return organisationDeletedEmail(data as OrganisationDeletedEmailParams);
+    case "org_invite":
+      return orgInviteEmail(data as OrgInviteEmailParams);
   }
 }
 

@@ -920,6 +920,7 @@ export interface WireInviteSummary {
   createdAt: Date | string;
   createdById: string;
   workspaces: { workspaceId: string; role: "admin" | "member" }[];
+  boards: { boardId: string; role: "editor" | "observer" }[];
 }
 
 export interface ClientToServerEvents {

@@ -63,6 +63,8 @@ export const enUS: Partial<ErrorCatalog> = {
     "users already associated with this organization cannot accept board guest invites",
   "users already in this organisation cannot accept board guest invites":
     "users already in this organization cannot accept board guest invites",
+  "organisation admins already have access to every board": "organization admins already have access to every board",
+  "board not in your organisation": "board not in your organization",
   "workspace not in your organisation":
     "workspace not in your organization",
   "you are already a member of this organisation":

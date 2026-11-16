@@ -151,6 +151,71 @@
       </button>
     </div>
     }
+    @else if (setupKind() === 'invite') {
+    <div class="ob-heading">
+      <h1 i18n>Who works on this with you?</h1>
+      <p i18n>Invite the people you work with now, or skip this and invite them later.</p>
+    </div>
+
+    <div class="ob-fields ob-invite-fields">
+      <div class="ob-field">
+        <label for="ob-org-name" i18n="Form field label">Organisation name</label>
+        <input id="ob-org-name" name="orgName" [value]="orgNameDraft()" (input)="orgNameDraft.set($any($event.target).value); orgNameError.set(null)" [maxLength]="orgNameMaxLength" />
+        <p class="ob-field-hint" i18n>Teammates see this name when you invite them.</p>
+        @if (orgNameError(); as message) {
+        <div class="ob-error ob-field-error" role="alert">
+          <i aria-hidden="true" class="ti ti-alert-circle"></i>
+          <span>{{ message }}</span>
+        </div>
+        }
+      </div>
+
+      <div class="ob-field">
+        <span class="ob-field-label" i18n="Form field label">Invite link</span>
+        <p class="ob-field-hint">{{ inviteScopeHint() }}</p>
+        @if (inviteUrl(); as url) {
+        <div class="ob-invite-link">
+          <input class="ob-invite-url" readonly [value]="url" aria-label="Invite link" i18n-aria-label (focus)="$any($event.target).select()" />
+          <button type="button" class="ghost ob-invite-copy" (click)="copyInviteLink()">
+            <i aria-hidden="true" class="ti" [class.ti-check]="inviteCopied()" [class.ti-copy]="!inviteCopied()"></i>
+            @if (inviteCopied()) {
+            <ng-container i18n="Button state after copying">Copied</ng-container>
+            } @else {
+            <ng-container i18n="Button: copy to clipboard">Copy</ng-container>
+            }
+          </button>
+        </div>
+        } @else {
+        <button type="button" class="ghost ob-invite-create" [disabled]="inviteBusy()" (click)="createInviteLink()">
+          @if (inviteBusy()) {
+          <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n="Button label while an invite link is being created">Creating…</ng-container>
+          } @else {
+          <i aria-hidden="true" class="ti ti-link"></i> <ng-container i18n="Button">Create invite link</ng-container>
+          }
+        </button>
+        }
+        @if (inviteError(); as message) {
+        <div class="ob-error ob-field-error" role="alert">
+          <i aria-hidden="true" class="ti ti-alert-circle"></i>
+          <span>{{ message }}</span>
+        </div>
+        }
+      </div>
+    </div>
+
+    <div class="ob-footer">
+      <button class="ghost" [disabled]="leavingInvite()" (click)="skipInvite()" i18n="Button: leave the invite step without inviting anyone">Skip for now</button>
+      <button [disabled]="leavingInvite() || inviteBusy()" (click)="continueFromInvite()">
+        @if (leavingInvite()) {
+        <i aria-hidden="true" class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n="Button label while the organisation name is saved">Saving…</ng-container>
+        } @else if (created()?.boardId) {
+        <ng-container i18n="Button: open the board setup just created">Go to board</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i>
+        } @else {
+        <ng-container i18n="Button: next onboarding step">Continue</ng-container> <i aria-hidden="true" class="ti ti-arrow-right"></i>
+        }
+      </button>
+    </div>
+    }
     @else {
 
     <!-- Step 1: Workspace model -->

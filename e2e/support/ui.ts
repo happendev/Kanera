@@ -8,14 +8,21 @@ import { TEST_PASSWORD, webOrigin } from "./env";
 export async function signUp(page: Page, name: string): Promise<string> {
   const email = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@kanera.test`;
   await page.goto("/signup");
-  await page.locator("#cname").fill(name);
   await page.locator("#dn").fill(name);
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(TEST_PASSWORD);
-  await page.locator("#confirm-password").fill(TEST_PASSWORD);
   await page.locator("form").getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/onboarding/);
   return email;
+}
+
+/**
+ * Onboarding closes on a "Who works on this with you?" step for organisation admins once the board
+ * or workspace exists. Leaves it without inviting anyone, onto the board just created.
+ */
+export async function skipOnboardingInvite(page: Page) {
+  await expect(page.getByRole("heading", { name: "Who works on this with you?" })).toBeVisible();
+  await page.locator(".ob-footer").getByRole("button", { name: "Skip for now" }).click();
 }
 
 /** The sidebar href (`/b/:id`) of a board the signed-in user can see. */

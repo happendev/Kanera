@@ -24,7 +24,7 @@ export async function clientRoutes(app: FastifyInstance) {
     if (req.auth.authKind !== "user") throw badRequest("only user sessions can create an organisation");
     const body = dto.createClientBody.parse(req.body);
     const clientId = await createClient({ auth: req.auth, body });
-    return issueUserSession(app, req.auth.sub, reply, clientId);
+    return issueUserSession(app, req.auth.sub, reply, clientId, undefined, req.auth.amr);
   });
 
   app.get("/clients/me", async (req) => {
@@ -65,13 +65,14 @@ export async function clientRoutes(app: FastifyInstance) {
       auth: req.auth,
       body,
       log: req.log,
+      mailer: app.mailer,
       request: { id: req.id, method: req.method, url: req.url },
     });
     if (!nextContext.active) {
       reply.clearCookie(REFRESH_COOKIE, refreshCookieOptions());
       return reply.status(202).send({ status: "logged_out" });
     }
-    const session = await issueUserSession(app, req.auth.sub, reply, nextContext.active.clientId, nextContext);
+    const session = await issueUserSession(app, req.auth.sub, reply, nextContext.active.clientId, nextContext, req.auth.amr);
     return reply.status(202).send(session);
   });
 

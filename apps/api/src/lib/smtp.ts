@@ -1,3 +1,4 @@
+import { htmlToText } from "./email-text.js";
 import type { Locale } from "@kanera/shared/locales";
 import type { SmtpConfig } from "@kanera/shared/schema";
 import crypto from "node:crypto";
@@ -103,7 +104,9 @@ function buildTextMessage({ from, to, subject, text }: { from: string; to: strin
   ].join("\r\n");
 }
 
+/** HTML mail goes out as multipart/alternative with a plain-text part derived from the HTML. */
 function buildMimeMessage({ from, to, subject, html, headers }: { from: string; to: string; subject: string; html: string; headers?: Record<string, string> }): string {
+  const boundary = `kanera-${crypto.randomUUID()}`;
   return [
     `From: ${from}`,
     `To: ${to}`,
@@ -112,10 +115,20 @@ function buildMimeMessage({ from, to, subject, html, headers }: { from: string; 
     `Message-ID: <${crypto.randomUUID()}@${messageIdDomain(from)}>`,
     ...extraHeaderLines(headers),
     "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    encodeBase64Body(htmlToText(html)),
+    `--${boundary}`,
     "Content-Type: text/html; charset=utf-8",
     "Content-Transfer-Encoding: base64",
     "",
     encodeBase64Body(html),
+    `--${boundary}--`,
+    "",
   ].join("\r\n");
 }
 

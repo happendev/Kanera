@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { chmod, cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,6 +8,20 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const scriptPath = fileURLToPath(new URL("./release.mjs", import.meta.url));
+const releaseNotesScriptPath = fileURLToPath(new URL("./release-notes.mjs", import.meta.url));
+const unreleasedNote = `---
+title: A test release
+summary: One sentence about the test release.
+---
+
+The lead paragraph.
+
+![A test screenshot](media/unreleased/shot.jpg "medium")
+
+## New features
+
+- [Boards] Something new
+`;
 const releaseManifestPaths = [
   "package.json",
   "apps/api/package.json",
@@ -28,6 +43,10 @@ async function createFixture() {
   await mkdir(path.join(repo, "scripts"), { recursive: true });
   await mkdir(bin);
   await cp(scriptPath, path.join(repo, "scripts/release.mjs"));
+  await cp(releaseNotesScriptPath, path.join(repo, "scripts/release-notes.mjs"));
+  await mkdir(path.join(repo, "release-notes/media/unreleased"), { recursive: true });
+  await writeFile(path.join(repo, "release-notes/unreleased.md"), unreleasedNote);
+  await writeFile(path.join(repo, "release-notes/media/unreleased/shot.jpg"), "jpeg");
 
   for (const manifestPath of releaseManifestPaths) {
     const fullPath = path.join(repo, manifestPath);
@@ -82,6 +101,9 @@ async function assertRolledBack(fixture, initialHead, result) {
   assert.equal(manifest.version, "1.2.3");
   const clientSource = await readFile(path.join(fixture.repo, "packages/sdk/src/client.ts"), "utf8");
   assert.match(clientSource, /const SDK_VERSION = "1\.2\.3";/);
+  assert.equal(await readFile(path.join(fixture.repo, "release-notes/unreleased.md"), "utf8"), unreleasedNote);
+  assert.ok(!existsSync(path.join(fixture.repo, "release-notes/1.2.4.md")));
+  assert.ok(existsSync(path.join(fixture.repo, "release-notes/media/unreleased/shot.jpg")));
 }
 
 test("rolls back version and lockfile changes when validation fails", async (t) => {
@@ -131,4 +153,33 @@ test("leaves independently versioned CLI and MCP manifests unchanged", async (t)
   assert.match(clientSource, /const SDK_VERSION = "1\.2\.4";/);
   // Only the version constant changes; the rest of the file is untouched.
   assert.match(clientSource, /const before = 1;\nconst SDK_VERSION = "1\.2\.4";\nconst after = 2;\n/);
+});
+
+test("publishes the unreleased note under the new version", async (t) => {
+  const fixture = await createFixture();
+  t.after(() => rm(fixture.root, { recursive: true, force: true }));
+  const pnpm = "#!/bin/sh\nif [ \"$1\" = \"install\" ]; then printf \"changed\\n\" > pnpm-lock.yaml; fi\nexit 0\n";
+  const result = await runRelease(fixture, pnpm);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(git(fixture.repo, ["status", "--porcelain"]), "");
+  assert.ok(!existsSync(path.join(fixture.repo, "release-notes/unreleased.md")));
+  const note = await readFile(path.join(fixture.repo, "release-notes/1.2.4.md"), "utf8");
+  assert.match(note, /^---\nversion: 1\.2\.4\ndate: \d{4}-\d{2}-\d{2}\ntitle: A test release\n/);
+  assert.match(note, /\(media\/1\.2\.4\/shot\.jpg "medium"\)/);
+  assert.ok(existsSync(path.join(fixture.repo, "release-notes/media/1.2.4/shot.jpg")));
+  assert.match(git(fixture.repo, ["show", "--name-only", "--format=", "HEAD"]), /release-notes\/1\.2\.4\.md/);
+});
+
+test("refuses to release without valid release notes", async (t) => {
+  const fixture = await createFixture();
+  t.after(() => rm(fixture.root, { recursive: true, force: true }));
+  git(fixture.repo, ["rm", "-q", "release-notes/unreleased.md"]);
+  git(fixture.repo, ["commit", "-q", "-m", "drop notes"]);
+  const head = git(fixture.repo, ["rev-parse", "HEAD"]);
+  const result = await runRelease(fixture, "#!/bin/sh\nexit 0\n");
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /release-notes\/unreleased\.md is missing/);
+  assert.equal(git(fixture.repo, ["rev-parse", "HEAD"]), head);
 });

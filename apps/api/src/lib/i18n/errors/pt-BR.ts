@@ -761,6 +761,9 @@ export const ptBR: ErrorCatalog = {
     "O nome do espaço de trabalho não corresponde.",
   "workspace not found":
     "Espaço de trabalho não encontrado.",
+  "organisation admins already have access to every board": "Os administradores da organização já têm acesso a todos os quadros.",
+  "duplicate board in invite": "Há um quadro duplicado no convite.",
+  "board not in your organisation": "O quadro não está na sua organização.",
   "workspace not in your organisation":
     "O espaço de trabalho não está na sua organização.",
   "write-capable credential required":
@@ -898,4 +901,18 @@ export const ptBR: ErrorCatalog = {
   "cards must be in the same workspace to be related": "Os cartões precisam estar no mesmo espaço de trabalho para serem relacionados.",
   "relation not found": "Relação não encontrada.",
   "this relation would create a blocking cycle": "Esta relação criaria um ciclo de bloqueio.",
+  "This sign-in has expired. Start again.":
+    "Esta entrada expirou. Comece novamente.",
+  "This sign-in can't create an account.":
+    "Esta entrada não pode criar uma conta.",
+  "This sign-in can't be linked to your account.":
+    "Esta entrada não pode ser vinculada à sua conta.",
+  "Set a password or connect another sign-in method before removing this one.":
+    "Defina uma senha ou conecte outro método de entrada antes de remover este.",
+  "confirm with your current password":
+    "Confirme com sua senha atual.",
+  "sign-in provider not available":
+    "O provedor de entrada não está disponível.",
+  "sign-in method not found":
+    "Método de entrada não encontrado.",
 };

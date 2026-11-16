@@ -85,3 +85,9 @@ export function isMfaEnrollmentRequired(value: unknown): value is MfaEnrollmentR
   const response = value as Partial<MfaEnrollmentRequiredResponse>;
   return response.status === "mfa_enrollment_required" && typeof response.challengeToken === "string";
 }
+
+/**
+ * Navigation-state key for a provider sign-in that still needs the account's own second factor. The
+ * provider callback page hands the challenge to the login page, which owns the code entry.
+ */
+export const MFA_VERIFY_HANDOFF_KEY = "mfaVerifyChallengeToken";

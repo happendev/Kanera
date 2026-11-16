@@ -17,6 +17,7 @@ hosted application itself is documented in [DEPLOY.md](DEPLOY.md).
 | Kanera Agent Skill | GitHub and `www.kanera.app` | source snapshot | merge this repo, then deploy Kanera-site |
 | Published Claude connector | Claude connector directory | live MCP server | deploy MCP; update the directory listing only when its public metadata or connection changes |
 | Kanera docs and agent discovery | `www.kanera.app` | site commit | build and deploy the sibling Kanera-site repository |
+| Release notes and public changelog | `release-notes/` here, `www.kanera.app/changelog` | workspace version | `pnpm release`, then `npm run changelog:sync` in Kanera-site |
 
 ## Self-host image security checks
 
@@ -89,6 +90,12 @@ fails in CI rather than on an integrator's machine.
 
 ## Cutting a release
 
+Every release needs release notes. Keep `release-notes/unreleased.md` (and any screenshots in
+`release-notes/media/unreleased/`) up to date as work lands, following
+[release-notes/README.md](release-notes/README.md), and check it with `pnpm release-notes:check`.
+Those notes become the GitHub release description and the public changelog at
+<https://www.kanera.app/changelog>; `CHANGELOG.md` remains the full technical record.
+
 Releases run from `main` with a clean tree:
 
 ```bash
@@ -97,21 +104,29 @@ pnpm release
 
 The script:
 
-1. Prompts for major/minor/patch (or a manual version).
-2. Rewrites the version in the app, SDK, and shared workspace manifests **and** the `SDK_VERSION` User-Agent constant
+1. Refuses to start unless `release-notes/unreleased.md` exists and is valid.
+2. Prompts for major/minor/patch (or a manual version).
+3. Rewrites the version in the app, SDK, and shared workspace manifests **and** the `SDK_VERSION` User-Agent constant
    in `packages/sdk/src/client.ts` — that constant is hardcoded because the SDK also runs on
    browsers and Workers, and the SDK package test fails if it ever drifts from `package.json`.
-3. Runs `pnpm install --lockfile-only`, `pnpm lint`, and `pnpm test`, rolling everything back on
+4. Publishes the draft as `release-notes/<version>.md` with today's date, moving its screenshots
+   to `release-notes/media/<version>/`.
+5. Runs `pnpm install --lockfile-only`, `pnpm lint`, and `pnpm test`, rolling everything back on
    failure.
-4. Commits, and optionally creates the annotated `vX.Y.Z` tag.
+6. Commits, and optionally creates the annotated `vX.Y.Z` tag.
 
 Then push and create the GitHub release:
 
 ```bash
 git push origin main
 git push origin vX.Y.Z
-gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes --verify-tag
+node scripts/release-notes.mjs github X.Y.Z > /tmp/kanera-vX.Y.Z.md
+gh release create vX.Y.Z --title "Kanera vX.Y.Z" --notes-file /tmp/kanera-vX.Y.Z.md --verify-tag
 ```
+
+The description's screenshots load from the pushed tag, so push the tag first. Then publish the
+changelog: in Kanera-site run `npm run changelog:sync`, commit the generated changes, and deploy.
+Start the next release with a fresh `release-notes/unreleased.md`.
 
 Publishing the release starts `publish-images.yml`, which builds `kanera-api`, `kanera-web`,
 `kanera-mcp`, and `kanera-db-backup` for amd64 and arm64, tags them `X.Y.Z`, `X.Y`, and `X`, and

@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import process from "node:process";
 import { createInterface } from "node:readline/promises";
+import { loadReleaseNotes, publishUnreleased } from "./release-notes.mjs";
 
 const manifestPaths = [
   "package.json",
@@ -211,6 +212,18 @@ async function updateManifestVersions(version) {
   await writeFile(sdkVersionPath, clientSource.replace(sdkVersionPattern, `const SDK_VERSION = "${version}";`));
 }
 
+// The public changelog and the GitHub release are built from release-notes/, so a release
+// without a valid draft would publish nothing. Check it before asking any questions.
+async function assertReleaseNotesReady() {
+  const { unreleased, errors } = await loadReleaseNotes(process.cwd());
+  if (!unreleased) {
+    fail("release-notes/unreleased.md is missing. Write this release's notes first; see release-notes/README.md.");
+  }
+  if (errors.length) {
+    fail(`release notes are invalid:\n${errors.join("\n")}`);
+  }
+}
+
 function rollbackRelease(initialHead, tagName, tagCreated) {
   console.error("\nRelease failed. Rolling back release changes...");
   const failures = [];
@@ -240,6 +253,7 @@ async function main() {
 
   await assertManifestVersionsMatch(currentVersion);
   assertOnMainBranch();
+  await assertReleaseNotesReady();
   const asker = await createAsker();
   let nextVersion;
   let tagName;
@@ -268,6 +282,9 @@ async function main() {
 
   try {
     await updateManifestVersions(nextVersion);
+    const releaseDate = new Date().toISOString().slice(0, 10);
+    const releaseNotePaths = await publishUnreleased(process.cwd(), nextVersion, releaseDate);
+    run("git", ["add", "--all", "--", ...releaseNotePaths]);
 
     run("pnpm", ["install", "--lockfile-only"]);
     run("pnpm", ["lint"]);
@@ -285,7 +302,9 @@ async function main() {
     console.log("git push origin main");
     if (shouldCreateTag) {
       console.log(`git push origin ${tagName}`);
-      console.log(`gh release create ${tagName} --title "${tagName}" --generate-notes --verify-tag`);
+      console.log(`node scripts/release-notes.mjs github ${nextVersion} > /tmp/kanera-${tagName}.md`);
+      console.log(`gh release create ${tagName} --title "Kanera ${tagName}" --notes-file /tmp/kanera-${tagName}.md --verify-tag`);
+      console.log("\nThen publish the changelog: in Kanera-site run npm run changelog:sync, commit and deploy.");
       console.log("\nPublishing the release triggers .github/workflows/publish-npm.yml, which");
       console.log("publishes @kanera/cli and @kanera/sdk to npm. See RELEASING.md.");
     }

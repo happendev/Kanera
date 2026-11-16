@@ -4,11 +4,12 @@ import { provideRouter, Router } from "@angular/router";
 import type { Board, Workspace } from "@kanera/shared/schema";
 import { DEFAULT_WORKSPACE_TEMPLATE } from "@kanera/shared/workspace-templates";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ApiError } from "../../core/api/api.client";
 import type { AuthUser } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
 import { isOnboardingSkipped } from "../../core/auth/onboarding-skip";
 import { SocketService } from "../../core/realtime/socket.service";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { OnboardingPage } from "./onboarding.page";
 
 function authUser(overrides: Partial<AuthUser> = {}): AuthUser {
@@ -94,7 +95,9 @@ describe("OnboardingPage", () => {
     maxBoards?: ReturnType<typeof signal<number | null>>;
     get?: ReturnType<typeof vi.fn>;
     post?: ReturnType<typeof vi.fn>;
+    patch?: ReturnType<typeof vi.fn>;
     navigateByUrl?: ReturnType<typeof vi.fn>;
+    isOrgAdmin?: boolean;
   } = {}) {
     const user = signal(overrides.user ?? authUser());
     const maxBoards = overrides.maxBoards ?? signal<number | null>(null);
@@ -102,19 +105,21 @@ describe("OnboardingPage", () => {
     const updateUser = vi.fn((mutator: (current: AuthUser) => AuthUser) => user.set(mutator(user()!)));
     const get = overrides.get ?? vi.fn(() => Promise.resolve({ groups: [] }));
     const post = overrides.post ?? vi.fn(() => Promise.resolve({ ...workspace(), initialBoard: starterList() }));
+    const patch = overrides.patch ?? vi.fn((_path: string, body: { name: string }) => Promise.resolve({ name: body.name }));
     const navigateByUrl = overrides.navigateByUrl ?? vi.fn(() => Promise.resolve(true));
+    const upgradePromptOpen = vi.fn(() => Promise.resolve());
 
     await TestBed.configureTestingModule({
       imports: [OnboardingPage],
       providers: [
         provideZonelessChangeDetection(),
         provideRouter([]),
-        { provide: ApiClient, useValue: { get, post } },
+        { provide: ApiClient, useValue: { get, post, patch } },
         {
           provide: AuthService,
           useValue: {
             user,
-            isOrgAdmin: signal(true),
+            isOrgAdmin: signal(overrides.isOrgAdmin ?? true),
             maxBoards,
             refresh,
             updateUser,
@@ -122,11 +127,12 @@ describe("OnboardingPage", () => {
         },
         { provide: Router, useValue: { navigateByUrl } },
         { provide: SocketService, useValue: { connect: vi.fn() } },
+        { provide: UpgradePromptService, useValue: { open: upgradePromptOpen } },
       ],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(OnboardingPage);
-    return { fixture, component: fixture.componentInstance, get, post, navigateByUrl, refresh, user, maxBoards };
+    return { fixture, component: fixture.componentInstance, get, post, patch, navigateByUrl, refresh, user, maxBoards, upgradePromptOpen };
   }
 
   it("selects the Development Team template by default", async () => {
@@ -349,6 +355,10 @@ describe("OnboardingPage", () => {
       cards: [],
       automations: [],
     });
+    // Without a board the closing invite step grants the workspace alone and continues Home.
+    expect(component.setupKind()).toBe("invite");
+    expect(component.inviteScopeHint()).toContain("become members of this workspace.");
+    await component.continueFromInvite();
     expect(navigateByUrl).toHaveBeenCalledWith("/", { replaceUrl: true });
   });
 
@@ -480,7 +490,142 @@ describe("OnboardingPage", () => {
     expect(post).toHaveBeenCalledOnce();
     expect(refresh).not.toHaveBeenCalled();
     expect(user()?.hasWorkspace).toBe(true);
+    expect(component.setupKind()).toBe("invite");
+    await component.skipInvite();
     expect(navigateByUrl).toHaveBeenCalledWith("/b/list-1", { replaceUrl: true });
+  });
+
+  it("ends every step with its actions in the footer that phones pin to the viewport", async () => {
+    // The phone stylesheet makes .ob-footer sticky and bleeds it over the card's bottom padding,
+    // which only lines up when the footer is the card's last element and holds the primary action.
+    const { component, fixture } = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    const expectFooterLast = async () => {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const card = root.querySelector(".ob-card")!;
+      expect(card.lastElementChild?.classList.contains("ob-footer")).toBe(true);
+      expect(card.lastElementChild?.querySelector("button:not(.ghost)")).not.toBeNull();
+    };
+
+    component.chooseSetupKind("board");
+    await expectFooterLast();
+    component.chooseSetupKind("workspace");
+    for (const step of [1, 2, 3, 4, 5, 6] as const) {
+      component.step.set(step);
+      await expectFooterLast();
+    }
+    await component.finish();
+    await expectFooterLast();
+  });
+
+  describe("closing invite step", () => {
+    const standaloneBoard = () => ({ ...workspace(), kind: "board" as const, initialBoard: { ...starterList(), id: "board-9" } });
+
+    async function createStandaloneBoard(overrides: Parameters<typeof render>[0] = {}) {
+      const harness = await render({ post: vi.fn(() => Promise.resolve(standaloneBoard())), ...overrides });
+      harness.component.chooseSetupKind("board");
+      harness.component.boardName.set("Launch");
+      await harness.component.finishStandaloneBoard();
+      harness.fixture.detectChanges();
+      await harness.fixture.whenStable();
+      return harness;
+    }
+
+    it("asks who works on the new board instead of opening it straight away", async () => {
+      const { component, fixture, navigateByUrl } = await createStandaloneBoard();
+
+      const root = fixture.nativeElement as HTMLElement;
+      expect(component.setupKind()).toBe("invite");
+      expect(navigateByUrl).not.toHaveBeenCalled();
+      expect(root.textContent).toContain("Who works on this with you?");
+      expect(root.querySelector<HTMLInputElement>("#ob-org-name")?.value).toBe("Kanera");
+      expect(root.textContent).toContain("can edit this board");
+      const footer = [...root.querySelectorAll<HTMLButtonElement>(".ob-footer button")].map((button) => button.textContent?.trim());
+      expect(footer).toEqual(["Skip for now", expect.stringContaining("Go to board")]);
+    });
+
+    it("creates a member invite that grants the new standalone board as editor", async () => {
+      const { component, fixture, post } = await createStandaloneBoard();
+      post.mockImplementation(() => Promise.resolve({ token: "tok-1" }));
+      const writeText = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+      await component.createInviteLink();
+      fixture.detectChanges();
+
+      expect(post).toHaveBeenLastCalledWith("/clients/me/invites", {
+        orgRole: "member",
+        expiresInDays: 7,
+        workspaces: [],
+        boards: [{ boardId: "board-9", role: "editor" }],
+      });
+      expect(component.inviteUrl()).toBe(`${location.origin}/signup?invite=tok-1`);
+      expect(writeText).toHaveBeenCalledWith(`${location.origin}/signup?invite=tok-1`);
+      expect(component.inviteCopied()).toBe(true);
+      expect((fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(".ob-invite-url")?.value).toContain("invite=tok-1");
+    });
+
+    it("grants a new workspace and its board, so invitees can open the board", async () => {
+      const { component, post } = await render();
+      await component.finish();
+      post.mockImplementation(() => Promise.resolve({ token: "tok-2" }));
+
+      await component.createInviteLink();
+
+      expect(post).toHaveBeenLastCalledWith("/clients/me/invites", expect.objectContaining({
+        workspaces: [{ workspaceId: "workspace-1", role: "member" }],
+        boards: [{ boardId: "list-1", role: "editor" }],
+      }));
+    });
+
+    it("saves an edited organisation name before creating the link and again on Go to board only if changed", async () => {
+      const { component, post, patch, navigateByUrl, user } = await createStandaloneBoard();
+      post.mockImplementation(() => Promise.resolve({ token: "tok-3" }));
+      component.orgNameDraft.set("  Northwind Studio ");
+
+      await component.createInviteLink();
+      expect(patch).toHaveBeenCalledExactlyOnceWith("/clients/me", { name: "Northwind Studio" });
+      expect(user()?.orgName).toBe("Northwind Studio");
+
+      await component.continueFromInvite();
+      expect(patch).toHaveBeenCalledOnce();
+      expect(navigateByUrl).toHaveBeenCalledWith("/b/board-9", { replaceUrl: true });
+    });
+
+    it("stays on the step with the error when the rename fails, while Skip still leaves", async () => {
+      const patch = vi.fn(() => Promise.reject(new ApiError(400, { message: "name too long" })));
+      const { component, navigateByUrl } = await createStandaloneBoard({ patch });
+      component.orgNameDraft.set("Renamed");
+
+      await component.continueFromInvite();
+      expect(component.orgNameError()).toBe("name too long");
+      expect(navigateByUrl).not.toHaveBeenCalled();
+
+      await component.skipInvite();
+      expect(navigateByUrl).toHaveBeenCalledWith("/b/board-9", { replaceUrl: true });
+    });
+
+    it("opens the upgrade prompt when the plan has no room for another member", async () => {
+      const { component, post, upgradePromptOpen } = await createStandaloneBoard();
+      post.mockImplementation(() => Promise.reject(new ApiError(403, { code: "PLAN_LIMIT", limit: "members", current: 3, max: 3 })));
+
+      await component.createInviteLink();
+
+      expect(upgradePromptOpen).toHaveBeenCalledWith({ reason: "member", source: "onboarding" });
+      expect(component.inviteError()).toBeNull();
+      expect(component.inviteUrl()).toBeNull();
+    });
+
+    it("skips the step for people who cannot invite or rename the organisation", async () => {
+      const { component, navigateByUrl } = await render({ isOrgAdmin: false });
+
+      await (component as unknown as { showInviteStep(created: { boardId: string; workspaceId: null }): Promise<void> })
+        .showInviteStep({ boardId: "board-9", workspaceId: null });
+
+      expect(component.setupKind()).not.toBe("invite");
+      expect(navigateByUrl).toHaveBeenCalledWith("/b/board-9", { replaceUrl: true });
+    });
   });
 
   it("blocks first-run standalone creation when the organisation board cap is full", async () => {

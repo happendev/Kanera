@@ -3,7 +3,7 @@ import type { ImportCompletedEmailQueueData } from "@kanera/shared/schema";
 import { escapeHtml } from "../html-escape.js";
 import { formatNumber } from "../i18n/format.js";
 import { serverMessages } from "../i18n/messages/index.js";
-import { button, emailLayout, fallbackLink, heading, mutedHtml, paragraph, text } from "./layout.js";
+import { button, emailLayout, fallbackLink, heading, paragraph } from "./layout.js";
 
 export type ImportCompletedEmailParams = ImportCompletedEmailQueueData & { locale: Locale };
 
@@ -42,9 +42,8 @@ export function importCompletedEmail(params: ImportCompletedEmailParams): string
     ${paragraph(m.check, "0 0 14px 0")}
     ${button({ href: params.boardUrl, label: m.button })}
     ${fallbackLink(params.boardUrl, locale)}
-    ${mutedHtml(text(m.footer), "18px 0 0 0")}
   `;
-  return emailLayout({ locale, subject: m.subject, preheader: m.preheader({ cards: params.cards, source }), body });
+  return emailLayout({ locale, subject: m.subject, preheader: m.preheader({ cards: params.cards, source }), body, footerReason: m.footer });
 }
 
 function firstName(displayName: string): string {

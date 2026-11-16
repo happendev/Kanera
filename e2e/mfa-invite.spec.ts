@@ -2,7 +2,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 import { contextDefaults, TEST_PASSWORD } from "./support/env";
 import { expect, test } from "./support/fixtures";
 import { totpCode } from "./support/totp";
-import { expectBoardLoaded } from "./support/ui";
+import { expectBoardLoaded, skipOnboardingInvite } from "./support/ui";
 
 // An organisation that requires two-factor authentication must not hand a session to an account
 // that joins it through an invitation while that account has no enabled factor. Password login
@@ -18,11 +18,9 @@ function emailFor(name: string) {
 
 async function signUpOwner(page: Page, name: string) {
   await page.goto("/signup");
-  await page.locator("#cname").fill(name);
   await page.locator("#dn").fill(name);
   await page.locator("#email").fill(emailFor(name));
   await page.locator("#password").fill(TEST_PASSWORD);
-  await page.locator("#confirm-password").fill(TEST_PASSWORD);
   await page.locator("form").getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/onboarding/);
 }
@@ -31,6 +29,7 @@ async function createStandaloneBoard(page: Page, boardName: string): Promise<str
   await page.locator(".ob-kind-option").filter({ hasText: "Create a board" }).click();
   await page.getByPlaceholder("e.g. Product launch").fill(boardName);
   await page.locator(".ob-footer").getByRole("button", { name: "Create board" }).click();
+  await skipOnboardingInvite(page);
   await expect(page).toHaveURL(/\/b\/[^/]+$/);
   await expectBoardLoaded(page, boardName);
   return new URL(page.url()).pathname.split("/").pop()!;
@@ -88,7 +87,6 @@ test("joining an organisation that requires MFA through an invite withholds the 
     await newcomer.locator("#dn").fill(newcomerName);
     await newcomer.locator("#email").fill(emailFor(newcomerName));
     await newcomer.locator("#password").fill(TEST_PASSWORD);
-    await newcomer.locator("#confirm-password").fill(TEST_PASSWORD);
     await newcomer.locator("form").getByRole("button", { name: "Continue" }).click();
 
     await expectEnrollmentRequired(newcomer);

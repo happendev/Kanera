@@ -155,7 +155,9 @@ for local verification or updating an unrelated card.
   realtime fanout, notification suppression, automation side effects, coalescing, ordering. Explain
   intent and constraints, not mechanics or history.
 - Add only substantial user-visible changes or fixes to `CHANGELOG.md`; skip minor tweaks.
-  Keep entries succinct but useful for end users.
+  Keep entries succinct but useful for end users. Notable changes also go in the public release
+  note, `release-notes/unreleased.md` (format in `release-notes/README.md`; check with
+  `pnpm release-notes:check`).
 
 ## Done means
 

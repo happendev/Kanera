@@ -23,7 +23,10 @@ export const users = pgTable(
     // Null only for legacy rows created before verification existed; the signup flow
     // always sets it now since accounts are created after the code is verified.
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
-    passwordHash: text("password_hash").notNull(),
+    // Null for accounts created through a third-party sign-in (hosted only) that never set a
+    // password. Password login then fails like a wrong password; password-gated settings accept an
+    // emailed step-up code instead.
+    passwordHash: text("password_hash"),
     displayName: text("display_name").notNull(),
     avatarUrl: text("avatar_url"),
     timezone: text("timezone").notNull().default("UTC"),

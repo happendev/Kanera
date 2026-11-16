@@ -62,6 +62,7 @@ export { importCompletedEmail } from "./import-completed.js";
 export type { ImportCompletedEmailParams } from "./import-completed.js";
 export {
   lifecycleActiveCheckinEmail,
+  lifecycleCheckoutAbandonedEmail,
   lifecycleEarlySuccessEmail,
   lifecycleEmailSubject,
   lifecycleInactiveEmail,
@@ -69,3 +70,9 @@ export {
   lifecycleNoBoardEmail,
 } from "./lifecycle.js";
 export type { LifecycleEmailParams } from "./lifecycle.js";
+export { accountSecurityEmail, accountSecurityEmailSubject } from "./account-security.js";
+export type { AccountSecurityEmailParams } from "./account-security.js";
+export { organisationDeletedEmail } from "./organisation-deleted.js";
+export type { OrganisationDeletedEmailParams } from "./organisation-deleted.js";
+export { orgInviteEmail, orgInviteEmailSubject } from "./org-invite.js";
+export type { OrgInviteEmailParams } from "./org-invite.js";

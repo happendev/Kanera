@@ -2,6 +2,7 @@ import type { Properties } from "posthog-js";
 
 const allowedByEvent: Record<string, ReadonlySet<string>> = {
   registration_started: new Set(["anonymous_id", "source", "medium", "campaign", "landing_page", "content", "term", "event_version"]),
+  signup_step: new Set(["step", "error_code", "event_version"]),
   import_started: new Set(["import_source"]),
   premium_feature_attempted: new Set(["premium_feature", "limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),
   plan_limit_warning_seen: new Set(["limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),

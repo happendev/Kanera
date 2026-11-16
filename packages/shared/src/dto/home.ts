@@ -138,6 +138,8 @@ export interface HomeProUsageSummary {
 export const GETTING_STARTED_STEPS = [
   // The basics: the life of a card, in the order someone meets it.
   "createCard",
+  // An organisation-admin step, offered this early because few new teams ever invite anyone.
+  "inviteTeam",
   "assignCard",
   "comment",
   "mention",
@@ -159,7 +161,6 @@ export const GETTING_STARTED_STEPS = [
   "scratchpad",
   "saveNote",
   // Setting up the team (organisation admins).
-  "inviteTeam",
   "secondBoard",
   "createAutomation",
   // Making Kanera reach you.

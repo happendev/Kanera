@@ -8,7 +8,11 @@ import { users } from "./user.js";
 // "email a 6-digit code, prove ownership before we write the address" flow. The
 // purpose discriminates them so a signup code can never satisfy an email change
 // (or vice versa) for the same address.
-export const EMAIL_VERIFICATION_PURPOSES = ["signup", "email_change"] as const;
+// identity_link proves a provider-reported address the provider itself did not verify before it is
+// linked or used for a new account; step_up stands in for the current password on password-gated
+// settings when the account has none (provider-only sign-in).
+export const EMAIL_VERIFICATION_PURPOSES = ["signup", "email_change", "identity_link", "step_up"] as const;
+export type EmailVerificationPurpose = (typeof EMAIL_VERIFICATION_PURPOSES)[number];
 
 export const emailVerificationCodes = pgTable(
   "email_verification_code",

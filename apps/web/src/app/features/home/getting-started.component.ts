@@ -93,7 +93,7 @@ const SECTIONS: readonly { key: string; label: string; steps: readonly GettingSt
   {
     key: "basics",
     label: $localize`:Getting started checklist section heading for the core card workflow:The basics`,
-    steps: ["createCard", "assignCard", "comment", "mention", "completeCard"],
+    steps: ["createCard", "inviteTeam", "assignCard", "comment", "mention", "completeCard"],
   },
   {
     key: "faster",
@@ -118,7 +118,7 @@ const SECTIONS: readonly { key: string; label: string; steps: readonly GettingSt
   {
     key: "team",
     label: $localize`:Getting started checklist section heading for the organisation admin steps:Your team`,
-    steps: ["inviteTeam", "secondBoard", "createAutomation"],
+    steps: ["secondBoard", "createAutomation"],
   },
   {
     key: "setup",
@@ -510,7 +510,7 @@ export class GettingStartedComponent implements OnInit, OnDestroy {
       case "inviteTeam":
         return {
           title: $localize`:Getting started step title:Invite your team`,
-          text: $localize`:Getting started step text:Add people to the organisation, then give them the workspaces and boards they work on.`,
+          text: $localize`:Getting started step text:Create an invite link and choose the boards they'll work on.`,
           actionLabel: $localize`:Getting started step button:Invite`,
           action: { kind: "link", commands: ["/settings", "users"] },
         };

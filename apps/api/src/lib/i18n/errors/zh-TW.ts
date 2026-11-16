@@ -384,6 +384,9 @@ export const zhTW: ErrorCatalog = {
   "work-history cursor does not match this query": "工作歷史游標與此查詢不匹配",
   "workspace name does not match": "工作區名稱不匹配",
   "workspace not found": "找不到工作區",
+  "organisation admins already have access to every board": "組織管理員已經有權訪問所有看板",
+  "duplicate board in invite": "邀請中有重複的看板",
+  "board not in your organisation": "看板不在你的組織中",
   "workspace not in your organisation": "工作區不在你的組織中",
   "write-capable credential required": "需要可寫入的憑據",
   "you are already a member of this organisation": "你已經是該組織的成員",
@@ -455,4 +458,18 @@ export const zhTW: ErrorCatalog = {
   "cards must be in the same workspace to be related": "卡片必須位於同一工作區才能關聯",
   "relation not found": "未找到關聯",
   "this relation would create a blocking cycle": "此關聯會形成阻塞循環",
+  "This sign-in has expired. Start again.":
+    "此次登錄已過期。請重新開始。",
+  "This sign-in can't create an account.":
+    "此次登錄無法建立帳戶。",
+  "This sign-in can't be linked to your account.":
+    "此次登錄無法連結至你的帳戶。",
+  "Set a password or connect another sign-in method before removing this one.":
+    "請先設定密碼或連結其他登錄方式，再移除此方式。",
+  "confirm with your current password":
+    "請使用目前密碼確認。",
+  "sign-in provider not available":
+    "登錄服務提供者無法使用。",
+  "sign-in method not found":
+    "找不到登錄方式。",
 };

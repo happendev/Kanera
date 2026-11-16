@@ -16,12 +16,15 @@
 }
 
 .ob-card {
+  // The sticky phone footer bleeds to the card edges, so it reads the card's padding from here.
+  --ob-card-pad-x: 32px;
+  --ob-card-pad-y: 32px;
   width: 100%;
   max-width: 920px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 32px;
+  padding: var(--ob-card-pad-y) var(--ob-card-pad-x);
   box-shadow: var(--shadow-sm);
 }
 
@@ -438,6 +441,19 @@
     align-items: center;
     gap: 6px;
   }
+}
+
+.ob-field-label {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ob-field-hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
 .ob-label-hint {
@@ -874,6 +890,38 @@
   margin: 0;
 }
 
+// ─── Closing invite step ─────────────────────────────────────────────────────
+
+// Two short fields read better at form width than stretched across the template-sized card.
+.ob-invite-fields {
+  max-width: 560px;
+  gap: 24px;
+}
+
+.ob-field-error {
+  margin: 4px 0 0;
+}
+
+.ob-invite-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  input.ob-invite-url {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-sm);
+    color: var(--text-3);
+  }
+}
+
+.ob-invite-create,
+.ob-invite-copy {
+  flex: none;
+  align-self: flex-start;
+  gap: 6px;
+}
+
 // ─── Footer ───────────────────────────────────────────────────────────────────
 
 .ob-footer {
@@ -888,10 +936,27 @@
 
 // ─── Mobile overrides ─────────────────────────────────────────────────────────
 
+// Phones and narrow tablets: template grids and long step lists push the primary action far below
+// the fold (the board path's Create board sat about 1500px down on a 375px phone). Pin the footer
+// to the bottom of the viewport while the card scrolls past it. It bleeds to the card's edges so
+// content slides under an opaque bar, and pads for the home indicator in the installed PWA.
+@media (max-width: 768px) {
+  .ob-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 0 calc(-1 * var(--ob-card-pad-x)) calc(-1 * var(--ob-card-pad-y));
+    padding: 12px var(--ob-card-pad-x) max(12px, env(safe-area-inset-bottom));
+    border-radius: 0 0 12px 12px;
+    background: var(--surface);
+  }
+}
+
 @media (max-width: 480px) {
   // Trim the card gutters so the form isn't squashed on phones.
   .ob-card {
-    padding: 22px 18px;
+    --ob-card-pad-x: 18px;
+    --ob-card-pad-y: 22px;
   }
 
   .ob-brand,

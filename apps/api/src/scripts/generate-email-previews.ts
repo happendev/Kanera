@@ -14,7 +14,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isLocale, LOCALES, SOURCE_LOCALE, type Locale } from "@kanera/shared/locales";
-import { formatDate, formatLocalDate } from "../lib/i18n/format.js";
+import { formatDate, formatLocalDate, formatMomentInZone } from "../lib/i18n/format.js";
 import { serverMessages } from "../lib/i18n/messages/index.js";
 
 import { boardInviteEmail } from "../lib/email-templates/board-invite.js";
@@ -57,11 +57,16 @@ import { weeklyAdminRecapEmail } from "../lib/email-templates/weekly-admin-recap
 import { importCompletedEmail } from "../lib/email-templates/import-completed.js";
 import {
   lifecycleActiveCheckinEmail,
+  lifecycleCheckoutAbandonedEmail,
   lifecycleEarlySuccessEmail,
   lifecycleInactiveEmail,
   lifecycleInviteTeamEmail,
   lifecycleNoBoardEmail,
 } from "../lib/email-templates/lifecycle.js";
+
+import { accountSecurityEmail } from "../lib/email-templates/account-security.js";
+import { organisationDeletedEmail } from "../lib/email-templates/organisation-deleted.js";
+import { orgInviteEmail } from "../lib/email-templates/org-invite.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const requested = process.argv.find((arg) => arg.startsWith("--locale="))?.slice("--locale=".length) ?? process.env.EMAIL_PREVIEW_LOCALE ?? SOURCE_LOCALE;
@@ -82,6 +87,9 @@ const today = m.email.dailyDigest.itemToday;
 const billingDate = (iso: string) => formatDate(locale, new Date(`${iso}T12:00:00Z`), { dateStyle: "medium", timeZone: "UTC" });
 const recapDate = (iso: string) => formatDate(locale, new Date(`${iso}T00:00:00Z`), { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const recapRange = (start: string, end: string) => m.email.weeklyAdminRecap.dateRange({ start: recapDate(start), end: recapDate(end) });
+
+const NOTIFICATION_SETTINGS_URL = "http://localhost:4200/settings/notifications";
+const securityWhen = formatMomentInZone(locale, new Date("2026-05-26T09:42:00Z"), "Africa/Johannesburg");
 
 const templates = [
   {
@@ -134,6 +142,7 @@ const templates = [
     name: "daily-digest",
     html: dailyDigestEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       localDate: "2026-05-26",
       localDateLabel: formatLocalDate(locale, "2026-05-26", { month: "long", day: "numeric", year: "numeric" }),
@@ -209,6 +218,7 @@ const templates = [
     name: "card-assigned",
     html: cardAssignedEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Confirm production checklist",
@@ -220,6 +230,7 @@ const templates = [
     name: "card-comment-added",
     html: cardCommentAddedEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Confirm production checklist",
@@ -232,6 +243,7 @@ const templates = [
     name: "comment-mentioned",
     html: commentMentionedEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Confirm production checklist",
@@ -244,6 +256,7 @@ const templates = [
     name: "reaction-added",
     html: reactionAddedEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Confirm production checklist",
@@ -257,6 +270,7 @@ const templates = [
     name: "card-dependency-added",
     html: cardDependencyAddedEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Launch checkout redesign",
@@ -271,6 +285,7 @@ const templates = [
     name: "card-unblocked",
     html: cardUnblockedEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       cardTitle: "Launch checkout redesign",
       boardName: "Website Refresh",
@@ -283,6 +298,7 @@ const templates = [
     name: "card-blocked-again",
     html: cardUnblockedEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       cardTitle: "Launch checkout redesign",
       boardName: "Website Refresh",
@@ -296,6 +312,7 @@ const templates = [
     name: "card-due-date-changed",
     html: cardDueDateChangedEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Confirm production checklist",
@@ -311,6 +328,7 @@ const templates = [
     name: "card-start-date-changed",
     html: cardDueDateChangedEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Confirm production checklist",
@@ -327,6 +345,7 @@ const templates = [
     name: "card-overdue",
     html: cardOverdueEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       cardTitle: "Confirm production checklist",
       boardName: "Website Refresh",
@@ -338,6 +357,7 @@ const templates = [
     name: "card-reminder",
     html: cardReminderEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       cardTitle: "Confirm production checklist",
       boardName: "Website Refresh",
@@ -361,6 +381,7 @@ const templates = [
     name: "checklist-item-overdue",
     html: checklistItemOverdueEmail({
       locale,
+      notificationSettingsUrl: NOTIFICATION_SETTINGS_URL,
       displayName: "Amelia Hart",
       itemText: "Confirm DNS cutover window",
       cardTitle: "Confirm production checklist",
@@ -407,6 +428,7 @@ const templates = [
       orgName: "Northstar Studio",
       invitedByName: "Amelia Hart",
       acceptUrl: "http://localhost:4200/board-invite?token=example-token-abc123",
+      expiresAtLabel: billingDate("2026-06-02"),
     }),
   },
   {
@@ -596,6 +618,46 @@ const templates = [
     }),
   },
   {
+    name: "security-password-changed",
+    html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "password_changed", occurredAtLabel: securityWhen, securityUrl: "http://localhost:4200/settings/account-security", supportEmail: "support@kanera.app" }),
+  },
+  {
+    name: "security-password-reset",
+    html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "password_reset", occurredAtLabel: securityWhen, securityUrl: "http://localhost:4200/settings/account-security", supportEmail: "support@kanera.app" }),
+  },
+  {
+    name: "security-email-changed",
+    html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "email_changed", occurredAtLabel: securityWhen, newEmail: "amelia@newcompany.com", securityUrl: "http://localhost:4200/settings/account-security", supportEmail: "support@kanera.app" }),
+  },
+  {
+    name: "security-mfa-enabled",
+    html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "mfa_enabled", occurredAtLabel: securityWhen, securityUrl: "http://localhost:4200/settings/account-security", supportEmail: "support@kanera.app" }),
+  },
+  {
+    name: "security-mfa-disabled",
+    html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "mfa_disabled", occurredAtLabel: securityWhen, securityUrl: "http://localhost:4200/settings/account-security", supportEmail: null }),
+  },
+  {
+    name: "security-recovery-codes",
+    html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "recovery_codes_regenerated", occurredAtLabel: securityWhen, securityUrl: "http://localhost:4200/settings/account-security", supportEmail: "support@kanera.app" }),
+  },
+  {
+    name: "security-sign-in-method-added",
+    html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "sign_in_method_added", provider: "google", occurredAtLabel: securityWhen, securityUrl: "http://localhost:4200/settings/account-security", supportEmail: "support@kanera.app" }),
+  },
+  {
+    name: "security-sign-in-method-removed",
+    html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "sign_in_method_removed", provider: "github", occurredAtLabel: securityWhen, securityUrl: "http://localhost:4200/settings/account-security", supportEmail: "support@kanera.app" }),
+  },
+  {
+    name: "organisation-deleted",
+    html: organisationDeletedEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", deletedByName: "Jordan Lee", deletedAtLabel: securityWhen, supportEmail: "support@kanera.app" }),
+  },
+  {
+    name: "org-invite",
+    html: orgInviteEmail({ locale, orgName: "Northstar Studio", invitedByName: "Amelia Hart", orgRole: "member", acceptUrl: "http://localhost:4200/signup?invite=example-token-abc123", expiresAtLabel: billingDate("2026-06-02") }),
+  },
+  {
     name: "lifecycle-no-board",
     html: lifecycleNoBoardEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/" }),
   },
@@ -618,6 +680,10 @@ const templates = [
   {
     name: "lifecycle-active-checkin",
     html: lifecycleActiveCheckinEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/team-cards", onFreePlan: true, feedbackEmail: "support@kanera.app" }),
+  },
+  {
+    name: "lifecycle-checkout-abandoned",
+    html: lifecycleCheckoutAbandonedEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/settings/account-plan", feedbackEmail: "support@kanera.app" }),
   },
 ];
 

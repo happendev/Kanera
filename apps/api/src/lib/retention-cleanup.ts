@@ -3,6 +3,7 @@ import {
   adminAuditLogs,
   adminInvites,
   adminRefreshTokens,
+  authProviderFlows,
   boardInvitations,
   emailVerificationCodes,
   inviteTokens,
@@ -115,7 +116,7 @@ export async function runAuthTokenRetentionCleanup({ db, log }: RetentionCleanup
     return predicates.length === 1 ? predicates[0]! : or(...predicates)!;
   };
 
-  const [refresh, adminRefresh, emailCode, passwordReset, invite, adminInvite, boardInvite, oauthDeviceCode, oauthAuthorizationCode, oauthToken] = await Promise.all([
+  const [refresh, adminRefresh, emailCode, passwordReset, invite, adminInvite, boardInvite, oauthDeviceCode, oauthAuthorizationCode, oauthToken, providerFlow] = await Promise.all([
     db.delete(refreshTokens).where(terminalBefore([refreshTokens.expiresAt, refreshTokens.revokedAt])).returning({ id: refreshTokens.id }),
     db.delete(adminRefreshTokens).where(terminalBefore([adminRefreshTokens.expiresAt, adminRefreshTokens.revokedAt])).returning({ id: adminRefreshTokens.id }),
     db.delete(emailVerificationCodes).where(terminalBefore([emailVerificationCodes.expiresAt, emailVerificationCodes.consumedAt])).returning({ id: emailVerificationCodes.id }),
@@ -126,6 +127,7 @@ export async function runAuthTokenRetentionCleanup({ db, log }: RetentionCleanup
     db.delete(oauthDeviceCodes).where(terminalBefore([oauthDeviceCodes.expiresAt])).returning({ id: oauthDeviceCodes.id }),
     db.delete(oauthAuthorizationCodes).where(terminalBefore([oauthAuthorizationCodes.expiresAt, oauthAuthorizationCodes.consumedAt])).returning({ id: oauthAuthorizationCodes.id }),
     db.delete(oauthTokens).where(terminalBefore([oauthTokens.expiresAt, oauthTokens.revokedAt])).returning({ id: oauthTokens.id }),
+    db.delete(authProviderFlows).where(terminalBefore([authProviderFlows.expiresAt, authProviderFlows.consumedAt])).returning({ id: authProviderFlows.id }),
   ]);
 
   // Grants and dynamically registered public clients are parents of the short-lived rows above.
@@ -159,6 +161,7 @@ export async function runAuthTokenRetentionCleanup({ db, log }: RetentionCleanup
     oauth_token: oauthToken.length,
     oauth_grant: oauthGrant.length,
     oauth_client: oauthClient.length,
+    auth_provider_flow: providerFlow.length,
   };
   const total = Object.values(byTable).reduce((sum, count) => sum + count, 0);
   if (total > 0) {

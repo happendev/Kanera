@@ -99,6 +99,9 @@ export const clients = pgTable(
     // One-shot claim marker so a trial that expires without converting emits `trial_ended` exactly once,
     // even if concurrent Stripe webhooks observe the same trialing -> canceled transition.
     analyticsTrialEndedAt: timestamp("analytics_trial_ended_at", { withTimezone: true }),
+    // One-shot claim for the internal "trial ends soon" notification, so worker restarts (each runs the
+    // trial sweep immediately) cannot tell the team about the same trial twice.
+    trialEndingNotifiedAt: timestamp("trial_ending_notified_at", { withTimezone: true }),
     currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
     // Persist Stripe's scheduled-cancellation flag so webhook reconciliation can distinguish a newly
     // scheduled cancellation from a reversal and send the correct customer lifecycle email once.

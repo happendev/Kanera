@@ -1,6 +1,6 @@
 import { TEST_PASSWORD } from "./support/env";
 import { expect, test } from "./support/fixtures";
-import { cardTile, createCard, expectBoardLoaded, signUp } from "./support/ui";
+import { cardTile, createCard, expectBoardLoaded, signUp, skipOnboardingInvite } from "./support/ui";
 
 // Exercise the checklist from a real signup, including its initial onboarding state.
 test("the getting started checklist guides step by step, ticks itself off, hides to the account menu and can be removed", async ({ page, uniqueName }, testInfo) => {
@@ -9,6 +9,7 @@ test("the getting started checklist guides step by step, ticks itself off, hides
   await page.locator(".ob-kind-option").filter({ hasText: "Create a board" }).click();
   await page.getByPlaceholder("e.g. Product launch").fill(boardName);
   await page.locator(".ob-footer").getByRole("button", { name: "Create board" }).click();
+  await skipOnboardingInvite(page);
   await expectBoardLoaded(page, boardName);
 
   await page.goto("/");
@@ -37,7 +38,8 @@ test("the getting started checklist guides step by step, ticks itself off, hides
   await page.goto("/");
   await expect(step("Create your first card")).toHaveClass(/is-done/);
   await expect(step("Quick edit a card")).toHaveClass(/is-done/);
-  await expect(step("Assign a card")).toHaveClass(/is-open/);
+  // Inviting comes straight after the first card: a board pays off once the team is on it.
+  await expect(step("Invite your team")).toHaveClass(/is-open/);
 
   // The palette step ticks while home is still on screen: the overlay that stamps it lives in the
   // shell, and the tick must not wait for a reload.

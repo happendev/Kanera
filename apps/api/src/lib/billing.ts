@@ -10,7 +10,8 @@ import { canAddPaidSeat, isPaidTier } from "./entitlements.js";
 import type { Mailer } from "./mailer.js";
 import { convertClientPlan } from "./plan-conversion.js";
 import { emitClientEntitlementsChanged } from "../realtime/emit.js";
-import { sendInternalSaleNotification } from "./internal-notification-emails.js";
+import { followUpAbandonedCheckout } from "./checkout-recovery.js";
+import { sendInternalCheckoutNotification, sendInternalSaleNotification } from "./internal-notification-emails.js";
 import {
   ANALYTICS_EVENT_VERSION,
   productAnalytics,
@@ -362,15 +363,24 @@ export async function settleSeatCapacity(clientId: string, config: StripeEnv = e
   return settled.seatLimit;
 }
 
+// Checkout sessions expire after about an hour instead of Stripe's 24-hour default, so an admin who
+// leaves the payment page gets the abandoned-checkout follow-up the same day (see checkout-recovery.ts).
+const CHECKOUT_SESSION_TTL_SECONDS = 60 * 60;
+// A reused session must leave the admin enough time to pay; one closer to expiry is replaced.
+const CHECKOUT_REUSE_MIN_REMAINING_SECONDS = 15 * 60;
+
+/** The admin opening checkout: named in the internal notification and sent the abandonment follow-up. */
+export type CheckoutStarter = { id: string; email: string; displayName: string };
+
 export async function createCheckoutSession(
   clientId: string,
-  userEmail: string,
+  starter: CheckoutStarter,
   interval: ClientBillingInterval,
   seatLimit: number,
   config: StripeEnv = env,
 ): Promise<{ url: string }> {
   requireHostedStripe(config);
-  const { session, quantity, created } = await db.transaction(async (tx) => {
+  const { session, quantity, created, orgName } = await db.transaction(async (tx) => {
     // Serialize tabs/admins and webhook adoption. Stripe idempotency keys also cover an ambiguous
     // network response or a process crash between creating the external object and committing it.
     await tx.execute(sql`select 1 from ${clients} where ${clients.id} = ${clientId} for update`);
@@ -380,7 +390,7 @@ export async function createCheckoutSession(
     const api = stripe(config);
     const customerId = client.stripeCustomerId ?? (await api.customers.create({
       name: client.name,
-      email: userEmail,
+      email: starter.email,
       metadata: { clientId },
     }, { idempotencyKey: `billing-customer:${clientId}` })).id;
     await tx.update(clients).set({ stripeCustomerId: customerId, updatedAt: new Date() }).where(eq(clients.id, clientId));
@@ -389,14 +399,16 @@ export async function createCheckoutSession(
     // a second recurring charge. Existing subscribers manage their subscription in the portal.
     for await (const subscription of api.subscriptions.list({ customer: customerId, status: "all", limit: 100 })) {
       if (subscription.status !== "canceled" && subscription.status !== "incomplete_expired") {
-        return { session: await api.billingPortal.sessions.create({ customer: customerId, return_url: `${config.WEB_ORIGIN}/settings/account-plan` }), quantity, created: false };
+        return { session: await api.billingPortal.sessions.create({ customer: customerId, return_url: `${config.WEB_ORIGIN}/settings/account-plan` }), quantity, created: false, orgName: client.name };
       }
     }
     const latest = await api.checkout.sessions.list({ customer: customerId, limit: 1 });
     let reusable: Stripe.Checkout.Session | undefined;
+    const nowSeconds = Math.floor(Date.now() / 1000);
     for await (const open of api.checkout.sessions.list({ customer: customerId, status: "open", limit: 100 })) {
       if (open.mode !== "subscription") continue;
-      if (!reusable && open.metadata?.interval === interval && open.metadata?.seatLimit === String(quantity) && open.url) {
+      const timeLeft = open.expires_at ? open.expires_at - nowSeconds : Infinity;
+      if (!reusable && open.metadata?.interval === interval && open.metadata?.seatLimit === String(quantity) && open.url && timeLeft >= CHECKOUT_REUSE_MIN_REMAINING_SECONDS) {
         reusable = open;
       } else {
         // Expiring the old link closes the race with someone paying it in another tab. If completion
@@ -404,18 +416,21 @@ export async function createCheckoutSession(
         await api.checkout.sessions.expire(open.id);
       }
     }
-    if (reusable) return { session: reusable, quantity, created: false };
+    if (reusable) return { session: reusable, quantity, created: false, orgName: client.name };
     const session = await api.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
+      // Rounded up to five minutes so an ambiguous-failure retry with the same idempotency key sends
+      // the same parameters, which Stripe requires.
+      expires_at: Math.ceil((nowSeconds + CHECKOUT_SESSION_TTL_SECONDS) / 300) * 300,
       success_url: `${config.WEB_ORIGIN}/settings/account-plan?billing=success`,
       cancel_url: `${config.WEB_ORIGIN}/settings/account-plan?billing=cancelled`,
       client_reference_id: clientId,
       line_items: [{ price: priceIdForInterval(interval, config), quantity }],
-      metadata: { clientId, interval, seatLimit: String(quantity), upgradeSource: "account_plan" },
+      metadata: { clientId, interval, seatLimit: String(quantity), upgradeSource: "account_plan", startedByUserId: starter.id },
       subscription_data: { metadata: { clientId, interval } },
     }, { idempotencyKey: `billing-checkout:${clientId}:${latest.data[0]?.id ?? "initial"}:${interval}:${quantity}` });
-    return { session, quantity, created: true };
+    return { session, quantity, created: true, orgName: client.name };
   });
 
   if (!session.url) throw badRequest("Stripe did not return a checkout URL");
@@ -448,6 +463,15 @@ export async function createCheckoutSession(
       event_version: ANALYTICS_EVENT_VERSION,
     },
   });
+  // Best-effort team heads-up; a mail failure must never fail the checkout redirect.
+  void sendInternalCheckoutNotification({
+    type: "checkout_started",
+    orgName,
+    clientId,
+    startedBy: { displayName: starter.displayName, email: starter.email },
+    billingInterval: interval,
+    seatCount: quantity,
+  }).catch(() => undefined);
   return { url: session.url };
 }
 
@@ -873,7 +897,11 @@ export async function handleStripeEvent(
   event: Stripe.Event,
   config: StripeEnv = env,
   mailer?: Mailer,
-  internalNotifications: { sendSale?: typeof sendInternalSaleNotification; log?: FastifyBaseLogger } = {},
+  internalNotifications: {
+    sendSale?: typeof sendInternalSaleNotification;
+    sendCheckout?: typeof sendInternalCheckoutNotification;
+    log?: FastifyBaseLogger;
+  } = {},
 ): Promise<void> {
   const afterCommit: AfterCommit = [];
   // An uncommitted claim is rolled back by PostgreSQL even if the process dies. Concurrent deliveries
@@ -922,6 +950,13 @@ export async function handleStripeEvent(
               event_version: ANALYTICS_EVENT_VERSION,
             },
           }));
+          // The follow-up is optional; a failure is logged rather than answering Stripe with an error,
+          // because the event claim has committed and a retry would skip it anyway.
+          afterCommit.push(() => followUpAbandonedCheckout(session, event.created, {
+            mailer,
+            log: internalNotifications.log,
+            sendInternal: internalNotifications.sendCheckout,
+          }).catch((err: unknown) => internalNotifications.log?.error({ err, eventId: event.id, clientId }, "abandoned checkout follow-up failed")));
         }
         break;
       }

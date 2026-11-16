@@ -1,25 +1,65 @@
+      @if (providerRows().length) {
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-plug-connected"></i><span i18n="Settings section heading">Sign-in methods</span></h3>
+        <p class="settings-section-help" i18n>Connect an account to sign in to Kanera with it.</p>
+        <ul class="sign-in-methods">
+          @for (row of providerRows(); track row.provider) {
+          <li class="sign-in-method">
+            <i aria-hidden="true" [class]="'ti ' + row.icon"></i>
+            <div class="sign-in-method-text">
+              <span class="sign-in-method-name">{{ row.name }}</span>
+              @if (row.identity; as identity) {
+              <span class="sign-in-method-detail">{{ identity.email || row.name }}</span>
+              } @else {
+              <span class="sign-in-method-detail" i18n="Sign-in method status">Not connected</span>
+              }
+            </div>
+            @if (row.identity) {
+            <button class="ghost sm" type="button" (click)="disconnectProvider(row.provider)" [disabled]="providerBusy() !== null" i18n="Button: remove a connected sign-in account">Disconnect</button>
+            } @else {
+            <button class="sm" type="button" (click)="connectProvider(row.provider)" [disabled]="providerBusy() !== null" i18n="Button: connect a sign-in account">Connect</button>
+            }
+          </li>
+          }
+        </ul>
+        @if (providerError()) { <p class="form-error">{{ providerError() }}</p> }
+      </div>
+      }
+
       <div class="settings-section">
         <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-shield-lock"></i><span i18n="Settings section heading">Two-factor authentication</span></h3>
         <p class="settings-section-help" i18n>Protect fresh sign-ins with an authenticator app or a one-time recovery code.</p>
         <k-docs-link path="profile-security" label="Learn more about account security" i18n-label />
         @if (!mfaEnabled() && !mfaSecret()) {
+          @if (hasPassword()) {
           <div class="board-form"><input type="password" autocomplete="current-password" placeholder="Current password" i18n-placeholder [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><button class="sm" type="button" (click)="startMfa()" [disabled]="mfaBusy()" i18n="Button">Set up authenticator</button></div>
+          } @else {
+          <div class="settings-form"><div class="step-up"><input autocomplete="one-time-code" inputmode="numeric" placeholder="Emailed code" i18n-placeholder [value]="stepUpCode()" (input)="stepUpCode.set($any($event.target).value)" /><button class="ghost sm" type="button" (click)="sendStepUpCode()" [disabled]="stepUpBusy()">@if (stepUpSent()) { <ng-container i18n="Button">Resend code</ng-container> } @else { <ng-container i18n="Button: send a confirmation code to the account's email">Email me a code</ng-container> }</button></div><div><button class="sm" type="button" (click)="startMfa()" [disabled]="mfaBusy()" i18n="Button">Set up authenticator</button></div></div>
+          }
         } @else if (mfaSecret()) {
           <p i18n>Scan the QR code, or enter <code>{{ mfaSecret() // i18n(ph="secret") }}</code> manually.</p>
           @if (mfaQrUrl()) { <img [src]="mfaQrUrl()" width="200" height="200" alt="Authenticator setup QR code" i18n-alt /> }
           <div class="board-form"><input autocomplete="one-time-code" inputmode="numeric" placeholder="123456" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><button class="sm" type="button" (click)="confirmMfa()" [disabled]="mfaBusy()" i18n="Button">Confirm</button></div>
         } @else {
           <p class="settings-section-help mfa-enabled"><i aria-hidden="true" class="ti ti-shield-check"></i><ng-container i18n>Two-factor authentication is enabled.</ng-container></p>
-          <div class="settings-form"><input type="password" autocomplete="current-password" placeholder="Current password" i18n-placeholder [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><input autocomplete="one-time-code" placeholder="Authenticator or recovery code" i18n-placeholder [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><div class="logo-actions"><button class="sm" type="button" (click)="regenerateMfaCodes()" [disabled]="mfaBusy()" i18n="Button">New recovery codes</button><button class="ghost sm" type="button" (click)="disableMfa()" [disabled]="mfaBusy()" i18n="Button: turn off two-factor authentication">Disable</button></div></div>
+          <div class="settings-form">@if (hasPassword()) {<input type="password" autocomplete="current-password" placeholder="Current password" i18n-placeholder [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" />} @else {<div class="step-up"><input autocomplete="one-time-code" inputmode="numeric" placeholder="Emailed code" i18n-placeholder [value]="stepUpCode()" (input)="stepUpCode.set($any($event.target).value)" /><button class="ghost sm" type="button" (click)="sendStepUpCode()" [disabled]="stepUpBusy()">@if (stepUpSent()) { <ng-container i18n="Button">Resend code</ng-container> } @else { <ng-container i18n="Button: send a confirmation code to the account's email">Email me a code</ng-container> }</button></div>}<input autocomplete="one-time-code" placeholder="Authenticator or recovery code" i18n-placeholder [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><div class="logo-actions"><button class="sm" type="button" (click)="regenerateMfaCodes()" [disabled]="mfaBusy()" i18n="Button">New recovery codes</button><button class="ghost sm" type="button" (click)="disableMfa()" [disabled]="mfaBusy()" i18n="Button: turn off two-factor authentication">Disable</button></div></div>
         }
         @if (mfaRecoveryCodes().length) { <p><strong i18n>Save these recovery codes now. They will not be shown again.</strong></p><pre>{{ mfaRecoveryCodes().join('\n') }}</pre> }
         @if (mfaError()) { <p class="form-error">{{ mfaError() }}</p> }
       </div>
 
       <div class="settings-section">
+        @if (hasPassword()) {
         <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-lock"></i><span i18n="Settings section heading">Change password</span></h3>
         <p class="settings-section-help" i18n>You'll be signed out from all other sessions after changing.</p>
+        } @else {
+        <h3 class="settings-section-title"><i aria-hidden="true" class="ti ti-lock"></i><span i18n="Settings section heading">Set a password</span></h3>
+        <p class="settings-section-help" i18n>Add a password to also sign in with your email address. We'll email you a code to confirm it's you.</p>
+        }
         <form class="settings-form" (submit)="changePassword($event)">
+          @if (!hasPassword()) {
+          <div class="step-up"><input autocomplete="one-time-code" inputmode="numeric" placeholder="Emailed code" i18n-placeholder [value]="stepUpCode()" (input)="stepUpCode.set($any($event.target).value)" /><button class="ghost sm" type="button" (click)="sendStepUpCode()" [disabled]="stepUpBusy()">@if (stepUpSent()) { <ng-container i18n="Button">Resend code</ng-container> } @else { <ng-container i18n="Button: send a confirmation code to the account's email">Email me a code</ng-container> }</button></div>
+          } @else {
           <label class="settings-field">
             <span i18n="Field label">Current password</span>
             <div class="input-wrap">
@@ -29,6 +69,7 @@
               </button>
             </div>
           </label>
+          }
           <label class="settings-field">
             <span i18n="Field label">New password</span>
             <div class="input-wrap">
@@ -50,7 +91,7 @@
           @if (passwordForm().touched() && passwordForm().errorSummary()[0]; as error) { <p class="form-error">{{ error.message }}</p> }
           <div>
             <button class="sm" type="submit" [disabled]="passwordForm().submitting()">
-              @if (passwordForm().submitting()) { <ng-container i18n="Button state">Saving...</ng-container> } @else { <ng-container i18n="Button">Change password</ng-container> }
+              @if (passwordForm().submitting()) { <ng-container i18n="Button state">Saving...</ng-container> } @else if (hasPassword()) { <ng-container i18n="Button">Change password</ng-container> } @else { <ng-container i18n="Button">Set password</ng-container> }
             </button>
           </div>
         </form>
