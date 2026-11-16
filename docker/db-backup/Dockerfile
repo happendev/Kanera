@@ -1,6 +1,6 @@
 # Keep this pinned to the same version as the `postgres` service in docker-compose.yml: pg_dump
 # refuses to dump from a server newer than itself, so letting the two drift breaks backups.
-FROM postgres:18.6-alpine AS runtime
+FROM postgres:18.7-alpine AS runtime
 
 # This image runs pg_dump, never the PostgreSQL server entrypoint or its privilege helper.
 RUN rm -f /usr/local/bin/gosu \
