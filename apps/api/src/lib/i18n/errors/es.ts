@@ -901,4 +901,18 @@ export const es: ErrorCatalog = {
   "cards must be in the same workspace to be related": "Las tarjetas deben estar en el mismo espacio de trabajo para relacionarse.",
   "relation not found": "No se encontró la relación.",
   "this relation would create a blocking cycle": "Esta relación crearía un ciclo de bloqueo.",
+  "This sign-in has expired. Start again.":
+    "Este inicio de sesión ha caducado. Vuelve a empezar.",
+  "This sign-in can't create an account.":
+    "Este inicio de sesión no puede crear una cuenta.",
+  "This sign-in can't be linked to your account.":
+    "Este inicio de sesión no se puede vincular a tu cuenta.",
+  "Set a password or connect another sign-in method before removing this one.":
+    "Establece una contraseña o conecta otro método de inicio de sesión antes de quitar este.",
+  "confirm with your current password":
+    "Confirma con tu contraseña actual.",
+  "sign-in provider not available":
+    "El proveedor de inicio de sesión no está disponible.",
+  "sign-in method not found":
+    "No se encontró el método de inicio de sesión.",
 };

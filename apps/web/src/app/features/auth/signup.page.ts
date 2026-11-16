@@ -10,6 +10,7 @@ import { isMfaEnrollmentRequired, MFA_ENROLLMENT_HANDOFF_KEY, parseAuthResponse 
 import { appLocale } from "../../core/i18n/locale";
 import { LogoComponent } from "../../shared/logo.component";
 import { LocaleSwitcherComponent } from "./locale-switcher.component";
+import { ProviderSignInComponent } from "./provider-sign-in.component";
 import { signupAcquisition } from "../../core/analytics/signup-attribution";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import type { SignupStep } from "../../core/analytics/analytics-events";
@@ -42,7 +43,7 @@ const ANALYTICS_EVENT_VERSION = 1;
 @Component({
   selector: "k-signup",
   standalone: true,
-  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent],
+  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent, ProviderSignInComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./signup.page.html",
   styleUrl: "./signup.page.scss",
@@ -101,6 +102,13 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   // Both invitation kinds must survive the hop to login, or an invitee who already has an account
   // signs in to their ordinary home and the invitation is silently dropped. Login sends them back to
   // the acceptance page through returnUrl.
+  // An existing account that signs in with a provider lands back on the invitation it was opening.
+  readonly providerReturnUrl = computed(() => {
+    const boardToken = this.boardInviteToken();
+    if (boardToken) return `/board-invite?token=${encodeURIComponent(boardToken)}`;
+    const inviteToken = this.inviteToken();
+    return inviteToken ? `/invite?token=${encodeURIComponent(inviteToken)}` : null;
+  });
   readonly signInLink = computed(() => {
     const boardToken = this.boardInviteToken();
     const inviteToken = this.inviteToken();

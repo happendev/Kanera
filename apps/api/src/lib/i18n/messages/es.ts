@@ -696,6 +696,18 @@ const es: ServerMessages = {
         heading: "Nuevos códigos de recuperación creados",
         intro: ({ firstName, when }) => `Hola, ${firstName}: se crearon nuevos códigos de recuperación de la verificación en dos pasos para tu cuenta de Kanera el ${when}. Tus códigos anteriores ya no funcionan.`,
       },
+      signInMethodAdded: {
+        subject: "Se añadió una nueva forma de iniciar sesión en Kanera",
+        preheader: "Tu cuenta de Kanera tiene un nuevo método de inicio de sesión.",
+        heading: "Nuevo método de inicio de sesión",
+        intro: ({ firstName, provider, when }) => `Hola, ${firstName}: se conectó ${provider} a tu cuenta de Kanera el ${when}. Ahora puedes usarlo para iniciar sesión.`,
+      },
+      signInMethodRemoved: {
+        subject: "Se quitó un método de inicio de sesión de tu cuenta de Kanera",
+        preheader: "Tu cuenta de Kanera tiene una forma menos de iniciar sesión.",
+        heading: "Método de inicio de sesión quitado",
+        intro: ({ firstName, provider, when }) => `Hola, ${firstName}: se desconectó ${provider} de tu cuenta de Kanera el ${when}. Ya no se puede usar para iniciar sesión.`,
+      },
       notYouWithSupport: ({ email }) => `Si no hiciste este cambio, restablece tu contraseña ahora y escribe a ${email}.`,
       notYouWithoutSupport: "Si no hiciste este cambio, restablece tu contraseña ahora y avisa a tu administrador de Kanera.",
       notYouEmailWithSupport: ({ email }) => `Si no hiciste este cambio, escribe a ${email} de inmediato para que podamos proteger tu cuenta.`,

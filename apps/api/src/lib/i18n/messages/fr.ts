@@ -700,6 +700,18 @@ const fr: ServerMessages = {
         heading: "Nouveaux codes de récupération créés",
         intro: ({ firstName, when }) => `Bonjour ${firstName}, de nouveaux codes de récupération pour l’authentification à deux facteurs ont été créés pour votre compte Kanera le ${when}. Vos anciens codes ne fonctionnent plus.`,
       },
+      signInMethodAdded: {
+        subject: "Un nouveau moyen de connexion à Kanera a été ajouté",
+        preheader: "Votre compte Kanera dispose d’un nouveau moyen de connexion.",
+        heading: "Nouveau moyen de connexion ajouté",
+        intro: ({ firstName, provider, when }) => `Bonjour ${firstName}, ${provider} a été associé à votre compte Kanera le ${when}. Vous pouvez désormais l’utiliser pour vous connecter.`,
+      },
+      signInMethodRemoved: {
+        subject: "Un moyen de connexion a été retiré de votre compte Kanera",
+        preheader: "Votre compte Kanera dispose d’un moyen de connexion en moins.",
+        heading: "Moyen de connexion retiré",
+        intro: ({ firstName, provider, when }) => `Bonjour ${firstName}, ${provider} a été dissocié de votre compte Kanera le ${when}. Il ne permet plus de vous connecter.`,
+      },
       notYouWithSupport: ({ email }) => `Si vous n’êtes pas à l’origine de cette modification, réinitialisez votre mot de passe dès maintenant et contactez ${email}.`,
       notYouWithoutSupport: "Si vous n’êtes pas à l’origine de cette modification, réinitialisez votre mot de passe dès maintenant et prévenez votre administrateur Kanera.",
       notYouEmailWithSupport: ({ email }) => `Si vous n’êtes pas à l’origine de cette modification, contactez immédiatement ${email} afin que nous puissions sécuriser votre compte.`,

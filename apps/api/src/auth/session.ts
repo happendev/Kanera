@@ -1,4 +1,4 @@
-import { refreshTokens, users } from "@kanera/shared/schema";
+import { refreshTokens, users, type AuthMethod } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { db } from "../db.js";
@@ -92,6 +92,9 @@ export async function issueUserSession(
   reply: FastifyReply,
   requestedClientId?: string,
   knownContext?: { active: ActiveOrganisation | null; organisations: ActiveOrganisation[] },
+  // Carried into the access token and the refresh family so refresh and org switches keep applying
+  // the same MFA rule. Authenticated callers pass the current session's method.
+  authMethod: AuthMethod = "password",
 ) {
   const context = knownContext ?? await resolveActiveOrganisationContext(userId, requestedClientId);
   const active = context.active;
@@ -100,12 +103,12 @@ export async function issueUserSession(
   // acceptance, organisation creation/switch, post-deletion fallback). Enforcing the organisation's MFA
   // policy here means an account can never receive tokens for an organisation that /auth/refresh
   // would immediately refuse; callers return the challenge and the client completes enrollment.
-  const enrollment = await mfaEnrollmentRequiredFor(userId, active);
+  const enrollment = await mfaEnrollmentRequiredFor(userId, active, authMethod);
   if (enrollment) return enrollment;
   await db.update(users).set({ activeClientId: active.clientId, updatedAt: new Date() }).where(eq(users.id, userId));
-  const accessToken = app.jwt.sign({ sub: userId, cid: active.clientId, role: active.role });
+  const accessToken = app.jwt.sign({ sub: userId, cid: active.clientId, role: active.role, amr: authMethod });
   const refresh = newRefreshToken();
-  await db.insert(refreshTokens).values({ userId, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
+  await db.insert(refreshTokens).values({ userId, tokenHash: refresh.hash, expiresAt: refresh.expiresAt, authMethod });
   reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
   return { status: "authenticated" as const, accessToken, user: await authUserPayload(userId, active.clientId, context.organisations) };
 }

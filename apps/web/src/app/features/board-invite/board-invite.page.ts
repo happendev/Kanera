@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import type { OnInit } from "@angular/core";
 import { Router } from "@angular/router";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { describeAcceptInvitationError } from "../../core/board-invitations/pending-invitations.service";
+import { ProviderSignInComponent } from "../auth/provider-sign-in.component";
 import { LogoComponent } from "../../shared/logo.component";
 
 interface InviteDetails {
@@ -20,7 +21,7 @@ interface InviteDetails {
 @Component({
   selector: "k-board-invite",
   standalone: true,
-  imports: [LogoComponent],
+  imports: [LogoComponent, ProviderSignInComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board-invite.page.html",
   styleUrl: "./board-invite.page.scss",
@@ -32,6 +33,12 @@ export class BoardInvitePage implements OnInit {
 
   // Bound from query params via withComponentInputBinding().
   readonly token = input<string | undefined>(undefined);
+  // An existing account that continues with a provider comes back here to accept; a new one joins
+  // through the token during signup.
+  protected readonly providerReturnUrl = computed(() => {
+    const token = this.token();
+    return token ? `/board-invite?token=${encodeURIComponent(token)}` : null;
+  });
 
   readonly invite = signal<InviteDetails | null>(null);
   readonly state = signal<"loading" | "ready" | "invalid" | "accepted">("loading");

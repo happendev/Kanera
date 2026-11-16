@@ -60,13 +60,13 @@ void test("auth config exposes whether email verification is enabled", async () 
   try {
     const disabled = await app.inject({ method: "GET", url: "/auth/config" });
     assert.equal(disabled.statusCode, 200);
-    assert.deepEqual(disabled.json(), { emailVerificationEnabled: false, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: env.KANERA_DEPLOYMENT_MODE, analytics: null });
+    assert.deepEqual(disabled.json(), { emailVerificationEnabled: false, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: env.KANERA_DEPLOYMENT_MODE, signInProviders: [], analytics: null });
 
     env.EMAIL_VERIFICATION_ENABLED = true;
     env.SIGNUPS_ENABLED = false;
     const enabled = await app.inject({ method: "GET", url: "/auth/config" });
     assert.equal(enabled.statusCode, 200);
-    assert.deepEqual(enabled.json(), { emailVerificationEnabled: true, signupsEnabled: false, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: env.KANERA_DEPLOYMENT_MODE, analytics: null });
+    assert.deepEqual(enabled.json(), { emailVerificationEnabled: true, signupsEnabled: false, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: env.KANERA_DEPLOYMENT_MODE, signInProviders: [], analytics: null });
 
     env.SIGNUPS_ENABLED = true;
     env.CLOUDFLARE_TURNSTILE_SITE_KEY = "site-key";
@@ -74,12 +74,12 @@ void test("auth config exposes whether email verification is enabled", async () 
     env.KANERA_DEPLOYMENT_MODE = "self_hosted";
     const selfHosted = await app.inject({ method: "GET", url: "/auth/config" });
     assert.equal(selfHosted.statusCode, 200);
-    assert.deepEqual(selfHosted.json(), { emailVerificationEnabled: true, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: "self_hosted", analytics: null });
+    assert.deepEqual(selfHosted.json(), { emailVerificationEnabled: true, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: "self_hosted", signInProviders: [], analytics: null });
 
     env.KANERA_DEPLOYMENT_MODE = "hosted";
     const hosted = await app.inject({ method: "GET", url: "/auth/config" });
     assert.equal(hosted.statusCode, 200);
-    assert.deepEqual(hosted.json(), { emailVerificationEnabled: true, signupsEnabled: true, turnstileSiteKey: "site-key", kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: "hosted", analytics: null });
+    assert.deepEqual(hosted.json(), { emailVerificationEnabled: true, signupsEnabled: true, turnstileSiteKey: "site-key", kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: "hosted", signInProviders: [], analytics: null });
 
     env.ANALYTICS_ENABLED = true;
     env.ANALYTICS_PROVIDER = "posthog";

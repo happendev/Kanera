@@ -64,6 +64,13 @@
       "src/app/app.routes.ts"
     ]
   },
+  "6858207717814520392": "Signing in",
+  "@6858207717814520392": {
+    "description": "Browser tab title - finishing a third-party sign-in",
+    "x-files": [
+      "src/app/app.routes.ts"
+    ]
+  },
   "2663204243022959500": "Connect AI agent",
   "@2663204243022959500": {
     "description": "Browser tab title",
@@ -3974,6 +3981,41 @@
       "src/app/features/account-settings/account-plan/account-plan.page.ts"
     ]
   },
+  "7449000061608046498": "Sign-in methods",
+  "@7449000061608046498": {
+    "description": "Settings section heading",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "6989491850244601366": "Connect an account to sign in to Kanera with it.",
+  "@6989491850244601366": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "5896927379604759167": "Not connected",
+  "@5896927379604759167": {
+    "description": "Sign-in method status",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "2907016025519254862": "Disconnect",
+  "@2907016025519254862": {
+    "description": "Button: remove a connected sign-in account",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "813263746069473514": "Connect",
+  "@813263746069473514": {
+    "description": "Button: connect a sign-in account",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
   "3892825090402620438": "Two-factor authentication",
   "@3892825090402620438": {
     "description": "Settings section heading",
@@ -4003,6 +4045,27 @@
   "4379830886284362842": "Set up authenticator",
   "@4379830886284362842": {
     "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "8745232204806777768": "Emailed code",
+  "@8745232204806777768": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "3972495142175860210": "Resend code",
+  "@3972495142175860210": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/auth/signup.page.html"
+    ]
+  },
+  "4077195556998869912": "Email me a code",
+  "@4077195556998869912": {
+    "description": "Button: send a confirmation code to the account's email",
     "x-files": [
       "src/app/features/account-settings/account-security/account-security.page.html"
     ]
@@ -4074,6 +4137,19 @@
       "src/app/features/account-settings/account-security/account-security.page.html"
     ]
   },
+  "8591875090862306452": "Set a password",
+  "@8591875090862306452": {
+    "description": "Settings section heading",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "5134485241389352558": "Add a password to also sign in with your email address. We'll email you a code to confirm it's you.",
+  "@5134485241389352558": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
   "3588415639242079458": "New password",
   "@3588415639242079458": {
     "description": "Field label",
@@ -4085,6 +4161,13 @@
   "8656126574213649581": "Confirm new password",
   "@8656126574213649581": {
     "description": "Field label",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "6908429302189588668": "Set password",
+  "@6908429302189588668": {
+    "description": "Button",
     "x-files": [
       "src/app/features/account-settings/account-security/account-security.page.html"
     ]
@@ -4147,6 +4230,49 @@
       "src/app/features/auth/signup.page.ts"
     ]
   },
+  "9121424381282805046": "Enter your current password.",
+  "@9121424381282805046": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "6518227749736777848": "Enter the six-digit code we emailed you.",
+  "@6518227749736777848": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "4646229059467843731": "We emailed you a code.",
+  "@4646229059467843731": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "1037706585478915086": "Couldn't reach {$provider}. Try again.",
+  "@1037706585478915086": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/auth/provider-sign-in.component.ts"
+    ]
+  },
+  "4604583644335869545": "{$provider} disconnected.",
+  "@4604583644335869545": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "812106935151128961": "Set a password or connect another sign-in method before removing this one.",
+  "@812106935151128961": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "2360251819813119073": "Couldn't disconnect {$provider}. Try again.",
+  "@2360251819813119073": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
   "1489758710743967189": "Enter your current password to set up an authenticator.",
   "@1489758710743967189": {
     "x-files": [
@@ -4160,14 +4286,14 @@
       "src/app/features/auth/login.page.ts"
     ]
   },
-  "9121424381282805046": "Enter your current password.",
-  "@9121424381282805046": {
+  "8782487788877276260": "Enter an authenticator or recovery code.",
+  "@8782487788877276260": {
     "x-files": [
       "src/app/features/account-settings/account-security/account-security.page.ts"
     ]
   },
-  "8782487788877276260": "Enter an authenticator or recovery code.",
-  "@8782487788877276260": {
+  "175882404495206125": "Password set. You'll be signed out on the next refresh.",
+  "@175882404495206125": {
     "x-files": [
       "src/app/features/account-settings/account-security/account-security.page.ts"
     ]
@@ -6346,6 +6472,7 @@
   "@8203367621031610680": {
     "x-files": [
       "src/app/features/account-settings/profile/profile.page.html",
+      "src/app/features/auth/provider-callback.page.ts",
       "src/app/features/auth/signup.page.html"
     ]
   },
@@ -7661,6 +7788,7 @@
     "description": "Field label",
     "x-files": [
       "src/app/features/auth/login.page.html",
+      "src/app/features/auth/provider-callback.page.ts",
       "src/app/features/auth/signup.page.html"
     ]
   },
@@ -7710,7 +7838,8 @@
   "431455034991697181": "Invalid or expired verification code",
   "@431455034991697181": {
     "x-files": [
-      "src/app/features/auth/login.page.ts"
+      "src/app/features/auth/login.page.ts",
+      "src/app/features/auth/provider-callback.page.ts"
     ]
   },
   "966716773187464757": "Authenticator or recovery code is required.",
@@ -7736,7 +7865,8 @@
   "3723454109055307608": "Unable to reach the server. Check your connection and try again.",
   "@3723454109055307608": {
     "x-files": [
-      "src/app/features/auth/login.page.ts"
+      "src/app/features/auth/login.page.ts",
+      "src/app/features/auth/provider-callback.page.ts"
     ]
   },
   "7858768589576583715": "Invalid credentials",
@@ -7759,6 +7889,193 @@
     "x-files": [
       "src/app/features/auth/login.page.ts",
       "src/app/features/auth/signup.page.ts"
+    ]
+  },
+  "3686284950598311784": "Private",
+  "@3686284950598311784": {
+    "description": "Default name for a new organisation",
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts",
+      "src/app/features/auth/signup.page.ts",
+      "src/app/features/global-work/save-view.popover.ts",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "2319099628339158211": "Sign-in was cancelled.",
+  "@2319099628339158211": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "9166215289853627973": "That account didn't share an email address with Kanera. Make one visible on the account, or sign in with your email.",
+  "@9166215289853627973": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "6713673844951056782": "This Kanera account isn't available. Contact support if you think this is a mistake.",
+  "@6713673844951056782": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "7542846270847284598": "No Kanera account uses that email, and new sign-ups are closed. Ask for an invitation.",
+  "@7542846270847284598": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "6704634547709978668": "This invitation is invalid or has expired.",
+  "@6704634547709978668": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "133068979002952429": "This invitation was sent to a different email address. Continue with the account that uses the invited address.",
+  "@133068979002952429": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "2361870173454437871": "That account is already connected to a different Kanera account.",
+  "@2361870173454437871": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "1184522522871655331": "Your Kanera account is already connected to a different account with this provider. Disconnect it first in Account security.",
+  "@1184522522871655331": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "1618095083841106007": "This sign-in has expired. Start again.",
+  "@1618095083841106007": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "8900509084295852638": "We couldn't sign you in. Try again.",
+  "@8900509084295852638": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "6892425506867128440": "Signing you in…",
+  "@6892425506867128440": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "2354687172778385277": "Confirm your email address",
+  "@2354687172778385277": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "6842101936220353593": "Create your Kanera account",
+  "@6842101936220353593": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "4821925454201474280": "Sign-in didn't finish",
+  "@4821925454201474280": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "5833005330921644052": "We sent a six-digit code to {$START_TAG_STRONG}{$EMAIL}{$CLOSE_TAG_STRONG}. Enter it to continue.",
+  "@5833005330921644052": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "6962699013778688473": "Continue",
+  "@6962699013778688473": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts",
+      "src/app/features/auth/signup.page.html",
+      "src/app/features/board-mirrors/mirror-create.dialog.ts",
+      "src/app/features/oauth/oauth-device.page.ts",
+      "src/app/features/onboarding/onboarding.page.html",
+      "src/app/features/shell/organisation-action.dialog.ts"
+    ]
+  },
+  "6068450519985931074": "You're joining {$START_TAG_STRONG}{$ORGANISATION}{$CLOSE_TAG_STRONG} as {$EMAIL}.",
+  "@6068450519985931074": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "7973479212603616333": "No Kanera account uses {$EMAIL} yet. Add your name to create one.",
+  "@7973479212603616333": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "1024001460651531895": " By continuing, you agree to the {$START_LINK}Terms of Service{$CLOSE_LINK} and acknowledge the {$START_LINK_1}Privacy Policy{$CLOSE_LINK}. ",
+  "@1024001460651531895": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts",
+      "src/app/features/auth/signup.page.html"
+    ]
+  },
+  "5907476126990913307": "Create account",
+  "@5907476126990913307": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts",
+      "src/app/features/board-invite/board-invite.page.html",
+      "src/app/features/invite/invite.page.html"
+    ]
+  },
+  "7945613634454385817": "Back to account security",
+  "@7945613634454385817": {
+    "description": "Link back to account security settings",
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "4939428286618017421": "Back to sign in",
+  "@4939428286618017421": {
+    "description": "Link back to the sign-in page",
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "7856920154752569312": "Enter the six-digit code from the email.",
+  "@7856920154752569312": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "4444753420973870540": "Name is required.",
+  "@4444753420973870540": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "3728336095556647473": "This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.",
+  "@3728336095556647473": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts",
+      "src/app/features/auth/signup.page.ts"
+    ]
+  },
+  "5458928982267091974": "Continue with {$provider}",
+  "@5458928982267091974": {
+    "description": "Button - sign in or sign up through a third-party account",
+    "x-files": [
+      "src/app/features/auth/provider-sign-in.component.ts"
+    ]
+  },
+  "6627551976444260400": "or",
+  "@6627551976444260400": {
+    "description": "Separator between third-party sign-in buttons and the email form",
+    "x-files": [
+      "src/app/features/auth/provider-sign-in.component.ts"
     ]
   },
   "4200328509857455180": "Choose a new password",
@@ -7887,23 +8204,6 @@
       "src/app/features/auth/signup.page.html"
     ]
   },
-  "1024001460651531895": " By continuing, you agree to the {$START_LINK}Terms of Service{$CLOSE_LINK} and acknowledge the {$START_LINK_1}Privacy Policy{$CLOSE_LINK}. ",
-  "@1024001460651531895": {
-    "x-files": [
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "6962699013778688473": "Continue",
-  "@6962699013778688473": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/auth/signup.page.html",
-      "src/app/features/board-mirrors/mirror-create.dialog.ts",
-      "src/app/features/oauth/oauth-device.page.ts",
-      "src/app/features/onboarding/onboarding.page.html",
-      "src/app/features/shell/organisation-action.dialog.ts"
-    ]
-  },
   "6189830083511725668": "We sent a 6-digit code to {$START_TAG_STRONG}{$EMAIL}{$CLOSE_TAG_STRONG}. Enter it below to continue.",
   "@6189830083511725668": {
     "x-files": [
@@ -7938,26 +8238,10 @@
       "src/app/features/auth/signup.page.html"
     ]
   },
-  "3972495142175860210": "Resend code",
-  "@3972495142175860210": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
   "7007703201160377234": "Already have an account? {$START_LINK}Sign in{$CLOSE_LINK}",
   "@7007703201160377234": {
     "x-files": [
       "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "3686284950598311784": "Private",
-  "@3686284950598311784": {
-    "description": "Default name for a new organisation",
-    "x-files": [
-      "src/app/features/auth/signup.page.ts",
-      "src/app/features/global-work/save-view.popover.ts",
-      "src/app/features/notes/note-editor.component.ts"
     ]
   },
   "4968369344159400023": "Your name is required.",
@@ -7986,12 +8270,6 @@
   },
   "1080744542945497947": "Could not send verification code",
   "@1080744542945497947": {
-    "x-files": [
-      "src/app/features/auth/signup.page.ts"
-    ]
-  },
-  "3728336095556647473": "This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.",
-  "@3728336095556647473": {
     "x-files": [
       "src/app/features/auth/signup.page.ts"
     ]
@@ -8059,14 +8337,6 @@
   "@5466585966834098565": {
     "x-files": [
       "src/app/features/board-invite/board-invite.page.html"
-    ]
-  },
-  "5907476126990913307": "Create account",
-  "@5907476126990913307": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/board-invite/board-invite.page.html",
-      "src/app/features/invite/invite.page.html"
     ]
   },
   "4962321521106816970": "Opening board…",
@@ -18673,13 +18943,6 @@
   "465607310718150951": "Let Claude or another agent read and update your boards through MCP or the Kanera CLI.",
   "@465607310718150951": {
     "description": "Getting started step text",
-    "x-files": [
-      "src/app/features/home/getting-started.component.ts"
-    ]
-  },
-  "813263746069473514": "Connect",
-  "@813263746069473514": {
-    "description": "Getting started step button",
     "x-files": [
       "src/app/features/home/getting-started.component.ts"
     ]

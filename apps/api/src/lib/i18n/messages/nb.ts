@@ -621,6 +621,18 @@ const nb: ServerMessages = {
         heading: "Nye gjenopprettingskoder opprettet",
         intro: ({ firstName, when }) => `Hei ${firstName}, nye gjenopprettingskoder for tofaktorautentisering ble opprettet for Kanera-kontoen din ${when}. De forrige kodene dine virker ikke lenger.`,
       },
+      signInMethodAdded: {
+        subject: "En ny måte å logge inn på Kanera ble lagt til",
+        preheader: "Kanera-kontoen din har en ny innloggingsmetode.",
+        heading: "Ny innloggingsmetode lagt til",
+        intro: ({ firstName, provider, when }) => `Hei ${firstName}, ${provider} ble koblet til Kanera-kontoen din ${when}. Nå kan du bruke den til å logge inn.`,
+      },
+      signInMethodRemoved: {
+        subject: "En innloggingsmetode ble fjernet fra Kanera-kontoen din",
+        preheader: "Kanera-kontoen din har én innloggingsmetode mindre.",
+        heading: "Innloggingsmetode fjernet",
+        intro: ({ firstName, provider, when }) => `Hei ${firstName}, ${provider} ble koblet fra Kanera-kontoen din ${when}. Den kan ikke lenger brukes til å logge inn.`,
+      },
       notYouWithSupport: ({ email }) => `Hvis du ikke gjorde denne endringen, tilbakestill passordet nå og kontakt ${email}.`,
       notYouWithoutSupport: "Hvis du ikke gjorde denne endringen, tilbakestill passordet nå og si fra til Kanera-administratoren din.",
       notYouEmailWithSupport: ({ email }) => `Hvis du ikke gjorde denne endringen, kontakt ${email} med en gang, så vi kan sikre kontoen din.`,

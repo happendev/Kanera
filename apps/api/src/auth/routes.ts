@@ -17,6 +17,7 @@ import {
   workspaceMembers,
   workspaces,
   mfaCredentials,
+  type EmailVerificationPurpose,
 } from "@kanera/shared/schema";
 import { and, desc, eq, gt, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -47,7 +48,10 @@ import { captureWorkspaceMemberJoined } from "../lib/analytics-milestones.js";
 import { isClientAdminRole, resolveActiveOrganisation, resolveActiveOrganisationContext, type ActiveOrganisation } from "../lib/client-membership.js";
 import { disconnectSupportSessionSockets, disconnectUserRealtimeSockets } from "../realtime/io.js";
 import { emitToUser } from "../realtime/emit.js";
-import { mfaEnrollmentRequiredFor, requiresMfaForAccess } from "./mfa-policy.js";
+import { mfaEnrollmentRequiredFor, organisationMfaBlocksSession, requiresMfaForAccess } from "./mfa-policy.js";
+import { configuredSignInProviders } from "./providers/adapters.js";
+import { providerAuthRoutes } from "./providers/routes.js";
+import { announceCreatedAccount, assertEmailAvailableForSignup, createAccount, duplicateSignupMessage, isUniqueViolation, loadSignupBoardInvitation } from "./create-account.js";
 import { authUserPayload as meResponseFor, issueUserSession as issueSession, REFRESH_COOKIE, refreshCookieOptions } from "./session.js";
 
 const ALLOWED_AVATAR_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -154,12 +158,6 @@ function normalizeTimezone(value: string | undefined): string {
   }
 }
 
-function isUniqueViolation(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false;
-  if ((err as { code?: unknown }).code === "23505") return true;
-  return isUniqueViolation((err as { cause?: unknown }).cause);
-}
-
 export async function authRoutes(app: FastifyInstance) {
   // Per-IP brute-force / abuse throttle for unauthenticated auth endpoints. Valkey makes the
   // buckets global across API processes; keys stay action-scoped so login attempts do not drain
@@ -219,6 +217,7 @@ export async function authRoutes(app: FastifyInstance) {
       turnstileSiteKey: turnstileEnabled() ? env.CLOUDFLARE_TURNSTILE_SITE_KEY! : null,
       kaneraEnvironment: env.KANERA_ENVIRONMENT,
       deploymentMode: env.KANERA_DEPLOYMENT_MODE,
+      signInProviders: configuredSignInProviders().map((adapter) => adapter.id),
       analytics,
     };
   });
@@ -292,7 +291,7 @@ export async function authRoutes(app: FastifyInstance) {
   // never leak whether the address exists via a different error shape.
   async function issueVerificationCode(params: {
     email: string;
-    purpose: "signup" | "email_change";
+    purpose: EmailVerificationPurpose;
     userId: string | null;
     /** The reader's language: the signup form's at signup, the account's for an email change. */
     locale: Locale;
@@ -333,7 +332,7 @@ export async function authRoutes(app: FastifyInstance) {
   // redeem the same code twice. Throws badRequest on any failure.
   async function verifyAndConsumeCode(params: {
     email: string;
-    purpose: "signup" | "email_change";
+    purpose: EmailVerificationPurpose;
     code: string;
     userId?: string | null;
   }) {
@@ -367,6 +366,20 @@ export async function authRoutes(app: FastifyInstance) {
       .where(and(eq(emailVerificationCodes.id, row.id), isNull(emailVerificationCodes.consumedAt)))
       .returning({ id: emailVerificationCodes.id });
     if (consumed.length === 0) throw badRequest("invalid or expired verification code");
+  }
+
+  // Re-confirms the account owner before a password-gated settings change. Accounts with a password
+  // must use it (a stolen session alone cannot read their mailbox *and* know the password); accounts
+  // that only sign in through a provider have no password, so a code emailed to the account stands in.
+  async function assertStepUp(userId: string, proof: { currentPassword?: string; emailCode?: string }) {
+    const [user] = await db.select({ email: users.email, passwordHash: users.passwordHash }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!user) throw unauthorized();
+    if (user.passwordHash) {
+      if (!proof.currentPassword || !(await verifyPassword(user.passwordHash, proof.currentPassword))) throw unauthorized("invalid password");
+      return;
+    }
+    if (!proof.emailCode) throw badRequest("verification code required");
+    await verifyAndConsumeCode({ email: user.email, purpose: "step_up", code: proof.emailCode, userId });
   }
 
   // Step 1 of verify-before-account: email a code to the address the visitor wants to
@@ -420,53 +433,8 @@ export async function authRoutes(app: FastifyInstance) {
   app.post("/auth/signup", { preHandler: authRateLimit("signup") }, async (req, reply) => {
     const body = dto.signupBody.parse(req.body);
     await assertSignupOpenForIntent({ inviteToken: body.inviteToken, boardInviteToken: body.boardInviteToken });
-    const boardInvitation = body.boardInviteToken
-      ? await loadRedeemableBoardInvitation({ token: body.boardInviteToken })
-      : null;
-    // Fail loud only when the board invite is the sole signup intent. Alongside a valid org
-    // invite, a stale board token (they rotate when boards are bundled onto a pending invitation)
-    // is ignored rather than blocking the stronger, still-valid invitation.
-    if (body.boardInviteToken && !boardInvitation && !body.inviteToken) {
-      throw unauthorized("This board invitation is invalid or has expired.");
-    }
-    if (boardInvitation && boardInvitation.email.toLowerCase() !== body.email.toLowerCase()) {
-      throw new AppError(
-        403,
-        "BOARD_INVITE_EMAIL_MISMATCH",
-        "This invitation was sent to a different email address. Sign up with the invited address.",
-      );
-    }
-    const duplicateSignupMessage = body.boardInviteToken || body.inviteToken
-      ? "An account already exists for this email. Sign in to accept the invite."
-      : "email already registered";
-
-    const [existingUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, body.email))
-      .limit(1);
-    if (existingUser) {
-      if (body.inviteToken) {
-        const [invite] = await db
-          .select({ orgName: clients.name })
-          .from(inviteTokens)
-          .innerJoin(clients, eq(clients.id, inviteTokens.clientId))
-          .where(and(
-            eq(inviteTokens.tokenHash, hashOpaqueToken(body.inviteToken)),
-            isNull(inviteTokens.revokedAt),
-            sql`(${inviteTokens.expiresAt} is null or ${inviteTokens.expiresAt} > now())`,
-          ))
-          .limit(1);
-        if (invite) throw new AppError(409, "ACCOUNT_EXISTS", duplicateSignupMessage, { orgName: invite.orgName });
-      }
-      if (boardInvitation) {
-        throw new AppError(409, "ACCOUNT_EXISTS", duplicateSignupMessage, {
-          orgName: boardInvitation.orgName,
-          boardInvite: true,
-        });
-      }
-      throw conflict(duplicateSignupMessage);
-    }
+    const boardInvitation = await loadSignupBoardInvitation(body);
+    await assertEmailAvailableForSignup({ email: body.email, inviteToken: body.inviteToken, boardInvitation });
 
     if (!env.EMAIL_VERIFICATION_ENABLED) {
       await verifyTurnstile(req, body.turnstileToken);
@@ -484,334 +452,50 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
-      const result = await db.transaction(async (tx) => {
-        let clientId: string;
-        let orgName: string;
-        let orgRole: "owner" | "admin" | "member";
-        let workspaceGrants: Array<{ workspaceId: string; role: "admin" | "member" }> = [];
-        let acceptedInvite = false;
-        let acceptedInviteId: string | null = null;
-        let redeemedInvite: { invitation: RedeemableBoardInvitation; grants: BoardInvitationGrant[] } | null = null;
-
-        if (body.inviteToken) {
-          acceptedInvite = true;
-          const [invite] = await tx
-            .select({
-              id: inviteTokens.id,
-              clientId: inviteTokens.clientId,
-              orgRole: inviteTokens.orgRole,
-              orgName: clients.name,
-            })
-            .from(inviteTokens)
-            .innerJoin(clients, eq(clients.id, inviteTokens.clientId))
-            .where(
-              and(
-                eq(inviteTokens.tokenHash, hashOpaqueToken(body.inviteToken)),
-                isNull(inviteTokens.revokedAt),
-                sql`(${inviteTokens.expiresAt} is null or ${inviteTokens.expiresAt} > now())`,
-              ),
-            )
-            .limit(1);
-          if (!invite) throw unauthorized("invalid invite");
-          clientId = invite.clientId;
-          orgName = invite.orgName;
-          orgRole = invite.orgRole;
-          acceptedInviteId = invite.id;
-          // Hard gate on the free-tier member cap: this is the point where a person actually joins
-          // the org. Runs inside the signup transaction; the helper takes a tenant row lock so
-          // concurrent invite acceptances serialize and cannot race past the cap. On trials the free cap
-          // no-ops and seats are unlimited; paid subscriptions still gate against purchased capacity.
-          await assertOrgMemberLimit(clientId, tx);
-          await assertSeatPoolAvailable(clientId, tx);
-          const grants = await tx
-            .select({ workspaceId: inviteWorkspaceGrants.workspaceId, role: inviteWorkspaceGrants.role })
-            .from(inviteWorkspaceGrants)
-            .where(eq(inviteWorkspaceGrants.inviteId, invite.id));
-          workspaceGrants = grants;
-        } else {
-          const [client] = await tx
-            .insert(clients)
-            .values({
-              // A board-only guest still needs a home client for the identity/JWT/media tenancy
-              // invariant, but it is intentionally private and invisible in the signup journey.
-              name: boardInvitation ? "Private" : body.orgName,
-              storageConfig: getConfiguredS3StorageConfig() ?? { kind: "local" },
-              // In hosted mode a new org starts on a time-boxed trial. currentPeriodEnd is the
-              // trial end consumed by the trial-expiry sweep and surfaced to the UI; once it lapses
-              // the org reverts to free. A board-invite guest's silent home org must NOT enter that
-              // lifecycle: the sweeps select purely on billingStatus='trialing' and would otherwise
-              // email trial warnings and a downgrade notice for a trial the guest was never told
-              // about (their signup deliberately sends only the welcome email). Their org starts on
-              // the free plan; they can begin a trial later by choosing to upgrade.
-              ...(env.KANERA_DEPLOYMENT_MODE === "hosted"
-                ? boardInvitation
-                  ? { pushEnabled: true }
-                  : {
-                    pushEnabled: true,
-                    plan: "paid" as const,
-                    billingStatus: "trialing" as const,
-                    currentPeriodEnd: new Date(Date.now() + env.HOSTED_TRIAL_DAYS * 86_400_000),
-                  }
-                : {}),
-            })
-            .returning();
-          clientId = client!.id;
-          orgName = client!.name;
-          orgRole = "owner";
-        }
-
-        const passwordHash = await hashPassword(body.password);
-        const [user] = await tx
-          .insert(users)
-          .values({
-            clientId,
-            activeClientId: clientId,
-            email: body.email,
-            emailVerifiedAt: emailVerified ? new Date() : null,
-            passwordHash,
-            displayName: body.displayName,
-            timezone: normalizeTimezone(undefined),
-            locale: body.locale ?? null,
-          })
-          .returning();
-
-        const attribution = body.analyticsAttribution;
-        // Only consent-stamped hosted acquisition is durable. Legacy/no-consent signups still
-        // work, and a member's private attribution never overwrites the organisation creator's.
-        if (env.KANERA_DEPLOYMENT_MODE === "hosted" && attribution?.consent_version === 1
-          && attribution.consented_at && attribution.captured_at) {
-          await tx.insert(userAcquisitions).values({ userId: user!.id, attribution });
-        }
-
-        await tx.insert(clientMembers).values({
-          clientId,
-          userId: user!.id,
-          clientRole: orgRole,
-          createdById: acceptedInvite ? null : user!.id,
-        });
-        if (!acceptedInvite) {
-          await tx.update(clients).set({ createdByUserId: user!.id }).where(eq(clients.id, clientId));
-        }
-
-        if (boardInvitation) {
-          // The outer read gives a clear pre-verification error. Revalidation here is the
-          // concurrency boundary; a seat failure or concurrent redemption rolls back the account,
-          // private client, and every board membership together.
-          const currentInvitation = await loadRedeemableBoardInvitation({ token: body.boardInviteToken! }, tx);
-          if (!currentInvitation) throw conflict("invitation already accepted");
-          // A board invite from the org this signup just joined via inviteToken is moot: org
-          // membership supersedes guest access, and board_members rows are for cross-organisation
-          // guests only (the accept route rejects the same combination). Skip rather than fail so
-          // the org-invite signup still completes; the host can revoke the leftover invitation.
-          if (currentInvitation.hostClientId !== clientId) {
-            const grants = await loadBoardInvitationGrants(currentInvitation, tx);
-            await redeemBoardInvitationInTx(tx, {
-              invitation: currentInvitation,
-              grants,
-              userId: user!.id,
-              redeemerEmail: user!.email,
-              targetClientId: clientId,
-              createdById: currentInvitation.invitedById,
-            });
-            redeemedInvite = { invitation: currentInvitation, grants };
-          }
-        }
-
-        if (workspaceGrants.length > 0) {
-          await tx.insert(workspaceMembers).values(
-            workspaceGrants.map((g) => ({
-              workspaceId: g.workspaceId,
-              userId: user!.id,
-              role: g.role,
-            })),
-          );
-          // Board membership is the content-access model for normal users: a workspace-admin grant
-          // alone opens workspace settings but not the boards themselves. Materialize the pinned
-          // editor rows the promote path writes, or an invited admin gets 403 on every existing board.
-          for (const grant of workspaceGrants) {
-            if (grant.role === "admin") await pinAdminToWorkspaceBoards(tx, grant.workspaceId, user!.id);
-          }
-        }
-
-        // After workspace grants so a workspace-admin pin from this invite is kept over a board grant.
-        // Admin invites carry no board grants (create rejects them): org authority pins every board below.
-        const boardGrants: AppliedInviteBoardGrants = acceptedInviteId
-          ? await applyInviteBoardGrantsInTx(tx, { inviteId: acceptedInviteId, clientId, userId: user!.id })
-          : { members: [], workspaceMembers: [] };
-
-        // An accepted organisation-admin invite is another org-role assignment path. Materialize
-        // its inherited board access before signup commits so existing standalone rosters stay whole.
-        if (orgRole === "owner" || orgRole === "admin") {
-          await pinOrgAdminToClientBoards(tx, clientId, user!.id);
-        }
-
-        return {
-          user: user!,
-          hasWorkspace: workspaceGrants.length > 0,
-          workspaceIds: workspaceGrants.map((grant) => grant.workspaceId),
-          orgName: orgName!,
-          orgRole,
-          acceptedInvite,
-          boardGrants,
-          redeemedInvite,
-          boardInviteRedirect: redeemedInvite ? `/b/${redeemedInvite.grants[0]!.boardId}` : null,
-        };
+      const result = await createAccount({
+        email: body.email,
+        emailVerified,
+        passwordHash: await hashPassword(body.password),
+        displayName: body.displayName,
+        orgName: body.orgName,
+        locale: body.locale ?? null,
+        inviteToken: body.inviteToken,
+        boardInviteToken: body.boardInviteToken,
+        boardInvitation,
+        analyticsAttribution: body.analyticsAttribution,
       });
 
       // An invite-driven signup joins an organisation (or a board-invite host) whose security policy may
       // already mandate MFA. The account now exists either way, so every side effect below still runs,
       // but tokens are withheld and the enrollment challenge is returned exactly as password login does.
       const joinedOrganisation = await resolveActiveOrganisation(result.user.id, result.user.clientId);
-      const enrollment = joinedOrganisation ? await mfaEnrollmentRequiredFor(result.user.id, joinedOrganisation) : null;
+      const enrollment = joinedOrganisation ? await mfaEnrollmentRequiredFor(result.user.id, joinedOrganisation, "password") : null;
       let accessToken: string | null = null;
       if (!enrollment) {
         accessToken = app.jwt.sign({
           sub: result.user.id,
           cid: result.user.clientId,
           role: result.orgRole,
+          amr: "password",
         });
         const refresh = newRefreshToken();
         await db
           .insert(refreshTokens)
-          .values({ userId: result.user.id, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
+          .values({ userId: result.user.id, tokenHash: refresh.hash, expiresAt: refresh.expiresAt, authMethod: "password" });
 
         reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
       }
-      // Account creation is authoritative here: the user and organisation transaction has committed.
-      // Analytics is fire-and-forget and can never turn a successful signup into a failed request.
-      void productAnalytics.capture({
-        event: "registration_completed",
-        distinctId: result.user.id,
-        organizationId: result.user.clientId,
-        properties: {
-          user_id: result.user.id,
-          source: body.analyticsAttribution?.source ?? "direct",
-          medium: body.analyticsAttribution?.medium ?? "none",
-          campaign: body.analyticsAttribution?.campaign ?? "none",
-          event_version: ANALYTICS_EVENT_VERSION,
-        },
+      await announceCreatedAccount(app, result, {
+        analyticsAttribution: body.analyticsAttribution,
+        signInMethod: "password",
+        fallbackLocale: requestLocale(req),
+        log: req.log,
       });
-      // Single source for every trial-start side effect (analytics below, email switch further
-      // down): a signup that joined an existing org or redeemed a board invite starts no trial,
-      // and its silent home org was created without trial billing columns to match.
-      const startsHostedTrial = env.KANERA_DEPLOYMENT_MODE === "hosted" && !result.acceptedInvite && !result.redeemedInvite;
-      if (startsHostedTrial) {
-        void productAnalytics.capture({
-          event: "trial_started",
-          distinctId: result.user.id,
-          organizationId: result.user.clientId,
-          properties: {
-            // Billing is organisation-scoped in Kanera; the guide's workspace_id maps to that
-            // billing account for commercial events rather than to one child workspace.
-            workspace_id: result.user.clientId,
-            plan_code: "pro_trial",
-            billing_period: "not_selected",
-            event_version: ANALYTICS_EVENT_VERSION,
-          },
-        });
-        // Keep the established lifecycle event while adding the activation vocabulary used by the
-        // new value-to-upgrade funnel. Both are emitted from the same committed signup boundary.
-        void productAnalytics.capture({
-          event: "trial_activated",
-          distinctId: result.user.id,
-          organizationId: result.user.clientId,
-          properties: {
-            workspace_id: result.user.clientId,
-            plan_code: "pro_trial",
-            billing_period: "not_selected",
-            event_version: ANALYTICS_EVENT_VERSION,
-          },
-        });
-      }
-
-      if (result.redeemedInvite) {
-        await emitBoardInvitationAccepted(app, {
-          invitation: result.redeemedInvite.invitation,
-          grants: result.redeemedInvite.grants,
-          user: result.user,
-        });
-      }
-
-      // A new hosted owner gets the trial-start message below, which now includes the account-ready
-      // context and trial next steps. Avoid sending a second generic welcome email in the same minute.
-      if (!startsHostedTrial) await app.mailer.sendWelcome(result.user.email, result.user.displayName, accountLocale(result.user.locale, req));
-      await sendInternalSignupNotification(
-        result.acceptedInvite
-          ? { type: "invite_accepted", displayName: result.user.displayName, email: result.user.email, orgName: result.orgName }
-          : {
-            type: "signup",
-            displayName: result.user.displayName,
-            email: result.user.email,
-            orgName: result.orgName,
-            // The team follows up by hand, so it needs to know which channel brought this person in.
-            attribution: body.analyticsAttribution
-              ? {
-                source: body.analyticsAttribution.source,
-                medium: body.analyticsAttribution.medium,
-                campaign: body.analyticsAttribution.campaign,
-                referringDomain: body.analyticsAttribution.referring_domain,
-                landingPage: body.analyticsAttribution.landing_page,
-              }
-              : null,
-          },
-        { log: req.log },
-      );
-      if (startsHostedTrial) {
-        const [client] = await db
-          .select({ currentPeriodEnd: clients.currentPeriodEnd })
-          .from(clients)
-          .where(eq(clients.id, result.user.clientId))
-          .limit(1);
-        await sendHostedBillingEmail(app.mailer, {
-          clientId: result.user.clientId,
-          kind: "pro_trial_started",
-          trialEndsAt: client?.currentPeriodEnd ?? null,
-          dedupeKey: `pro_trial_started:${result.user.clientId}`,
-        }, { log: req.log });
-      }
-      if (result.acceptedInvite) {
-        // Signup is also an organisation-membership mutation. Publish the same client event as the
-        // authenticated acceptance path so open admin rosters and their seat usage converge without
-        // waiting for a page refresh.
-        await emitToClientDurable(result.user.clientId, "client:user:added", {
-          clientId: result.user.clientId,
-          user: withSignedMedia(result.user.clientId, {
-            id: result.user.id,
-            email: result.user.email,
-            displayName: result.user.displayName,
-            avatarUrl: result.user.avatarUrl,
-            role: result.orgRole,
-            createdAt: result.user.createdAt,
-          }),
-        });
-        await emitInviteBoardGrants(result.boardGrants, { ...result.user, orgRole: result.orgRole });
-        await captureWorkspaceMemberJoined({
-          organizationId: result.user.clientId,
-          workspaceIds: result.workspaceIds,
-          // An org owner/admin who accepted an invite with no explicit workspace grants joins every
-          // workspace; count that as one organisation-scoped acceptance rather than one per workspace.
-          orgWide: result.workspaceIds.length === 0
-            && isClientAdminRole(result.orgRole),
-          actorId: result.user.id,
-          joinSource: "invitation",
-        });
-        await notifyAdminsOrgInviteAccepted(app, {
-          acceptedUserId: result.user.id,
-          acceptedByName: result.user.displayName,
-          acceptedByEmail: result.user.email,
-          clientId: result.user.clientId,
-          orgName: result.orgName,
-          orgRole: result.orgRole,
-        });
-        // No Stripe change on acceptance: the new member occupies a pre-purchased pool seat (the signup
-        // tx already gated on seat_limit via assertSeatPoolAvailable), and the billed quantity is the
-        // seat_limit, not headcount. Capacity is only charged when the admin explicitly buys seats.
-      }
 
       if (enrollment) return enrollment;
       return { accessToken, user: { ...(await meResponseFor(result.user.id, result.user.clientId)), boardInviteRedirect: result.boardInviteRedirect } };
     } catch (err: unknown) {
-      if (isUniqueViolation(err)) throw conflict(duplicateSignupMessage);
+      if (isUniqueViolation(err)) throw conflict(duplicateSignupMessage(body));
       throw err;
     }
   });
@@ -849,7 +533,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (!active) throw unauthorized("no active organisation membership");
     if (await requiresMfaForAccess(row.userId, active.clientId, active.requireMfa)) return { status: "mfa_enrollment_required" as const, challengeToken: createMfaChallenge({ kind: "user", id: row.userId }, "enroll") };
 
-    const upgradedPasswordHash = needsPasswordRehash(row.passwordHash) ? await hashPassword(body.password) : null;
+    const upgradedPasswordHash = row.passwordHash && needsPasswordRehash(row.passwordHash) ? await hashPassword(body.password) : null;
     if (upgradedPasswordHash) await db.update(users).set({ passwordHash: upgradedPasswordHash, updatedAt: new Date() }).where(eq(users.id, row.userId));
     return issueSession(app, row.userId, reply, active.clientId, organisationContext);
   });
@@ -861,7 +545,7 @@ export async function authRoutes(app: FastifyInstance) {
     const credential = await getMfaCredential(challenge);
     if (!credential?.enabledAt || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized("invalid verification code");
     await bootstrapOrganisationAfterFullDeletion(challenge.id);
-    return issueSession(app, challenge.id, reply);
+    return issueSession(app, challenge.id, reply, undefined, undefined, challenge.amr ?? "password");
   });
 
   // Organisation-enforced enrollment runs after password verification but before any access or refresh
@@ -904,8 +588,9 @@ export async function authRoutes(app: FastifyInstance) {
   // factor is already enabled it also consumes a code, so it must share the login throttle.
   app.post("/auth/mfa/enroll", { preHandler: [app.authenticate, authRateLimit("mfa")] }, async (req) => {
     const body = dto.mfaEnrollmentStartBody.parse(req.body);
-    const [user] = await db.select({ email: users.email, passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
-    if (!user || !(await verifyPassword(user.passwordHash, body.currentPassword))) throw unauthorized("invalid password");
+    const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+    if (!user) throw unauthorized();
+    await assertStepUp(req.auth.sub, body);
     // beginMfaEnrollment replaces the existing credential, which would silently leave the account
     // without an enabled factor if the new enrollment is abandoned. Replacing an enabled factor is
     // therefore equivalent to disabling it and must clear the same bar: a valid current code, with
@@ -931,9 +616,10 @@ export async function authRoutes(app: FastifyInstance) {
   // lockout so a stolen session plus password cannot brute-force the six-digit second factor.
   app.post("/auth/mfa/recovery-codes", { preHandler: [app.authenticate, authRateLimit("mfa")] }, async (req) => {
     const body = dto.mfaProtectedActionBody.parse(req.body);
-    const [user] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
     const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
-    if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized();
+    if (!credential?.enabledAt) throw unauthorized();
+    await assertStepUp(req.auth.sub, body);
+    if (!(await verifyMfaLoginCode(credential, body.code))) throw unauthorized();
     const recoveryCodes = await regenerateRecoveryCodes(credential.id);
     await notifyAccountSecurityChange(app.mailer, { userId: req.auth.sub, event: "recovery_codes_regenerated", log: req.log });
     return { recoveryCodes };
@@ -941,10 +627,11 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.delete("/auth/mfa", { preHandler: [app.authenticate, authRateLimit("mfa")] }, async (req) => {
     const body = dto.mfaProtectedActionBody.parse(req.body);
-    const [user] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
     const active = await resolveActiveOrganisation(req.auth.sub, req.auth.cid);
     const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
-    if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized();
+    if (!credential?.enabledAt) throw unauthorized();
+    await assertStepUp(req.auth.sub, body);
+    if (!(await verifyMfaLoginCode(credential, body.code))) throw unauthorized();
     // A user cannot leave themselves without a second factor while the active org (or a true guest
     // host org) mandates MFA — they would only be forced to re-enroll on next login anyway.
     if (!active || await requiresMfaForAccess(req.auth.sub, active.clientId, active.requireMfa)) throw forbidden("MFA is required by your organisation");
@@ -988,14 +675,13 @@ export async function authRoutes(app: FastifyInstance) {
       if (body.clientId) throw forbidden("organisation membership is not active");
       throw unauthorized("no active organisation membership");
     }
-    if (await requiresMfaForAccess(identity.id, active.clientId, active.requireMfa)
-      && !(await getMfaCredential({ kind: "user", id: identity.id }))?.enabledAt) {
+    if (await organisationMfaBlocksSession(identity.id, active, refresh.authMethod)) {
       throw forbidden("MFA is required by this organisation");
     }
     if (!body.clientId) {
       await db.update(users).set({ activeClientId: active.clientId, updatedAt: new Date() }).where(eq(users.id, identity.id));
     }
-    const accessToken = app.jwt.sign({ sub: identity.id, cid: active.clientId, role: active.role });
+    const accessToken = app.jwt.sign({ sub: identity.id, cid: active.clientId, role: active.role, amr: refresh.authMethod });
 
     return { accessToken, user: await meResponseFor(identity.id, active.clientId, organisationContext.organisations) };
   });
@@ -1006,11 +692,10 @@ export async function authRoutes(app: FastifyInstance) {
     const organisationContext = await resolveActiveOrganisationContext(req.auth.sub, body.clientId);
     const active = organisationContext.active;
     if (!active) throw forbidden("organisation membership is not active");
-    if (await requiresMfaForAccess(req.auth.sub, active.clientId, active.requireMfa)
-      && !(await getMfaCredential({ kind: "user", id: req.auth.sub }))?.enabledAt) {
+    if (await organisationMfaBlocksSession(req.auth.sub, active, req.auth.amr)) {
       throw forbidden("MFA is required by this organisation");
     }
-    const session = await issueSession(app, req.auth.sub, reply, active.clientId, organisationContext);
+    const session = await issueSession(app, req.auth.sub, reply, active.clientId, organisationContext, req.auth.amr);
     // Evict only after the replacement token exists so reconnecting clients cannot rejoin the old
     // organisation with the token that initiated the switch.
     disconnectUserRealtimeSockets(req.auth.sub);
@@ -1196,6 +881,17 @@ export async function authRoutes(app: FastifyInstance) {
     return { avatarUrl: null };
   });
 
+  // Emails the code that stands in for a password on password-gated settings. Only provider-only
+  // accounts get one; an account with a password must keep using it.
+  app.post("/auth/me/step-up-code", { preHandler: [app.authenticate, authRateLimit("request-email-verification")] }, async (req) => {
+    if (req.auth.authKind !== "user") throw forbidden();
+    const [me] = await db.select({ email: users.email, locale: users.locale, passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+    if (!me) throw unauthorized();
+    if (me.passwordHash) throw badRequest("confirm with your current password");
+    await issueVerificationCode({ email: me.email, purpose: "step_up", userId: req.auth.sub, locale: accountLocale(me.locale, req), log: req.log });
+    return { ok: true };
+  });
+
   app.post("/auth/change-password", { preHandler: app.authenticate }, async (req) => {
     const body = dto.changePasswordBody.parse(req.body);
     const [row] = await db
@@ -1204,8 +900,13 @@ export async function authRoutes(app: FastifyInstance) {
       .where(eq(users.id, req.auth.sub))
       .limit(1);
     if (!row) throw unauthorized();
-    if (!(await verifyPassword(row.passwordHash, body.currentPassword))) {
-      throw unauthorized("invalid current password");
+    if (row.passwordHash) {
+      if (!body.currentPassword || !(await verifyPassword(row.passwordHash, body.currentPassword))) {
+        throw unauthorized("invalid current password");
+      }
+    } else {
+      // A provider-only account is setting its first password; the emailed code proves the owner.
+      await assertStepUp(row.id, body);
     }
 
     await db.transaction(async (tx) => {
@@ -1283,5 +984,15 @@ export async function authRoutes(app: FastifyInstance) {
     });
     await notifyAccountSecurityChange(app.mailer, { userId, event: "password_reset", log: req.log });
     return { ok: true };
+  });
+
+  // Hosted-only Google / Microsoft / GitHub sign-in. Registered inside this plugin so it shares the
+  // auth throttles, signup gates and verification-code helpers above.
+  await providerAuthRoutes(app, {
+    authRateLimit,
+    assertSignupOpenForIntent,
+    issueVerificationCode,
+    verifyAndConsumeCode,
+    bootstrapOrganisationAfterFullDeletion,
   });
 }

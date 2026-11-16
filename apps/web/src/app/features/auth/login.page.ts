@@ -4,10 +4,11 @@ import { disabled, form, FormField, submit, validate } from "@angular/forms/sign
 import { Router, RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth/auth.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
-import { MFA_ENROLLMENT_HANDOFF_KEY, parseAuthResponse } from "../../core/auth/auth-response";
+import { MFA_ENROLLMENT_HANDOFF_KEY, MFA_VERIFY_HANDOFF_KEY, parseAuthResponse } from "../../core/auth/auth-response";
 import { LogoComponent } from "../../shared/logo.component";
 import { mfaQrDataUrl } from "../../shared/mfa-qr";
 import { LocaleSwitcherComponent } from "./locale-switcher.component";
+import { ProviderSignInComponent } from "./provider-sign-in.component";
 
 const INVALID_CODE_MESSAGE = $localize`Invalid or expired verification code`;
 
@@ -20,7 +21,7 @@ interface AuthConfigResponse {
 @Component({
   selector: "k-login",
   standalone: true,
-  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent],
+  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent, ProviderSignInComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./login.page.html",
   styleUrl: "./login.page.scss",
@@ -70,26 +71,26 @@ export class LoginPage implements OnInit {
   // The reverse hop of the signup page's signInLink: a returnUrl that points at an invitation
   // acceptance page carries its token into signup, so "Create account" from login keeps the
   // organisation or board invitation instead of opening a plain public signup.
+  private readonly returnInvite = computed(() => invitationInReturnUrl(this.returnUrl()));
   readonly signupLink = computed(() => {
-    const value = this.returnUrl();
-    if (!value?.startsWith("/") || value.startsWith("//")) return "/signup";
-    try {
-      const parsed = new URL(value, "https://kanera.local");
-      const token = parsed.searchParams.get("token")?.trim();
-      if (!token) return "/signup";
-      if (parsed.pathname === "/board-invite") return `/signup?boardInviteToken=${encodeURIComponent(token)}`;
-      if (parsed.pathname === "/invite") return `/signup?invite=${encodeURIComponent(token)}`;
-      return "/signup";
-    } catch {
-      return "/signup";
-    }
+    const invite = this.returnInvite();
+    if (invite?.kind === "board") return `/signup?boardInviteToken=${encodeURIComponent(invite.token)}`;
+    if (invite?.kind === "org") return `/signup?invite=${encodeURIComponent(invite.token)}`;
+    return "/signup";
   });
+  // A provider sign-in that turns out to be a new account must still join the invitation it came from.
+  readonly providerInviteToken = computed(() => (this.returnInvite()?.kind === "org" ? this.returnInvite()!.token : null));
+  readonly providerBoardInviteToken = computed(() => (this.returnInvite()?.kind === "board" ? this.returnInvite()!.token : null));
+  readonly providerReturnUrl = computed(() => this.safeReturnUrl());
   readonly environmentBannerLabel = computed(() => environmentBannerLabel(this.kaneraEnvironment()));
 
   // Signup and invite acceptance can end in an organisation-mandated enrollment instead of a session.
   // They hand the challenge over through navigation state, which is only readable while that
   // navigation is current, so it is captured here and acted on in ngOnInit.
   private readonly handedOverChallenge = readHandedOverChallenge(this.router.currentNavigation()?.extras.state);
+  // A Google / Microsoft / GitHub sign-in for an account with its own two-factor authentication
+  // arrives here with the verification challenge, so the code step opens straight away.
+  private readonly handedOverVerifyChallenge = readHandedOverToken(this.router.currentNavigation()?.extras.state, MFA_VERIFY_HANDOFF_KEY);
 
   constructor() {
     void this.publicAuth.get("/auth/config")
@@ -99,6 +100,10 @@ export class LoginPage implements OnInit {
   }
 
   async ngOnInit() {
+    if (this.handedOverVerifyChallenge) {
+      this.challengeToken.set(this.handedOverVerifyChallenge);
+      return;
+    }
     if (!this.handedOverChallenge) return;
     this.workflowBusy.set(true);
     try {
@@ -200,8 +205,26 @@ export class LoginPage implements OnInit {
 }
 
 function readHandedOverChallenge(state: Record<string, unknown> | undefined): string | null {
-  const token = state?.[MFA_ENROLLMENT_HANDOFF_KEY];
+  return readHandedOverToken(state, MFA_ENROLLMENT_HANDOFF_KEY);
+}
+
+function readHandedOverToken(state: Record<string, unknown> | undefined, key: string): string | null {
+  const token = state?.[key];
   return typeof token === "string" && token.length > 0 ? token : null;
+}
+
+function invitationInReturnUrl(value: string | undefined): { kind: "org" | "board"; token: string } | null {
+  if (!value?.startsWith("/") || value.startsWith("//")) return null;
+  try {
+    const parsed = new URL(value, "https://kanera.local");
+    const token = parsed.searchParams.get("token")?.trim();
+    if (!token) return null;
+    if (parsed.pathname === "/board-invite") return { kind: "board", token };
+    if (parsed.pathname === "/invite") return { kind: "org", token };
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function parseAuthConfigResponse(value: unknown): AuthConfigResponse {

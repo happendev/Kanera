@@ -614,6 +614,18 @@ const ja: ServerMessages = {
         heading: "新しいリカバリーコードが作成されました",
         intro: ({ firstName, when }) => `${firstName}さん、Kaneraアカウントの二要素認証用の新しいリカバリーコードが${when}に作成されました。以前のコードは使用できなくなりました。`,
       },
+      signInMethodAdded: {
+        subject: "Kaneraに新しいログイン方法が追加されました",
+        preheader: "Kaneraアカウントに新しいログイン方法が追加されました。",
+        heading: "新しいログイン方法を追加しました",
+        intro: ({ firstName, provider, when }) => `${firstName}さん、${when}に${provider}がKaneraアカウントに連携されました。今後は${provider}でログインできます。`,
+      },
+      signInMethodRemoved: {
+        subject: "Kaneraアカウントからログイン方法が削除されました",
+        preheader: "Kaneraアカウントのログイン方法が1つ減りました。",
+        heading: "ログイン方法を削除しました",
+        intro: ({ firstName, provider, when }) => `${firstName}さん、${when}に${provider}とKaneraアカウントの連携が解除されました。今後は${provider}でログインできません。`,
+      },
       notYouWithSupport: ({ email }) => `この変更に心当たりがない場合は、今すぐパスワードを再設定し、${email}までご連絡ください。`,
       notYouWithoutSupport: "この変更に心当たりがない場合は、今すぐパスワードを再設定し、Kaneraの管理者にお知らせください。",
       notYouEmailWithSupport: ({ email }) => `この変更に心当たりがない場合は、アカウントを保護するため、すぐに${email}までご連絡ください。`,

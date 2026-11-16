@@ -614,6 +614,18 @@ const zhTW: ServerMessages = {
         heading: "已產生新的復原碼",
         intro: ({ firstName, when }) => `你好 ${firstName}，你的 Kanera 帳戶已於 ${when} 產生新的雙重驗證復原碼。你先前的復原碼已失效。`,
       },
+      signInMethodAdded: {
+        subject: "你的 Kanera 帳戶新增了一種登入方式",
+        preheader: "你的 Kanera 帳戶新增了一種登入方式。",
+        heading: "已新增登入方式",
+        intro: ({ firstName, provider, when }) => `你好 ${firstName}，${provider} 已於 ${when} 連結到你的 Kanera 帳戶。現在你可以用它登入。`,
+      },
+      signInMethodRemoved: {
+        subject: "你的 Kanera 帳戶移除了一種登入方式",
+        preheader: "你的 Kanera 帳戶少了一種登入方式。",
+        heading: "已移除登入方式",
+        intro: ({ firstName, provider, when }) => `你好 ${firstName}，${provider} 已於 ${when} 與你的 Kanera 帳戶解除連結，無法再用於登入。`,
+      },
       notYouWithSupport: ({ email }) => `如果這不是你本人的操作，請立即重設密碼並聯絡 ${email}。`,
       notYouWithoutSupport: "如果這不是你本人的操作，請立即重設密碼並告知你的 Kanera 管理員。",
       notYouEmailWithSupport: ({ email }) => `如果這不是你本人的操作，請立即聯絡 ${email}，以便我們保護你的帳戶。`,

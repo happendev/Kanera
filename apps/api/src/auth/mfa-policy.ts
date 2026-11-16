@@ -1,4 +1,4 @@
-import { boardMembers, boards, clientMembers, clients, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boards, clientMembers, clients, workspaces, type AuthMethod } from "@kanera/shared/schema";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { createMfaChallenge, getMfaCredential } from "./mfa.js";
@@ -35,6 +35,16 @@ export async function requiresMfaForAccess(userId: string, activeClientId: strin
 export type MfaEnrollmentRequired = { status: "mfa_enrollment_required"; challengeToken: string };
 
 /**
+ * Product rule (hosted sign-in providers): an organisation's MFA requirement is satisfied by a
+ * session signed in through Google, Microsoft or GitHub. Kanera cannot see whether the provider
+ * itself enforced a second factor; organisations that require MFA accept that trade for easier
+ * team sign-in. A factor the user enabled on their own account is still asked for at sign-in.
+ */
+function authMethodSatisfiesOrganisationMfa(authMethod: AuthMethod | undefined): boolean {
+  return !!authMethod && authMethod !== "password";
+}
+
+/**
  * The enrollment challenge a session-issuing path must return instead of tokens when the policy
  * applies and the user has no enabled factor yet. Password login, invite acceptance, invite-driven
  * signup and organisation switches all funnel through this so no entry point can hand out a session
@@ -43,8 +53,21 @@ export type MfaEnrollmentRequired = { status: "mfa_enrollment_required"; challen
 export async function mfaEnrollmentRequiredFor(
   userId: string,
   active: { clientId: string; requireMfa: boolean },
+  authMethod: AuthMethod,
 ): Promise<MfaEnrollmentRequired | null> {
+  if (authMethodSatisfiesOrganisationMfa(authMethod)) return null;
   if (!(await requiresMfaForAccess(userId, active.clientId, active.requireMfa))) return null;
   if ((await getMfaCredential({ kind: "user", id: userId }))?.enabledAt) return null;
   return { status: "mfa_enrollment_required", challengeToken: createMfaChallenge({ kind: "user", id: userId }, "enroll") };
+}
+
+/** Refresh and org switches refuse a session the organisation's MFA policy would not have issued. */
+export async function organisationMfaBlocksSession(
+  userId: string,
+  active: { clientId: string; requireMfa: boolean },
+  authMethod: AuthMethod | undefined,
+): Promise<boolean> {
+  if (authMethodSatisfiesOrganisationMfa(authMethod)) return false;
+  if (!(await requiresMfaForAccess(userId, active.clientId, active.requireMfa))) return false;
+  return !(await getMfaCredential({ kind: "user", id: userId }))?.enabledAt;
 }

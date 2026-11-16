@@ -800,6 +800,12 @@ staff, demo, seed, test, and load-test organisations.
 | `GITHUB_APP_CLIENT_ID` | hosted | The App's OAuth client id. Enable "Request user authorization (OAuth) during installation" and set the Callback URL to `${WEB_ORIGIN}/settings/org`. Lets Kanera verify that the user connecting an installation can see it on GitHub; hosted deployments refuse to connect installations without it. |
 | `GITHUB_APP_CLIENT_SECRET` | hosted | An OAuth client secret generated for the App. Required alongside `GITHUB_APP_CLIENT_ID`. |
 | `GITHUB_APP_WEBHOOK_SECRET` | no | The App's webhook secret. Set the App's Webhook URL to `${API_PUBLIC_URL}/api/integrations/github/webhook` and subscribe it to "Pull request" events; pull requests whose branch, title or body name a card key are then linked to that card. Without it, webhooks are refused. |
+| `GOOGLE_OAUTH_CLIENT_ID` | hosted | Google OAuth client id for "Continue with Google". Ignored unless `KANERA_DEPLOYMENT_MODE=hosted`. Authorized redirect URI: `${API_PUBLIC_URL}/api/auth/providers/google/callback`. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | hosted | Required alongside `GOOGLE_OAUTH_CLIENT_ID`. |
+| `MICROSOFT_OAUTH_CLIENT_ID` | hosted | Microsoft Entra multi-tenant app (work, school and personal accounts) for "Continue with Microsoft". Redirect URI: `${API_PUBLIC_URL}/api/auth/providers/microsoft/callback`. Add the optional ID-token claims `email` and `xms_edov`; without `xms_edov` Kanera asks for an emailed code before linking. |
+| `MICROSOFT_OAUTH_CLIENT_SECRET` | hosted | Required alongside `MICROSOFT_OAUTH_CLIENT_ID`. |
+| `GITHUB_OAUTH_CLIENT_ID` | hosted | GitHub OAuth App (separate from the GitHub App) for "Continue with GitHub". Callback URL: `${API_PUBLIC_URL}/api/auth/providers/github/callback`. |
+| `GITHUB_OAUTH_CLIENT_SECRET` | hosted | Required alongside `GITHUB_OAUTH_CLIENT_ID`. |
 | `TRELLO_API_KEY` | no | Trello app API key for authenticated Trello attachment imports. See `trello_import.md`. |
 
 ## Notes

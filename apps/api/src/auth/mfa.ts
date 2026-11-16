@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { mfaCredentials, mfaRecoveryCodes } from "@kanera/shared/schema";
+import { mfaCredentials, mfaRecoveryCodes, type AuthMethod } from "@kanera/shared/schema";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import * as OTPAuth from "otpauth";
 import { db } from "../db.js";
@@ -39,18 +39,20 @@ export async function getMfaCredential(identity: Identity) {
   return row ?? null;
 }
 
-export function createMfaChallenge(identity: Identity, purpose: ChallengePurpose): string {
-  const payload = Buffer.from(JSON.stringify({ ...identity, purpose, exp: Date.now() + 5 * 60_000 })).toString("base64url");
+// `amr` remembers how the first step was signed in, so the session a code completes keeps that
+// method (a provider sign-in followed by the user's own second factor stays a provider session).
+export function createMfaChallenge(identity: Identity, purpose: ChallengePurpose, amr?: AuthMethod): string {
+  const payload = Buffer.from(JSON.stringify({ ...identity, purpose, amr, exp: Date.now() + 5 * 60_000 })).toString("base64url");
   return `${payload}.${createHmac("sha256", KEY).update(payload).digest("base64url")}`;
 }
 
-export function readMfaChallenge(token: string, kind: Identity["kind"], purpose?: ChallengePurpose): Identity & { purpose: ChallengePurpose } {
+export function readMfaChallenge(token: string, kind: Identity["kind"], purpose?: ChallengePurpose): Identity & { purpose: ChallengePurpose; amr?: AuthMethod } {
   const [payload, signature] = token.split(".");
   if (!payload || !signature) throw new Error("invalid challenge");
   const expected = createHmac("sha256", KEY).update(payload).digest();
   const actual = Buffer.from(signature, "base64url");
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new Error("invalid challenge");
-  const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Identity & { purpose: ChallengePurpose; exp: number };
+  const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Identity & { purpose: ChallengePurpose; amr?: AuthMethod; exp: number };
   if (parsed.kind !== kind || parsed.exp < Date.now() || (purpose && parsed.purpose !== purpose)) throw new Error("invalid challenge");
   return parsed;
 }

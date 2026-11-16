@@ -1252,6 +1252,56 @@
   > i { color: var(--success); }
 }
 
+.sign-in-methods {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sign-in-method {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+
+  & + & { border-top: 1px solid var(--divider); }
+
+  > i { font-size: 18px; color: var(--text-3); }
+
+  button { flex: none; }
+}
+
+.sign-in-method-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sign-in-method-name { font-weight: 500; }
+
+.sign-in-method-detail {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-up {
+  display: flex;
+  gap: 8px;
+
+  input { flex: 1; min-width: 0; }
+
+  button { flex: none; }
+}
+
 .storage-test-feedback {
   display: flex;
   align-items: center;

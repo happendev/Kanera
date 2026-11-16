@@ -458,4 +458,18 @@ export const nl: ErrorCatalog = {
   "cards must be in the same workspace to be related": "kaarten moeten in dezelfde werkruimte staan om te worden gerelateerd",
   "relation not found": "relatie niet gevonden",
   "this relation would create a blocking cycle": "deze relatie zou een blokkeringscyclus veroorzaken",
+  "This sign-in has expired. Start again.":
+    "Deze inlogpoging is verlopen. Begin opnieuw.",
+  "This sign-in can't create an account.":
+    "Met deze inlogpoging kan geen account worden aangemaakt.",
+  "This sign-in can't be linked to your account.":
+    "Deze inlogpoging kan niet aan je account worden gekoppeld.",
+  "Set a password or connect another sign-in method before removing this one.":
+    "Stel een wachtwoord in of koppel een andere inlogmethode voordat je deze verwijdert.",
+  "confirm with your current password":
+    "Bevestig met je huidige wachtwoord.",
+  "sign-in provider not available":
+    "Inlogprovider niet beschikbaar.",
+  "sign-in method not found":
+    "Inlogmethode niet gevonden.",
 };

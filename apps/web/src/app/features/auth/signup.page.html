@@ -18,6 +18,7 @@
       <a routerLink="/login" i18n="Link to the sign-in page">Sign in</a>
     </div>
     } @else if (step() === 'details') {
+    <k-provider-sign-in [returnUrl]="providerReturnUrl()" [inviteToken]="inviteToken()" [boardInviteToken]="boardInviteToken()" />
     <form (submit)="submit($event)">
       @if (boardInvite(); as boardInvitation) {
       <div class="invite-banner">

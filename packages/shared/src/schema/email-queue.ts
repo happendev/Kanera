@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { Locale } from "../locales.js";
 import { valueIn } from "./_value-check.js";
+import type { SignInProvider } from "./user-identity.js";
 
 export const EMAIL_QUEUE_TYPES = [
   "admin_invite",
@@ -384,6 +385,8 @@ export const ACCOUNT_SECURITY_EVENTS = [
   "mfa_enabled",
   "mfa_disabled",
   "recovery_codes_regenerated",
+  "sign_in_method_added",
+  "sign_in_method_removed",
 ] as const;
 export type AccountSecurityEvent = (typeof ACCOUNT_SECURITY_EVENTS)[number];
 
@@ -394,6 +397,8 @@ export type AccountSecurityEmailQueueData = {
   occurredAtLabel: string;
   /** email_changed only: the address the account moved to (this notice goes to the old one). */
   newEmail?: string | null;
+  /** sign_in_method_added/removed only: the provider connected or disconnected. */
+  provider?: SignInProvider | null;
   securityUrl: string;
   /** Where a person who did not make the change asks for help; null on self-hosted installs. */
   supportEmail?: string | null;

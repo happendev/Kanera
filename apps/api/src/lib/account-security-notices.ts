@@ -1,4 +1,4 @@
-import type { AccountSecurityEvent } from "@kanera/shared/schema";
+import type { AccountSecurityEvent, SignInProvider } from "@kanera/shared/schema";
 import { users } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
@@ -17,11 +17,12 @@ import type { Mailer } from "./mailer.js";
  */
 export async function notifyAccountSecurityChange(
   mailer: Mailer,
-  { userId, event, toEmail, newEmail, log, now = new Date() }: {
+  { userId, event, toEmail, newEmail, provider, log, now = new Date() }: {
     userId: string;
     event: AccountSecurityEvent;
     toEmail?: string;
     newEmail?: string;
+    provider?: SignInProvider;
     log: FastifyBaseLogger;
     now?: Date;
   },
@@ -40,6 +41,7 @@ export async function notifyAccountSecurityChange(
       event,
       occurredAtLabel: formatMomentInZone(locale, now, user.timezone),
       newEmail: newEmail ?? null,
+      provider: provider ?? null,
       securityUrl: `${env.WEB_ORIGIN}/settings/account-security`,
       supportEmail: securitySupportEmail(),
     });

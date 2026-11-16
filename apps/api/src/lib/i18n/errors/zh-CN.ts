@@ -458,4 +458,18 @@ export const zhCN: ErrorCatalog = {
   "cards must be in the same workspace to be related": "卡片必须位于同一工作区才能关联",
   "relation not found": "未找到关联",
   "this relation would create a blocking cycle": "此关联会形成阻塞循环",
+  "This sign-in has expired. Start again.":
+    "此次登录已过期。请重新开始。",
+  "This sign-in can't create an account.":
+    "此次登录无法创建账户。",
+  "This sign-in can't be linked to your account.":
+    "此次登录无法关联到你的账户。",
+  "Set a password or connect another sign-in method before removing this one.":
+    "请先设置密码或关联其他登录方式，然后再移除此方式。",
+  "confirm with your current password":
+    "请使用当前密码确认。",
+  "sign-in provider not available":
+    "登录服务商不可用。",
+  "sign-in method not found":
+    "未找到登录方式。",
 };

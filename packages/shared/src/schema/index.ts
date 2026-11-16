@@ -78,6 +78,8 @@ export * from "./standalone-board-group.js";
 export * from "./support-session.js";
 export * from "./trello-import.js";
 export * from "./user.js";
+export * from "./user-identity.js";
+export * from "./auth-provider-flow.js";
 export * from "./user-acquisition.js";
 export * from "./webhook-delivery.js";
 export * from "./webhook-endpoint.js";

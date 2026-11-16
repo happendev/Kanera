@@ -252,7 +252,7 @@ export async function inviteRoutes(app: FastifyInstance) {
         orgName: accepted.orgName,
         orgRole: accepted.orgRole,
       });
-      const session = await issueUserSession(app, req.auth.sub, reply, accepted.clientId);
+      const session = await issueUserSession(app, req.auth.sub, reply, accepted.clientId, undefined, req.auth.amr);
       disconnectUserRealtimeSockets(req.auth.sub);
       return session;
     });

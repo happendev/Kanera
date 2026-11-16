@@ -1,5 +1,5 @@
 import type { Locale } from "@kanera/shared/locales";
-import type { AccountSecurityEmailQueueData, AccountSecurityEvent } from "@kanera/shared/schema";
+import type { AccountSecurityEmailQueueData, AccountSecurityEvent, SignInProvider } from "@kanera/shared/schema";
 import { serverMessages } from "../i18n/messages/index.js";
 import type { SecurityNotice, ServerMessages } from "../i18n/messages/types.js";
 import { button, emailLayout, fallbackLink, heading, mailtoLink, mutedHtml, paragraph, richHtml, text } from "./layout.js";
@@ -8,7 +8,9 @@ export type AccountSecurityEmailParams = AccountSecurityEmailQueueData & { local
 
 type SecurityMessages = ServerMessages["email"]["accountSecurity"];
 
-function notice(m: SecurityMessages, event: AccountSecurityEvent): SecurityNotice | SecurityMessages["emailChanged"] {
+const PROVIDER_NAMES: Record<SignInProvider, string> = { google: "Google", microsoft: "Microsoft", github: "GitHub" };
+
+function notice(m: SecurityMessages, event: AccountSecurityEvent): Pick<SecurityNotice, "subject" | "preheader" | "heading"> {
   switch (event) {
     case "password_changed": return m.passwordChanged;
     case "password_reset": return m.passwordReset;
@@ -16,6 +18,8 @@ function notice(m: SecurityMessages, event: AccountSecurityEvent): SecurityNotic
     case "mfa_enabled": return m.mfaEnabled;
     case "mfa_disabled": return m.mfaDisabled;
     case "recovery_codes_regenerated": return m.recoveryCodesRegenerated;
+    case "sign_in_method_added": return m.signInMethodAdded;
+    case "sign_in_method_removed": return m.signInMethodRemoved;
   }
 }
 
@@ -34,9 +38,20 @@ export function accountSecurityEmail(params: AccountSecurityEmailParams): string
   const m = messages.email.accountSecurity;
   const firstName = params.displayName.split(" ")[0] || params.displayName;
   const n = notice(m, params.event);
-  const intro = params.event === "email_changed"
-    ? m.emailChanged.intro({ firstName, newEmail: params.newEmail ?? "", when: params.occurredAtLabel })
-    : (n as SecurityNotice).intro({ firstName, when: params.occurredAtLabel });
+  const when = params.occurredAtLabel;
+  const provider = params.provider ? PROVIDER_NAMES[params.provider] : "";
+  const intro = (() => {
+    switch (params.event) {
+      case "email_changed": return m.emailChanged.intro({ firstName, newEmail: params.newEmail ?? "", when });
+      case "sign_in_method_added": return m.signInMethodAdded.intro({ firstName, provider, when });
+      case "sign_in_method_removed": return m.signInMethodRemoved.intro({ firstName, provider, when });
+      case "password_changed": return m.passwordChanged.intro({ firstName, when });
+      case "password_reset": return m.passwordReset.intro({ firstName, when });
+      case "mfa_enabled": return m.mfaEnabled.intro({ firstName, when });
+      case "mfa_disabled": return m.mfaDisabled.intro({ firstName, when });
+      case "recovery_codes_regenerated": return m.recoveryCodesRegenerated.intro({ firstName, when });
+    }
+  })();
   const support = params.supportEmail ?? null;
   const notYou = params.event === "email_changed"
     ? support ? richHtml((s) => m.notYouEmailWithSupport(s), { email: mailtoLink(support) }) : text(m.notYouEmailWithoutSupport)

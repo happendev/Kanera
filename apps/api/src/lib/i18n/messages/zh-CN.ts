@@ -614,6 +614,18 @@ const zhCN: ServerMessages = {
         heading: "已生成新的恢复码",
         intro: ({ firstName, when }) => `你好 ${firstName}，你的 Kanera 账户已于 ${when} 生成新的双重验证恢复码。你之前的恢复码已失效。`,
       },
+      signInMethodAdded: {
+        subject: "你的 Kanera 账户新增了一种登录方式",
+        preheader: "你的 Kanera 账户新增了一种登录方式。",
+        heading: "已新增登录方式",
+        intro: ({ firstName, provider, when }) => `你好 ${firstName}，${provider} 已于 ${when} 关联到你的 Kanera 账户。现在你可以用它登录。`,
+      },
+      signInMethodRemoved: {
+        subject: "你的 Kanera 账户移除了一种登录方式",
+        preheader: "你的 Kanera 账户少了一种登录方式。",
+        heading: "已移除登录方式",
+        intro: ({ firstName, provider, when }) => `你好 ${firstName}，${provider} 已于 ${when} 与你的 Kanera 账户解除关联，无法再用于登录。`,
+      },
       notYouWithSupport: ({ email }) => `如果这不是你本人的操作，请立即重置密码并联系 ${email}。`,
       notYouWithoutSupport: "如果这不是你本人的操作，请立即重置密码并告知你的 Kanera 管理员。",
       notYouEmailWithSupport: ({ email }) => `如果这不是你本人的操作，请立即联系 ${email}，以便我们保护你的账户。`,

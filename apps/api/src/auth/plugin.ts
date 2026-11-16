@@ -1,7 +1,7 @@
 import jwt from "@fastify/jwt";
 import { requestContext } from "@fastify/request-context";
 import type { AuthFailureReason } from "@kanera/shared/dto";
-import { supportSessions, users, workspaceApiKeys, workspaces, type ClientMcpPolicy, type ClientRole, type WorkspaceApiKeyKind, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
+import { supportSessions, users, workspaceApiKeys, workspaces, type AuthMethod, type ClientMcpPolicy, type ClientRole, type WorkspaceApiKeyKind, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
@@ -67,6 +67,9 @@ export interface AuthClaims {
   cid: string; // clientId
   role: ClientRole; // organisation-level role
   authKind?: "user" | "apiKey" | "support";
+  // How the session was signed in. Absent on tokens minted before the claim existed and on API-key /
+  // support credentials, which are treated as password sessions for MFA policy.
+  amr?: AuthMethod;
   apiKeyId?: string;
   apiKeyName?: string;
   // Present when a personal OAuth credential belongs to an interactive agent connection (the

@@ -621,6 +621,18 @@ const de: ServerMessages = {
         heading: "Neue Wiederherstellungscodes erstellt",
         intro: ({ firstName, when }) => `Hallo ${firstName}, am ${when} wurden neue Wiederherstellungscodes für die Zwei-Faktor-Authentifizierung deines Kanera-Kontos erstellt. Deine bisherigen Codes funktionieren nicht mehr.`,
       },
+      signInMethodAdded: {
+        subject: "Eine neue Anmeldemethode für Kanera wurde hinzugefügt",
+        preheader: "Dein Kanera-Konto hat eine neue Anmeldemethode.",
+        heading: "Neue Anmeldemethode hinzugefügt",
+        intro: ({ firstName, provider, when }) => `Hallo ${firstName}, am ${when} wurde ${provider} mit deinem Kanera-Konto verbunden. Du kannst dich jetzt damit anmelden.`,
+      },
+      signInMethodRemoved: {
+        subject: "Eine Anmeldemethode wurde aus deinem Kanera-Konto entfernt",
+        preheader: "Dein Kanera-Konto hat eine Anmeldemethode weniger.",
+        heading: "Anmeldemethode entfernt",
+        intro: ({ firstName, provider, when }) => `Hallo ${firstName}, am ${when} wurde ${provider} von deinem Kanera-Konto getrennt. Du kannst dich damit nicht mehr anmelden.`,
+      },
       notYouWithSupport: ({ email }) => `Falls du diese Änderung nicht vorgenommen hast, setze jetzt dein Passwort zurück und wende dich an ${email}.`,
       notYouWithoutSupport: "Falls du diese Änderung nicht vorgenommen hast, setze jetzt dein Passwort zurück und informiere deinen Kanera-Admin.",
       notYouEmailWithSupport: ({ email }) => `Falls du diese Änderung nicht vorgenommen hast, wende dich sofort an ${email}, damit wir dein Konto schützen können.`,

@@ -642,6 +642,14 @@ const templates = [
     html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "recovery_codes_regenerated", occurredAtLabel: securityWhen, securityUrl: "http://localhost:4200/settings/account-security", supportEmail: "support@kanera.app" }),
   },
   {
+    name: "security-sign-in-method-added",
+    html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "sign_in_method_added", provider: "google", occurredAtLabel: securityWhen, securityUrl: "http://localhost:4200/settings/account-security", supportEmail: "support@kanera.app" }),
+  },
+  {
+    name: "security-sign-in-method-removed",
+    html: accountSecurityEmail({ locale, displayName: "Amelia Hart", event: "sign_in_method_removed", provider: "github", occurredAtLabel: securityWhen, securityUrl: "http://localhost:4200/settings/account-security", supportEmail: "support@kanera.app" }),
+  },
+  {
     name: "organisation-deleted",
     html: organisationDeletedEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", deletedByName: "Jordan Lee", deletedAtLabel: securityWhen, supportEmail: "support@kanera.app" }),
   },

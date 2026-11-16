@@ -901,4 +901,18 @@ export const ja: ErrorCatalog = {
   "cards must be in the same workspace to be related": "関連付けるカードは同じワークスペースにある必要があります。",
   "relation not found": "関係が見つかりません。",
   "this relation would create a blocking cycle": "この関連付けにより、ブロックの循環が発生します。",
+  "This sign-in has expired. Start again.":
+    "このログインは有効期限が切れました。最初からやり直してください。",
+  "This sign-in can't create an account.":
+    "このログインではアカウントを作成できません。",
+  "This sign-in can't be linked to your account.":
+    "このログインはあなたのアカウントに連携できません。",
+  "Set a password or connect another sign-in method before removing this one.":
+    "この方法を削除する前に、パスワードを設定するか別のログイン方法を連携してください。",
+  "confirm with your current password":
+    "現在のパスワードで確認してください。",
+  "sign-in provider not available":
+    "ログインプロバイダーを利用できません。",
+  "sign-in method not found":
+    "ログイン方法が見つかりません。",
 };

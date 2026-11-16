@@ -332,6 +332,9 @@ export interface EmailMessages {
     mfaEnabled: SecurityNotice;
     mfaDisabled: SecurityNotice;
     recoveryCodesRegenerated: SecurityNotice;
+    /** `provider` is the brand name (Google, Microsoft, GitHub) and is never translated. */
+    signInMethodAdded: Omit<SecurityNotice, "intro"> & { intro: (p: { firstName: string; provider: string; when: string }) => string };
+    signInMethodRemoved: Omit<SecurityNotice, "intro"> & { intro: (p: { firstName: string; provider: string; when: string }) => string };
     /** `email` is rendered as a link. */
     notYouWithSupport: (p: { email: string }) => string;
     notYouWithoutSupport: string;

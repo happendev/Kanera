@@ -353,6 +353,12 @@ Leave them unset to instead bootstrap an App from Settings > Organisation.
 | `GITHUB_APP_CLIENT_SECRET` | Hosted | An OAuth client secret for the App. Required alongside `GITHUB_APP_CLIENT_ID`. |
 | `GITHUB_APP_WEBHOOK_SECRET` | No | The App's webhook secret. Set the App's Webhook URL to `${API_PUBLIC_URL}/api/integrations/github/webhook` and subscribe it to "Pull request" events so pull requests naming a card key link to that card. |
 | `GITHUB_APP_PRIVATE_KEY` | No | App private key PEM with newlines escaped as `\n`. Paste as a single line — Dokploy's env editor reads one value per line, so a raw multi-line PEM will be silently truncated. Run `awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' your-key.pem` to get the correctly escaped form. |
+| `GOOGLE_OAUTH_CLIENT_ID` | Hosted | Google OAuth client id for "Continue with Google". Ignored unless `KANERA_DEPLOYMENT_MODE=hosted`. Authorized redirect URI: `${API_PUBLIC_URL}/api/auth/providers/google/callback`. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Hosted | Required alongside `GOOGLE_OAUTH_CLIENT_ID`. |
+| `MICROSOFT_OAUTH_CLIENT_ID` | Hosted | Microsoft Entra multi-tenant app (work, school and personal accounts) for "Continue with Microsoft". Redirect URI: `${API_PUBLIC_URL}/api/auth/providers/microsoft/callback`. Add the optional ID-token claims `email` and `xms_edov`; without `xms_edov` Kanera asks for an emailed code before linking. |
+| `MICROSOFT_OAUTH_CLIENT_SECRET` | Hosted | Required alongside `MICROSOFT_OAUTH_CLIENT_ID`. |
+| `GITHUB_OAUTH_CLIENT_ID` | Hosted | GitHub OAuth App (separate from the GitHub App) for "Continue with GitHub". Callback URL: `${API_PUBLIC_URL}/api/auth/providers/github/callback`. |
+| `GITHUB_OAUTH_CLIENT_SECRET` | Hosted | Required alongside `GITHUB_OAUTH_CLIENT_ID`. |
 | `TRELLO_API_KEY` | No | Trello app API key for authenticated Trello attachment imports. See `trello_import.md`. |
 
 ## 6. Monitoring (optional)

@@ -690,6 +690,18 @@ const ptBR: ServerMessages = {
         heading: "Novos códigos de recuperação criados",
         intro: ({ firstName, when }) => `Olá, ${firstName}. Novos códigos de recuperação da autenticação de dois fatores foram criados para sua conta do Kanera em ${when}. Seus códigos anteriores não funcionam mais.`,
       },
+      signInMethodAdded: {
+        subject: "Uma nova forma de entrar no Kanera foi adicionada",
+        preheader: "Sua conta do Kanera tem um novo método de entrada.",
+        heading: "Novo método de entrada adicionado",
+        intro: ({ firstName, provider, when }) => `Olá, ${firstName}. ${provider} foi conectado à sua conta do Kanera em ${when}. Agora você pode usá-lo para entrar.`,
+      },
+      signInMethodRemoved: {
+        subject: "Um método de entrada foi removido da sua conta do Kanera",
+        preheader: "Sua conta do Kanera tem uma forma a menos de entrar.",
+        heading: "Método de entrada removido",
+        intro: ({ firstName, provider, when }) => `Olá, ${firstName}. ${provider} foi desconectado da sua conta do Kanera em ${when}. Ele não pode mais ser usado para entrar.`,
+      },
       notYouWithSupport: ({ email }) => `Se não foi você que fez esta alteração, redefina sua senha agora e entre em contato com ${email}.`,
       notYouWithoutSupport: "Se não foi você que fez esta alteração, redefina sua senha agora e avise o administrador do Kanera.",
       notYouEmailWithSupport: ({ email }) => `Se não foi você que fez esta alteração, entre em contato com ${email} imediatamente para que possamos proteger sua conta.`,

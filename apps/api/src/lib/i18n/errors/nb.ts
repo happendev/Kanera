@@ -458,4 +458,18 @@ export const nb: ErrorCatalog = {
   "cards must be in the same workspace to be related": "Kortene må være i samme arbeidsområde for å kunne relateres",
   "relation not found": "Relasjonen ble ikke funnet",
   "this relation would create a blocking cycle": "Denne relasjonen ville skape en blokkeringssyklus",
+  "This sign-in has expired. Start again.":
+    "Denne innloggingen er utløpt. Start på nytt.",
+  "This sign-in can't create an account.":
+    "Denne innloggingen kan ikke opprette en konto.",
+  "This sign-in can't be linked to your account.":
+    "Denne innloggingen kan ikke kobles til kontoen din.",
+  "Set a password or connect another sign-in method before removing this one.":
+    "Angi et passord eller koble til en annen innloggingsmetode før du fjerner denne.",
+  "confirm with your current password":
+    "Bekreft med det nåværende passordet ditt.",
+  "sign-in provider not available":
+    "Innloggingsleverandøren er ikke tilgjengelig.",
+  "sign-in method not found":
+    "Fant ikke innloggingsmetoden.",
 };

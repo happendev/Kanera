@@ -2981,17 +2981,64 @@
         "apps/mcp/src/server.ts#customFieldValueColumns.valueNumber",
         "packages/shared/src/dto/custom-fields.ts#customFieldValueColumns"
       ]
+    },
+    "v7189e398e39c": {
+      "status": "validated",
+      "reason": "Runtime schema: dto.signInProviderParams. Zod enforces declared fields; unrecognised object keys follow that schema's strip/strict policy.",
+      "references": [
+        "apps/api/src/auth/providers/routes.ts"
+      ],
+      "directValidator": "dto.signInProviderParams.parse(req.params"
+    },
+    "v256b1f37482e": {
+      "status": "validated",
+      "reason": "Runtime schema: dto.providerSignInBeginBody. Zod enforces declared fields; unrecognised object keys follow that schema's strip/strict policy. returnUrl must be a same-origin path; invite tokens are only stored, never placed in a URL.",
+      "references": [
+        "apps/api/src/auth/providers/routes.ts"
+      ],
+      "directValidator": "dto.providerSignInBeginBody.parse(req.body"
+    },
+    "vd51dd50b5325": {
+      "status": "validated",
+      "reason": "Runtime schema: dto.providerSignInBeginBody.pick({ returnUrl: true }). Zod enforces declared fields; unrecognised object keys follow that schema's strip/strict policy.",
+      "references": [
+        "apps/api/src/auth/providers/routes.ts"
+      ],
+      "directValidator": "dto.providerSignInBeginBody.pick({ returnUrl: true }).parse(req.body"
+    },
+    "v5e0bad4a7704": {
+      "status": "validated",
+      "reason": "Runtime schema: dto.providerCompleteBody. Zod enforces declared fields; unrecognised object keys follow that schema's strip/strict policy. The stored analytics attribution is re-parsed with the begin schema before use.",
+      "references": [
+        "apps/api/src/auth/providers/routes.ts"
+      ],
+      "directValidator": "dto.providerCompleteBody.parse(req.body"
+    },
+    "vf9f7cb7310c0": {
+      "status": "validated",
+      "reason": "Inline Zod object: optional code (max 4096), state (max 512) and provider error (max 256). The provider error is only reduced to the fixed cancelled reason, never echoed.",
+      "references": [
+        "apps/api/src/auth/providers/routes.ts"
+      ],
+      "directValidator": "}).parse(req.query"
+    },
+    "vd22f053886ab": {
+      "status": "reviewed",
+      "reason": "kanera_pf is an opaque Fastify-parsed browser nonce; it is hashed and compared with the flow row's browser_nonce_hash, so a missing or foreign value fails as an expired sign-in. No other cookie is read.",
+      "references": [
+        "apps/api/src/auth/providers/routes.ts"
+      ]
     }
   },
   "evidenceFiles": {
-    "apps/api/src/auth/plugin.ts": "011aa0f5448995aff08b6b55f719868ee9d6cde39936a1e39314bb6086df762f",
+    "apps/api/src/auth/plugin.ts": "00e5c813bba04d26d00219e37a110d1fee87696e46e55e4df2bb594c2e9b9aaa",
     "apps/api/src/public-api-server.ts": "17f9b99badc006e2f1e6e3d11bc95c11bd404c99eef9eced78a1daead8282f59",
     "apps/api/src/server.ts": "191cece49a40bc9e2342273027ee03220af83ae5188bdea65bd6c80eea48a4e4",
     "apps/api/src/admin/plugin.ts": "285e7dd8ce6eefcd51458f4ab7c68423c884d81645526e6d806616a33a2139da",
-    "apps/api/src/auth/routes.ts": "27f1021f5640dcddf55d72197b9596df74d374f8b1b29a7d1312c75951ec0528",
+    "apps/api/src/auth/routes.ts": "0c6f4f4a4b6c880e922373b59e346420613927080e8c575beebb4d46460c31c6",
     "apps/api/src/admin/auth.routes.ts": "b42ac02979a883eeca671cb2b989567c2978db84310b7063730b8de54d44bee2",
     "apps/api/src/admin/admins.routes.ts": "8c696e83e8a8973d169c86578d2958c9a64033a590ace0bbcddf4628080b6210",
-    "apps/api/src/admin/demo.routes.ts": "836d012412288b1782684208dc7d9748fdf60dde451038d5514a3d604237fa97",
+    "apps/api/src/admin/demo.routes.ts": "4ffe3dee2bbeac719ca65c80f98089faae68408cf48c07edb787d19c9ae5f294",
     "apps/api/src/admin/ops.routes.ts": "d7cce16b4c0e8a672c20639c67e4dc260e650d27d4c0207d195f09eb7b39fbe9",
     "apps/api/src/admin/orgs.routes.ts": "a0fb04be464994f8ce290c49efc6bb784c963bd917552a5eb937d65515f30578",
     "apps/api/src/admin/support.routes.ts": "3034a49114bddbf1f0a7616de7796814be716afe18d43543fe5984cc5237e7f1",
@@ -3026,7 +3073,7 @@
     "apps/api/src/modules/cards/update.routes.ts": "c73412b126218727ccf08fd2dcf57b6a8449b5dd87a80ad5056a7c69d7d01629",
     "apps/api/src/modules/cards/upload-links.routes.ts": "8ed8a7aa9012e97c7c51fa57655cc5db3d38ad30b2f503e8599a4d8919a1654e",
     "apps/api/src/modules/checklist-templates/routes.ts": "4d33fa9b84d01cf7424e9c0b5fec8d9c96b800880f5f1322f9a86d6bdf8195e2",
-    "apps/api/src/modules/clients/routes.ts": "32ea1b6f1f891717fa5c09ec9a3467f131fd7be6dae692aa2b7117f5a5d0505f",
+    "apps/api/src/modules/clients/routes.ts": "6cf9e2f0b3e26f5965146d62c9f20c89ee2a9c7d5d7ba0bfeeb45f0629316612",
     "apps/api/src/modules/clients/storage.ts": "83ca11d4eadc29c6307f5812f6d7be354add723ea34a524a0cda58fcc3b8b47d",
     "apps/api/src/modules/clients/users.ts": "b40fe28bb8cc067c0844f648b7449d66fc85ebe966ad15920f80d9ca36fc0252",
     "apps/api/src/modules/comments/routes.ts": "0cb3eb034ff960dec961bc6552784600e19a1d1ea5ed05bde7496f2ef49bac88",
@@ -3044,7 +3091,7 @@
     "apps/api/src/modules/integrations/routes.ts": "1da7fd65e5976af831fc4bf766918201fb1d93068bd4d5cebcad19a83ca61df7",
     "apps/api/src/modules/integrations/webhook-endpoint.routes.ts": "49a859431c0139634b24bb556938887bad63bf712e929ab42a5d2630aef44d3c",
     "apps/api/src/modules/internal-links/routes.ts": "8016a7a045dfa5a380e985fd6a11978563a4315aab261f3f5fca5ca96ee00779",
-    "apps/api/src/modules/invites/routes.ts": "666880180fa11db8c0edbbc11d11b3941cc4b54bd77ba4ad6b7acbbf2bc06cdd",
+    "apps/api/src/modules/invites/routes.ts": "752520207a09a195f4da16e7e34ca657cf9f65da60b0eeddef88f13e152495e4",
     "apps/api/src/modules/lists/routes.ts": "e0f954a9dd74f67ddab3f8322541fa99d890938cdb7efd7ea054970f8c8040cf",
     "apps/api/src/modules/media/routes.ts": "f75c31cfcd20c3d80272b7f829237d90dae4c1a6e0a5cdb812a1f5df3d86929d",
     "apps/api/src/modules/notes/routes.ts": "6a36cea7ae8bb4347fe4aa17c8740156b4a9f5a62d460a8ad378a1df4662d2a5",
@@ -3071,7 +3118,7 @@
     "packages/shared/src/dto/admin.ts": "a6f589b237dd488fd5e13cd77511c423273396b69254fa0bcefde3655c9c602d",
     "packages/shared/src/dto/agent-runs.ts": "d3dc222cdf706d2016f438793a319e0ef13357daa0928e119a9de0e64aa1a00f",
     "packages/shared/src/dto/agent-work.ts": "f55563b39e8b17f89ea14fa44b6a6dfa478301266309257012f9959f4930eb35",
-    "packages/shared/src/dto/auth.ts": "8a5bdba873a8931e9cc4a56e25f031675ea61aa3028dca521b02efd6b4efeeb9",
+    "packages/shared/src/dto/auth.ts": "05dc145bb9c8531572d2ff395dce7c65bdd81eaa4efc5fd79f102f20c749b9b5",
     "packages/shared/src/dto/automations.ts": "5d20b00ed8f51bb7d04041c95d8152e03269218be3681529a72b9d63977d5b97",
     "packages/shared/src/dto/board-export.ts": "f42bfaf4b327b143dc32b967e29628026266008f175cd2039f931c92155d14d1",
     "packages/shared/src/dto/board-invitations.ts": "ba6219296eff3990069572bb849a5141c68de66dba3c88da4a4cd253036790ee",
@@ -3157,9 +3204,10 @@
     "packages/shared/src/schema/note.ts": "5797b18441e9ed8bcc431eec6c56ea3ec545ec137f107b4803cb793c3329195c",
     "packages/shared/src/schema/workspace.ts": "7a2bbeebcf08a57af48a2a264947edb618b53938f29bcb3c93b1144f3c5a46df",
     "apps/api/src/modules/imports/colors.ts": "198a7f887a5763ac3af570c8fe7bb82a73b6097181dd31d0597e21686333025b",
-    "apps/api/src/env.ts": "17dea87768a2a78088588b7729fd5647583bc0d43f5d69de58a830566b41be80",
+    "apps/api/src/env.ts": "05962e216ff9676371ab682bd24e9d018e7e858483154b28124c680d13c4a1bd",
     "apps/api/src/modules/media/authorise-media.ts": "eaa61def92d95aca4e899ce12bc688e36eb355e158f995caa7947b4582684e59",
-    "apps/api/src/lib/mcp-event-webhooks.ts": "72137c18b5a80b256ab3f18159fba65341842ea0d772d83483dbc2d7b410ce9a"
+    "apps/api/src/lib/mcp-event-webhooks.ts": "72137c18b5a80b256ab3f18159fba65341842ea0d772d83483dbc2d7b410ce9a",
+    "apps/api/src/auth/providers/routes.ts": "6becff650ee1d954cfd49074402454fbd407cac11863ac6ad5f2e04ff7309e80"
   },
   "operations": {
     "apps/api/src/admin-server.ts#http:GET /health": {
@@ -3315,7 +3363,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/admin/demo.routes.ts#http:POST /demo/reset": {
-      "handlerSha256": "2c43a9ef8ab57a2758be57e1ea97326f3b5545df89f558b200f6b132142fd8b2",
+      "handlerSha256": "21fa754282636e7f3f8f4e26bf4f0fdc882012eddf5c9a748346139856e605c7",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "vd22f73c0fd6a",
@@ -3586,6 +3634,54 @@
       "headers": "v990063495562",
       "cookies": "v66f21e980a63"
     },
+    "apps/api/src/auth/providers/routes.ts#http:DELETE /auth/me/identities/:provider": {
+      "handlerSha256": "53091f76cd41f8aebc462c01d28c5053d98ec61b0678e66da762c28e3855ca6c",
+      "params": "v7189e398e39c",
+      "query": "v322750628d67",
+      "body": "v322750628d67",
+      "headers": "v990063495562",
+      "cookies": "v66f21e980a63"
+    },
+    "apps/api/src/auth/providers/routes.ts#http:GET /auth/me/sign-in-methods": {
+      "handlerSha256": "2ada10f1217c270da71abe8600e2e46cda2021156d82fc892ecf3899abb0667f",
+      "params": "v322750628d67",
+      "query": "v322750628d67",
+      "body": "v322750628d67",
+      "headers": "v990063495562",
+      "cookies": "v66f21e980a63"
+    },
+    "apps/api/src/auth/providers/routes.ts#http:GET /auth/providers/:provider/callback": {
+      "handlerSha256": "4968cf73cb0e05cf98fd091568e2db5d1d8f209d6eba62507d7cc7e9cac9767d",
+      "params": "v7189e398e39c",
+      "query": "vf9f7cb7310c0",
+      "body": "v322750628d67",
+      "headers": "v990063495562",
+      "cookies": "vd22f053886ab"
+    },
+    "apps/api/src/auth/providers/routes.ts#http:POST /auth/me/identities/:provider/begin": {
+      "handlerSha256": "a0a8f94415ec7db87c604e841aab096585bd3bd8d5034f63f0d8a73d4bf91f92",
+      "params": "v7189e398e39c",
+      "query": "v322750628d67",
+      "body": "vd51dd50b5325",
+      "headers": "v990063495562",
+      "cookies": "v66f21e980a63"
+    },
+    "apps/api/src/auth/providers/routes.ts#http:POST /auth/providers/:provider/begin": {
+      "handlerSha256": "6c3d5fd627c7c849110e4c8d3fdd75e2c6a1ce2353341a40b0e629b4f58250cd",
+      "params": "v7189e398e39c",
+      "query": "v322750628d67",
+      "body": "v256b1f37482e",
+      "headers": "v990063495562",
+      "cookies": "v66f21e980a63"
+    },
+    "apps/api/src/auth/providers/routes.ts#http:POST /auth/providers/complete": {
+      "handlerSha256": "610a79eb6ba992de1564c73a9eaec871741b129e2091984d7c04e3387a27915b",
+      "params": "v322750628d67",
+      "query": "v322750628d67",
+      "body": "v5e0bad4a7704",
+      "headers": "v990063495562",
+      "cookies": "vd22f053886ab"
+    },
     "apps/api/src/auth/routes.ts#http:DELETE /auth/me/avatar": {
       "handlerSha256": "2a68cf0c9a56c0bcb935fec1d02cb63f2b03f43e0cf7d66224e0dd007b695722",
       "params": "v322750628d67",
@@ -3595,7 +3691,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:DELETE /auth/mfa": {
-      "handlerSha256": "1f1b68993a1f3ea329b8ec31d4f0623c06d2a65674c70c0dc979002c2c54d6da",
+      "handlerSha256": "1e45f570f2e5a1149c4406de838bb80af5a4fa97d0c8f983c6faec149b23bd36",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v2ec6c7d38d5a",
@@ -3603,7 +3699,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:GET /auth/config": {
-      "handlerSha256": "19455b570fe6691faf53b2dc37485f8a0a2c7d150b318456f02d22672056e461",
+      "handlerSha256": "0fcb5f49b8716df508930362ca17d3e2e112389deeedb43f37fceccad29cdf5d",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v322750628d67",
@@ -3635,7 +3731,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/change-password": {
-      "handlerSha256": "e6d19b559e90a8f7bcf1c5d9b4af95c882ad853ec37a184676aa795cb604a0ef",
+      "handlerSha256": "cc297efad3b93a31518fd3368056b2da28b26ce3aa7b296e8dd1b3304644c996",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "vf8e104d95ff9",
@@ -3651,7 +3747,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/login": {
-      "handlerSha256": "6e63a345c3a8e84cceb49b745f73e354cb9f72c0acd11ffecec48177cbe17b81",
+      "handlerSha256": "6f1a6fcab3f51a15c630ca02883530f6a8e7f5b171e8c9592eb83789b092d650",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v91af5d2c39df",
@@ -3690,8 +3786,16 @@
       "headers": "v990063495562",
       "cookies": "v66f21e980a63"
     },
+    "apps/api/src/auth/routes.ts#http:POST /auth/me/step-up-code": {
+      "handlerSha256": "cf036266de37edc1454f1217c1cb31c90382cb59fbd613d55ecbc6d123fb838b",
+      "params": "v322750628d67",
+      "query": "v322750628d67",
+      "body": "v322750628d67",
+      "headers": "v990063495562",
+      "cookies": "v66f21e980a63"
+    },
     "apps/api/src/auth/routes.ts#http:POST /auth/mfa/enroll": {
-      "handlerSha256": "a2015c3b998be5453489e0215308574917a534809de42247b4d45394e93b2fac",
+      "handlerSha256": "f6d3253c58b0b0f5a8b36853fb66052768007e18df4b7816395fde97579b9ad5",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "vb941edf16cdd",
@@ -3707,7 +3811,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/mfa/recovery-codes": {
-      "handlerSha256": "2c83dc9497120a9a8825f16e8443ddb6510fce4f8908ebbf6f9c5a641aa1628c",
+      "handlerSha256": "633510abd2fb811a8ec9cedce8a93e1901a7f2053f6678df8cf8dd2f4af54e57",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v2ec6c7d38d5a",
@@ -3739,7 +3843,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/mfa/verify": {
-      "handlerSha256": "529c6dd720ebb3100e812b1f70eb75759ef6a5c386e8e0a9802b6439aa920321",
+      "handlerSha256": "927c0d1d8254cedfa0e784a1df70d6c2a2ee85b23eff36f60ad3458c47476274",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "ve66669a24936",
@@ -3747,7 +3851,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/refresh": {
-      "handlerSha256": "2282a0a58ae2314a5fe43716c335b2953f2071bad8763fca76424f9e8f808840",
+      "handlerSha256": "daebc43e279888a7561bad1d66fb8debf53409d4e93d142823453a01c03c3ae4",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v9cda37b27a61",
@@ -3771,7 +3875,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/signup": {
-      "handlerSha256": "9c71f0958301cdb3636df0b0cef8cf860c241fcfd2673a82ce299160db77dfa5",
+      "handlerSha256": "84888d15793e45e7db918e10d7d01946f65ea67a2e291e3e28dcb1e125e46cc6",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v74d905ff908c",
@@ -3787,7 +3891,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/switch-org": {
-      "handlerSha256": "f5d348fa71435d8dfc38390b4e86735d77fd949c22b04c59c2db284b14f5a66e",
+      "handlerSha256": "19bc80dbff4ebea15c8d8cd16fdccd862778c076081d42e22e082553c811f3e5",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v77208276ce68",
@@ -4884,7 +4988,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/clients/routes.ts#http:DELETE /clients/me": {
-      "handlerSha256": "8fb1557bddaca8b16c2b2db44e9e7e36f87106f29f852c8247a7b8ba3f5d9b39",
+      "handlerSha256": "1e242750710b49aac14522f21d28cd2fe93f33da68afecabea70eecffe7a4003",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v52cec4ccace4",
@@ -4932,7 +5036,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/clients/routes.ts#http:POST /clients": {
-      "handlerSha256": "ecd01a1089e57c0f7e6d5af97194afa9900571b71fbab8545c35d390e0778593",
+      "handlerSha256": "8907ec27a4c20c38b0dde41588750f3b7993977cd7560360f91c839b24853a90",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v7c409ccbd163",
@@ -5709,7 +5813,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/invites/routes.ts#http:POST /invites/accept": {
-      "handlerSha256": "1c0556f369a5b5db837da11b2f9b12fbf47eb25fa76c9477937a402c68d110d6",
+      "handlerSha256": "16574c8d9cddb5726e5da38a3e2db97fddf1e94571f9858542727f26acb9bc32",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "ve5401a275bc4",

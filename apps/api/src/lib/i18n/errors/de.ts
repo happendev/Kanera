@@ -901,4 +901,18 @@ export const de: ErrorCatalog = {
   "cards must be in the same workspace to be related": "Karten müssen im selben Arbeitsbereich liegen, um verknüpft zu werden.",
   "relation not found": "Beziehung nicht gefunden.",
   "this relation would create a blocking cycle": "Diese Beziehung würde einen Blockierungszyklus erzeugen.",
+  "This sign-in has expired. Start again.":
+    "Diese Anmeldung ist abgelaufen. Beginne erneut.",
+  "This sign-in can't create an account.":
+    "Mit dieser Anmeldung kann kein Konto erstellt werden.",
+  "This sign-in can't be linked to your account.":
+    "Diese Anmeldung kann nicht mit deinem Konto verbunden werden.",
+  "Set a password or connect another sign-in method before removing this one.":
+    "Lege ein Passwort fest oder verbinde eine andere Anmeldemethode, bevor du diese entfernst.",
+  "confirm with your current password":
+    "Bestätige mit deinem aktuellen Passwort.",
+  "sign-in provider not available":
+    "Anmeldeanbieter nicht verfügbar.",
+  "sign-in method not found":
+    "Anmeldemethode nicht gefunden.",
 };

@@ -611,6 +611,18 @@ const nl: ServerMessages = {
         heading: "Nieuwe herstelcodes aangemaakt",
         intro: ({ firstName, when }) => `Hallo ${firstName}, op ${when} zijn er nieuwe herstelcodes voor tweefactorauthenticatie aangemaakt voor je Kanera-account. Je vorige codes werken niet meer.`,
       },
+      signInMethodAdded: {
+        subject: "Er is een nieuwe manier toegevoegd om in te loggen bij Kanera",
+        preheader: "Je Kanera-account heeft een nieuwe inlogmethode.",
+        heading: "Nieuwe inlogmethode toegevoegd",
+        intro: ({ firstName, provider, when }) => `Hallo ${firstName}, ${provider} is op ${when} gekoppeld aan je Kanera-account. Je kunt er nu mee inloggen.`,
+      },
+      signInMethodRemoved: {
+        subject: "Er is een inlogmethode verwijderd uit je Kanera-account",
+        preheader: "Je Kanera-account heeft een inlogmethode minder.",
+        heading: "Inlogmethode verwijderd",
+        intro: ({ firstName, provider, when }) => `Hallo ${firstName}, ${provider} is op ${when} ontkoppeld van je Kanera-account. Je kunt er niet meer mee inloggen.`,
+      },
       notYouWithSupport: ({ email }) => `Heb je deze wijziging niet zelf gedaan? Stel dan nu je wachtwoord opnieuw in en neem contact op met ${email}.`,
       notYouWithoutSupport: "Heb je deze wijziging niet zelf gedaan? Stel dan nu je wachtwoord opnieuw in en laat het je Kanera-beheerder weten.",
       notYouEmailWithSupport: ({ email }) => `Heb je deze wijziging niet zelf gedaan? Neem dan direct contact op met ${email}, zodat we je account kunnen beveiligen.`,

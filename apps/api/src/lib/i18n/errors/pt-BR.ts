@@ -901,4 +901,18 @@ export const ptBR: ErrorCatalog = {
   "cards must be in the same workspace to be related": "Os cartões precisam estar no mesmo espaço de trabalho para serem relacionados.",
   "relation not found": "Relação não encontrada.",
   "this relation would create a blocking cycle": "Esta relação criaria um ciclo de bloqueio.",
+  "This sign-in has expired. Start again.":
+    "Esta entrada expirou. Comece novamente.",
+  "This sign-in can't create an account.":
+    "Esta entrada não pode criar uma conta.",
+  "This sign-in can't be linked to your account.":
+    "Esta entrada não pode ser vinculada à sua conta.",
+  "Set a password or connect another sign-in method before removing this one.":
+    "Defina uma senha ou conecte outro método de entrada antes de remover este.",
+  "confirm with your current password":
+    "Confirme com sua senha atual.",
+  "sign-in provider not available":
+    "O provedor de entrada não está disponível.",
+  "sign-in method not found":
+    "Método de entrada não encontrado.",
 };

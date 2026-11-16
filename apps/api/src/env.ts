@@ -279,6 +279,18 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   // Webhook secret of the same GitHub App. Pull request webhooks link pull requests to the cards
   // they name and are refused without it. Apps bootstrapped in-app store their own secret instead.
   GITHUB_APP_WEBHOOK_SECRET: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  // Hosted-only "Continue with Google / Microsoft / GitHub". Each provider turns on only when the
+  // deployment is hosted and both of its values are set; self-hosted ignores them. The GitHub pair
+  // is a separate OAuth App, not the GitHub App above: sign-in must not depend on an installation.
+  GOOGLE_OAUTH_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  MICROSOFT_OAUTH_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  MICROSOFT_OAUTH_CLIENT_SECRET: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  GITHUB_OAUTH_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  GITHUB_OAUTH_CLIENT_SECRET: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  // Test-only: points every sign-in provider at a stub OAuth server so E2E can drive the real
+  // redirect flow. Refused in production below.
+  KANERA_TEST_OAUTH_ISSUER: z.preprocess(emptyToUndefined, z.url().optional()),
   TRELLO_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   SMTP_HOST: z.preprocess(emptyToUndefined, z.string().optional()),
   SMTP_PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(65535).optional()),
@@ -317,6 +329,9 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
       });
     }
     if (value.NODE_ENV !== "production") return;
+    if (value.KANERA_TEST_OAUTH_ISSUER) {
+      ctx.addIssue({ code: "custom", path: ["KANERA_TEST_OAUTH_ISSUER"], message: "KANERA_TEST_OAUTH_ISSUER must not be set in production" });
+    }
     const developmentSecrets = new Map<string, string>([
       ["JWT_SECRET", "change-me-to-a-long-random-string"],
       ["MFA_ENCRYPTION_KEY", "change-me-to-a-distinct-32-character-random-string"],

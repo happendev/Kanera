@@ -460,6 +460,13 @@ export const ERROR_MESSAGES = [
   "remindAt must be within {days} days",
   "this attachment has no {variant} image",
   "work-done history is limited to the last {days} days",
+  "This sign-in has expired. Start again.",
+  "This sign-in can't create an account.",
+  "This sign-in can't be linked to your account.",
+  "Set a password or connect another sign-in method before removing this one.",
+  "confirm with your current password",
+  "sign-in provider not available",
+  "sign-in method not found",
 ] as const;
 
 export type ErrorMessageKey = (typeof ERROR_MESSAGES)[number];

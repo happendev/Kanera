@@ -616,6 +616,18 @@ const enGB: ServerMessages = {
         heading: "New recovery codes created",
         intro: ({ firstName, when }) => `Hi ${firstName}, new two-step verification recovery codes were created for your Kanera account on ${when}. Your previous codes no longer work.`,
       },
+      signInMethodAdded: {
+        subject: "A new way to sign in to Kanera was added",
+        preheader: "Your Kanera account has a new sign-in method.",
+        heading: "New sign-in method added",
+        intro: ({ firstName, provider, when }) => `Hi ${firstName}, ${provider} was connected to your Kanera account on ${when}. You can now use it to sign in.`,
+      },
+      signInMethodRemoved: {
+        subject: "A sign-in method was removed from your Kanera account",
+        preheader: "Your Kanera account has one fewer way to sign in.",
+        heading: "Sign-in method removed",
+        intro: ({ firstName, provider, when }) => `Hi ${firstName}, ${provider} was disconnected from your Kanera account on ${when}. It can no longer be used to sign in.`,
+      },
       notYouWithSupport: ({ email }) => `If you didn't make this change, reset your password now and contact ${email}.`,
       notYouWithoutSupport: "If you didn't make this change, reset your password now and tell your Kanera administrator.",
       notYouEmailWithSupport: ({ email }) => `If you didn't make this change, contact ${email} straight away so we can secure your account.`,
