@@ -3110,7 +3110,7 @@
     "apps/api/src/modules/workspaces/routes.ts": "8944c55a0a6bd2fc16e8d94d826651e6bb390e40ddd9779f1bd1ed7ac6dfa38c",
     "apps/api/src/oauth/routes.ts": "043fd7f32d7f6bf303a1c1734e10d53b383db8d32b054fd7eb4a27fb1ed70c39",
     "apps/api/src/realtime/io.ts": "8760710e5aa85838a869169dcc22b2276fce498ae2851ae0bb775faf6e9e5c9c",
-    "apps/mcp/src/server.ts": "3c43aef44d87f6b05f71a93d82986de97e72f5ed49295ae927041f545b404ddd",
+    "apps/mcp/src/server.ts": "a6f3cf0f664883b845420d5927c3e78a666ae81101b22448c12471f02cea692b",
     "packages/shared/src/dto/_colors.ts": "ab56baaaae121135856e8b06c544de99ae6106f43812d254188e531f14eb2f89",
     "packages/shared/src/dto/_icons.ts": "01e77b71b24b4b1cba94b725d58b423687322c7943cf8389dbca4579716f4bb2",
     "packages/shared/src/dto/_pagination.ts": "7ca05eb5e2a9d8523e33f00593446f66751f1e49ce3ed4e1360ea9a8f0e36d6f",
@@ -7025,7 +7025,7 @@
       "payload": "v9c1f945ff8fe"
     },
     "apps/mcp/src/server.ts#mcp:cards.bulk_create": {
-      "handlerSha256": "eb8dff51c22d10ef039ab53893f1fe90653b4b6ff2d4d06fc7a175dfff3e2c1e",
+      "handlerSha256": "bbec1385d4a9e212998922d132f6c678b815a70505f0cc1c2740a2a375c5e107",
       "payload": "v9c1f945ff8fe"
     },
     "apps/mcp/src/server.ts#mcp:cards.bulk_duplicate": {
@@ -7057,7 +7057,7 @@
       "payload": "v9c1f945ff8fe"
     },
     "apps/mcp/src/server.ts#mcp:cards.create": {
-      "handlerSha256": "bf68ff7d569adf587286dfe7b818e748f5b697708de0fcc70e5f789e66d19728",
+      "handlerSha256": "9365a1632727455caf120c7be6b1b1e0b223e909dd3a3cb9ff1196ce4d61a158",
       "payload": "v9c1f945ff8fe"
     },
     "apps/mcp/src/server.ts#mcp:cards.create_upload_link": {
@@ -7125,7 +7125,7 @@
       "payload": "v9c1f945ff8fe"
     },
     "apps/mcp/src/server.ts#mcp:cards.set_relations": {
-      "handlerSha256": "a86bb5c5c14122b5d92ac580a3401584e6da3e7eb79a2fc3288f5692a5692a61",
+      "handlerSha256": "fc875ca7fa596296d30e66f56da5677155d4749f56ff1e8a1d9874b168cd692b",
       "payload": "v9c1f945ff8fe"
     },
     "apps/mcp/src/server.ts#mcp:cards.set_reminder": {

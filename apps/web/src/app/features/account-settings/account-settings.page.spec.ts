@@ -2,11 +2,12 @@ import { computed, provideZonelessChangeDetection, signal, type WritableSignal }
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { ActivatedRoute, Router } from "@angular/router";
-import type { Entitlements, NotificationSettingsResponse, NotificationWorkspaceRule, PlanUsageResponse, StorageFilesResponse, StorageOverviewResponse } from "@kanera/shared/dto";
+import type { Entitlements, NotificationSettingsResponse, NotificationWorkspaceRule, PlanUsageResponse, SignInMethodsResponse, StorageFilesResponse, StorageOverviewResponse } from "@kanera/shared/dto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import type { AuthUser } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
+import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { CookieConsentService } from "../../core/consent/cookie-consent.service";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
@@ -237,6 +238,8 @@ describe("AccountSettingsPage", () => {
     api = {
       get: vi.fn(async (path: string) => {
         if (path === "/auth/config") return { emailVerificationEnabled };
+        if (path === "/auth/mfa") return { enabled: false };
+        if (path === "/auth/me/sign-in-methods") return { hasPassword: true, identities: [] } satisfies SignInMethodsResponse;
         if (path === "/clients/me") return currentClient;
         if (path === "/billing/me") {
           return {
@@ -283,6 +286,7 @@ describe("AccountSettingsPage", () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: ApiClient, useValue: api },
+        { provide: PublicAuthClient, useValue: { get: vi.fn(async () => Response.json({ signInProviders: [] })) } },
         {
           provide: AuthService,
           useValue: {
