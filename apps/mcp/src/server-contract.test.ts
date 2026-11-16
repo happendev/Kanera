@@ -927,8 +927,11 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // Shared finite-decimal patterns/length limits and matching single/bulk custom-field
     // validators measure 207,323 characters after this audit. Allow 500 characters of
     // deliberate schema growth; the overall OAuth-inclusive ceiling stays unchanged.
-    assert.ok(schemaCatalogLength <= 207_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 216_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    // Relations on cards.create and cards.bulk_create items (so agents link the cards they mention
+    // instead of writing keys as text) add ~2.2k: the schema ceiling moves to 210,000 and the
+    // OAuth-inclusive one to 218,500.
+    assert.ok(schemaCatalogLength <= 210_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 218_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8.5k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.
@@ -1291,6 +1294,77 @@ void test("date phrases resolve in the user's zone before reaching the public AP
     assert.deepEqual([structured.timeZone, structured.today, structured.dueThisWeekThrough], ["Pacific/Auckland", "2026-10-09", "2026-10-15"]);
     // The schedule section is the attention endpoint's four fields and nothing else.
     assert.deepEqual(structured.schedule, { conflicts: [], critical: [], lateToStart: [], truncated: true });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+// Failure modes: relations sent to the create endpoint (which rejects unknown fields), a batch
+// index linked to the wrong new card, a bad index creating cards before failing, and a refused
+// relation turning a committed create into an error the agent retries into a duplicate.
+void test("cards.create and cards.bulk_create add relations after the cards exist", async () => {
+  const tools = internals()._registeredTools;
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+    requests.push({ method: init?.method ?? "GET", path: url.pathname, body });
+    if (url.pathname === `/api/v1/boards/${B}/cards/bulk/create`) {
+      return new Response(JSON.stringify({ created: 2, cards: [{ id: C }, { id: N }] }), { status: 201 });
+    }
+    if (url.pathname === `/api/v1/boards/${B}/lists/${L}/cards`) return new Response(JSON.stringify({ id: C, title: "One" }), { status: 201 });
+    if (url.pathname === `/api/v1/cards/${C}/relations` && body?.targetCardId === O) {
+      return new Response(JSON.stringify({ code: "RELATION_CYCLE", message: "would form a cycle" }), { status: 409 });
+    }
+    return new Response(JSON.stringify({}), { status: 201 });
+  };
+  try {
+    let result = await tools["cards.bulk_create"]!.handler({
+      boardId: B,
+      cards: [
+        { listId: L, title: "One", relations: { relatesTo: [IT] } },
+        { listId: L, title: "Two", relations: { blockedBy: [{ item: 0 }] } },
+      ],
+    });
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(requests, [
+      { method: "POST", path: `/api/v1/boards/${B}/cards/bulk/create`, body: { cards: [{ listId: L, title: "One" }, { listId: L, title: "Two" }] } },
+      { method: "POST", path: `/api/v1/cards/${C}/relations`, body: { targetCardId: IT, direction: "relates_to" } },
+      { method: "POST", path: `/api/v1/cards/${N}/relations`, body: { targetCardId: C, direction: "blocked_by" } },
+    ]);
+    assert.deepEqual((result.structuredContent as { relations: unknown }).relations, [
+      { cardId: C, added: [{ cardId: IT, direction: "relates_to" }] },
+      { cardId: N, added: [{ cardId: C, direction: "blocked_by" }] },
+    ]);
+
+    // Bad batch indexes are refused before any card is created.
+    for (const relations of [{ blocks: [{ item: 2 }] }, { relatesTo: [{ item: 0 }] }]) {
+      requests.length = 0;
+      result = await tools["cards.bulk_create"]!.handler({ boardId: B, cards: [{ listId: L, title: "One", relations }, { listId: L, title: "Two" }] });
+      assert.equal(result.isError, true);
+      assert.match(String(result.content[0]?.type === "text" && result.content[0].text), /cards\[0\]\.relations\./u);
+      assert.deepEqual(requests, []);
+    }
+
+    // A refused relation is reported beside the created card, not raised as an error.
+    requests.length = 0;
+    result = await tools["cards.create"]!.handler({ boardId: B, listId: L, title: "One", relations: { blocks: [O], relatesTo: [IT] } });
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(requests.map((request) => request.body), [
+      { title: "One" },
+      { targetCardId: O, direction: "blocks" },
+      { targetCardId: IT, direction: "relates_to" },
+    ]);
+    assert.deepEqual(result.structuredContent, {
+      id: C,
+      title: "One",
+      relations: {
+        cardId: C,
+        added: [{ cardId: IT, direction: "relates_to" }],
+        failed: [{ cardId: O, direction: "blocks", status: 409, code: "RELATION_CYCLE", message: "would form a cycle" }],
+      },
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
