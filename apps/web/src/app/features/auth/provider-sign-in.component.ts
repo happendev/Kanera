@@ -65,12 +65,15 @@ function providerButtonLabel(provider: SignInProvider): string {
   styles: [`
     :host { display: block; }
     .providers { display: flex; flex-direction: column; gap: 8px; }
+    /* The icon sits at a fixed inset and the label centres across the whole button, so the three
+       brand marks line up in one column whatever the label length. */
     button.provider-btn {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
       width: 100%;
+      padding-inline: 44px;
       height: var(--h-lg);
       background: var(--surface);
       color: var(--text);
@@ -78,7 +81,8 @@ function providerButtonLabel(provider: SignInProvider): string {
       font-weight: 500;
     }
     button.provider-btn:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
-    button.provider-btn i { font-size: 17px; }
+    /* Centred with a margin rather than a transform, which the loading spinner's rotation would replace. */
+    button.provider-btn i { position: absolute; left: 16px; top: 50%; margin-top: -0.5em; font-size: 17px; line-height: 1; }
     @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
       button.provider-btn { height: 44px; }
     }
