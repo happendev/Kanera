@@ -155,9 +155,10 @@ SMTP_FROM_EMAIL=kanera@example.com
 SMTP_FROM_NAME=Kanera
 # Optional EHLO/Message-ID domain; defaults to SMTP_FROM_EMAIL's domain.
 SMTP_IDENTITY_DOMAIN=example.com
-# Optional: comma-separated internal recipients for signup, invite-acceptance, and paid-invoice alerts.
+# Optional: comma-separated internal recipients for signup, invite-acceptance, paid-invoice, checkout
+# started/abandoned and trial-ending alerts.
 INTERNAL_NOTIFICATION_EMAILS=ops@example.com,founder@example.com
-# Optional (hosted): where lifecycle check-in emails invite customers to send feedback (default support@kanera.app).
+# Optional (hosted): where lifecycle check-in and abandoned-checkout emails invite customers to send feedback (default support@kanera.app).
 LIFECYCLE_FEEDBACK_EMAIL=support@kanera.app
 # Cross-tenant support access is started from the management portal (a superadmin opens an org and runs
 # POST /admin/orgs/:clientId/support-session). SUPPORT_SESSION_TTL_MINUTES tunes the minted token

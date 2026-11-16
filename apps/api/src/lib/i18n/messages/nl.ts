@@ -547,6 +547,19 @@ const nl: ServerMessages = {
         },
         cta: "Open Kanera",
       },
+      checkoutAbandoned: {
+        subject: "Zat er iets in de weg bij je upgrade?",
+        preheader: "Je afrekening voor Kanera Pro is niet afgerond, dus er is niets in rekening gebracht.",
+        title: "Je upgrade is niet afgerond",
+        intro: ({ firstName, org }) => `Hallo ${firstName}, je bent begonnen met het upgraden van ${org} naar Kanera Pro, maar de afrekening is niet afgerond. Er is niets in rekening gebracht en er is niets veranderd.`,
+        question: {
+          lead: "Zat er iets in de weg?",
+          withFeedback: ({ email }) => `Of het nu om de prijs, het aantal plaatsen, een betaalprobleem of een vraag over Pro ging: laat het ons weten via ${email}. Wij lezen elk bericht en antwoorden persoonlijk.`,
+          withoutFeedback: "Of het nu om de prijs, het aantal plaatsen, een betaalprobleem of een vraag over Pro ging: laat het ons weten. Wij lezen elk bericht en antwoorden persoonlijk.",
+        },
+        resume: "Als je klaar bent, kun je verdergaan waar je gebleven was via je abonnementsinstellingen.",
+        cta: "Bekijk je abonnement",
+      },
     },
     smtpTest: {
       subject: "Kanera-SMTP-test",

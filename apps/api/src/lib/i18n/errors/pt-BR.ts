@@ -761,6 +761,9 @@ export const ptBR: ErrorCatalog = {
     "O nome do espaço de trabalho não corresponde.",
   "workspace not found":
     "Espaço de trabalho não encontrado.",
+  "organisation admins already have access to every board": "Os administradores da organização já têm acesso a todos os quadros.",
+  "duplicate board in invite": "Há um quadro duplicado no convite.",
+  "board not in your organisation": "O quadro não está na sua organização.",
   "workspace not in your organisation":
     "O espaço de trabalho não está na sua organização.",
   "write-capable credential required":

@@ -37,6 +37,8 @@ function list<T>(data: T[]) {
   return Object.assign(Promise.resolve({ data }), { async *[Symbol.asyncIterator]() { yield* data; } });
 }
 
+const starter = { id: "00000000-0000-4000-8000-000000000001", email: "owner@example.test", displayName: "Owner" };
+
 void test("a stale webhook read cannot undo a paid seat purchase committed while the read was in flight", async () => {
   const client = await org();
   let quantity = 5;
@@ -137,16 +139,16 @@ void test("concurrent Checkout requests share one customer/session and completed
       },
     } },
   } as unknown as Stripe);
-  const [a, b] = await Promise.all([createCheckoutSession(client.id, "owner@example.test", "monthly", 5), createCheckoutSession(client.id, "owner@example.test", "monthly", 5)]);
+  const [a, b] = await Promise.all([createCheckoutSession(client.id, starter, "monthly", 5), createCheckoutSession(client.id, starter, "monthly", 5)]);
   assert.deepEqual(a, b);
   assert.equal(customers, 1);
   assert.equal(sessionsCreated, 1);
-  await createCheckoutSession(client.id, "owner@example.test", "annual", 7);
+  await createCheckoutSession(client.id, starter, "annual", 7);
   assert.equal(sessions[0]!.status, "expired");
   assert.equal(sessionsCreated, 2);
   assert.notEqual(keys[0], keys[1]);
   active = true; // Payment completed; Kanera's webhook has not arrived yet.
-  const next = await createCheckoutSession(client.id, "owner@example.test", "monthly", 5);
+  const next = await createCheckoutSession(client.id, starter, "monthly", 5);
   assert.equal(next.url, "https://billing.test/existing");
   assert.equal(sessionsCreated, 2);
 });
@@ -166,9 +168,37 @@ void test("Checkout retries recover a session created before an ambiguous networ
       },
     } },
   } as unknown as Stripe);
-  await assert.rejects(createCheckoutSession(client.id, "owner@example.test", "monthly", 5), /response lost/);
-  assert.equal((await createCheckoutSession(client.id, "owner@example.test", "monthly", 5)).url, saved!.url);
+  await assert.rejects(createCheckoutSession(client.id, starter, "monthly", 5), /response lost/);
+  assert.equal((await createCheckoutSession(client.id, starter, "monthly", 5)).url, saved!.url);
   assert.equal(created, 1);
+});
+
+void test("Checkout sessions expire within the hour and a nearly expired one is replaced, not reused", async () => {
+  const client = await org();
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const nearlyExpired = {
+    id: "cs_nearly_expired", mode: "subscription", status: "open", expires_at: nowSeconds + 5 * 60,
+    metadata: { clientId: client.id, interval: "monthly", seatLimit: "5" }, url: "https://checkout.test/old",
+  } as unknown as Stripe.Checkout.Session;
+  let created: Stripe.Checkout.SessionCreateParams | undefined;
+  setStripeClientForTests({
+    customers: { create: async () => ({ id: "cus_expiry" }) },
+    subscriptions: { list: () => list([]) },
+    checkout: { sessions: {
+      list: (params: Stripe.Checkout.SessionListParams) => list(params.status === "open" ? [nearlyExpired].filter(s => s.status === "open") : [nearlyExpired]),
+      expire: async () => { nearlyExpired.status = "expired"; },
+      create: async (params: Stripe.Checkout.SessionCreateParams) => {
+        created = params;
+        return { id: "cs_fresh", mode: "subscription", status: "open", metadata: params.metadata, url: "https://checkout.test/fresh" } as Stripe.Checkout.Session;
+      },
+    } },
+  } as unknown as Stripe);
+
+  const result = await createCheckoutSession(client.id, starter, "monthly", 5);
+  assert.equal(result.url, "https://checkout.test/fresh");
+  assert.equal(nearlyExpired.status, "expired");
+  assert.ok(created?.expires_at && created.expires_at > nowSeconds + 55 * 60 && created.expires_at <= nowSeconds + 66 * 60);
+  assert.equal(created?.metadata?.startedByUserId, starter.id);
 });
 
 void test("seat reduction credits only a paid invoice even when local dunning status is stale", async () => {

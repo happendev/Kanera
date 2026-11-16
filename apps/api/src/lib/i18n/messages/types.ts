@@ -536,6 +536,17 @@ export interface LifecycleMessages {
     feedback: { lead: string; body: (p: { email: string }) => string };
     cta: string;
   };
+  /** Sent to whoever started a Stripe checkout that expired unpaid. */
+  checkoutAbandoned: {
+    subject: string;
+    preheader: string;
+    title: string;
+    intro: (p: { firstName: string; org: string }) => string;
+    /** `email` is rendered as a mailto link. */
+    question: { lead: string; withFeedback: (p: { email: string }) => string; withoutFeedback: string };
+    resume: string;
+    cta: string;
+  };
 }
 
 /** Browser push and personal channels (ntfy, Gotify, webhook): a short title and one-line body. */

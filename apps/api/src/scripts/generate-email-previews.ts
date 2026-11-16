@@ -57,6 +57,7 @@ import { weeklyAdminRecapEmail } from "../lib/email-templates/weekly-admin-recap
 import { importCompletedEmail } from "../lib/email-templates/import-completed.js";
 import {
   lifecycleActiveCheckinEmail,
+  lifecycleCheckoutAbandonedEmail,
   lifecycleEarlySuccessEmail,
   lifecycleInactiveEmail,
   lifecycleInviteTeamEmail,
@@ -618,6 +619,10 @@ const templates = [
   {
     name: "lifecycle-active-checkin",
     html: lifecycleActiveCheckinEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/team-cards", onFreePlan: true, feedbackEmail: "support@kanera.app" }),
+  },
+  {
+    name: "lifecycle-checkout-abandoned",
+    html: lifecycleCheckoutAbandonedEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/settings/account-plan", feedbackEmail: "support@kanera.app" }),
   },
 ];
 

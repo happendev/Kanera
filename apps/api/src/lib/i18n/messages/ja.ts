@@ -550,6 +550,19 @@ const ja: ServerMessages = {
         },
         cta: "Kaneraを開く",
       },
+      checkoutAbandoned: {
+        subject: "アップグレードの途中で何かお困りでしたか？",
+        preheader: "Kanera Proのお支払い手続きが完了していないため、料金は発生していません。",
+        title: "アップグレードが完了していません",
+        intro: ({ firstName, org }) => `${firstName}さん、${org}をKanera Proにアップグレードする手続きを始められましたが、お支払いが完了していません。料金は発生しておらず、何も変更されていません。`,
+        question: {
+          lead: "何かお困りのことがありましたか？",
+          withFeedback: ({ email }) => `料金、シート数、お支払いの問題、Proに関するご質問など、${email}までお気軽にお知らせください。すべてのメッセージに目を通し、担当者が直接お返事します。`,
+          withoutFeedback: "料金、シート数、お支払いの問題、Proに関するご質問など、お気軽にお知らせください。すべてのメッセージに目を通し、担当者が直接お返事します。",
+        },
+        resume: "準備ができたら、プラン設定から手続きを再開できます。",
+        cta: "プランを確認",
+      },
     },
     smtpTest: {
       subject: "Kanera SMTPテスト",

@@ -632,6 +632,19 @@ const es: ServerMessages = {
         },
         cta: "Abrir Kanera",
       },
+      checkoutAbandoned: {
+        subject: "¿Algo te impidió completar la mejora?",
+        preheader: "Tu pago de Kanera Pro no se completó, así que no se te ha cobrado nada.",
+        title: "Tu mejora no se completó",
+        intro: ({ firstName, org }) => `Hola, ${firstName}: empezaste a mejorar ${org} a Kanera Pro, pero el pago no se completó. No se te ha cobrado nada y no ha cambiado nada.`,
+        question: {
+          lead: "¿Algo se interpuso?",
+          withFeedback: ({ email }) => `Ya sea el precio, el número de puestos, un problema con el pago o una pregunta sobre Pro, escríbenos a ${email}. Leemos todos los mensajes y respondemos personalmente.`,
+          withoutFeedback: "Ya sea el precio, el número de puestos, un problema con el pago o una pregunta sobre Pro, cuéntanoslo. Leemos todos los mensajes y respondemos personalmente.",
+        },
+        resume: "Cuando quieras, puedes retomarlo donde lo dejaste desde la configuración de tu plan.",
+        cta: "Revisar tu plan",
+      },
     },
     smtpTest: {
       subject: "Prueba de SMTP de Kanera",

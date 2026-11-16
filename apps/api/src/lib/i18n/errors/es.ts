@@ -761,6 +761,9 @@ export const es: ErrorCatalog = {
     "El nombre del espacio de trabajo no coincide.",
   "workspace not found":
     "No se encontró el espacio de trabajo.",
+  "organisation admins already have access to every board": "Los administradores de la organización ya tienen acceso a todos los tableros.",
+  "duplicate board in invite": "Hay un tablero duplicado en la invitación.",
+  "board not in your organisation": "El tablero no está en tu organización.",
   "workspace not in your organisation":
     "El espacio de trabajo no está en tu organización.",
   "write-capable credential required":

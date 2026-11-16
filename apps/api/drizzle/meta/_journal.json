@@ -694,6 +694,20 @@
       "when": 1794437040416,
       "tag": "0098_illegal_mandroid",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1794782251559,
+      "tag": "0099_complete_stick",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1794785680744,
+      "tag": "0100_simple_jigsaw",
+      "breakpoints": true
     }
   ]
 }

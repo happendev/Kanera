@@ -16,6 +16,15 @@ export async function signUp(page: Page, name: string): Promise<string> {
   return email;
 }
 
+/**
+ * Onboarding closes on a "Who works on this with you?" step for organisation admins once the board
+ * or workspace exists. Leaves it without inviting anyone, onto the board just created.
+ */
+export async function skipOnboardingInvite(page: Page) {
+  await expect(page.getByRole("heading", { name: "Who works on this with you?" })).toBeVisible();
+  await page.locator(".ob-footer").getByRole("button", { name: "Skip for now" }).click();
+}
+
 /** The sidebar href (`/b/:id`) of a board the signed-in user can see. */
 export async function boardHref(page: Page, boardName: string): Promise<string> {
   const href = await page.locator("a.board-link").filter({ hasText: boardName }).first().getAttribute("href");

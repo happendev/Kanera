@@ -130,6 +130,36 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Chore", color: "purple" },
       { name: "Feature / Enhancement", color: "blue" },
     ],
+    // Example cards (here and in the templates below) give a new board something to look at and
+    // move on day one. They are written in the creation transaction and flagged as template-seeded,
+    // so they never count as the person's own work, notify anyone or fire automations. Keep them
+    // out of lists whose automations would have changed them (terminal lanes that complete cards)
+    // and give them the label such an entry rule would have added.
+    cards: [
+      {
+        title: "Plan the next release",
+        description: "Agree what ships, who reviews it, and when it goes out.",
+        listName: "Planning / Review",
+      },
+      {
+        title: "Set up the project repository",
+        description: "Create the repository, branch rules, and CI so the team can start shipping.",
+        listName: "Backlog",
+        labelNames: ["Chore"],
+      },
+      {
+        title: "Fix the login error on Safari",
+        description: "Reproduce the blank screen after sign-in, fix it, and add a regression test.",
+        listName: "Bugs / Issues / Feedback",
+        labelNames: ["Issue / Bug"],
+      },
+      {
+        title: "Add CSV export to reports",
+        description: "Let people download the report table as a CSV file.",
+        listName: "In Progress",
+        labelNames: ["Feature / Enhancement", "Reporting"],
+      },
+    ],
     automations: [
       {
         trigger: { type: "card_enters_list", listName: "Bugs / Issues / Feedback" },
@@ -182,6 +212,18 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
         description:
           "Write the outcome you want and any constraints, then ask your agent to pick it up. It moves the card to Agent Working while it runs, to Waiting on Me when it needs a decision, and to Review when it is done.",
         listName: "Backlog",
+      },
+      {
+        title: "Research options for error monitoring",
+        description: "Compare two or three tools and summarise cost, setup effort, and trade-offs.",
+        listName: "Backlog",
+        labelNames: ["Research"],
+      },
+      {
+        title: "Update dependencies to the latest minor versions",
+        description: "Run the tests after each upgrade and note anything that needed a code change.",
+        listName: "Backlog",
+        labelNames: ["Chore"],
       },
     ],
     automations: [
@@ -236,6 +278,32 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Brand", color: "violet" },
       { name: "Urgent", color: "red" },
     ],
+    // Nothing starts in Scheduled: its entry rule ticks Approved, which a seeded card would skip.
+    cards: [
+      {
+        title: "Refresh the social media profile images",
+        listName: "Ideas",
+        labelNames: ["Brand"],
+      },
+      {
+        title: "Spring product launch campaign",
+        description: "Write the brief with the audience, key message, channels, and budget.",
+        listName: "Briefing",
+        labelNames: ["Campaign", "Launch"],
+      },
+      {
+        title: "Customer story blog post",
+        description: "Interview one happy customer and draft a short story about their results.",
+        listName: "Copy / Creative",
+        labelNames: ["Evergreen"],
+      },
+      {
+        title: "Monthly newsletter",
+        description: "Check links, spelling, and the send list before it is scheduled.",
+        listName: "Review",
+        labelNames: ["Campaign"],
+      },
+    ],
     automations: [
       {
         // Scheduling is the approval gate, so record it on the card without a manual tick.
@@ -283,6 +351,28 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Admin", color: "gray" },
       { name: "Follow-up", color: "amber" },
       { name: "Quick Win", color: "green" },
+    ],
+    cards: [
+      {
+        title: "Book a venue for the team offsite",
+        listName: "To Do",
+        labelNames: ["Admin"],
+      },
+      {
+        title: "Renew the domain name",
+        listName: "To Do",
+        labelNames: ["Quick Win"],
+      },
+      {
+        title: "Draft the weekly update",
+        listName: "Doing",
+      },
+      {
+        title: "Reply to the supplier about the invoice",
+        description: "Waiting for them to confirm the corrected amount.",
+        listName: "Waiting",
+        labelNames: ["Follow-up"],
+      },
     ],
     automations: [
       {
@@ -339,6 +429,31 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Experiment", color: "orange" },
       { name: "Customer", color: "rose" },
     ],
+    cards: [
+      {
+        title: "Saved filters for the dashboard",
+        description: "Several customers asked to save and share their filter settings.",
+        listName: "Ideas",
+        labelNames: ["Customer"],
+      },
+      {
+        title: "Interview five customers about onboarding",
+        description: "Find where new customers get stuck in their first week.",
+        listName: "Discovery",
+        labelNames: ["Research", "Customer"],
+      },
+      {
+        title: "Redesign the settings page",
+        listName: "Design",
+        labelNames: ["UX"],
+      },
+      {
+        title: "Test a shorter signup form",
+        description: "Compare completion rates with the current form for two weeks.",
+        listName: "Validation",
+        labelNames: ["Experiment"],
+      },
+    ],
     automations: [
       {
         trigger: { type: "card_enters_list", listName: "Shipped" },
@@ -394,6 +509,27 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Expansion", color: "violet" },
       { name: "At Risk", color: "red" },
       { name: "Partner", color: "orange" },
+    ],
+    // Example deals use made-up company names; none starts in Follow-up, whose entry rule adds At Risk.
+    cards: [
+      {
+        title: "Acme Logistics - 25 seat pilot",
+        description: "Inbound demo request. Book a discovery call to confirm their needs and timeline.",
+        listName: "Leads",
+        labelNames: ["New Business"],
+      },
+      {
+        title: "Harbour Studio - second team",
+        description: "Send the proposal for ten more seats with onboarding support.",
+        listName: "Proposal",
+        labelNames: ["Expansion"],
+      },
+      {
+        title: "Brightside Dental - annual renewal",
+        description: "Their contract ends next month and they asked about a two-year discount.",
+        listName: "Negotiation",
+        labelNames: ["Renewal"],
+      },
     ],
     automations: [
       // Follow-up flags a stalled deal as At Risk; the closed lanes clear that flag again so a
@@ -468,6 +604,31 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Internal", color: "gray" },
       { name: "Customer", color: "teal" },
       { name: "Compliance", color: "purple" },
+    ],
+    cards: [
+      {
+        title: "Annual access review",
+        description: "Confirm who still needs admin access to each system.",
+        listName: "Intake",
+        labelNames: ["Compliance", "Internal"],
+      },
+      {
+        title: "Customer cannot reset their password",
+        description: "Reset emails are not arriving. Check the mail logs and reply to the customer.",
+        listName: "Triage",
+        labelNames: ["Incident", "Customer"],
+      },
+      {
+        title: "Laptop for a new starter on Monday",
+        listName: "Assigned",
+        labelNames: ["Request", "Internal"],
+      },
+      {
+        title: "Refund a duplicate charge",
+        description: "Waiting for finance to confirm the refund.",
+        listName: "Waiting",
+        labelNames: ["Request", "Customer"],
+      },
     ],
     automations: [
       {

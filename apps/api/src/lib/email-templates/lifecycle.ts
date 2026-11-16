@@ -24,6 +24,8 @@ export function lifecycleEmailSubject(type: LifecycleEmailQueueType, params: Lif
       return m.inactive.subject;
     case "lifecycle_active_checkin":
       return m.activeCheckin.subject;
+    case "lifecycle_checkout_abandoned":
+      return m.checkoutAbandoned.subject;
   }
 }
 
@@ -98,6 +100,28 @@ export function lifecycleActiveCheckinEmail(params: LifecycleEmailParams): strin
       feedbackEmail
         ? `${strong(m.feedback.lead)} ${richHtml((s) => m.feedback.body(s), { email: feedbackLink(feedbackEmail) })}`
         : null,
+    ],
+    cta: m.cta,
+  });
+}
+
+/**
+ * Sent once the Stripe checkout someone started expires unpaid. It asks what got in the way rather
+ * than pushing the sale again: the answer is what the team needs to follow up personally.
+ */
+export function lifecycleCheckoutAbandonedEmail(params: LifecycleEmailParams): string {
+  const m = serverMessages(params.locale).email.lifecycle.checkoutAbandoned;
+  const feedbackEmail = params.feedbackEmail;
+  return lifecycleLayout(params, {
+    subject: lifecycleEmailSubject("lifecycle_checkout_abandoned", params),
+    preheader: m.preheader,
+    title: m.title,
+    intro: m.intro({ firstName: firstName(params.displayName), org: params.orgName }),
+    linesHtml: [
+      `${strong(m.question.lead)} ${feedbackEmail
+        ? richHtml((s) => m.question.withFeedback(s), { email: feedbackLink(feedbackEmail) })
+        : text(m.question.withoutFeedback)}`,
+      text(m.resume),
     ],
     cta: m.cta,
   });

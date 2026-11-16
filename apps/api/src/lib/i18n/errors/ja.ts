@@ -761,6 +761,9 @@ export const ja: ErrorCatalog = {
     "ワークスペース名が一致しません。",
   "workspace not found":
     "ワークスペースが見つかりません。",
+  "organisation admins already have access to every board": "組織の管理者はすでにすべてのボードにアクセスできます。",
+  "duplicate board in invite": "招待に同じボードが重複しています。",
+  "board not in your organisation": "ボードがご利用の組織にありません。",
   "workspace not in your organisation":
     "ワークスペースがご利用の組織にありません。",
   "write-capable credential required":

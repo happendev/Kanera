@@ -44,6 +44,7 @@ import {
   weeklyAdminRecapEmail,
   importCompletedEmail,
   lifecycleActiveCheckinEmail,
+  lifecycleCheckoutAbandonedEmail,
   lifecycleEarlySuccessEmail,
   lifecycleEmailSubject,
   lifecycleInactiveEmail,
@@ -494,6 +495,8 @@ export function renderEmail(row: EmailQueue): string {
       return lifecycleInactiveEmail(data as LifecycleEmailParams);
     case "lifecycle_active_checkin":
       return lifecycleActiveCheckinEmail(data as LifecycleEmailParams);
+    case "lifecycle_checkout_abandoned":
+      return lifecycleCheckoutAbandonedEmail(data as LifecycleEmailParams);
   }
 }
 

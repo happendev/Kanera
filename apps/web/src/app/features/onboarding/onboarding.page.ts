@@ -4,8 +4,8 @@ import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
 import type { ColorToken } from "@kanera/shared/colors";
-import type { CustomFieldTypeName } from "@kanera/shared/dto";
-import { CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
+import type { CreateInviteBody, CustomFieldTypeName } from "@kanera/shared/dto";
+import { CARD_LABEL_NAME_MAX_LENGTH, GENERAL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import type { Board, Workspace } from "@kanera/shared/schema";
 import { DEFAULT_WORKSPACE_TEMPLATE, WORKSPACE_TEMPLATES } from "@kanera/shared/workspace-templates";
 import { localizeWorkspaceTemplate } from "@kanera/shared/workspace-template-localize";
@@ -20,6 +20,7 @@ import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { LogoComponent } from "../../shared/logo.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { standaloneBoardCreatePayload, workspaceTemplateSeedPayload } from "@kanera/shared/workspace-template-payload";
 
 interface DraftItem {
@@ -48,7 +49,20 @@ interface DraftLabel {
 type OnboardingWorkspaceResponse = Workspace & { initialBoard?: Board };
 type OnboardingStandaloneBoardResponse = Workspace & { initialBoard: Board };
 type OnboardingHomeResponse = { groups: { boards: unknown[] }[] };
-type SetupKind = "choice" | "board" | "workspace";
+type OnboardingInviteResponse = { token: string };
+type OnboardingClientResponse = { name: string };
+// "invite" is the closing step, shown once the board or workspace exists.
+type SetupKind = "choice" | "board" | "workspace" | "invite";
+
+/** What setup just created; the invite step grants it and "Go to board" opens it. */
+interface CreatedSetup {
+  boardId: string | null;
+  /** Standard workspaces only. A standalone board's backing workspace cannot be granted. */
+  workspaceId: string | null;
+}
+
+// Matches the default on the organisation invite form, so a link made here behaves like any other.
+const INVITE_EXPIRY_DAYS = 7;
 
 // Templates are shown and created in the viewer's language. Every name the template's starter cards
 // and automations refer to goes through the same translation, so the seed payload still resolves
@@ -86,6 +100,7 @@ export class OnboardingPage implements OnInit {
   protected readonly inProgressEnabled = computed(() => this.auth.user()?.inProgressEnabled !== false);
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
+  private readonly upgradePrompt = inject(UpgradePromptService);
   private draftSequence = 0;
 
   readonly mode = input<string | undefined>();
@@ -131,6 +146,23 @@ export class OnboardingPage implements OnInit {
   readonly newLabelColor = signal<ColorToken | null>(null);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
+  readonly created = signal<CreatedSetup | null>(null);
+  readonly orgNameDraft = signal("");
+  readonly orgNameError = signal<string | null>(null);
+  readonly orgNameMaxLength = GENERAL_NAME_MAX_LENGTH;
+  readonly inviteUrl = signal<string | null>(null);
+  readonly inviteBusy = signal(false);
+  readonly inviteCopied = signal(false);
+  readonly inviteError = signal<string | null>(null);
+  readonly leavingInvite = signal(false);
+  readonly inviteScopeHint = computed(() => {
+    const created = this.created();
+    if (created?.workspaceId && created.boardId) {
+      return $localize`People who join with this link become members of this workspace and can edit its board. The link expires in 7 days.`;
+    }
+    if (created?.workspaceId) return $localize`People who join with this link become members of this workspace. The link expires in 7 days.`;
+    return $localize`People who join with this link can edit this board. The link expires in 7 days.`;
+  });
   readonly canCancel = computed(() => !!this.auth.user()?.hasWorkspace);
   // First-run users have nothing to cancel back to, so they get "Skip for now" instead: it records
   // the choice (see onboarding-skip.ts) so workspaceGuard lets them onto the blank home page.
@@ -138,6 +170,7 @@ export class OnboardingPage implements OnInit {
   readonly canReturnToSetupChoice = computed(() => !this.auth.user()?.hasWorkspace && this.mode() !== "workspace");
   readonly brandTitle = computed(() => {
     if (this.setupKind() === "choice") return $localize`:Onboarding page title:Get started`;
+    if (this.setupKind() === "invite") return $localize`:Onboarding page title:Invite teammates`;
     return this.setupKind() === "board"
       ? $localize`:Onboarding page title:Create a Board`
       : $localize`:Onboarding page title:Create a Workspace`;
@@ -473,7 +506,7 @@ export class OnboardingPage implements OnInit {
       );
       // A standalone board intentionally does not satisfy hasWorkspace; the shell guard resolves
       // its board access from /home/boards on this navigation and on future sign-ins.
-      await this.router.navigateByUrl(`/b/${created.initialBoard.id}`, { replaceUrl: true });
+      await this.showInviteStep({ boardId: created.initialBoard.id, workspaceId: null });
     } catch (error) {
       if (error instanceof ApiError && this.isPlanLimitError(error.body)) this.markBoardLimitReached();
       this.error.set(this.describeStandaloneBoardError(error));
@@ -536,13 +569,131 @@ export class OnboardingPage implements OnInit {
       if (!this.auth.user()?.hasWorkspace) {
         this.auth.updateUser((user) => ({ ...user, hasWorkspace: true }));
       }
-      await this.router.navigateByUrl(workspace.initialBoard ? `/b/${workspace.initialBoard.id}` : "/", { replaceUrl: true });
+      await this.showInviteStep({ boardId: workspace.initialBoard?.id ?? null, workspaceId: workspace.id });
     } catch (error) {
       if (error instanceof ApiError && this.isPlanLimitError(error.body)) this.markBoardLimitReached();
       this.error.set(this.describeError(error));
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /**
+   * Few new organisations ever invite anyone, and invite links name the organisation, which signup
+   * now defaults to a placeholder. So setup closes on one skippable step that offers both, while the
+   * person is already thinking about who the board is for. Only organisation admins may rename the
+   * organisation or create invites; anyone else goes straight to the board.
+   */
+  private async showInviteStep(created: CreatedSetup) {
+    this.created.set(created);
+    if (!this.auth.isOrgAdmin()) {
+      await this.router.navigateByUrl(this.landingUrl(), { replaceUrl: true });
+      return;
+    }
+    this.orgNameDraft.set(this.auth.user()?.orgName ?? "");
+    this.error.set(null);
+    this.setupKind.set("invite");
+    // The previous step may have been scrolled to its (sticky) footer on a phone.
+    document.documentElement.scrollTop = 0;
+  }
+
+  private landingUrl(): string {
+    const boardId = this.created()?.boardId;
+    return boardId ? `/b/${boardId}` : "/";
+  }
+
+  async createInviteLink() {
+    const created = this.created();
+    if (!created || this.inviteBusy()) return;
+    this.inviteBusy.set(true);
+    this.inviteError.set(null);
+    try {
+      // The invite page shows the organisation name, so a rename typed first applies to this link.
+      if (!(await this.saveOrgName())) return;
+      // Workspace membership alone opens no board, so the link also grants the new board itself.
+      const body: CreateInviteBody = {
+        orgRole: "member",
+        expiresInDays: INVITE_EXPIRY_DAYS,
+        workspaces: created.workspaceId ? [{ workspaceId: created.workspaceId, role: "member" }] : [],
+        boards: created.boardId ? [{ boardId: created.boardId, role: "editor" }] : [],
+      };
+      const invite = await this.api.post<OnboardingInviteResponse>("/clients/me/invites", body);
+      this.inviteUrl.set(`${location.origin}/signup?invite=${invite.token}`);
+      await this.copyInviteLink();
+    } catch (error) {
+      if (error instanceof ApiError && this.isMemberLimitError(error.body)) {
+        await this.upgradePrompt.open({ reason: "member", source: "onboarding" });
+        return;
+      }
+      this.inviteError.set(this.describeInviteError(error));
+    } finally {
+      this.inviteBusy.set(false);
+    }
+  }
+
+  async copyInviteLink() {
+    const url = this.inviteUrl();
+    if (!url) return;
+    this.inviteCopied.set(false);
+    // Clipboard access can be refused (permissions, insecure origin); the link stays visible to copy by hand.
+    await navigator.clipboard?.writeText(url).then(() => this.inviteCopied.set(true)).catch(() => { });
+  }
+
+  async continueFromInvite() {
+    if (this.leavingInvite()) return;
+    this.leavingInvite.set(true);
+    try {
+      if (!(await this.saveOrgName())) return;
+      await this.router.navigateByUrl(this.landingUrl(), { replaceUrl: true });
+    } finally {
+      this.leavingInvite.set(false);
+    }
+  }
+
+  async skipInvite() {
+    if (this.leavingInvite()) return;
+    await this.router.navigateByUrl(this.landingUrl(), { replaceUrl: true });
+  }
+
+  /** Saves an edited organisation name; false (with the error shown) when the save failed. */
+  private async saveOrgName(): Promise<boolean> {
+    const next = this.orgNameDraft().trim();
+    // A cleared field keeps the current name rather than blocking the step.
+    if (!next || next === this.auth.user()?.orgName) return true;
+    this.orgNameError.set(null);
+    try {
+      const updated = await this.api.patch<OnboardingClientResponse>("/clients/me", { name: next });
+      this.orgNameDraft.set(updated.name);
+      this.auth.updateUser((user) => ({ ...user, orgName: updated.name }));
+      return true;
+    } catch (error) {
+      this.orgNameError.set(this.describeOrgNameError(error));
+      return false;
+    }
+  }
+
+  private isMemberLimitError(body: unknown): boolean {
+    if (!body || typeof body !== "object") return false;
+    const record = body as Record<string, unknown>;
+    return (record["code"] === "PLAN_LIMIT" && record["limit"] === "members") || record["code"] === "SEAT_LIMIT_REACHED";
+  }
+
+  private describeInviteError(error: unknown): string {
+    if (error instanceof ApiError) {
+      if (error.status === 0) return OFFLINE_ERROR;
+      const message = this.messageFromBody(error.body);
+      if (message) return message;
+    }
+    return $localize`Could not create the invite link. Try again.`;
+  }
+
+  private describeOrgNameError(error: unknown): string {
+    if (error instanceof ApiError) {
+      if (error.status === 0) return OFFLINE_ERROR;
+      const message = this.messageFromBody(error.body);
+      if (message) return message;
+    }
+    return $localize`Could not save the organisation name. Try again.`;
   }
 
   private describeError(error: unknown): string {

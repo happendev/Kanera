@@ -44,6 +44,7 @@ export const EMAIL_QUEUE_TYPES = [
   "lifecycle_early_success",
   "lifecycle_inactive",
   "lifecycle_active_checkin",
+  "lifecycle_checkout_abandoned",
 ] as const;
 export type EmailQueueType = (typeof EMAIL_QUEUE_TYPES)[number];
 export type LifecycleEmailQueueType = Extract<EmailQueueType, `lifecycle_${string}`>;
@@ -382,7 +383,7 @@ export type LifecycleEmailQueueData = {
   nextStep?: LifecycleNextStep | null;
   /** active_checkin only: whether the organisation is on the free plan (expansion copy differs). */
   onFreePlan?: boolean | null;
-  /** inactive and active_checkin: where feedback goes (LIFECYCLE_FEEDBACK_EMAIL, default support@kanera.app). */
+  /** inactive, active_checkin and checkout_abandoned: where feedback goes (LIFECYCLE_FEEDBACK_EMAIL, default support@kanera.app). */
   feedbackEmail?: string | null;
 };
 
@@ -426,7 +427,8 @@ export type EmailQueueData =
   | { type: "lifecycle_invite_team"; data: LifecycleEmailQueueData }
   | { type: "lifecycle_early_success"; data: LifecycleEmailQueueData }
   | { type: "lifecycle_inactive"; data: LifecycleEmailQueueData }
-  | { type: "lifecycle_active_checkin"; data: LifecycleEmailQueueData };
+  | { type: "lifecycle_active_checkin"; data: LifecycleEmailQueueData }
+  | { type: "lifecycle_checkout_abandoned"; data: LifecycleEmailQueueData };
 
 export const emailQueue = pgTable(
   "email_queue",

@@ -62,6 +62,7 @@ export { importCompletedEmail } from "./import-completed.js";
 export type { ImportCompletedEmailParams } from "./import-completed.js";
 export {
   lifecycleActiveCheckinEmail,
+  lifecycleCheckoutAbandonedEmail,
   lifecycleEarlySuccessEmail,
   lifecycleEmailSubject,
   lifecycleInactiveEmail,

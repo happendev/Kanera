@@ -2988,7 +2988,7 @@
     "apps/api/src/public-api-server.ts": "17f9b99badc006e2f1e6e3d11bc95c11bd404c99eef9eced78a1daead8282f59",
     "apps/api/src/server.ts": "191cece49a40bc9e2342273027ee03220af83ae5188bdea65bd6c80eea48a4e4",
     "apps/api/src/admin/plugin.ts": "285e7dd8ce6eefcd51458f4ab7c68423c884d81645526e6d806616a33a2139da",
-    "apps/api/src/auth/routes.ts": "dc4e0bfb6d867ee33dfd77f15db7d3a3c9413d90452329a145cec3ff4ccd494e",
+    "apps/api/src/auth/routes.ts": "76d9ee7e197fd424753777a5165e870c23ac4ebb8b9ab545b4910d2a7fdead45",
     "apps/api/src/admin/auth.routes.ts": "b42ac02979a883eeca671cb2b989567c2978db84310b7063730b8de54d44bee2",
     "apps/api/src/admin/admins.routes.ts": "8c696e83e8a8973d169c86578d2958c9a64033a590ace0bbcddf4628080b6210",
     "apps/api/src/admin/demo.routes.ts": "836d012412288b1782684208dc7d9748fdf60dde451038d5514a3d604237fa97",
@@ -3001,7 +3001,7 @@
     "apps/api/src/modules/activity/routes.ts": "4397ad747fff972d1eec7a7c9416107cac149699978bf650287ae4b9a2e2e0ca",
     "apps/api/src/modules/agent-runs/routes.ts": "085f39bbbf365b577a893ca544b451f2351e5ec177c4ca6e8a13ab3cfa4a3387",
     "apps/api/src/modules/automations/routes.ts": "58f063046ba2ca405cf99159e085fb070850e27ea02af450685127965e1aaef7",
-    "apps/api/src/modules/billing/routes.ts": "2699f5a6ab86bda4b1db341d73ba3bac913cf619dc75134e2575a1c734eb6b37",
+    "apps/api/src/modules/billing/routes.ts": "31804cf6bca8c4f508cac2271624673800f9c50999ac2291a3a99d1e9635f836",
     "apps/api/src/modules/board-invitations/routes.ts": "c2b0f646a1f6dd46312c1ffe0eb3edbff7f9a891fed7f0975c93ac71425961a5",
     "apps/api/src/modules/board-mirrors/routes.ts": "3f4276e07bbfd8b7b6ea2d8bb4ed7a675443ed9776a8c7a9ed0049986a18fbd4",
     "apps/api/src/modules/boards/routes.ts": "d44ef374d725f69bb28dea6d4f929468a1ed77a93fdea0bd5eea587ecaa3c303",
@@ -3044,7 +3044,7 @@
     "apps/api/src/modules/integrations/routes.ts": "1da7fd65e5976af831fc4bf766918201fb1d93068bd4d5cebcad19a83ca61df7",
     "apps/api/src/modules/integrations/webhook-endpoint.routes.ts": "49a859431c0139634b24bb556938887bad63bf712e929ab42a5d2630aef44d3c",
     "apps/api/src/modules/internal-links/routes.ts": "8016a7a045dfa5a380e985fd6a11978563a4315aab261f3f5fca5ca96ee00779",
-    "apps/api/src/modules/invites/routes.ts": "589a78bc84ddea24d759a34d668811777888027a9a29308db3549ddf851d57a8",
+    "apps/api/src/modules/invites/routes.ts": "af26cbfcb0c2dbc751c88eaa38b596f88373d0ace1ff9c36d0046bfa99b4ae2e",
     "apps/api/src/modules/lists/routes.ts": "e0f954a9dd74f67ddab3f8322541fa99d890938cdb7efd7ea054970f8c8040cf",
     "apps/api/src/modules/media/routes.ts": "f75c31cfcd20c3d80272b7f829237d90dae4c1a6e0a5cdb812a1f5df3d86929d",
     "apps/api/src/modules/notes/routes.ts": "6a36cea7ae8bb4347fe4aa17c8740156b4a9f5a62d460a8ad378a1df4662d2a5",
@@ -3096,11 +3096,11 @@
     "packages/shared/src/dto/deployment.ts": "584e313d7c829e6a3c0870ce3d3d3c9d57b3f99ef0c3a465790b2a8f2d789f13",
     "packages/shared/src/dto/external-links.ts": "245c1bac6f56dd7f3f6c6e34291461d01901fb4952dc0c67315ac323cf874fc6",
     "packages/shared/src/dto/github-links.ts": "77cad54df7e458c20afdc594162182d1c913d3b9bb200149cf441a13f67cb448",
-    "packages/shared/src/dto/home.ts": "a4e95d03629e1f1216e7ed5323619df4a67f71dc757a1cebd02158bb2eadc859",
+    "packages/shared/src/dto/home.ts": "39d61a810e225bbb4e5215f2f040def7d3190bc12d4ac4b5c8a49bc7745cd7b9",
     "packages/shared/src/dto/imports.ts": "a1334d43800886036dcf1865e7b5b6608ba586c07d0e35188e2cf075bcd3dcbf",
     "packages/shared/src/dto/index.ts": "2cb21fdcd1d9b519ec09aed78c22a871fbd8bc04bbc30668e7d75b9ec5013184",
     "packages/shared/src/dto/internal-links.ts": "efc5d2f210c878566baa2961f11de4470da808c74da38ecf6a256dd02b2e720f",
-    "packages/shared/src/dto/invites.ts": "7cba6058884018136f09e9f442e1b1ee7288723e4f8aaa8c6bfd83c8602dbc13",
+    "packages/shared/src/dto/invites.ts": "3eea6edeb634b185c4e13208ec4c11879231e99b246af1019417998ebe56cb8f",
     "packages/shared/src/dto/lists.ts": "59dd5e41a6b349186e013f23db13406be9ce4d69dee9c9511fa881a9560dc608",
     "packages/shared/src/dto/mcp-events.ts": "283aa514fa3740a63eefa19a453402f45d41bf92978a685e8cd6e2b1e46d1f37",
     "packages/shared/src/dto/name-limits.ts": "b8af469bf8ac4935efa894113c84083a6ae74d755aface053b2ef5873e6fa2b4",
@@ -3771,7 +3771,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/routes.ts#http:POST /auth/signup": {
-      "handlerSha256": "fce60d85dbc409994dec318f399acbee333163809cd57bd1d307e1372698e68f",
+      "handlerSha256": "9c71f0958301cdb3636df0b0cef8cf860c241fcfd2673a82ce299160db77dfa5",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v74d905ff908c",
@@ -3931,7 +3931,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/billing/routes.ts#http:POST /billing/checkout": {
-      "handlerSha256": "1dbca789db38068d15c4136b47a550d878b7c14860a7f293c72ed7b3fdf58bf5",
+      "handlerSha256": "d6dad4abdab8a523747c261b9dde965ef70ddbcf1176da7115cb48afbddcfe13",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "vd39843f0888c",
@@ -5685,7 +5685,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/invites/routes.ts#http:GET /clients/me/invites": {
-      "handlerSha256": "d70d880af8b7e168584c2f71cad2a1c27d6f694ab0a233f6223a253535ceb77b",
+      "handlerSha256": "0f2a77320ae1ddbcab69899d5f6b9514b78bdf5b27c4f2ba1c2fc0e8d426d333",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v322750628d67",
@@ -5701,7 +5701,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/invites/routes.ts#http:POST /clients/me/invites": {
-      "handlerSha256": "9656ddbaf4bdfa1677860ca4c46d1be20f17009f98b1dee9490a3d1298d056ed",
+      "handlerSha256": "63dcad6248a340340a3caa136b729be69a805a90f3e12071f69138d9bbb2f993",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "vbdc027a967ac",
@@ -5709,7 +5709,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/modules/invites/routes.ts#http:POST /invites/accept": {
-      "handlerSha256": "e9ae13f339924259d28c21510c9b931d4c175f73ef41dad72308009d7d0a5824",
+      "handlerSha256": "1c0556f369a5b5db837da11b2f9b12fbf47eb25fa76c9477937a402c68d110d6",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "ve5401a275bc4",

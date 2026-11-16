@@ -557,6 +557,19 @@ const nb: ServerMessages = {
         },
         cta: "Åpne Kanera",
       },
+      checkoutAbandoned: {
+        subject: "Kom noe i veien for oppgraderingen din?",
+        preheader: "Betalingen for Kanera Pro ble ikke fullført, så du har ikke blitt belastet.",
+        title: "Oppgraderingen ble ikke fullført",
+        intro: ({ firstName, org }) => `Hei ${firstName}, du begynte å oppgradere ${org} til Kanera Pro, men betalingen ble ikke fullført. Du har ikke blitt belastet, og ingenting er endret.`,
+        question: {
+          lead: "Kom noe i veien?",
+          withFeedback: ({ email }) => `Enten det gjaldt prisen, antall plasser, et betalingsproblem eller et spørsmål om Pro, skriv til ${email}. Vi leser hver melding og svarer personlig.`,
+          withoutFeedback: "Enten det gjaldt prisen, antall plasser, et betalingsproblem eller et spørsmål om Pro, gi oss beskjed. Vi leser hver melding og svarer personlig.",
+        },
+        resume: "Når du er klar, kan du fortsette der du slapp fra planinnstillingene dine.",
+        cta: "Se planen din",
+      },
     },
     smtpTest: {
       subject: "Kanera SMTP-test",

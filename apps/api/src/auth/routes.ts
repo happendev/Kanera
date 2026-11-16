@@ -33,6 +33,7 @@ import { sendInternalSignupNotification } from "../lib/internal-notification-ema
 import { getConfiguredS3StorageConfig, getStorageForClient } from "../lib/storage/index.js";
 import { avatarStorageKey } from "../lib/storage/keys.js";
 import { notifyAdminsOrgInviteAccepted } from "../lib/invite-accepted-notifications.js";
+import { applyInviteBoardGrantsInTx, emitInviteBoardGrants, type AppliedInviteBoardGrants } from "../lib/invite-board-grants.js";
 import { emitBoardInvitationAccepted, loadBoardInvitationGrants, loadRedeemableBoardInvitation, redeemBoardInvitationInTx, type BoardInvitationGrant, type RedeemableBoardInvitation } from "../lib/board-invitation-redemption.js";
 import { pinAdminToWorkspaceBoards, pinOrgAdminToClientBoards } from "../lib/board-membership.js";
 import { hashOpaqueToken, newOpaqueToken, newVerificationCode } from "../lib/tokens.js";
@@ -488,6 +489,7 @@ export async function authRoutes(app: FastifyInstance) {
         let orgRole: "owner" | "admin" | "member";
         let workspaceGrants: Array<{ workspaceId: string; role: "admin" | "member" }> = [];
         let acceptedInvite = false;
+        let acceptedInviteId: string | null = null;
         let redeemedInvite: { invitation: RedeemableBoardInvitation; grants: BoardInvitationGrant[] } | null = null;
 
         if (body.inviteToken) {
@@ -513,6 +515,7 @@ export async function authRoutes(app: FastifyInstance) {
           clientId = invite.clientId;
           orgName = invite.orgName;
           orgRole = invite.orgRole;
+          acceptedInviteId = invite.id;
           // Hard gate on the free-tier member cap: this is the point where a person actually joins
           // the org. Runs inside the signup transaction; the helper takes a tenant row lock so
           // concurrent invite acceptances serialize and cannot race past the cap. On trials the free cap
@@ -629,6 +632,12 @@ export async function authRoutes(app: FastifyInstance) {
           }
         }
 
+        // After workspace grants so a workspace-admin pin from this invite is kept over a board grant.
+        // Admin invites carry no board grants (create rejects them): org authority pins every board below.
+        const boardGrants: AppliedInviteBoardGrants = acceptedInviteId
+          ? await applyInviteBoardGrantsInTx(tx, { inviteId: acceptedInviteId, clientId, userId: user!.id })
+          : { members: [], workspaceMembers: [] };
+
         // An accepted organisation-admin invite is another org-role assignment path. Materialize
         // its inherited board access before signup commits so existing standalone rosters stay whole.
         if (orgRole === "owner" || orgRole === "admin") {
@@ -642,6 +651,7 @@ export async function authRoutes(app: FastifyInstance) {
           orgName: orgName!,
           orgRole,
           acceptedInvite,
+          boardGrants,
           redeemedInvite,
           boardInviteRedirect: redeemedInvite ? `/b/${redeemedInvite.grants[0]!.boardId}` : null,
         };
@@ -727,7 +737,22 @@ export async function authRoutes(app: FastifyInstance) {
       await sendInternalSignupNotification(
         result.acceptedInvite
           ? { type: "invite_accepted", displayName: result.user.displayName, email: result.user.email, orgName: result.orgName }
-          : { type: "signup", displayName: result.user.displayName, email: result.user.email, orgName: result.orgName },
+          : {
+            type: "signup",
+            displayName: result.user.displayName,
+            email: result.user.email,
+            orgName: result.orgName,
+            // The team follows up by hand, so it needs to know which channel brought this person in.
+            attribution: body.analyticsAttribution
+              ? {
+                source: body.analyticsAttribution.source,
+                medium: body.analyticsAttribution.medium,
+                campaign: body.analyticsAttribution.campaign,
+                referringDomain: body.analyticsAttribution.referring_domain,
+                landingPage: body.analyticsAttribution.landing_page,
+              }
+              : null,
+          },
         { log: req.log },
       );
       if (startsHostedTrial) {
@@ -758,6 +783,7 @@ export async function authRoutes(app: FastifyInstance) {
             createdAt: result.user.createdAt,
           }),
         });
+        await emitInviteBoardGrants(result.boardGrants, { ...result.user, orgRole: result.orgRole });
         await captureWorkspaceMemberJoined({
           organizationId: result.user.clientId,
           workspaceIds: result.workspaceIds,

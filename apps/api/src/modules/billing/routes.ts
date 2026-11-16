@@ -160,8 +160,8 @@ export async function billingRoutes(app: FastifyInstance) {
     assertHostedBillingMode();
     await assertBillingOrganisationActive(req.auth.cid);
     const body = dto.billingCheckoutBody.parse(req.body);
-    const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
-    return createCheckoutSession(req.auth.cid, user?.email ?? "", body.interval, body.seatLimit);
+    const [user] = await db.select({ email: users.email, displayName: users.displayName }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+    return createCheckoutSession(req.auth.cid, { id: req.auth.sub, email: user?.email ?? "", displayName: user?.displayName ?? "" }, body.interval, body.seatLimit);
   });
 
   // Buy more / reduce seats: set the org's purchased capacity. On an active subscription an increase is

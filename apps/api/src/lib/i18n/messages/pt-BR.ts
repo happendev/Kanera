@@ -626,6 +626,19 @@ const ptBR: ServerMessages = {
         },
         cta: "Abrir o Kanera",
       },
+      checkoutAbandoned: {
+        subject: "Algo atrapalhou o seu upgrade?",
+        preheader: "O pagamento do Kanera Pro não foi concluído, então você não foi cobrado.",
+        title: "Seu upgrade não foi concluído",
+        intro: ({ firstName, org }) => `Olá, ${firstName}. Você começou a fazer o upgrade de ${org} para o Kanera Pro, mas o pagamento não foi concluído. Você não foi cobrado e nada mudou.`,
+        question: {
+          lead: "Algo atrapalhou?",
+          withFeedback: ({ email }) => `Seja o preço, o número de licenças, um problema no pagamento ou uma dúvida sobre o Pro, escreva para ${email}. Lemos todas as mensagens e respondemos pessoalmente.`,
+          withoutFeedback: "Seja o preço, o número de licenças, um problema no pagamento ou uma dúvida sobre o Pro, conte para nós. Lemos todas as mensagens e respondemos pessoalmente.",
+        },
+        resume: "Quando quiser, você pode continuar de onde parou nas configurações do seu plano.",
+        cta: "Ver seu plano",
+      },
     },
     smtpTest: {
       subject: "Teste de SMTP do Kanera",

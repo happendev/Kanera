@@ -1,12 +1,13 @@
 import "../test/setup.integration.js";
 import { insertTestUsers } from "../test/user-fixtures.js";
-import { clients, emailQueue, workspaces, type BillingEmailQueueData } from "@kanera/shared/schema";
+import { clients, emailQueue, users, workspaces, type BillingEmailQueueData } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { runTrialExpirySweep, runTrialWarningSweep } from "./trial-expiry.js";
+import type { InternalTrialEndingNotification } from "./internal-notification-emails.js";
+import { runTrialEndingNoticeSweep, runTrialExpirySweep, runTrialWarningSweep } from "./trial-expiry.js";
 import { hashPassword } from "../auth/password.js";
 import { buildIntegrationServer } from "../test/integration.js";
 
@@ -119,4 +120,47 @@ void test("trial warning sweep is a no-op in self-hosted mode", async () => {
   const sent = await runTrialWarningSweep(undefined, app.mailer);
   assert.equal(sent, 0);
   assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_trial_warning")), 0);
+});
+
+void test("the team hears once about each self-serve trial ending within three days", async () => {
+  await inHostedMode(async () => {
+    const previousRecipients = env.INTERNAL_NOTIFICATION_EMAILS;
+    const selfServe = async (name: string, email: string, end: Date) => {
+      const id = await insertTrialWithOwner(name, email, end);
+      const [owner] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
+      await db.update(clients).set({ createdByUserId: owner!.id }).where(eq(clients.id, id));
+      return id;
+    };
+    const now = new Date();
+    const soon = await selfServe("Ending Soon", "ending-soon@example.com", new Date(now.getTime() + 2 * DAY));
+    await selfServe("Ending Later", "ending-later@example.com", new Date(now.getTime() + 5 * DAY));
+    const staff = await selfServe("Staff Trial", "staff-trial@example.com", new Date(now.getTime() + DAY));
+    await db.update(clients).set({ analyticsExcluded: true }).where(eq(clients.id, staff));
+    // Operator-provisioned: no creating user.
+    await insertTrialWithOwner("Provisioned Trial", "provisioned-trial@example.com", new Date(now.getTime() + DAY));
+
+    const sent: InternalTrialEndingNotification[] = [];
+    const send = async (notification: InternalTrialEndingNotification) => {
+      sent.push(notification);
+      return 1;
+    };
+    try {
+      env.INTERNAL_NOTIFICATION_EMAILS = [];
+      // Without recipients nothing is claimed, so the trial is still covered once the setting is on.
+      assert.equal(await runTrialEndingNoticeSweep(undefined, now, send), 0);
+
+      env.INTERNAL_NOTIFICATION_EMAILS = ["team@example.com"];
+      assert.equal(await runTrialEndingNoticeSweep(undefined, now, send), 1);
+      // A worker restart runs the sweep again immediately; the claim keeps it to one notice.
+      assert.equal(await runTrialEndingNoticeSweep(undefined, now, send), 0);
+    } finally {
+      env.INTERNAL_NOTIFICATION_EMAILS = previousRecipients;
+    }
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]!.clientId, soon);
+    assert.equal(sent[0]!.orgName, "Ending Soon");
+    assert.deepEqual(sent[0]!.owners, [{ displayName: "Ending Soon", email: "ending-soon@example.com" }]);
+    assert.equal(sent[0]!.members, 1);
+  });
 });

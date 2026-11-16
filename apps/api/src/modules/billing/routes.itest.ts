@@ -9,7 +9,7 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { cleanupStripeEvents, handleStripeEvent, setStripeClientForTests, syncStripeSeatQuantity } from "../../lib/billing.js";
 import { configureOpsAlertsForTests } from "../../lib/ops-alerts.js";
-import type { InternalSaleNotification } from "../../lib/internal-notification-emails.js";
+import type { InternalCheckoutNotification, InternalSaleNotification } from "../../lib/internal-notification-emails.js";
 import { ANALYTICS_EVENT_VERSION, productAnalytics, type ServerAnalyticsEvent } from "../../lib/product-analytics.js";
 import { runSeatReconcileSweep } from "../../lib/seat-reconcile.js";
 import { buildIntegrationServer } from "../../test/integration.js";
@@ -573,6 +573,52 @@ void test("Stripe checkout expiry captures one privacy-safe abandonment event", 
     } finally {
       capture.mock.restore();
     }
+  });
+});
+
+void test("an abandoned checkout emails the admin who started it once and tells the team", async () => {
+  await withHostedStripe(async () => {
+    const app = await buildIntegrationServer();
+    const email = "checkout-follow-up@example.com";
+    const clientId = await createClient(email);
+    const [starter] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
+    const notifications: InternalCheckoutNotification[] = [];
+    const sendCheckout = async (notification: InternalCheckoutNotification) => {
+      notifications.push(notification);
+      return 1;
+    };
+    const expiredSession = (id: string, expiresAt: number) => ({
+      id,
+      client_reference_id: clientId,
+      expires_at: expiresAt,
+      metadata: { clientId, interval: "monthly", seatLimit: "3", upgradeSource: "account_plan", startedByUserId: starter!.id },
+    });
+    const followUps = () => db.select({ toEmail: emailQueue.toEmail }).from(emailQueue)
+      .where(eq(emailQueue.type, "lifecycle_checkout_abandoned"));
+
+    // Expired at its own deadline (the fixture's event time is 1): the admin left the payment page.
+    await handleStripeEvent(event("checkout.session.expired", expiredSession("cs_left", 1), "evt_left"), env, app.mailer, { sendCheckout });
+    assert.deepEqual(await followUps(), [{ toEmail: email }]);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.type, "checkout_abandoned");
+    assert.deepEqual(notifications[0]!.startedBy, { displayName: email, email });
+    assert.equal(notifications[0]!.customerEmailed, true);
+
+    // Another abandoned session inside the repeat window: the team still hears, the admin is not mailed again.
+    await handleStripeEvent(event("checkout.session.expired", expiredSession("cs_left_again", 1), "evt_left_again"), env, app.mailer, { sendCheckout });
+    assert.equal((await followUps()).length, 1);
+    assert.equal(notifications.length, 2);
+    assert.equal(notifications[1]!.customerEmailed, false);
+
+    // Expired long before its deadline: Kanera replaced it with a new checkout, so nothing was abandoned.
+    await handleStripeEvent(event("checkout.session.expired", expiredSession("cs_replaced", periodEnd), "evt_replaced"), env, app.mailer, { sendCheckout });
+    assert.equal(notifications.length, 2);
+
+    // Paid through another session before this one lapsed.
+    await db.update(clients).set({ billingStatus: "active" }).where(eq(clients.id, clientId));
+    await handleStripeEvent(event("checkout.session.expired", expiredSession("cs_after_paying", 1), "evt_after_paying"), env, app.mailer, { sendCheckout });
+    assert.equal(notifications.length, 2);
+    assert.equal((await followUps()).length, 1);
   });
 });
 

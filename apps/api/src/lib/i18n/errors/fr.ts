@@ -761,6 +761,9 @@ export const fr: ErrorCatalog = {
     "Le nom de l'espace de travail ne correspond pas.",
   "workspace not found":
     "Espace de travail introuvable.",
+  "organisation admins already have access to every board": "Les administrateurs de l'organisation ont déjà accès à tous les tableaux.",
+  "duplicate board in invite": "Un tableau figure en double dans l'invitation.",
+  "board not in your organisation": "Le tableau ne fait pas partie de votre organisation.",
   "workspace not in your organisation":
     "L'espace de travail ne fait pas partie de votre organisation.",
   "write-capable credential required":

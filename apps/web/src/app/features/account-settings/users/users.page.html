@@ -74,6 +74,33 @@
       }
     </div>
     }
+    @if (settings.inviteBoards().length > 0) {
+    @if (settings.inviteOrgRole() === 'member') {
+    <span class="ws-grant-label" i18n>Board access</span>
+    <div class="ws-grant-grid">
+      @for (b of settings.inviteBoards(); track b.boardId) {
+      <div class="ws-grant-row">
+        <label class="ws-grant-check">
+          <input type="checkbox" [checked]="b.selected" (change)="settings.toggleInviteBoard(b.boardId)" />
+          <span class="ws-grant-name">{{ b.boardName }}</span>
+          @if (b.workspaceName) { <span class="ws-grant-context">{{ b.workspaceName }}</span> }
+        </label>
+        @if (b.selected) {
+        <label class="inline-label">
+          <span i18n="Field label">Board role</span>
+          <select [value]="b.role" (input)="settings.setInviteBoardRole(b.boardId, $any($event.target).value)">
+            <option value="editor" [selected]="b.role === 'editor'" i18n="Board role">Editor</option>
+            <option value="observer" [selected]="b.role === 'observer'" i18n="Board role">Observer</option>
+          </select>
+        </label>
+        }
+      </div>
+      }
+    </div>
+    } @else {
+    <p class="ws-grant-hint" i18n>Organisation admins can open every board.</p>
+    }
+    }
     @if (settings.inviteError()) { <p class="form-error">{{ settings.inviteError() }}</p> }
     @if (settings.memberLimitReached()) {
     <p class="plan-limit-hint"><i aria-hidden="true" class="ti ti-lock"></i> <ng-container i18n>Your current team fills every Free seat. Create the invite to see the exact annual price for adding this person.</ng-container></p>
@@ -111,7 +138,7 @@
   <div class="invite-list">
     <div class="invite-list-head">
       <span i18n="Column heading">Invite</span>
-      <span i18n="Column heading">Workspaces</span>
+      <span i18n="Column heading: the workspaces and boards an invite grants">Access</span>
       <span i18n="Column heading: organisation role">Org role</span>
       <span i18n="Column heading: when the invite expires">Expires</span>
       <span></span>
@@ -127,13 +154,20 @@
           <span class="invite-identity-sub" [kTooltip]="settings.inviteCreatedLabel(invite)">{{ settings.inviteCreatedLabel(invite) }}</span>
         </div>
       </div>
-      <div class="invite-ws-cell" data-label="Workspaces" i18n-data-label="Column heading">
-        @if (invite.workspaces.length > 0) {
+      <div class="invite-ws-cell" data-label="Access" i18n-data-label="Column heading: the workspaces and boards an invite grants">
+        @if (invite.workspaces.length > 0 || (invite.boards?.length ?? 0) > 0) {
         @for (w of invite.workspaces; track w.workspaceId) {
         <span class="ws-badge invite-ws-badge" [kTooltip]="w.workspaceName">
           <i aria-hidden="true" class="ti ti-layout-kanban"></i>
           <span class="invite-ws-name">{{ w.workspaceName }}</span>
           <span class="ws-badge-role" i18n="Workspace role badge">{ w.role, select, admin {admin} member {member} other {{{ w.role }}} }</span>
+        </span>
+        }
+        @for (b of invite.boards ?? []; track b.boardId) {
+        <span class="ws-badge invite-ws-badge" [kTooltip]="b.boardName">
+          <i aria-hidden="true" class="ti ti-layout-board"></i>
+          <span class="invite-ws-name">{{ b.boardName }}</span>
+          <span class="ws-badge-role" i18n="Board role badge">{ b.role, select, editor {editor} observer {observer} other {{{ b.role }}} }</span>
         </span>
         }
         } @else {

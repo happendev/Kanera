@@ -550,6 +550,19 @@ const zhTW: ServerMessages = {
         },
         cta: "打開 Kanera",
       },
+      checkoutAbandoned: {
+        subject: "升級時遇到什麼問題了嗎？",
+        preheader: "你的 Kanera Pro 結帳沒有完成，因此不會產生任何費用。",
+        title: "你的升級沒有完成",
+        intro: ({ firstName, org }) => `${firstName}，你好。你開始將 ${org} 升級到 Kanera Pro，但結帳沒有完成。你沒有被收費，一切都沒有改變。`,
+        question: {
+          lead: "遇到什麼問題了嗎？",
+          withFeedback: ({ email }) => `無論是價格、席位數量、付款問題，還是關於 Pro 的疑問，請來信 ${email}。我們會閱讀每一則訊息並親自回覆。`,
+          withoutFeedback: "無論是價格、席位數量、付款問題，還是關於 Pro 的疑問，都請告訴我們。我們會閱讀每一則訊息並親自回覆。",
+        },
+        resume: "準備好後，你可以在方案設定中從上次中斷的地方繼續。",
+        cta: "查看你的方案",
+      },
     },
     smtpTest: {
       subject: "Kanera SMTP 測試",

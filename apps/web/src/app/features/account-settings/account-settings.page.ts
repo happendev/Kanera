@@ -52,6 +52,7 @@ const ALL_TABS: readonly string[] = [...ACCOUNT_TABS, ...ORG_TABS];
 const WORKSPACE_DEFAULTS_SAVE_DEBOUNCE_MS = 300;
 
 type WorkspaceGrant = { workspaceId: string; workspaceName: string; role: "admin" | "member" };
+type BoardGrant = { boardId: string; boardName: string; role: "editor" | "observer" };
 
 interface OrgUser {
   id: string;
@@ -109,6 +110,7 @@ interface OrgInvite {
   createdAt: string;
   createdById: string;
   workspaces: WorkspaceGrant[];
+  boards?: BoardGrant[];
   url?: string;
 }
 
@@ -117,6 +119,15 @@ interface InviteWorkspaceSelection {
   workspaceName: string;
   selected: boolean;
   role: "admin" | "member";
+}
+
+interface InviteBoardSelection {
+  boardId: string;
+  boardName: string;
+  // Null for standalone boards, whose hidden workspace is never shown to people.
+  workspaceName: string | null;
+  selected: boolean;
+  role: "editor" | "observer";
 }
 
 type BillingPortalIntent = "home" | "invoices" | "cancel_subscription" | "payment_method";
@@ -312,6 +323,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly inviteOrgRole = signal<"member" | "admin">("member");
   readonly inviteExpiresInDays = signal<number | null>(7);
   readonly inviteWorkspaces = signal<InviteWorkspaceSelection[]>([]);
+  // Workspace membership alone opens no board, so the invite can also name the boards the person
+  // will work on. Admin invites skip this: organisation admins already open every board.
+  readonly inviteBoards = signal<InviteBoardSelection[]>([]);
   readonly createdInviteUrl = signal<string | null>(null);
   readonly inviteCopied = signal(false);
   readonly inviteBusy = signal(false);
@@ -1404,11 +1418,12 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   private async loadOrgUsers() {
     this.orgUsersError.set(null);
     try {
-      const [users, invites, workspaces, archived] = await Promise.all([
+      const [users, invites, workspaces, archived, boards] = await Promise.all([
         this.api.get<OrgUser[]>("/clients/me/users"),
         this.api.get<OrgInvite[]>("/clients/me/invites"),
         this.api.get<{ id: string; name: string }[]>("/workspaces"),
         this.api.get<ArchivedWorkspace[]>("/clients/me/archived-workspaces"),
+        this.api.get<NotificationBoardOption[]>("/boards"),
       ]);
       const guestSeats = this.isHosted() ? await this.api.get<OrgGuestSeat[]>("/clients/me/guest-seats") : [];
       this.orgUsers.set(users);
@@ -1419,6 +1434,18 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.inviteWorkspaces.set(
         workspaces.map((w) => existing.get(w.id) ?? { workspaceId: w.id, workspaceName: w.name, selected: false, role: "member" }),
       );
+      // /boards spans every organisation the identity belongs to; an invite can only grant this one's.
+      const orgBoards = boards.filter((board) => board.clientId === this.user()?.clientId);
+      const existingBoards = new Map(this.inviteBoards().map((b) => [b.boardId, b]));
+      this.inviteBoards.set(orgBoards.map((board) => existingBoards.get(board.id) ?? {
+        boardId: board.id,
+        boardName: board.name,
+        workspaceName: board.workspaceKind === "board" ? null : board.workspaceName,
+        // A single-board organisation (typically one that started with "Create a board") has only one
+        // place to invite someone to, so that is the default.
+        selected: orgBoards.length === 1,
+        role: "editor",
+      }));
     } catch (err) {
       this.orgUsersError.set(extractErrorMessage(err));
     }
@@ -1444,7 +1471,14 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       "client:user:removed": () => this.refreshOrgMembership(),
       "client:invite:created": (invite) =>
         this.orgInvites.update((invites) =>
-          invites.some((i) => i.id === invite.id) ? invites : [...invites, { ...invite, expiresAt: invite.expiresAt as string | null, createdAt: invite.createdAt as string, workspaces: invite.workspaces as WorkspaceGrant[] }],
+          invites.some((i) => i.id === invite.id) ? invites : [...invites, {
+            ...invite,
+            expiresAt: invite.expiresAt as string | null,
+            createdAt: invite.createdAt as string,
+            // The event carries ids only; names come from the pickers this page already loaded.
+            workspaces: invite.workspaces.map((w) => ({ ...w, workspaceName: this.inviteWorkspaces().find((row) => row.workspaceId === w.workspaceId)?.workspaceName ?? "" })),
+            boards: (invite.boards ?? []).map((b) => ({ ...b, boardName: this.inviteBoards().find((row) => row.boardId === b.boardId)?.boardName ?? "" })),
+          }],
         ),
       "client:invite:revoked": ({ id }) =>
         this.orgInvites.update((invites) => invites.filter((i) => i.id !== id)),
@@ -1478,6 +1512,18 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   setInviteWorkspaceRole(workspaceId: string, role: "admin" | "member") {
     this.inviteWorkspaces.update((rows) =>
       rows.map((r) => (r.workspaceId === workspaceId ? { ...r, role } : r)),
+    );
+  }
+
+  toggleInviteBoard(boardId: string) {
+    this.inviteBoards.update((rows) =>
+      rows.map((r) => (r.boardId === boardId ? { ...r, selected: !r.selected } : r)),
+    );
+  }
+
+  setInviteBoardRole(boardId: string, role: "editor" | "observer") {
+    this.inviteBoards.update((rows) =>
+      rows.map((r) => (r.boardId === boardId ? { ...r, role } : r)),
     );
   }
 
@@ -1520,18 +1566,20 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       await this.upgradePrompt.open({ reason: "member", source: "organisation_users", projectedSeats: this.usedSeats() + 1 });
       return;
     }
-    if (!this.inviteWorkspaces().some((w) => w.selected)) {
-      this.inviteError.set($localize`Select at least one workspace before creating an invite.`);
-      return;
-    }
+    // Workspaces and boards are both optional: an organisation that only has standalone boards has
+    // no workspace to offer, and an organisation-only invite is a valid starting point.
     this.inviteBusy.set(true);
     try {
+      const orgRole = this.inviteOrgRole();
       const body = {
-        orgRole: this.inviteOrgRole(),
+        orgRole,
         expiresInDays: this.inviteExpiresInDays(),
         workspaces: this.inviteWorkspaces()
           .filter((w) => w.selected)
           .map((w) => ({ workspaceId: w.workspaceId, role: w.role })),
+        boards: orgRole === "admin" ? [] : this.inviteBoards()
+          .filter((b) => b.selected)
+          .map((b) => ({ boardId: b.boardId, role: b.role })),
       };
       const res = await this.api.post<{ id: string; token: string }>("/clients/me/invites", body);
       const inviteUrl = `${location.origin}/signup?invite=${res.token}`;
@@ -1539,6 +1587,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.inviteCopied.set(false);
       await navigator.clipboard.writeText(inviteUrl).then(() => this.inviteCopied.set(true)).catch(() => { });
       this.inviteWorkspaces.update((rows) => rows.map((r) => ({ ...r, selected: false })));
+      this.inviteBoards.update((rows) => rows.map((r) => ({ ...r, selected: rows.length === 1, role: "editor" })));
       await this.loadOrgUsers();
       this.orgInvites.update((invites) => invites.map((i) => (i.id === res.id ? { ...i, url: inviteUrl } : i)));
     } catch (err) {

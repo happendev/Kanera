@@ -557,6 +557,19 @@ const de: ServerMessages = {
         },
         cta: "Kanera öffnen",
       },
+      checkoutAbandoned: {
+        subject: "Ist bei deinem Upgrade etwas dazwischengekommen?",
+        preheader: "Dein Kanera-Pro-Checkout wurde nicht abgeschlossen, daher wurde dir nichts berechnet.",
+        title: "Dein Upgrade wurde nicht abgeschlossen",
+        intro: ({ firstName, org }) => `Hallo ${firstName}, du hast begonnen, ${org} auf Kanera Pro umzustellen, aber der Checkout wurde nicht abgeschlossen. Dir wurde nichts berechnet und es hat sich nichts geändert.`,
+        question: {
+          lead: "Ist etwas dazwischengekommen?",
+          withFeedback: ({ email }) => `Ob Preis, Anzahl der Lizenzen, ein Zahlungsproblem oder eine Frage zu Pro: Schreib uns an ${email}. Wir lesen jede Nachricht und antworten persönlich.`,
+          withoutFeedback: "Ob Preis, Anzahl der Lizenzen, ein Zahlungsproblem oder eine Frage zu Pro: Sag uns Bescheid. Wir lesen jede Nachricht und antworten persönlich.",
+        },
+        resume: "Wenn du so weit bist, kannst du in deinen Tarifeinstellungen dort weitermachen, wo du aufgehört hast.",
+        cta: "Tarif ansehen",
+      },
     },
     smtpTest: {
       subject: "Kanera-SMTP-Test",

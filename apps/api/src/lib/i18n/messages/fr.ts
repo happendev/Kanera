@@ -636,6 +636,19 @@ const fr: ServerMessages = {
         },
         cta: "Ouvrir Kanera",
       },
+      checkoutAbandoned: {
+        subject: "Un obstacle a-t-il interrompu votre passage à Pro ?",
+        preheader: "Votre paiement Kanera Pro n'a pas été finalisé : vous n'avez pas été facturé.",
+        title: "Votre passage à Pro n'a pas été finalisé",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, vous avez commencé à passer ${org} à Kanera Pro, mais le paiement n'a pas été finalisé. Vous n'avez pas été facturé et rien n'a changé.`,
+        question: {
+          lead: "Quelque chose vous a-t-il bloqué ?",
+          withFeedback: ({ email }) => `Qu'il s'agisse du prix, du nombre de places, d'un problème de paiement ou d'une question sur Pro, écrivez-nous à ${email}. Nous lisons chaque message et répondons personnellement.`,
+          withoutFeedback: "Qu'il s'agisse du prix, du nombre de places, d'un problème de paiement ou d'une question sur Pro, dites-le-nous. Nous lisons chaque message et répondons personnellement.",
+        },
+        resume: "Quand vous serez prêt, vous pourrez reprendre là où vous vous êtes arrêté depuis les paramètres de votre offre.",
+        cta: "Voir votre offre",
+      },
     },
     smtpTest: {
       subject: "Test SMTP Kanera",

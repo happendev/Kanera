@@ -761,6 +761,9 @@ export const de: ErrorCatalog = {
     "Der Name des Arbeitsbereichs stimmt nicht überein.",
   "workspace not found":
     "Arbeitsbereich nicht gefunden.",
+  "organisation admins already have access to every board": "Organisationsadmins haben bereits Zugriff auf jedes Board.",
+  "duplicate board in invite": "Ein Board ist in der Einladung doppelt angegeben.",
+  "board not in your organisation": "Das Board gehört nicht zu deiner Organisation.",
   "workspace not in your organisation":
     "Der Arbeitsbereich gehört nicht zu deiner Organisation.",
   "write-capable credential required":

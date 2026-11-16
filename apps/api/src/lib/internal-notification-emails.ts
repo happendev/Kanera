@@ -6,9 +6,46 @@ import { sendEmail, type SendEmailOptions } from "./smtp.js";
 
 type InternalNotificationEnv = Pick<Env, "INTERNAL_NOTIFICATION_EMAILS" | "NODE_ENV">;
 
+/** Where a self-serve signup came from, as the web app captured it (UTM tags or referrer). */
+export type InternalSignupAttribution = {
+  source: string;
+  medium: string;
+  campaign: string;
+  referringDomain?: string;
+  landingPage?: string;
+};
+
 export type InternalSignupNotification =
-  | { type: "signup"; displayName: string; email: string; orgName: string }
+  | { type: "signup"; displayName: string; email: string; orgName: string; attribution?: InternalSignupAttribution | null }
   | { type: "invite_accepted"; displayName: string; email: string; orgName: string };
+
+type InternalPerson = { displayName: string; email: string };
+
+/**
+ * Checkout moments worth a personal follow-up. Stripe only reports payment, so without these the team
+ * never learns that an admin reached the payment page and left.
+ */
+export type InternalCheckoutNotification = {
+  type: "checkout_started" | "checkout_abandoned";
+  orgName: string;
+  clientId: string;
+  startedBy: InternalPerson | null;
+  billingInterval: "monthly" | "annual" | null;
+  seatCount: number;
+  /** checkout_abandoned only: whether the follow-up email went to the person who started it. */
+  customerEmailed?: boolean;
+};
+
+export type InternalTrialEndingNotification = {
+  orgName: string;
+  clientId: string;
+  trialEndsAt: Date;
+  owners: InternalPerson[];
+  members: number;
+  boards: number;
+  cards: number;
+  lastActiveAt: Date | null;
+};
 
 export type InternalSaleNotification = {
   orgName: string;
@@ -36,9 +73,70 @@ export async function sendInternalSignupNotification(
   const subject = emailSubject("Kanera signup notification", config.NODE_ENV);
   const text = notification.type === "invite_accepted"
     ? `${notification.displayName} <${notification.email}> has accepted invite to org ${notification.orgName}.`
-    : `${notification.displayName} <${notification.email}> has signed up.`;
+    : [`${notification.displayName} <${notification.email}> has signed up.`, ...attributionLines(notification.attribution)].join("\n");
 
   return deliverInternalNotification({ subject, text }, "signup", options);
+}
+
+function attributionLines(attribution: InternalSignupAttribution | null | undefined): string[] {
+  if (!attribution) return [];
+  return [
+    "",
+    `Source: ${attribution.source} / ${attribution.medium}`,
+    `Campaign: ${attribution.campaign}`,
+    ...(attribution.referringDomain ? [`Referrer: ${attribution.referringDomain}`] : []),
+    ...(attribution.landingPage ? [`Landing page: ${attribution.landingPage}`] : []),
+  ];
+}
+
+export async function sendInternalCheckoutNotification(
+  notification: InternalCheckoutNotification,
+  options: InternalNotificationOptions = {},
+): Promise<number> {
+  const config = options.config ?? env;
+  const started = notification.type === "checkout_started";
+  const subject = emailSubject(
+    started ? `Kanera checkout started: ${notification.orgName}` : `Kanera checkout abandoned: ${notification.orgName}`,
+    config.NODE_ENV,
+  );
+  const plan = notification.billingInterval ? `Pro ${notification.billingInterval}` : "Pro";
+  const text = [
+    started
+      ? "Someone opened Stripe checkout. If no sale notification follows, it will be reported as abandoned when the session expires."
+      : "A Stripe checkout expired without payment. This is a good moment for a personal follow-up.",
+    "",
+    `Organisation: ${notification.orgName}`,
+    `Started by: ${notification.startedBy ? `${notification.startedBy.displayName} <${notification.startedBy.email}>` : "unknown"}`,
+    `Plan: ${plan}`,
+    `Seats: ${notification.seatCount}`,
+    ...(started ? [] : [`Follow-up email sent to them: ${notification.customerEmailed ? "yes" : "no"}`]),
+    `Organisation ID: ${notification.clientId}`,
+  ].join("\n");
+
+  return deliverInternalNotification({ subject, text }, "checkout", options);
+}
+
+export async function sendInternalTrialEndingNotification(
+  notification: InternalTrialEndingNotification,
+  options: InternalNotificationOptions = {},
+): Promise<number> {
+  const config = options.config ?? env;
+  const ends = notification.trialEndsAt.toISOString().slice(0, 10);
+  const subject = emailSubject(`Kanera trial ending ${ends}: ${notification.orgName}`, config.NODE_ENV);
+  const text = [
+    "This organisation's Pro trial ends soon and it has not subscribed. It will move to Free automatically.",
+    "",
+    `Organisation: ${notification.orgName}`,
+    `Trial ends: ${ends}`,
+    `Owners: ${notification.owners.length > 0 ? notification.owners.map((owner) => `${owner.displayName} <${owner.email}>`).join(", ") : "none"}`,
+    `Members: ${notification.members}`,
+    `Boards: ${notification.boards}`,
+    `Cards: ${notification.cards}`,
+    `Last active: ${notification.lastActiveAt ? notification.lastActiveAt.toISOString().slice(0, 10) : "never"}`,
+    `Organisation ID: ${notification.clientId}`,
+  ].join("\n");
+
+  return deliverInternalNotification({ subject, text }, "trial", options);
 }
 
 export async function sendInternalSaleNotification(
@@ -69,7 +167,7 @@ export async function sendInternalSaleNotification(
 
 async function deliverInternalNotification(
   message: { subject: string; text: string },
-  kind: "signup" | "sale",
+  kind: "signup" | "sale" | "checkout" | "trial",
   options: InternalNotificationOptions,
 ): Promise<number> {
   const config = options.config ?? env;

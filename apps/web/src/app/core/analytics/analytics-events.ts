@@ -7,7 +7,9 @@ export type UpgradeSource =
   | "workspace_settings"
   | "organisation_users"
   | "account_plan"
-  | "account_settings";
+  | "account_settings"
+  | "board_members"
+  | "onboarding";
 
 export interface PlanLimitAnalyticsProperties {
   limit_type: PremiumFeature;

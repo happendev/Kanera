@@ -552,6 +552,19 @@ const enGB: ServerMessages = {
         },
         cta: "Open Kanera",
       },
+      checkoutAbandoned: {
+        subject: "Did something get in the way of your upgrade?",
+        preheader: "Your Kanera Pro checkout wasn't finished, so you haven't been charged.",
+        title: "Your upgrade wasn't finished",
+        intro: ({ firstName, org }) => `Hi ${firstName}, you started upgrading ${org} to Kanera Pro, but the checkout wasn't finished. You haven't been charged and nothing has changed.`,
+        question: {
+          lead: "Did something get in the way?",
+          withFeedback: ({ email }) => `Whether it was the price, the number of seats, a payment problem or a question about Pro, tell us at ${email}. We read every message and reply personally.`,
+          withoutFeedback: "Whether it was the price, the number of seats, a payment problem or a question about Pro, let us know. We read every message and reply personally.",
+        },
+        resume: "When you're ready, you can pick up where you left off from your plan settings.",
+        cta: "Review your plan",
+      },
     },
     smtpTest: {
       subject: "Kanera SMTP test",
