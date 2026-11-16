@@ -1,3 +1,4 @@
+import { Location } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import type { OnInit } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
@@ -134,6 +135,7 @@ export class ProviderCallbackPage implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly publicAuth = inject(PublicAuthClient);
   private readonly router = inject(Router);
+  private readonly location = inject(Location);
 
   /** One-time handoff code from the API callback. */
   readonly h = input<string>();
@@ -248,7 +250,13 @@ export class ProviderCallbackPage implements OnInit {
       return;
     }
     const session = parseAuthResponse(body);
+    const destination = session.user.boardInviteRedirect ?? returnUrl ?? "/";
+    // Leave the single-use handoff URL before installing the session: installing it reloads the page
+    // when the account's language differs from this device's, and reloading ?h= would redeem a used
+    // handoff and report "expired" although the sign-in succeeded. The reload now lands on the
+    // destination, which restores the session from the refresh cookie.
+    this.location.replaceState(destination);
     this.auth.setSession(session.accessToken, session.user);
-    await this.router.navigateByUrl(session.user.boardInviteRedirect ?? returnUrl ?? "/");
+    await this.router.navigateByUrl(destination, { replaceUrl: true });
   }
 }

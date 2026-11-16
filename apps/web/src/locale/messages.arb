@@ -7765,8 +7765,8 @@
       "src/app/features/auth/signup.page.ts"
     ]
   },
-  "1753768480518778288": "Enter your credentials to continue",
-  "@1753768480518778288": {
+  "8661815477691948140": "Sign in to Kanera",
+  "@8661815477691948140": {
     "x-files": [
       "src/app/features/auth/login.page.html"
     ]
