@@ -25,7 +25,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [assignment-parity](assignment-parity.spec.ts) | Single and bulk labels/assignees preserving automation results, event order, idempotency, and live board/inbox delivery. |
 | [attachment-reactions](attachment-reactions.spec.ts) | Attachment reactions, quoting, uploader notifications, removal, and persistence reaching other viewers live. |
 | [attachments](attachments.spec.ts) | Preview/download behavior across four surfaces, decoded media and original file bytes, cover deletion/undo, and live activity. |
-| [auth](auth.spec.ts) | Password login, invalid credentials, refresh-cookie proxying, reload persistence, and logout. |
+| [auth](auth.spec.ts) | Password login, invalid credentials, refresh-cookie proxying, reload persistence, private storage cleanup on explicit/rejected/cross-tab logout, silent cleanup failure recovery without blocking sign-in, incoming PWA shares, and durable logout when server revocation fails. |
 | [billing-realtime](billing-realtime.spec.ts) | Committed plan conversions updating live navigation through separate processes; rolled-back conversions emitting nothing. |
 | [planning-mounting](planning-mounting.spec.ts) | Calendar panel measurement, crowded-day expansion and drag/drop; dependency chain windowing, scroll restoration, keyboard focus and phone Steps. |
 | [board](board.spec.ts) | Card persistence, board and workspace-list fanout, reload convergence, and late cards beyond the lane render cap. |

@@ -1406,6 +1406,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.workspaceService.clear();
     this.pendingInvitations.setFromHome({ guestGroups: [], pendingBoardInvitations: [] });
     this.search.close();
+    this.profileCards.teardown();
   }
 
   private scheduleShellBoardsRefresh(): void {
@@ -1809,18 +1810,16 @@ export class AppShellComponent implements OnInit, OnDestroy {
   async logout() {
     const accessToken = this.auth.getAccessToken();
     const pushCleanup = this.browserPush.unsubscribeForLogout(accessToken).catch(() => undefined);
-    const logoutRequest = this.api.request("/auth/logout", { method: "POST" }).catch(() => undefined);
-    const cacheCleanup = this.offlineCache.clearAll().catch(() => undefined);
+    const logoutRequest = this.api.request("/auth/logout", { method: "POST", signal: AbortSignal.timeout(5_000) }).catch(() => undefined);
 
     // Flush while the outgoing token still exists, then synchronously erase the root service before
     // the login screen (or another account) can render in this SPA instance.
     this.teardownSessionState();
     this.auth.broadcastLogout();
-    this.auth.clearSession({ disableRefresh: true });
+    const cleanup = this.auth.clearSession({ disableRefresh: true, beforeSignIn: logoutRequest });
     this.sockets.disconnect();
     await this.router.navigateByUrl("/login", { replaceUrl: true });
-
-    void Promise.allSettled([pushCleanup, logoutRequest, cacheCleanup]);
+    await Promise.allSettled([pushCleanup, logoutRequest, cleanup]);
   }
 
   private async registerPushForEligibleBrowser() {

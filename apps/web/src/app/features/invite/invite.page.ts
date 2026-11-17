@@ -72,7 +72,7 @@ export class InvitePage implements OnInit {
         // Membership was granted and the active organisation already moved, but the new organisation
         // mandates MFA so no session for it was issued. The previous organisation's in-memory token is
         // dropped (a refresh would now be refused anyway) and the login page completes enrollment.
-        this.auth.clearSession();
+        void this.auth.clearSession();
         await this.router.navigateByUrl("/login", { replaceUrl: true, state: { [MFA_ENROLLMENT_HANDOFF_KEY]: session.challengeToken } });
         return;
       }

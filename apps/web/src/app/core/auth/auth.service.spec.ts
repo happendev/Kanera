@@ -1,3 +1,5 @@
+import { Injector, runInInjectionContext } from "@angular/core";
+import { SessionCleanupService } from "./session-cleanup.service";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthService, authenticatedLandingPath, type AuthUser } from "./auth.service";
 
@@ -34,6 +36,13 @@ class TestAuthService extends AuthService {
   }
 }
 
+function createAuth(): TestAuthService {
+  const injector = Injector.create({ providers: [{ provide: SessionCleanupService, useValue: {
+    clear: () => Promise.resolve(), ready: () => Promise.resolve(),
+  } }] });
+  return runInInjectionContext(injector, () => new TestAuthService());
+}
+
 function fetchCallsFor(fetch: { mock: { calls: [RequestInfo | URL, RequestInit?][] } }, path: string) {
   return fetch.mock.calls.filter(([input]) => {
     const url = typeof input === "string" ? input : input instanceof Request ? input.url : input.href;
@@ -64,17 +73,17 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("does not refresh after logout disables refresh", async () => {
-    const auth = new TestAuthService();
+    const auth = createAuth();
     const fetch = auth.fetchMock.mockResolvedValue(new Response("{}"));
 
-    auth.clearSession({ disableRefresh: true });
+    void auth.clearSession({ disableRefresh: true });
 
     await expect(auth.refresh()).resolves.toBeNull();
     expect(fetchCallsFor(fetch, "/auth/refresh")).toHaveLength(0);
   });
 
   it("keeps the session and resolves null when refresh fetch fails", async () => {
-    const auth = new TestAuthService();
+    const auth = createAuth();
     auth.fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
 
     auth.setSession("old-token", user());
@@ -85,7 +94,7 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("clears the session when refresh is rejected by the server", async () => {
-    const auth = new TestAuthService();
+    const auth = createAuth();
     auth.fetchMock.mockResolvedValue(new Response("{}", { status: 401 }));
 
     auth.setSession("old-token", user());
@@ -96,12 +105,12 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("does not restore a user when an in-flight refresh resolves after logout", async () => {
-    const auth = new TestAuthService();
+    const auth = createAuth();
     const response = deferred<Response>();
     auth.fetchMock.mockReturnValue(response.promise);
 
     const refresh = auth.refresh();
-    auth.clearSession({ disableRefresh: true });
+    void auth.clearSession({ disableRefresh: true });
     response.resolve(new Response(JSON.stringify({ accessToken: "new-token", user: user() }), { status: 200 }));
 
     await expect(refresh).resolves.toBeNull();
@@ -110,7 +119,7 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
 
   it("retries session hydration while the API is restarting", async () => {
     vi.useFakeTimers();
-    const auth = new TestAuthService();
+    const auth = createAuth();
     const fetch = auth.fetchMock
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce(new Response(JSON.stringify({ accessToken: "new-token", user: user() }), { status: 200 }));
@@ -126,7 +135,7 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
 
   it("does not retry hydration when the refresh cookie is rejected", async () => {
     vi.useFakeTimers();
-    const auth = new TestAuthService();
+    const auth = createAuth();
     const fetch = auth.fetchMock.mockResolvedValue(new Response("{}", { status: 401 }));
 
     await auth.hydrate();
@@ -136,7 +145,7 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("installs the replacement session returned by an organisation switch", async () => {
-    const auth = new TestAuthService();
+    const auth = createAuth();
     auth.setSession("old-token", user({ clientId: "client-1", activeClientId: "client-1" }));
     auth.fetchMock.mockResolvedValue(new Response(JSON.stringify({
       accessToken: "client-2-token",
@@ -152,7 +161,7 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("allows another organisation-switch attempt after a rejected switch", async () => {
-    const auth = new TestAuthService();
+    const auth = createAuth();
     auth.setSession("token", user());
     auth.fetchMock.mockResolvedValue(new Response("{}", { status: 403 }));
 
@@ -162,7 +171,7 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("refreshes an expired access token and retries an organisation switch", async () => {
-    const auth = new TestAuthService();
+    const auth = createAuth();
     auth.setSession("expired-token", user({ clientId: "client-1", activeClientId: "client-1" }));
     let switchAttempt = 0;
     auth.fetchMock.mockImplementation(async (input) => {
@@ -194,7 +203,7 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("refreshes the organisation visible in this tab instead of silently following another tab", async () => {
-    const auth = new TestAuthService();
+    const auth = createAuth();
     auth.setSession("client-2-old", user({ clientId: "client-2", activeClientId: "client-2" }));
     auth.fetchMock.mockResolvedValue(new Response(JSON.stringify({
       accessToken: "client-2-new",
@@ -215,10 +224,10 @@ describe("offline session recovery", () => {
   });
 
   it("restores a bounded identity without persisting or granting a bearer token", async () => {
-    const first = new TestAuthService();
+    const first = createAuth();
     first.setSession("secret-token", user());
     expect(localStorage.getItem("kanera:offline-identity")).not.toContain("secret-token");
-    const restored = new TestAuthService();
+    const restored = createAuth();
     restored.fetchMock.mockRejectedValue(new TypeError("offline"));
     await restored.hydrate();
     expect(restored.user()?.id).toBe("user-1");
@@ -231,8 +240,8 @@ describe("offline session recovery", () => {
   });
 
   it("never restores identity after an explicit cookie rejection", async () => {
-    new TestAuthService().setSession("old", user());
-    const restored = new TestAuthService();
+    createAuth().setSession("old", user());
+    const restored = createAuth();
     restored.fetchMock.mockResolvedValue(new Response("{}", { status: 401 }));
     await restored.hydrate();
     expect(restored.user()).toBeNull();
@@ -240,11 +249,11 @@ describe("offline session recovery", () => {
   });
 
   it("rejects expired offline identities and clears identity on logout", async () => {
-    const auth = new TestAuthService();
+    const auth = createAuth();
     auth.setSession("old", user());
     localStorage.setItem("kanera:offline-identity", JSON.stringify({ user: user(), cachedAt: Date.now() - 8 * 86400000 }));
     expect((auth as unknown as { restoreOfflineIdentity(): boolean }).restoreOfflineIdentity()).toBe(false);
-    auth.clearSession({ disableRefresh: true });
+    void auth.clearSession({ disableRefresh: true });
     expect(localStorage.getItem("kanera:offline-identity")).toBeNull();
   });
 });

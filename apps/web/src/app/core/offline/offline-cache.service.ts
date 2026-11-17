@@ -1,3 +1,4 @@
+import { sessionStorageBlocked, CLEANUP_PENDING_KEY } from "../browser/session-storage";
 import type { WorkspaceFeatures } from "@kanera/shared/workspace-features";
 import { Injectable, signal } from "@angular/core";
 import type { DependencyGraphResponse, HomeTodayResponse, PendingBoardInvitationSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkPrioritiesResponse, WorkViewDefinition } from "@kanera/shared/dto";
@@ -246,6 +247,9 @@ type CacheTransaction = IDBPTransaction<KaneraOfflineDb, (CacheStore | "cacheMet
 
 @Injectable({ providedIn: "root" })
 export class OfflineCacheService {
+  // Clearing must invalidate saves still waiting for IndexedDB, even if a new login enables
+  // persistence before they resume. Transactions already started finish before the clear.
+  private writeRevision = 0;
   private readonly failedWrites = new Set<string>();
   // Weak keys do not retain notes after their route closes. Tokens identify the exact object saved
   // by this tab; the persisted manifest prevents another tab or an eviction from fooling this memo.
@@ -468,9 +472,10 @@ export class OfflineCacheService {
   }
 
   async clearAll(): Promise<void> {
+    this.writeRevision += 1;
     this.failedWrites.clear();
     this.persistenceError.set(null);
-    const db = await this.db();
+    const db = await this.db(true);
     const tx = db.transaction([...CACHE_STORES, "cacheMeta", "noteEntries"], "readwrite");
     await Promise.all([...CACHE_STORES, "cacheMeta" as const, "noteEntries" as const].map((store) => tx.objectStore(store).clear()));
     await tx.done;
@@ -480,6 +485,8 @@ export class OfflineCacheService {
     store: S, value: StoreValue<KaneraOfflineDb, S>, key: string,
     options?: { bytes: number; write: (tx: CacheTransaction) => Promise<void> },
   ): Promise<void> {
+    const revision = this.writeRevision;
+    if (sessionStorageBlocked()) return;
     try {
       // A conservative UTF-16 estimate bounds stored payloads without scanning/cloning every
       // cached board. Metadata and data eviction commit together, including across browser tabs.
@@ -487,6 +494,7 @@ export class OfflineCacheService {
       if (bytes > CACHE_BUDGET_BYTES) throw new Error("Snapshot exceeds offline cache capacity");
       const db = await this.db();
       const write = async (budget: number) => {
+        if (revision !== this.writeRevision || sessionStorageBlocked()) return;
         const tx = db.transaction([...CACHE_STORES, "cacheMeta", "noteEntries"], "readwrite");
         try {
           const meta = tx.objectStore("cacheMeta");
@@ -547,7 +555,9 @@ export class OfflineCacheService {
     return `${workspaceId}:${boardId ?? "workspace"}`;
   }
 
-  private db(): Promise<IDBPDatabase<KaneraOfflineDb>> {
+  private db(forCleanup = false): Promise<IDBPDatabase<KaneraOfflineDb>> {
+    // A failed erase must never expose the previous account’s snapshots to a new login.
+    if (!forCleanup && localStorage.getItem(CLEANUP_PENDING_KEY)) return Promise.reject(new Error("Offline cache is awaiting cleanup"));
     // Version 5 added `homeToday`; version 6 invalidates the older client-scoped Global Work
     // snapshots. Those projections are permission- and user-specific, so they must not survive the
     // move to client+user+lens keys even on a shared browser. Version 7 removes the cache store for

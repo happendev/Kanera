@@ -1833,7 +1833,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         return;
       }
       this.auth.broadcastLogout();
-      this.auth.clearSession({ disableRefresh: true });
+      await this.auth.clearSession({ disableRefresh: true });
       await this.router.navigateByUrl("/login", { replaceUrl: true });
     } catch (error) {
       this.organisationDeleteError.set(extractErrorMessage(error));

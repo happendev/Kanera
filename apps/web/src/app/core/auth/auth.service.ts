@@ -1,4 +1,4 @@
-import { Injectable, signal, computed } from "@angular/core";
+import { Injectable, signal, computed, inject } from "@angular/core";
 import type { Entitlements } from "@kanera/shared/dto";
 import type { Accent, Theme } from "@kanera/shared/appearance";
 import type { Locale } from "@kanera/shared/locales";
@@ -6,6 +6,8 @@ import { environment } from "../../../environments/environment";
 import { STORAGE_KEYS } from "../browser/browser-contracts";
 import { viewerTimeZone } from "../../shared/day-key.util";
 import { appLocale, applyLocale } from "../i18n/locale";
+import { SessionCleanupService } from "./session-cleanup.service";
+import { SESSION_CLEANUP_KEY } from "../browser/session-storage";
 
 export type OrgRole = "owner" | "admin" | "member";
 export type KaneraEnvironment = "development" | "test" | "staging" | "production";
@@ -103,6 +105,7 @@ function accessTokenLocalExpiry(token: string, receivedAt: number): number | nul
 
 @Injectable({ providedIn: "root" })
 export class AuthService {
+  private readonly cleanup = inject(SessionCleanupService);
   private readonly _user = signal<AuthUser | null>(null);
   private accessToken: string | null = null;
   private accessTokenExpiresAt: number | null = null;
@@ -192,7 +195,7 @@ export class AuthService {
 
   broadcastLogout(): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEYS.LOGOUT_SYNC, `${Date.now()}`);
+    try { localStorage.setItem(STORAGE_KEYS.LOGOUT_SYNC, `${Date.now()}`); } catch { /* Local logout must still complete when storage is unavailable. */ }
   }
 
   setSession(accessToken: string, user: AuthUser): void {
@@ -202,6 +205,7 @@ export class AuthService {
   }
 
   private installSession(accessToken: string, user: AuthUser): void {
+    try { localStorage.removeItem(SESSION_CLEANUP_KEY); } catch { /* Storage is optional. */ }
     this.invalidateSessionRequests();
     this.refreshDisabled = false;
     this.offlineSession.set(false);
@@ -270,6 +274,7 @@ export class AuthService {
   private restoreOfflineIdentity(): boolean {
     if (this.refreshDisabled) return false;
     try {
+      if (localStorage.getItem(SESSION_CLEANUP_KEY)) return false;
       const cached = JSON.parse(localStorage.getItem(OFFLINE_IDENTITY_KEY) ?? "null") as { user?: AuthUser; cachedAt?: number } | null;
       if (!cached?.user?.id || !cached.user.clientId || typeof cached.cachedAt !== "number"
         || cached.cachedAt > Date.now() || Date.now() - cached.cachedAt > OFFLINE_IDENTITY_MAX_AGE_MS) return false;
@@ -280,7 +285,7 @@ export class AuthService {
     } catch { return false; }
   }
 
-  clearSession(options: { disableRefresh?: boolean; broadcast?: boolean } = {}): void {
+  clearSession(options: { disableRefresh?: boolean; broadcast?: boolean; preserveIncomingShare?: boolean; beforeSignIn?: Promise<unknown> } = {}): Promise<void> {
     this.sessionGeneration += 1;
     this.invalidateSessionRequests();
     this.forgetOfflineIdentity();
@@ -290,6 +295,7 @@ export class AuthService {
     this._organisationSwitchPending.set(false);
     this._supportSession.set(null);
     if (options.broadcast) this.broadcastLogout();
+    return this.cleanup.clear({ preserveIncomingShare: options.preserveIncomingShare, beforeSignIn: options.beforeSignIn });
   }
 
   async refresh(): Promise<string | null> {
@@ -307,6 +313,13 @@ export class AuthService {
     if (this.refreshInFlight) return this.refreshInFlight;
     const revision = this.sessionRevision;
     const pending = (async () => {
+      try { await this.cleanup.ready(); } catch { return { token: null, retryable: false }; }
+      // Local logout remains authoritative after a reload, including when offline logout could
+      // not revoke the httpOnly cookie. Only an explicit successful sign-in removes this marker.
+      try {
+        if (localStorage.getItem(SESSION_CLEANUP_KEY)) return { token: null, retryable: false };
+      } catch { /* Browser storage is optional for online authentication. */ }
+      if (revision !== this.sessionRevision) return { token: null, retryable: false };
       if (this.refreshDisabled) return { token: null, retryable: false };
       try {
         const requestedClientId = this._user()?.activeClientId ?? this._user()?.clientId;
@@ -333,7 +346,11 @@ export class AuthService {
         if (this.refreshDisabled || revision !== this.sessionRevision) return { token: null, retryable: false };
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
-            this.clearSession({ disableRefresh: true, broadcast: true });
+            // A share launched while already signed out belongs to the incoming login flow.
+            // Rejecting a previous identity must still erase that identity's abandoned shares.
+            let preserveIncomingShare = false;
+            try { preserveIncomingShare = !this._user() && !localStorage.getItem(OFFLINE_IDENTITY_KEY); } catch { /* Clear on uncertainty. */ }
+            void this.clearSession({ disableRefresh: true, broadcast: true, preserveIncomingShare });
           }
           return { token: null, retryable: res.status === 502 || res.status === 503 || res.status === 504 };
         }
@@ -447,7 +464,7 @@ export class AuthService {
       if (revision !== this.sessionRevision) return false;
     }
     if (res.status === 401) {
-      this.clearSession();
+      await this.clearSession({ disableRefresh: true, broadcast: true });
       return false;
     }
     if (!res.ok) return false;

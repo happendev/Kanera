@@ -21,6 +21,8 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
+- Signing out or losing a session clears offline copies, local drafts, recent history and pending shares from the browser. Cleanup failures recover automatically without interrupting sign-in.
+
 - Security hardening: malformed IDs, dates, numbers and import data return validation errors, outbound integrations and push reject unsafe destinations, rich text, search results and CSV exports cannot inject markup or formulas, and self-hosted trust-proxy settings accept a proxy count.
 
 ## [1.11.0] - 2026-11-12
