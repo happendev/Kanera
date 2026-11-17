@@ -87,10 +87,12 @@ function clippedFormValue(form, name, maxLength) {
 self.addEventListener("activate", (event) => {
   if (!self.registration.navigationPreload) return;
 
-  // Angular's worker handles fetches after this wrapper imports it. Enabling
-  // navigation preload lets the browser start document requests while the
-  // service worker wakes up, without changing Kanera's cache strategy.
-  event.waitUntil(self.registration.navigationPreload.enable());
+  // Navigation preload stays off. Angular's worker never reads `preloadResponse`; it answers
+  // navigations from its cache or fetches them itself, so a preload only sent every navigation to
+  // the server a second time. That ran one-shot GETs twice: a sign-in provider's callback was
+  // redeemed by the preload and the page then showed "expired". Disabling (rather than no longer
+  // enabling) turns it off for installs that an earlier worker already switched on.
+  event.waitUntil(self.registration.navigationPreload.disable());
 });
 
 self.addEventListener("pushsubscriptionchange", (event) => {

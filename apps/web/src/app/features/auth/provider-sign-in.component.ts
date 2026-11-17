@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, signal } from "@angular/core";
 import type { OnInit } from "@angular/core";
 import type { SignInProvider } from "@kanera/shared/schema";
 import { signupAcquisition } from "../../core/analytics/signup-attribution";
@@ -108,6 +108,7 @@ function providerButtonLabel(provider: SignInProvider): string {
 export class ProviderSignInComponent implements OnInit {
   private readonly publicAuth = inject(PublicAuthClient);
   private readonly consent = inject(CookieConsentService);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Where to land after signing in, e.g. an invite page waiting for an accept click. */
   readonly returnUrl = input<string | null>(null);
@@ -121,6 +122,13 @@ export class ProviderSignInComponent implements OnInit {
   protected readonly label = providerButtonLabel;
 
   async ngOnInit() {
+    // Going Back from the provider restores this page from the back/forward cache exactly as it was
+    // left, spinner included, without re-running anything. Reset the buttons when that happens.
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) this.busy.set(null);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    this.destroyRef.onDestroy(() => window.removeEventListener("pageshow", onPageShow));
     this.providers.set(await loadSignInProviders(this.publicAuth));
   }
 
