@@ -6,11 +6,11 @@ import type { HomeActivityItem, HomeGettingStartedResponse, HomeItem, HomeTodayR
 
 /** Mirrors GETTING_STARTED_STEPS in @kanera/shared/dto; the web may import only types from it. */
 const GETTING_STARTED_STEPS = [
-  "createCard", "assignCard", "comment", "mention", "completeCard",
+  "createCard", "inviteTeam", "assignCard", "comment", "mention", "completeCard",
   "quickEdit", "useFilter", "commandPalette", "viewWorkDone",
   "groupTable", "totalColumn", "exportExcel", "addDependency", "setStartDate", "viewTimeline",
   "scratchpad", "saveNote",
-  "inviteTeam", "secondBoard", "createAutomation", "enablePush", "connectAgent", "useAgent",
+  "secondBoard", "createAutomation", "enablePush", "connectAgent", "useAgent",
 ] as const;
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
@@ -873,7 +873,23 @@ describe("HomePage", () => {
     expect(TestBed.inject(GettingStartedService).menuProgress()).toEqual({ done: 2, total: 23, percent: 9 });
   });
 
-  // Ten of 23 done: past the 40% at which the card starts compact.
+  const titles = () => [...host().querySelectorAll(".gs-section")[0]!.querySelectorAll(".gs-label")].map((label) => label.textContent?.trim());
+
+  it("offers inviteTeam second in The basics to admins and omits it for members", async () => {
+    await render({ isOrgAdmin: true, gettingStarted: checklist({ createCard: true }), registeredBoards: [{ id: "board-1", name: "Roadmap", icon: null, iconColor: null }] });
+    expect(titles().slice(0, 3)).toEqual(["Create your first card", "Invite your team", "Assign a card"]);
+    // Next open step follows the new order: createCard is done, so inviteTeam is the spotlight.
+    expect(row("Invite your team").classList).toContain("is-open");
+  });
+
+  it("closes up The basics when the server sends no inviteTeam step to a member", async () => {
+    const base = checklist({});
+    await render({ isOrgAdmin: false, gettingStarted: { ...base, steps: base.steps.filter((step) => step.key !== "inviteTeam") } });
+    expect(titles()).not.toContain("Invite your team");
+    expect(host().querySelectorAll(".gs-section")[0]!.querySelector(".gs-section-count")?.textContent?.trim()).toBe("0/5");
+  });
+
+  // Ten of 23 done (inviteTeam deliberately open, so it is the next step): past the 40% at which the card starts compact.
   const MOSTLY_DONE = checklist({
     createCard: true, assignCard: true, comment: true, mention: true, completeCard: true,
     quickEdit: true, useFilter: true, commandPalette: true, viewWorkDone: true, groupTable: true,
@@ -885,8 +901,7 @@ describe("HomePage", () => {
     // explicit expand must survive the next load rather than re-compacting.
     await render({ isOrgAdmin: true, gettingStarted: MOSTLY_DONE, registeredBoards: [{ id: "board-1", name: "Roadmap", icon: null, iconColor: null }] });
     expect(host().querySelector(".gs-step")).toBeNull();
-    expect(host().querySelector(".gs-next-title")?.textContent?.trim()).toBe("Total a column");
-    expect(host().querySelector(".gs-next a.gs-action")?.getAttribute("href")).toBe("/b/board-1?view=table");
+    expect(host().querySelector(".gs-next-title")?.textContent?.trim()).toBe("Invite your team");
     expect(host().querySelector(".gs-count")?.textContent?.trim()).toBe("10/23");
 
     host().querySelector<HTMLButtonElement>(".gs-toggle")!.click();

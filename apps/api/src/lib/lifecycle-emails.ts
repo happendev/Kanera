@@ -56,6 +56,7 @@ const KIND_TO_QUEUE_TYPE: Record<LifecycleEmailKind, LifecycleEmailQueueType> = 
   early_success: "lifecycle_early_success",
   inactive: "lifecycle_inactive",
   active_checkin: "lifecycle_active_checkin",
+  checkout_abandoned: "lifecycle_checkout_abandoned",
 };
 
 type Candidate = {
@@ -332,7 +333,7 @@ export function lifecycleUnsubscribeToken(userId: string): string {
   return `${userId}.${unsubscribeSignature(userId)}`;
 }
 
-function lifecycleUnsubscribeUrl(userId: string): string {
+export function lifecycleUnsubscribeUrl(userId: string): string {
   return `${env.WEB_ORIGIN}/email/unsubscribe?token=${encodeURIComponent(lifecycleUnsubscribeToken(userId))}`;
 }
 

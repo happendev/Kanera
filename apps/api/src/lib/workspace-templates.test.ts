@@ -85,6 +85,17 @@ void test("templates that seed starter cards also seed a board to hold them", ()
   }
 });
 
+void test("templates start a new board with a few example cards", () => {
+  // A board that opens empty gives a new person nothing to move or learn from. Blank is empty on
+  // purpose, and Hiring because its cards would be (made-up) candidates' personal details.
+  const startsEmpty = new Set(["blank", "hiring-pipeline"]);
+  for (const template of WORKSPACE_TEMPLATES) {
+    const count = template.cards?.length ?? 0;
+    if (startsEmpty.has(template.id)) assert.equal(count, 0, template.id);
+    else assert.ok(count >= 3 && count <= 4, `${template.id} has ${count} example cards`);
+  }
+});
+
 void test("the default template stays compatible with DEFAULT_WORKSPACE_CUSTOM_FIELDS", () => {
   // DEFAULT_WORKSPACE_CUSTOM_FIELDS narrows the default template's field types to the three the
   // fallback path can create without options; a select field here would be seeded without options.

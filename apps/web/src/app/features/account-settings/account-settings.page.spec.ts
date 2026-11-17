@@ -2,11 +2,12 @@ import { computed, provideZonelessChangeDetection, signal, type WritableSignal }
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { ActivatedRoute, Router } from "@angular/router";
-import type { Entitlements, NotificationSettingsResponse, NotificationWorkspaceRule, PlanUsageResponse, StorageFilesResponse, StorageOverviewResponse } from "@kanera/shared/dto";
+import type { Entitlements, NotificationSettingsResponse, NotificationWorkspaceRule, PlanUsageResponse, SignInMethodsResponse, StorageFilesResponse, StorageOverviewResponse } from "@kanera/shared/dto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import type { AuthUser } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
+import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { CookieConsentService } from "../../core/consent/cookie-consent.service";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
@@ -80,6 +81,7 @@ describe("AccountSettingsPage", () => {
   let githubConfigResponse: unknown;
   let githubInstallationResponse: unknown;
   let notificationSettingsResponse: NotificationSettingsResponse;
+  let workspacesResponse: Array<{ id: string; name: string }>;
   let notificationBoardsResponse: Array<{
     id: string;
     name: string;
@@ -223,6 +225,7 @@ describe("AccountSettingsPage", () => {
       },
       workspaceRules: [],
     };
+    workspacesResponse = [{ id: "workspace-1", name: "Workspace" }];
     notificationBoardsResponse = [{
       id: "board-1",
       name: "Roadmap",
@@ -235,6 +238,8 @@ describe("AccountSettingsPage", () => {
     api = {
       get: vi.fn(async (path: string) => {
         if (path === "/auth/config") return { emailVerificationEnabled };
+        if (path === "/auth/mfa") return { enabled: false };
+        if (path === "/auth/me/sign-in-methods") return { hasPassword: true, identities: [] } satisfies SignInMethodsResponse;
         if (path === "/clients/me") return currentClient;
         if (path === "/billing/me") {
           return {
@@ -252,7 +257,7 @@ describe("AccountSettingsPage", () => {
         if (path === "/clients/me/users") return orgUsersResponse;
         if (path === "/clients/me/guest-seats") return orgGuestSeatsResponse;
         if (path === "/clients/me/invites") return [];
-        if (path === "/workspaces") return [{ id: "workspace-1", name: "Workspace" }];
+        if (path === "/workspaces") return workspacesResponse;
         if (path === "/clients/me/archived-workspaces") return archivedWorkspacesResponse;
         if (path === "/clients/me/storage") return storageOverviewResponse;
         if (path === "/clients/me/plan-usage") return planUsageResponse;
@@ -281,6 +286,7 @@ describe("AccountSettingsPage", () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: ApiClient, useValue: api },
+        { provide: PublicAuthClient, useValue: { get: vi.fn(async () => Response.json({ signInProviders: [] })) } },
         {
           provide: AuthService,
           useValue: {
@@ -761,6 +767,94 @@ describe("AccountSettingsPage", () => {
 
     expect(api.post).not.toHaveBeenCalled();
     expect(upgradePromptOpen).toHaveBeenCalledWith({ reason: "member", source: "organisation_users", projectedSeats: 5 });
+  });
+
+  it("creates an invite for a standalone-board organisation with its only board preselected and no workspace", async () => {
+    // A "Create a board" onboarding leaves the organisation with one standalone board and no
+    // workspace. The invite must still be creatable, and default to that board.
+    notificationBoardsResponse = [{
+      id: "board-solo",
+      name: "Launch plan",
+      workspaceId: "hidden-workspace",
+      workspaceName: "Launch plan",
+      workspaceKind: "board",
+      clientId: "client-1",
+      clientName: "Acme",
+    }, {
+      id: "board-elsewhere",
+      name: "Other organisation board",
+      workspaceId: "workspace-x",
+      workspaceName: "Elsewhere",
+      workspaceKind: "standard",
+      clientId: "client-2",
+      clientName: "Other",
+    }];
+    workspacesResponse = [];
+    api.post.mockImplementation(async () => ({ id: "invite-1", token: "raw-token" }));
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn(async () => undefined) } });
+    activeSettingsRoute = "users";
+    await createPage();
+    const page = fixture.componentInstance;
+    await vi.waitFor(() => expect(page.inviteBoards()).toHaveLength(1));
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain("Board access");
+    expect(host.textContent).not.toContain("Workspace access");
+    expect(host.textContent).not.toContain("Other organisation board");
+    const boardCheckbox = [...host.querySelectorAll<HTMLLabelElement>(".ws-grant-check")]
+      .find((label) => label.textContent?.includes("Launch plan"))!.querySelector("input")!;
+    expect(boardCheckbox.checked).toBe(true);
+    // A standalone board's hidden workspace is never named.
+    expect(host.querySelector(".ws-grant-context")).toBeNull();
+
+    await page.createInvite(new Event("submit"));
+
+    expect(page.inviteError()).toBeNull();
+    expect(api.post).toHaveBeenCalledWith("/clients/me/invites", {
+      orgRole: "member",
+      expiresInDays: 7,
+      workspaces: [],
+      boards: [{ boardId: "board-solo", role: "editor" }],
+    });
+    expect(page.createdInviteUrl()).toContain("/signup?invite=raw-token");
+    // The single board stays the default for the next invite.
+    expect(page.inviteBoards()[0]!.selected).toBe(true);
+  });
+
+  it("grants chosen boards with their role and leaves boards off admin invites", async () => {
+    notificationBoardsResponse = [
+      { id: "board-a", name: "Roadmap", workspaceId: "workspace-1", workspaceName: "Workspace", workspaceKind: "standard", clientId: "client-1", clientName: "Acme" },
+      { id: "board-b", name: "Hiring", workspaceId: "hidden-b", workspaceName: "Hiring", workspaceKind: "board", clientId: "client-1", clientName: "Acme" },
+    ];
+    api.post.mockImplementation(async () => ({ id: "invite-1", token: "raw-token" }));
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn(async () => undefined) } });
+    activeSettingsRoute = "users";
+    await createPage();
+    const page = fixture.componentInstance;
+    await vi.waitFor(() => expect(page.inviteBoards()).toHaveLength(2));
+    // With more than one board nothing is assumed.
+    expect(page.inviteBoards().every((board) => !board.selected)).toBe(true);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector(".ws-grant-context")?.textContent).toBe("Workspace");
+
+    page.toggleInviteBoard("board-b");
+    page.setInviteBoardRole("board-b", "observer");
+    await page.createInvite(new Event("submit"));
+    expect(api.post).toHaveBeenLastCalledWith("/clients/me/invites", expect.objectContaining({
+      orgRole: "member",
+      workspaces: [],
+      boards: [{ boardId: "board-b", role: "observer" }],
+    }));
+
+    page.inviteOrgRole.set("admin");
+    page.toggleInviteBoard("board-a");
+    fixture.detectChanges();
+    expect(host.textContent).toContain("Organisation admins can open every board.");
+    expect(host.textContent).not.toContain("Board access");
+    await page.createInvite(new Event("submit"));
+    expect(api.post).toHaveBeenLastCalledWith("/clients/me/invites", expect.objectContaining({ orgRole: "admin", boards: [] }));
   });
 
   it("starts Free checkout from used seats instead of the Free allowance", async () => {
@@ -1359,6 +1453,9 @@ describe("AccountSettingsPage", () => {
 
   it("shows external guests that consume seats in the Users tab", async () => {
     activeSettingsRoute = "users";
+    // The invite form lists the organisation's boards; keep it empty so a board name on the page can
+    // only come from the guest-seat row this test is about.
+    notificationBoardsResponse = [];
     orgGuestSeatsResponse = [{
       userId: "guest-1",
       email: "external@example.com",

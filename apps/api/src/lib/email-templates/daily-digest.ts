@@ -25,6 +25,8 @@ export interface DailyDigestPriorityItem {
 /** Dates and due labels are formatted in `locale` when the digest is queued. */
 export interface DailyDigestEmailParams {
   locale: Locale;
+  /** Added when rendered: the notification settings page the footer links to. */
+  notificationSettingsUrl?: string;
   displayName: string;
   localDate: string;
   localDateLabel: string;
@@ -39,7 +41,7 @@ export interface DailyDigestEmailParams {
   lateStarts?: DailyDigestCardItem[];
 }
 
-export function dailyDigestEmail({ locale, displayName, localDateLabel, dueToday, overdue, priorities = [], lateStarts = [] }: DailyDigestEmailParams): string {
+export function dailyDigestEmail({ locale, notificationSettingsUrl, displayName, localDateLabel, dueToday, overdue, priorities = [], lateStarts = [] }: DailyDigestEmailParams): string {
   const m = serverMessages(locale).email.dailyDigest;
   const firstName = displayName.split(" ")[0] ?? displayName;
   const itemCount = dueToday.length + overdue.length;
@@ -56,7 +58,8 @@ export function dailyDigestEmail({ locale, displayName, localDateLabel, dueToday
 
   return emailLayout({
     locale,
-    subject: m.subject,
+    manageUrl: notificationSettingsUrl,
+    subject: m.subject({ date: localDateLabel }),
     preheader: m.preheader({ count: itemCount }),
     body: `
       ${heading(m.heading)}
@@ -101,7 +104,7 @@ function renderItem(item: DailyDigestCardItem): string {
     <tr>
       <td style="padding:0 0 10px 0;">${cardSummary({
         title: item.title,
-        subtitle: parts.join(" - "),
+        subtitle: parts.join(" · "),
         href: item.cardUrl,
       })}</td>
     </tr>

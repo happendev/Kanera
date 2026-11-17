@@ -4,13 +4,15 @@ import { valueIn } from "./_value-check.js";
 import { clients } from "./client.js";
 
 // Organisation lifecycle moments from the marketing lifecycle-communication plan. Each is decided
-// from structural signals only (counts, milestone timestamps, presence) and never from board content.
+// from structural signals only (counts, milestone timestamps, presence, billing state) and never from
+// board content. checkout_abandoned is sent from the Stripe webhook rather than the hourly sweep.
 export const LIFECYCLE_EMAIL_KINDS = [
   "no_board",
   "invite_team",
   "early_success",
   "inactive",
   "active_checkin",
+  "checkout_abandoned",
 ] as const;
 export type LifecycleEmailKind = (typeof LIFECYCLE_EMAIL_KINDS)[number];
 

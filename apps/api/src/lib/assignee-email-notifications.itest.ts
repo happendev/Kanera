@@ -243,7 +243,7 @@ void test("comment creation emails and pushes mentioned users", async () => {
   const emails = await queuedTypes("comment_mentioned");
   assert.equal(emails.length, 1);
   assert.equal(emails[0]!.toEmail, f.memberEmail);
-  assert.equal(emails[0]!.subject, "Mentioned in a comment on Prepare launch");
+  assert.equal(emails[0]!.subject, "Owner mentioned you on Prepare launch");
   assert.equal((emails[0]!.data as { commentExcerpt: string }).commentExcerpt, "@Member please review today.");
 
   const pushes = await db.select().from(pushQueue).where(and(eq(pushQueue.userId, f.member.id), eq(pushQueue.reason, "mentioned")));
@@ -367,7 +367,7 @@ void test("start date changes tell assignees, in one notification per write", as
     [false, null, "25 May 2026"],
     [true, "25 May 2026", "22 May 2026"],
   ]);
-  assert.deepEqual(rows.map((row) => row.subject.replace(/^\[DEV\] /, "")), ["Start date changed on your Kanera card", "Due date changed on your Kanera card"]);
+  assert.deepEqual(rows.map((row) => row.subject.replace(/^\[DEV\] /, "")), ["Start date changed: Prepare launch", "Due date changed: Prepare launch"]);
   const pushes = await db.select().from(pushQueue).where(eq(pushQueue.userId, f.member.id)).orderBy(pushQueue.createdAt);
   assert.deepEqual(pushes.map((row) => row.payload.notification.title), ["Start date changed", "Due date changed"]);
 });

@@ -41,6 +41,7 @@
     }
     } @else {
     <p class="auth-prompt" i18n>To accept this invitation, sign in or create your account.</p>
+            <k-provider-sign-in [returnUrl]="providerReturnUrl()" [boardInviteToken]="token() ?? null" />
     <div class="actions actions--row">
       <a [href]="signupUrl()" class="btn-primary">
         <i aria-hidden="true" class="ti ti-user-plus"></i> <ng-container i18n="Button">Create account</ng-container>

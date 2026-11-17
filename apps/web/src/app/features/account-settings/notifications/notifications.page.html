@@ -53,7 +53,7 @@
           <input type="checkbox" [checked]="notificationSettings.lifecycleEmail" (change)="settings.setLifecycleEmail($any($event.target).checked)" [disabled]="settings.notificationSettingsSaving() || !notificationSettings.emailEnabled" />
           <span class="push-toggle-copy">
             <span class="push-toggle-title" i18n>Send me onboarding and account tips</span>
-            <span class="push-toggle-help" i18n>A few emails to organisation owners about setting up and getting more from Kanera. They never include your card content.</span>
+            <span class="push-toggle-help" i18n>A few emails to organisation owners and admins about setting up and getting more from Kanera. They never include your card content.</span>
           </span>
         </label>
         }

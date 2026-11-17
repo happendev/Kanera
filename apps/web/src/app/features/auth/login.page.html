@@ -8,8 +8,12 @@
   <div class="auth-card">
     <div class="auth-header">
       <k-logo [height]="34" />
-      <p i18n>Enter your credentials to continue</p>
+      <p i18n>Sign in to Kanera</p>
     </div>
+
+    @if (!challengeToken()) {
+    <k-provider-sign-in [returnUrl]="providerReturnUrl()" [inviteToken]="providerInviteToken()" [boardInviteToken]="providerBoardInviteToken()" />
+    }
 
     <form (submit)="submit($event)">
       @if (!challengeToken()) {

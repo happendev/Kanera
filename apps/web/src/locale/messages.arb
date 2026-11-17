@@ -64,6 +64,13 @@
       "src/app/app.routes.ts"
     ]
   },
+  "6858207717814520392": "Signing in",
+  "@6858207717814520392": {
+    "description": "Browser tab title - finishing a third-party sign-in",
+    "x-files": [
+      "src/app/app.routes.ts"
+    ]
+  },
   "2663204243022959500": "Connect AI agent",
   "@2663204243022959500": {
     "description": "Browser tab title",
@@ -1009,6 +1016,62 @@
       "src/app/core/i18n/workspace-template.messages.ts"
     ]
   },
+  "1525816569801589627": "Plan the next release",
+  "@1525816569801589627": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "6058663397854720282": "Agree what ships, who reviews it, and when it goes out.",
+  "@6058663397854720282": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "2599298387861867516": "Set up the project repository",
+  "@2599298387861867516": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "1668107691015114881": "Create the repository, branch rules, and CI so the team can start shipping.",
+  "@1668107691015114881": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "3008872934531438143": "Fix the login error on Safari",
+  "@3008872934531438143": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "6505101371306162782": "Reproduce the blank screen after sign-in, fix it, and add a regression test.",
+  "@6505101371306162782": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "4886445002435477895": "Add CSV export to reports",
+  "@4886445002435477895": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "7841347551000609291": "Let people download the report table as a CSV file.",
+  "@7841347551000609291": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
   "5230623346067219881": "Agent Workflow",
   "@5230623346067219881": {
     "description": "Workspace template content, template name",
@@ -1102,6 +1165,34 @@
   },
   "8574956448175999889": "Write the outcome you want and any constraints, then ask your agent to pick it up. It moves the card to Agent Working while it runs, to Waiting on Me when it needs a decision, and to Review when it is done.",
   "@8574956448175999889": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "8375329924040319145": "Research options for error monitoring",
+  "@8375329924040319145": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "7949966534898245298": "Compare two or three tools and summarise cost, setup effort, and trade-offs.",
+  "@7949966534898245298": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "8505124333616140768": "Update dependencies to the latest minor versions",
+  "@8505124333616140768": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "757458483157682713": "Run the tests after each upgrade and note anything that needed a code change.",
+  "@757458483157682713": {
     "description": "Workspace template content, example card description",
     "x-files": [
       "src/app/core/i18n/workspace-template.messages.ts"
@@ -1268,6 +1359,55 @@
       "src/app/core/i18n/workspace-template.messages.ts"
     ]
   },
+  "7853726369887533467": "Refresh the social media profile images",
+  "@7853726369887533467": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "3262635069308868353": "Spring product launch campaign",
+  "@3262635069308868353": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "7079898067294566475": "Write the brief with the audience, key message, channels, and budget.",
+  "@7079898067294566475": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "3893109500677869541": "Customer story blog post",
+  "@3893109500677869541": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "1520070420541596833": "Interview one happy customer and draft a short story about their results.",
+  "@1520070420541596833": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "776373951795591952": "Monthly newsletter",
+  "@776373951795591952": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "3347574951349308731": "Check links, spelling, and the send list before it is scheduled.",
+  "@3347574951349308731": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
   "9014227117829618796": "Simple Todo",
   "@9014227117829618796": {
     "description": "Workspace template content, template name",
@@ -1376,6 +1516,41 @@
   "6360307214596957736": "Quick Win",
   "@6360307214596957736": {
     "description": "Workspace template content, label name",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "4625990533361143283": "Book a venue for the team offsite",
+  "@4625990533361143283": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "3132160105612192389": "Renew the domain name",
+  "@3132160105612192389": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "2034494875602355469": "Draft the weekly update",
+  "@2034494875602355469": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "3979321513538094963": "Reply to the supplier about the invoice",
+  "@3979321513538094963": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "6079621086323485632": "Waiting for them to confirm the corrected amount.",
+  "@6079621086323485632": {
+    "description": "Workspace template content, example card description",
     "x-files": [
       "src/app/core/i18n/workspace-template.messages.ts"
     ]
@@ -1516,6 +1691,55 @@
   "6360454536066814145": "Customer",
   "@6360454536066814145": {
     "description": "Workspace template content, label name and custom field name",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "6973165225399740850": "Saved filters for the dashboard",
+  "@6973165225399740850": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "6047356896559067209": "Several customers asked to save and share their filter settings.",
+  "@6047356896559067209": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "8345669691789465507": "Interview five customers about onboarding",
+  "@8345669691789465507": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "3515159257529493090": "Find where new customers get stuck in their first week.",
+  "@3515159257529493090": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "6066053814102608435": "Redesign the settings page",
+  "@6066053814102608435": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "6959361358583757442": "Test a shorter signup form",
+  "@6959361358583757442": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "1945790462008974687": "Compare completion rates with the current form for two weeks.",
+  "@1945790462008974687": {
+    "description": "Workspace template content, example card description",
     "x-files": [
       "src/app/core/i18n/workspace-template.messages.ts"
     ]
@@ -1681,6 +1905,48 @@
       "src/app/core/i18n/workspace-template.messages.ts"
     ]
   },
+  "8159560144495479833": "Acme Logistics - 25 seat pilot",
+  "@8159560144495479833": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "2934569764324102239": "Inbound demo request. Book a discovery call to confirm their needs and timeline.",
+  "@2934569764324102239": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "3751922559159198062": "Harbour Studio - second team",
+  "@3751922559159198062": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "2745075398869929125": "Send the proposal for ten more seats with onboarding support.",
+  "@2745075398869929125": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "4403730460088837621": "Brightside Dental - annual renewal",
+  "@4403730460088837621": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "7919829781001328837": "Their contract ends next month and they asked about a two-year discount.",
+  "@7919829781001328837": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
   "5076531214215449523": "Operations / Support",
   "@5076531214215449523": {
     "description": "Workspace template content, template name",
@@ -1810,6 +2076,55 @@
   "1271187681014266478": "Compliance",
   "@1271187681014266478": {
     "description": "Workspace template content, label name",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "8893404513103536141": "Annual access review",
+  "@8893404513103536141": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "1166733928241229084": "Confirm who still needs admin access to each system.",
+  "@1166733928241229084": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "4709314418766074030": "Customer cannot reset their password",
+  "@4709314418766074030": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "7694388200450280719": "Reset emails are not arriving. Check the mail logs and reply to the customer.",
+  "@7694388200450280719": {
+    "description": "Workspace template content, example card description",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "2431434269335417399": "Laptop for a new starter on Monday",
+  "@2431434269335417399": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "8047650566923034675": "Refund a duplicate charge",
+  "@8047650566923034675": {
+    "description": "Workspace template content, example card title",
+    "x-files": [
+      "src/app/core/i18n/workspace-template.messages.ts"
+    ]
+  },
+  "267560429399482810": "Waiting for finance to confirm the refund.",
+  "@267560429399482810": {
+    "description": "Workspace template content, example card description",
     "x-files": [
       "src/app/core/i18n/workspace-template.messages.ts"
     ]
@@ -3666,6 +3981,41 @@
       "src/app/features/account-settings/account-plan/account-plan.page.ts"
     ]
   },
+  "7449000061608046498": "Sign-in methods",
+  "@7449000061608046498": {
+    "description": "Settings section heading",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "6989491850244601366": "Connect an account to sign in to Kanera with it.",
+  "@6989491850244601366": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "5896927379604759167": "Not connected",
+  "@5896927379604759167": {
+    "description": "Sign-in method status",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "2907016025519254862": "Disconnect",
+  "@2907016025519254862": {
+    "description": "Button: remove a connected sign-in account",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "813263746069473514": "Connect",
+  "@813263746069473514": {
+    "description": "Button: connect a sign-in account",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/home/getting-started.component.ts"
+    ]
+  },
   "3892825090402620438": "Two-factor authentication",
   "@3892825090402620438": {
     "description": "Settings section heading",
@@ -3695,6 +4045,27 @@
   "4379830886284362842": "Set up authenticator",
   "@4379830886284362842": {
     "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "8745232204806777768": "Emailed code",
+  "@8745232204806777768": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "3972495142175860210": "Resend code",
+  "@3972495142175860210": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/auth/signup.page.html"
+    ]
+  },
+  "4077195556998869912": "Email me a code",
+  "@4077195556998869912": {
+    "description": "Button: send a confirmation code to the account's email",
     "x-files": [
       "src/app/features/account-settings/account-security/account-security.page.html"
     ]
@@ -3766,6 +4137,19 @@
       "src/app/features/account-settings/account-security/account-security.page.html"
     ]
   },
+  "8591875090862306452": "Set a password",
+  "@8591875090862306452": {
+    "description": "Settings section heading",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "5134485241389352558": "Add a password to also sign in with your email address. We'll email you a code to confirm it's you.",
+  "@5134485241389352558": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
   "3588415639242079458": "New password",
   "@3588415639242079458": {
     "description": "Field label",
@@ -3777,6 +4161,13 @@
   "8656126574213649581": "Confirm new password",
   "@8656126574213649581": {
     "description": "Field label",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "6908429302189588668": "Set password",
+  "@6908429302189588668": {
+    "description": "Button",
     "x-files": [
       "src/app/features/account-settings/account-security/account-security.page.html"
     ]
@@ -3839,6 +4230,49 @@
       "src/app/features/auth/signup.page.ts"
     ]
   },
+  "9121424381282805046": "Enter your current password.",
+  "@9121424381282805046": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "6518227749736777848": "Enter the six-digit code we emailed you.",
+  "@6518227749736777848": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "4646229059467843731": "We emailed you a code.",
+  "@4646229059467843731": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "1037706585478915086": "Couldn't reach {$provider}. Try again.",
+  "@1037706585478915086": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/auth/provider-sign-in.component.ts"
+    ]
+  },
+  "4604583644335869545": "{$provider} disconnected.",
+  "@4604583644335869545": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "812106935151128961": "Set a password or connect another sign-in method before removing this one.",
+  "@812106935151128961": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "2360251819813119073": "Couldn't disconnect {$provider}. Try again.",
+  "@2360251819813119073": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
   "1489758710743967189": "Enter your current password to set up an authenticator.",
   "@1489758710743967189": {
     "x-files": [
@@ -3852,14 +4286,14 @@
       "src/app/features/auth/login.page.ts"
     ]
   },
-  "9121424381282805046": "Enter your current password.",
-  "@9121424381282805046": {
+  "8782487788877276260": "Enter an authenticator or recovery code.",
+  "@8782487788877276260": {
     "x-files": [
       "src/app/features/account-settings/account-security/account-security.page.ts"
     ]
   },
-  "8782487788877276260": "Enter an authenticator or recovery code.",
-  "@8782487788877276260": {
+  "175882404495206125": "Password set. You'll be signed out on the next refresh.",
+  "@175882404495206125": {
     "x-files": [
       "src/app/features/account-settings/account-security/account-security.page.ts"
     ]
@@ -4434,12 +4868,6 @@
   },
   "1245035358028980253": "They will lose access to every workspace and board in this organisation.",
   "@1245035358028980253": {
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts"
-    ]
-  },
-  "2453869739918784549": "Select at least one workspace before creating an invite.",
-  "@2453869739918784549": {
     "x-files": [
       "src/app/features/account-settings/account-settings.page.ts"
     ]
@@ -5312,8 +5740,8 @@
       "src/app/features/account-settings/notifications/notifications.page.html"
     ]
   },
-  "1141883496104078420": "A few emails to organisation owners about setting up and getting more from Kanera. They never include your card content.",
-  "@1141883496104078420": {
+  "4519054980874959397": "A few emails to organisation owners and admins about setting up and getting more from Kanera. They never include your card content.",
+  "@4519054980874959397": {
     "x-files": [
       "src/app/features/account-settings/notifications/notifications.page.html"
     ]
@@ -5671,6 +6099,8 @@
     "x-files": [
       "src/app/features/account-settings/notifications/notifications.page.html",
       "src/app/features/account-settings/users/users.page.html",
+      "src/app/features/onboarding/onboarding.page.html",
+      "src/app/features/shared/board-members-menu.popover.ts",
       "src/app/features/workspace-settings/guests/guests.page.html"
     ]
   },
@@ -5726,7 +6156,7 @@
   "@5694529784730717795": {
     "x-files": [
       "src/app/features/account-settings/org/org.page.html",
-      "src/app/features/auth/signup.page.html",
+      "src/app/features/onboarding/onboarding.page.html",
       "src/app/features/shell/organisation-action.dialog.ts"
     ]
   },
@@ -6042,6 +6472,7 @@
   "@8203367621031610680": {
     "x-files": [
       "src/app/features/account-settings/profile/profile.page.html",
+      "src/app/features/auth/provider-callback.page.ts",
       "src/app/features/auth/signup.page.html"
     ]
   },
@@ -6049,8 +6480,7 @@
   "@8671234314555525900": {
     "description": "Settings section heading",
     "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/signup.page.html"
+      "src/app/features/account-settings/profile/profile.page.html"
     ]
   },
   "3334708804868032865": "Choose the theme, accent colour and density used on this device.",
@@ -6810,8 +7240,8 @@
       "src/app/features/account-settings/users/users.page.html"
     ]
   },
-  "869291787459254998": "Create an invite link to join {$ORGANISATION}.",
-  "@869291787459254998": {
+  "4983286110047750379": "Email an invite or create a link to join {$ORGANISATION}.",
+  "@4983286110047750379": {
     "x-files": [
       "src/app/features/account-settings/users/users.page.html"
     ]
@@ -6879,6 +7309,20 @@
       "src/app/features/account-settings/users/users.page.html"
     ]
   },
+  "3581015042077473122": "Email (optional)",
+  "@3581015042077473122": {
+    "description": "Field label: optional address to email the invite to",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html"
+    ]
+  },
+  "3397063315237339310": "name@company.com",
+  "@3397063315237339310": {
+    "description": "Placeholder: example email address",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html"
+    ]
+  },
   "1370650589752449584": "Organisation role",
   "@1370650589752449584": {
     "description": "Field label",
@@ -6920,6 +7364,47 @@
       "src/app/features/account-settings/users/users.page.html"
     ]
   },
+  "831143266842567132": "Board access",
+  "@831143266842567132": {
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html"
+    ]
+  },
+  "6386774134295253395": "Board role",
+  "@6386774134295253395": {
+    "description": "Field label",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html"
+    ]
+  },
+  "3742657416068781599": "Editor",
+  "@3742657416068781599": {
+    "description": "Board role",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html",
+      "src/app/features/board-invite/board-invite.page.ts",
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/features/workspace-settings/boards/boards.page.html",
+      "src/app/features/workspace-settings/guests/guests.page.html"
+    ]
+  },
+  "1909437188701622343": "Observer",
+  "@1909437188701622343": {
+    "description": "Board role",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html",
+      "src/app/features/board-invite/board-invite.page.ts",
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/features/workspace-settings/boards/boards.page.html",
+      "src/app/features/workspace-settings/guests/guests.page.html"
+    ]
+  },
+  "185086559350708993": "Organisation admins can open every board.",
+  "@185086559350708993": {
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html"
+    ]
+  },
   "4493617956098816826": "Your current team fills every Free seat. Create the invite to see the exact annual price for adding this person.",
   "@4493617956098816826": {
     "x-files": [
@@ -6929,6 +7414,12 @@
   "1721676999015334756": "Create invite",
   "@1721676999015334756": {
     "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html"
+    ]
+  },
+  "6909175212548521735": "Invite emailed to {$EMAIL}. You can also share the link below.",
+  "@6909175212548521735": {
     "x-files": [
       "src/app/features/account-settings/users/users.page.html"
     ]
@@ -6944,6 +7435,7 @@
     "x-files": [
       "src/app/features/account-settings/users/users.page.html",
       "src/app/features/account-settings/users/users.page.ts",
+      "src/app/features/shared/board-members-menu.popover.ts",
       "src/app/features/workspace-settings/guests/guests.page.html"
     ]
   },
@@ -6955,6 +7447,8 @@
       "src/app/features/account-settings/users/users.page.ts",
       "src/app/features/board/description-viewer.component.ts",
       "src/app/features/board/image-lightbox.component.ts",
+      "src/app/features/onboarding/onboarding.page.html",
+      "src/app/features/shared/board-members-menu.popover.ts",
       "src/app/features/workspace-settings/guests/guests.page.html",
       "src/app/shared/agent-connect-card/agent-connect-card.component.ts"
     ]
@@ -6980,12 +7474,11 @@
       "src/app/features/home/getting-started.component.ts"
     ]
   },
-  "1196063204965083742": "Workspaces",
-  "@1196063204965083742": {
-    "description": "Column heading",
+  "5278627882107105833": "Access",
+  "@5278627882107105833": {
+    "description": "Column heading: the workspaces and boards an invite grants",
     "x-files": [
-      "src/app/features/account-settings/users/users.page.html",
-      "src/app/features/shell/app-shell.component.html"
+      "src/app/features/account-settings/users/users.page.html"
     ]
   },
   "5522382975959026192": "Org role",
@@ -6998,7 +7491,9 @@
   "773109629925766380": "Invite link",
   "@773109629925766380": {
     "x-files": [
-      "src/app/features/account-settings/users/users.page.html"
+      "src/app/features/account-settings/users/users.page.html",
+      "src/app/features/onboarding/onboarding.page.html",
+      "src/app/features/shared/board-members-menu.popover.ts"
     ]
   },
   "3789236530844409687": "{VAR_SELECT, select, admin {admin} member {member} other {{INTERPOLATION}}}",
@@ -7006,6 +7501,14 @@
     "description": "Workspace role badge",
     "x-files": [
       "src/app/features/account-settings/users/users.page.html"
+    ]
+  },
+  "746730092064233061": "{VAR_SELECT, select, editor {editor} observer {observer} other {{INTERPOLATION}}}",
+  "@746730092064233061": {
+    "description": "Board role badge",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html",
+      "src/app/features/workspace-settings/guests/guests.page.html"
     ]
   },
   "3795150189172938501": "Organisation only",
@@ -7069,6 +7572,14 @@
       "src/app/features/board/description-editor.component.ts",
       "src/app/features/notifications/notifications-panel.component.html",
       "src/app/features/workspace-settings/fields/fields.page.html"
+    ]
+  },
+  "1196063204965083742": "Workspaces",
+  "@1196063204965083742": {
+    "description": "Column heading",
+    "x-files": [
+      "src/app/features/account-settings/users/users.page.html",
+      "src/app/features/shell/app-shell.component.html"
     ]
   },
   "2740863257338486540": "Suspended by your plan's member limit. Upgrade to restore access.",
@@ -7172,32 +7683,10 @@
       "src/app/features/account-settings/users/users.page.html"
     ]
   },
-  "3742657416068781599": "Editor",
-  "@3742657416068781599": {
-    "description": "Role name",
-    "x-files": [
-      "src/app/features/account-settings/users/users.page.html",
-      "src/app/features/board-invite/board-invite.page.ts",
-      "src/app/features/shared/board-members-menu.popover.ts",
-      "src/app/features/workspace-settings/boards/boards.page.html",
-      "src/app/features/workspace-settings/guests/guests.page.html"
-    ]
-  },
   "2329311905299579020": "Create, edit, move, and delete cards and comments across all boards.",
   "@2329311905299579020": {
     "x-files": [
       "src/app/features/account-settings/users/users.page.html"
-    ]
-  },
-  "1909437188701622343": "Observer",
-  "@1909437188701622343": {
-    "description": "Role name",
-    "x-files": [
-      "src/app/features/account-settings/users/users.page.html",
-      "src/app/features/board-invite/board-invite.page.ts",
-      "src/app/features/shared/board-members-menu.popover.ts",
-      "src/app/features/workspace-settings/boards/boards.page.html",
-      "src/app/features/workspace-settings/guests/guests.page.html"
     ]
   },
   "6430296177783686328": "Read-only. Can view boards and cards but cannot make changes.",
@@ -7276,8 +7765,8 @@
       "src/app/features/auth/signup.page.ts"
     ]
   },
-  "1753768480518778288": "Enter your credentials to continue",
-  "@1753768480518778288": {
+  "8661815477691948140": "Sign in to Kanera",
+  "@8661815477691948140": {
     "x-files": [
       "src/app/features/auth/login.page.html"
     ]
@@ -7299,6 +7788,7 @@
     "description": "Field label",
     "x-files": [
       "src/app/features/auth/login.page.html",
+      "src/app/features/auth/provider-callback.page.ts",
       "src/app/features/auth/signup.page.html"
     ]
   },
@@ -7348,7 +7838,8 @@
   "431455034991697181": "Invalid or expired verification code",
   "@431455034991697181": {
     "x-files": [
-      "src/app/features/auth/login.page.ts"
+      "src/app/features/auth/login.page.ts",
+      "src/app/features/auth/provider-callback.page.ts"
     ]
   },
   "966716773187464757": "Authenticator or recovery code is required.",
@@ -7374,7 +7865,8 @@
   "3723454109055307608": "Unable to reach the server. Check your connection and try again.",
   "@3723454109055307608": {
     "x-files": [
-      "src/app/features/auth/login.page.ts"
+      "src/app/features/auth/login.page.ts",
+      "src/app/features/auth/provider-callback.page.ts"
     ]
   },
   "7858768589576583715": "Invalid credentials",
@@ -7399,6 +7891,193 @@
       "src/app/features/auth/signup.page.ts"
     ]
   },
+  "3686284950598311784": "Private",
+  "@3686284950598311784": {
+    "description": "Default name for a new organisation",
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts",
+      "src/app/features/auth/signup.page.ts",
+      "src/app/features/global-work/save-view.popover.ts",
+      "src/app/features/notes/note-editor.component.ts"
+    ]
+  },
+  "2319099628339158211": "Sign-in was cancelled.",
+  "@2319099628339158211": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "9166215289853627973": "That account didn't share an email address with Kanera. Make one visible on the account, or sign in with your email.",
+  "@9166215289853627973": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "6713673844951056782": "This Kanera account isn't available. Contact support if you think this is a mistake.",
+  "@6713673844951056782": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "7542846270847284598": "No Kanera account uses that email, and new sign-ups are closed. Ask for an invitation.",
+  "@7542846270847284598": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "6704634547709978668": "This invitation is invalid or has expired.",
+  "@6704634547709978668": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "133068979002952429": "This invitation was sent to a different email address. Continue with the account that uses the invited address.",
+  "@133068979002952429": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "2361870173454437871": "That account is already connected to a different Kanera account.",
+  "@2361870173454437871": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "1184522522871655331": "Your Kanera account is already connected to a different account with this provider. Disconnect it first in Account security.",
+  "@1184522522871655331": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "1618095083841106007": "This sign-in has expired. Start again.",
+  "@1618095083841106007": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "8900509084295852638": "We couldn't sign you in. Try again.",
+  "@8900509084295852638": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "6892425506867128440": "Signing you in…",
+  "@6892425506867128440": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "2354687172778385277": "Confirm your email address",
+  "@2354687172778385277": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "6842101936220353593": "Create your Kanera account",
+  "@6842101936220353593": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "4821925454201474280": "Sign-in didn't finish",
+  "@4821925454201474280": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "5833005330921644052": "We sent a six-digit code to {$START_TAG_STRONG}{$EMAIL}{$CLOSE_TAG_STRONG}. Enter it to continue.",
+  "@5833005330921644052": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "6962699013778688473": "Continue",
+  "@6962699013778688473": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts",
+      "src/app/features/auth/signup.page.html",
+      "src/app/features/board-mirrors/mirror-create.dialog.ts",
+      "src/app/features/oauth/oauth-device.page.ts",
+      "src/app/features/onboarding/onboarding.page.html",
+      "src/app/features/shell/organisation-action.dialog.ts"
+    ]
+  },
+  "6068450519985931074": "You're joining {$START_TAG_STRONG}{$ORGANISATION}{$CLOSE_TAG_STRONG} as {$EMAIL}.",
+  "@6068450519985931074": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "7973479212603616333": "No Kanera account uses {$EMAIL} yet. Add your name to create one.",
+  "@7973479212603616333": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "1024001460651531895": " By continuing, you agree to the {$START_LINK}Terms of Service{$CLOSE_LINK} and acknowledge the {$START_LINK_1}Privacy Policy{$CLOSE_LINK}. ",
+  "@1024001460651531895": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts",
+      "src/app/features/auth/signup.page.html"
+    ]
+  },
+  "5907476126990913307": "Create account",
+  "@5907476126990913307": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts",
+      "src/app/features/board-invite/board-invite.page.html",
+      "src/app/features/invite/invite.page.html"
+    ]
+  },
+  "7945613634454385817": "Back to account security",
+  "@7945613634454385817": {
+    "description": "Link back to account security settings",
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "4939428286618017421": "Back to sign in",
+  "@4939428286618017421": {
+    "description": "Link back to the sign-in page",
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "7856920154752569312": "Enter the six-digit code from the email.",
+  "@7856920154752569312": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "4444753420973870540": "Name is required.",
+  "@4444753420973870540": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts"
+    ]
+  },
+  "3728336095556647473": "This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.",
+  "@3728336095556647473": {
+    "x-files": [
+      "src/app/features/auth/provider-callback.page.ts",
+      "src/app/features/auth/signup.page.ts"
+    ]
+  },
+  "5458928982267091974": "Continue with {$provider}",
+  "@5458928982267091974": {
+    "description": "Button - sign in or sign up through a third-party account",
+    "x-files": [
+      "src/app/features/auth/provider-sign-in.component.ts"
+    ]
+  },
+  "6627551976444260400": "or",
+  "@6627551976444260400": {
+    "description": "Separator between third-party sign-in buttons and the email form",
+    "x-files": [
+      "src/app/features/auth/provider-sign-in.component.ts"
+    ]
+  },
   "4200328509857455180": "Choose a new password",
   "@4200328509857455180": {
     "x-files": [
@@ -7409,8 +8088,7 @@
   "@3782563238994348625": {
     "description": "Field label",
     "x-files": [
-      "src/app/features/auth/reset-password.page.html",
-      "src/app/features/auth/signup.page.html"
+      "src/app/features/auth/reset-password.page.html"
     ]
   },
   "7064955130591581296": "Password reset. Sending you back to login.",
@@ -7429,8 +8107,7 @@
   "1543538730036692975": "Passwords do not match.",
   "@1543538730036692975": {
     "x-files": [
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
+      "src/app/features/auth/reset-password.page.ts"
     ]
   },
   "41109818476485334": "Reset link is missing a token.",
@@ -7454,22 +8131,19 @@
   "2790219900662105495": "Confirm password is required.",
   "@2790219900662105495": {
     "x-files": [
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
+      "src/app/features/auth/reset-password.page.ts"
     ]
   },
   "8348478964203310086": "Confirm password must be at least 8 characters.",
   "@8348478964203310086": {
     "x-files": [
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
+      "src/app/features/auth/reset-password.page.ts"
     ]
   },
   "137023682150214263": "Confirm password must be 200 characters or fewer.",
   "@137023682150214263": {
     "x-files": [
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
+      "src/app/features/auth/reset-password.page.ts"
     ]
   },
   "5906359199564086241": "Password must be at least 8 characters.",
@@ -7510,16 +8184,6 @@
       "src/app/features/auth/signup.page.html"
     ]
   },
-  "3686284950598311784": "Private",
-  "@3686284950598311784": {
-    "description": "Default name for a new organisation",
-    "x-files": [
-      "src/app/features/auth/signup.page.html",
-      "src/app/features/auth/signup.page.ts",
-      "src/app/features/global-work/save-view.popover.ts",
-      "src/app/features/notes/note-editor.component.ts"
-    ]
-  },
   "284984515138746555": "Jane Smith",
   "@284984515138746555": {
     "description": "Example person name",
@@ -7538,35 +8202,6 @@
     "description": "Password field placeholder",
     "x-files": [
       "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "7941159538449463077": "Re-enter your password",
-  "@7941159538449463077": {
-    "x-files": [
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "5351878947515429455": "Choose the theme used on this device.",
-  "@5351878947515429455": {
-    "x-files": [
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "1024001460651531895": " By continuing, you agree to the {$START_LINK}Terms of Service{$CLOSE_LINK} and acknowledge the {$START_LINK_1}Privacy Policy{$CLOSE_LINK}. ",
-  "@1024001460651531895": {
-    "x-files": [
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "6962699013778688473": "Continue",
-  "@6962699013778688473": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/auth/signup.page.html",
-      "src/app/features/board-mirrors/mirror-create.dialog.ts",
-      "src/app/features/oauth/oauth-device.page.ts",
-      "src/app/features/onboarding/onboarding.page.html",
-      "src/app/features/shell/organisation-action.dialog.ts"
     ]
   },
   "6189830083511725668": "We sent a 6-digit code to {$START_TAG_STRONG}{$EMAIL}{$CLOSE_TAG_STRONG}. Enter it below to continue.",
@@ -7603,29 +8238,10 @@
       "src/app/features/auth/signup.page.html"
     ]
   },
-  "3972495142175860210": "Resend code",
-  "@3972495142175860210": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/auth/signup.page.html"
-    ]
-  },
   "7007703201160377234": "Already have an account? {$START_LINK}Sign in{$CLOSE_LINK}",
   "@7007703201160377234": {
     "x-files": [
       "src/app/features/auth/signup.page.html"
-    ]
-  },
-  "3963463457405156297": "Organisation name is required.",
-  "@3963463457405156297": {
-    "x-files": [
-      "src/app/features/auth/signup.page.ts"
-    ]
-  },
-  "4258975407910381744": "Organisation name must be {$max} characters or fewer.",
-  "@4258975407910381744": {
-    "x-files": [
-      "src/app/features/auth/signup.page.ts"
     ]
   },
   "4968369344159400023": "Your name is required.",
@@ -7654,12 +8270,6 @@
   },
   "1080744542945497947": "Could not send verification code",
   "@1080744542945497947": {
-    "x-files": [
-      "src/app/features/auth/signup.page.ts"
-    ]
-  },
-  "3728336095556647473": "This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.",
-  "@3728336095556647473": {
     "x-files": [
       "src/app/features/auth/signup.page.ts"
     ]
@@ -7727,14 +8337,6 @@
   "@5466585966834098565": {
     "x-files": [
       "src/app/features/board-invite/board-invite.page.html"
-    ]
-  },
-  "5907476126990913307": "Create account",
-  "@5907476126990913307": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/board-invite/board-invite.page.html",
-      "src/app/features/invite/invite.page.html"
     ]
   },
   "4962321521106816970": "Opening board…",
@@ -9762,7 +10364,8 @@
     "description": "Button - fold a calendar day's cards back",
     "x-files": [
       "src/app/features/board/calendar-view/board-calendar-view.component.html",
-      "src/app/features/board/card-detail-description.component.html"
+      "src/app/features/board/card-detail-description.component.html",
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "3406674546225707827": "Blocked",
@@ -12568,7 +13171,8 @@
     "description": "Tooltip on a card's position in the viewer's Up next queue",
     "x-files": [
       "src/app/features/board/card.component.ts",
-      "src/app/features/board/table-view/board-table-view.component.ts"
+      "src/app/features/board/table-view/board-table-view.component.ts",
+      "src/app/features/global-work/team-overview.component.ts"
     ]
   },
   "4880952587019119931": "{total, plural, one {Collapse checklist: {done} of # item complete} other {Collapse checklist: {done} of # items complete}}",
@@ -12925,6 +13529,7 @@
     "x-files": [
       "src/app/features/board/description-editor.component.ts",
       "src/app/features/board/table-view/board-table-view.component.ts",
+      "src/app/features/onboarding/onboarding.page.html",
       "src/app/shared/autosave-status.component.ts"
     ]
   },
@@ -16735,11 +17340,12 @@
   "2559848334566452330": "Loading your cards…",
   "@2559848334566452330": {
     "x-files": [
-      "src/app/features/global-work/global-work.page.html"
+      "src/app/features/global-work/global-work.page.html",
+      "src/app/features/global-work/overview-skeleton.component.html"
     ]
   },
-  "8371055686202976923": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} Counts settle when the full set is ready.",
-  "@8371055686202976923": {
+  "7810072214821220623": "{$START_TAG_STRONG}Still loading cards…{$CLOSE_TAG_STRONG} Some numbers may go up as more cards arrive.",
+  "@7810072214821220623": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -16750,8 +17356,8 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "1322380274988329022": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} Chains settle when the full set is ready.",
-  "@1322380274988329022": {
+  "1088233120631462892": "{$START_TAG_STRONG}Still loading cards…{$CLOSE_TAG_STRONG} More chains may appear as more cards arrive.",
+  "@1088233120631462892": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -16835,8 +17441,8 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "5467495180002234399": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} The plan settles when the full set is ready.",
-  "@5467495180002234399": {
+  "2327243097523862940": "{$START_TAG_STRONG}Still loading cards…{$CLOSE_TAG_STRONG} The plan may change as more cards arrive.",
+  "@2327243097523862940": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -17667,13 +18273,6 @@
       "src/app/features/global-work/team-overview.component.ts"
     ]
   },
-  "8225018754533371665": "Loading activity…",
-  "@8225018754533371665": {
-    "description": "Team overview person header",
-    "x-files": [
-      "src/app/features/global-work/team-overview.component.ts"
-    ]
-  },
   "7112065803041924038": "Active {$time}",
   "@7112065803041924038": {
     "description": "Team overview person header, e.g. \"Active 2h ago\"",
@@ -18269,8 +18868,8 @@
       "src/app/features/home/getting-started.component.ts"
     ]
   },
-  "7141491141998033725": "Add people to the organisation, then give them the workspaces and boards they work on.",
-  "@7141491141998033725": {
+  "25205411783306580": "Create an invite link and choose the boards they'll work on.",
+  "@25205411783306580": {
     "description": "Getting started step text",
     "x-files": [
       "src/app/features/home/getting-started.component.ts"
@@ -18340,13 +18939,6 @@
   "465607310718150951": "Let Claude or another agent read and update your boards through MCP or the Kanera CLI.",
   "@465607310718150951": {
     "description": "Getting started step text",
-    "x-files": [
-      "src/app/features/home/getting-started.component.ts"
-    ]
-  },
-  "813263746069473514": "Connect",
-  "@813263746069473514": {
-    "description": "Getting started step button",
     "x-files": [
       "src/app/features/home/getting-started.component.ts"
     ]
@@ -19591,7 +20183,8 @@
   "@1479122279077293588": {
     "description": "Link: open the imported board",
     "x-files": [
-      "src/app/features/import/trello-import.page.html"
+      "src/app/features/import/trello-import.page.html",
+      "src/app/features/onboarding/onboarding.page.html"
     ]
   },
   "3197296855519098559": "{$START_TAG_SPAN}{$COUNT}{$CLOSE_TAG_SPAN} copied",
@@ -21411,6 +22004,31 @@
       "src/app/features/onboarding/onboarding.page.html"
     ]
   },
+  "8499207384930603682": "Who works on this with you?",
+  "@8499207384930603682": {
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.html"
+    ]
+  },
+  "4072411718861346704": "Invite the people you work with now, or skip this and invite them later.",
+  "@4072411718861346704": {
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.html"
+    ]
+  },
+  "5751753664308170569": "Teammates see this name when you invite them.",
+  "@5751753664308170569": {
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.html"
+    ]
+  },
+  "8125353260881979498": "Create invite link",
+  "@8125353260881979498": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.html"
+    ]
+  },
   "2413081980996920786": "Boards in a workspace share one setup",
   "@2413081980996920786": {
     "x-files": [
@@ -21696,8 +22314,33 @@
       "src/app/features/workspace-settings/general/general.page.ts"
     ]
   },
+  "996271465936723350": "People who join with this link become members of this workspace and can edit its board. The link expires in 7 days.",
+  "@996271465936723350": {
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.ts"
+    ]
+  },
+  "8209731135333412698": "People who join with this link become members of this workspace. The link expires in 7 days.",
+  "@8209731135333412698": {
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.ts"
+    ]
+  },
+  "5857668664262531276": "People who join with this link can edit this board. The link expires in 7 days.",
+  "@5857668664262531276": {
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.ts"
+    ]
+  },
   "3163044740176820503": "Get started",
   "@3163044740176820503": {
+    "description": "Onboarding page title",
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.ts"
+    ]
+  },
+  "1357016527933073189": "Invite teammates",
+  "@1357016527933073189": {
     "description": "Onboarding page title",
     "x-files": [
       "src/app/features/onboarding/onboarding.page.ts"
@@ -21738,6 +22381,18 @@
   },
   "1776970345979093269": "Enter a workspace name before finishing setup.",
   "@1776970345979093269": {
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.ts"
+    ]
+  },
+  "9117028496097101673": "Could not create the invite link. Try again.",
+  "@9117028496097101673": {
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.ts"
+    ]
+  },
+  "4422767337717838751": "Could not save the organisation name. Try again.",
+  "@4422767337717838751": {
     "x-files": [
       "src/app/features/onboarding/onboarding.page.ts"
     ]
@@ -22395,6 +23050,27 @@
       "src/app/features/shared/board-members-menu.popover.ts"
     ]
   },
+  "5839207226129095307": "An organisation admin can invite new people.",
+  "@5839207226129095307": {
+    "description": "Hint in the board members menu for a board admin who cannot create organisation invites",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "4369824653976054484": "Role for people who join with the link",
+  "@4369824653976054484": {
+    "description": "Select: board role an invite link grants",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "7105190804251724648": "Invite by link",
+  "@7105190804251724648": {
+    "description": "Button: create an invite link that grants this board",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
   "2199445424284781535": "Loading members…",
   "@2199445424284781535": {
     "x-files": [
@@ -22485,6 +23161,20 @@
   },
   "3598999512262112211": "Access to all cards — click to show only cards assigned directly or through a checklist item.",
   "@3598999512262112211": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "6444940540758118947": "Anyone with this link can join this board as an editor. It expires on {$date}.",
+  "@6444940540758118947": {
+    "description": "Invite link hint in the board members menu; the placeholder is a date such as \"23 Nov\"",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "8302086616797692226": "Anyone with this link can join this board as an observer. It expires on {$date}.",
+  "@8302086616797692226": {
+    "description": "Invite link hint in the board members menu; the placeholder is a date such as \"23 Nov\"",
     "x-files": [
       "src/app/features/shared/board-members-menu.popover.ts"
     ]
@@ -26051,13 +26741,6 @@
   "3157570261583742726": "Paid seat",
   "@3157570261583742726": {
     "description": "Badge: the guest uses a purchased seat",
-    "x-files": [
-      "src/app/features/workspace-settings/guests/guests.page.html"
-    ]
-  },
-  "746730092064233061": "{VAR_SELECT, select, editor {editor} observer {observer} other {{INTERPOLATION}}}",
-  "@746730092064233061": {
-    "description": "Board role, lower case",
     "x-files": [
       "src/app/features/workspace-settings/guests/guests.page.html"
     ]

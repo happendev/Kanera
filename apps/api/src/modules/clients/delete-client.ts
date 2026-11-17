@@ -7,6 +7,11 @@ import { db } from "../../db.js";
 import { cancelBillingForPermanentDeletion } from "../../lib/billing.js";
 import { resolveActiveOrganisationContext } from "../../lib/client-membership.js";
 import { AppError, badRequest } from "../../lib/errors.js";
+import { securitySupportEmail } from "../../lib/account-security-notices.js";
+import { formatMomentInZone } from "../../lib/i18n/format.js";
+import { recipientLocale } from "../../lib/i18n/request-locale.js";
+import { serverMessages } from "../../lib/i18n/messages/index.js";
+import type { Mailer } from "../../lib/mailer.js";
 import { sendOpsAlert } from "../../lib/ops-alerts.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 import { loadClient } from "./client-queries.js";
@@ -20,11 +25,13 @@ export async function deleteClient({
   auth,
   body,
   log,
+  mailer,
   request,
 }: {
   auth: AuthClaims;
   body: dto.DeleteClientBody;
   log: FastifyBaseLogger;
+  mailer: Mailer;
   request: { id: string; method: string; url: string };
 }) {
   const current = await loadClient(auth.cid);
@@ -58,6 +65,12 @@ export async function deleteClient({
   const memberRows = await db.select({ userId: clientMembers.userId })
     .from(clientMembers).where(eq(clientMembers.clientId, auth.cid));
   const memberUserIds = [...new Set(memberRows.map((row) => row.userId))];
+  // Read before the memberships are deleted below: afterwards nothing links these people to the org.
+  const recipients = await db
+    .select({ id: users.id, email: users.email, displayName: users.displayName, locale: users.locale, timezone: users.timezone })
+    .from(clientMembers)
+    .innerJoin(users, eq(users.id, clientMembers.userId))
+    .where(and(eq(clientMembers.clientId, auth.cid), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt), isNull(users.deletedAt)));
   const requestedAt = new Date();
   await db.transaction(async (tx) => {
     // Inaccessibility is the synchronous boundary. Storage and the heavy owned graph are purged by
@@ -99,7 +112,39 @@ export async function deleteClient({
   });
 
   for (const userId of memberUserIds) disconnectUserRealtimeSockets(userId);
+  await notifyOrganisationDeleted({ mailer, log, orgName: current.name, actorId: auth.sub, recipients, deletedAt: requestedAt });
   await db.update(refreshTokens).set({ revokedAt: requestedAt })
     .where(and(eq(refreshTokens.userId, auth.sub), isNull(refreshTokens.revokedAt)));
   return resolveActiveOrganisationContext(auth.sub);
+}
+
+/**
+ * Everyone who belonged to the organisation hears that it is gone: it vanishes from their sidebar at
+ * once, and the purge cannot be undone. The person who deleted it gets the same record in the first
+ * person. A failed send is logged; the deletion has already happened.
+ */
+async function notifyOrganisationDeleted({ mailer, log, orgName, actorId, recipients, deletedAt }: {
+  mailer: Mailer;
+  log: FastifyBaseLogger;
+  orgName: string;
+  actorId: string;
+  recipients: Array<{ id: string; email: string; displayName: string; locale: string | null; timezone: string }>;
+  deletedAt: Date;
+}): Promise<void> {
+  const actorName = recipients.find((recipient) => recipient.id === actorId)?.displayName ?? null;
+  for (const recipient of recipients) {
+    const locale = recipientLocale(recipient.locale);
+    try {
+      await mailer.sendOrganisationDeleted(recipient.email, {
+        locale,
+        displayName: recipient.displayName,
+        orgName,
+        deletedByName: recipient.id === actorId ? null : actorName ?? serverMessages(locale).common.someone,
+        deletedAtLabel: formatMomentInZone(locale, deletedAt, recipient.timezone),
+        supportEmail: securitySupportEmail(),
+      });
+    } catch (err) {
+      log.error({ err, userId: recipient.id }, "failed to queue organisation deleted email");
+    }
+  }
 }

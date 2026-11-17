@@ -49,7 +49,7 @@ export class AuthSyncService {
     });
     const onStorage = (event: StorageEvent) => {
       if (!this.auth.isLogoutSyncEvent(event)) return;
-      this.auth.clearSession({ disableRefresh: true });
+      void this.auth.clearSession({ disableRefresh: true });
     };
     window.addEventListener("storage", onStorage);
     inject(DestroyRef).onDestroy(() => window.removeEventListener("storage", onStorage));

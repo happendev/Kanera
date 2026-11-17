@@ -1,6 +1,6 @@
 import type { Locale } from "@kanera/shared/locales";
 import { serverMessages } from "../i18n/messages/index.js";
-import { codeDisplay, divider, emailLayout, heading, mutedHtml, paragraph, plainStrong, richHtml } from "./layout.js";
+import { codeDisplay, emailLayout, heading, mutedHtml, paragraph, plainStrong, richHtml } from "./layout.js";
 
 export interface VerificationCodeEmailParams {
   /** At signup no account exists yet, so this is the language the signup form was shown in. */
@@ -23,7 +23,7 @@ export function verificationCodeEmail({ locale, code, expiresInMinutes }: Verifi
       ${paragraph(m.instruction)}
       ${codeDisplay(code, locale)}
       ${mutedHtml(richHtml((s) => m.expiry(s), { duration: plainStrong(messages.common.minutes({ count: expiresInMinutes })) }))}
-      ${divider("24px 0 0 0")}
     `,
+    footerReason: messages.layout.footerVerification,
   });
 }

@@ -9,6 +9,17 @@ export interface LayoutOptions {
   preheader: string;
   body: string;
   /**
+   * Why this person got the email, when "you have a Kanera account" is not true or not the reason:
+   * invitations and signup codes can reach an address with no account, and some mail goes only to a
+   * role (storage warnings) or follows an action (imports).
+   */
+  footerReason?: string;
+  /**
+   * Card notification emails follow the recipient's notification settings, so their footer links
+   * there. Without a `footerReason` the footer says that is why they got it.
+   */
+  manageUrl?: string;
+  /**
    * Lifecycle (onboarding/check-in) emails are optional product messages, so their footer names why
    * the reader got them and links to a one-click opt-out. Transactional mail omits it.
    */
@@ -17,8 +28,7 @@ export interface LayoutOptions {
 
 const BRAND = "#0d9488";
 const FONT_STACK = "'Inter','Segoe UI',Arial,Helvetica,sans-serif";
-const EMAIL_BG = "#f8fafc";
-const EMAIL_BG_END = "#e2e8f0";
+const EMAIL_BG = "#f1f5f9";
 const EMAIL_CARD = "#ffffff";
 const EMAIL_PANEL = "#f8fafc";
 const EMAIL_BORDER = "#dbe4ee";
@@ -33,12 +43,16 @@ const EMAIL_LINK = BRAND;
 const EMAIL_BUTTON_TEXT = "#ffffff";
 const LOGO_URL = "https://www.kanera.app/assets/logo/jpg/logo%20light%20long.jpg";
 
-export function emailLayout({ locale, subject, preheader, body, unsubscribeUrl }: LayoutOptions): string {
+export function emailLayout({ locale, subject, preheader, body, footerReason, manageUrl, unsubscribeUrl }: LayoutOptions): string {
   const m = serverMessages(locale).layout;
-  const footerReason = unsubscribeUrl
-    ? `${escapeHtml(m.footerLifecycle)}<br>
-                  <a href="${escapeAttr(unsubscribeUrl)}" target="_blank" class="email-link" style="color:${EMAIL_FOOTER_TEXT};text-decoration:underline;">${escapeHtml(m.unsubscribe)}</a><br>`
-    : `${escapeHtml(m.footerAccount)}<br>`;
+  const reason = footerReason ?? (unsubscribeUrl ? m.footerLifecycle : manageUrl ? m.footerNotifications : m.footerAccount);
+  const optOut = unsubscribeUrl ? footerLink(unsubscribeUrl, m.unsubscribe) : manageUrl ? footerLink(manageUrl, m.manageNotifications) : "";
+  // The year is rendered, not written in: a hardcoded one goes stale every January.
+  const footer = [
+    escapeHtml(reason),
+    optOut,
+    `&copy; ${new Date().getUTCFullYear()} Kanera`,
+  ].filter(Boolean).join("<br>\n                  ");
   return `<!DOCTYPE html>
 <html lang="${escapeAttr(locale)}">
 <head>
@@ -67,7 +81,7 @@ export function emailLayout({ locale, subject, preheader, body, unsubscribeUrl }
   <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:${EMAIL_BG};opacity:0;">
     &nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
   </div>
-  <div class="email-gradient email-shell" style="margin:0;padding:32px 16px;background:${EMAIL_BG};background:linear-gradient(180deg,${EMAIL_BG} 0%,${EMAIL_BG_END} 100%);">
+  <div class="email-shell" style="margin:0;padding:32px 16px;background-color:${EMAIL_BG};">
     <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
       <tr>
         <td align="center" style="padding:0;">
@@ -88,8 +102,7 @@ export function emailLayout({ locale, subject, preheader, body, unsubscribeUrl }
             <tr>
               <td class="email-card-inner" style="padding:28px 32px 32px 32px;">
                 <div class="email-footer" style="padding-top:20px;border-top:1px solid ${EMAIL_DIVIDER};font-family:${FONT_STACK};font-size:13px;line-height:20px;color:${EMAIL_FOOTER_TEXT};text-align:center;mso-line-height-rule:exactly;">
-                  ${footerReason}
-                  &copy; 2026 Kanera
+                  ${footer}
                 </div>
               </td>
             </tr>
@@ -143,6 +156,12 @@ export function paragraphHtml(html: string, margin = "0 0 24px 0"): string {
   return `<p style="margin:${margin};font-family:${FONT_STACK};font-size:16px;line-height:26px;color:${EMAIL_TEXT};mso-line-height-rule:exactly;" class="email-text">${html}</p>`;
 }
 
+/** Joins separate catalog sentences; Japanese and Chinese run sentences together without a space. */
+export function joinSentences(locale: Locale, parts: (string | null | undefined)[]): string {
+  const separator = locale === "ja" || locale.startsWith("zh") ? "" : " ";
+  return parts.filter(Boolean).join(separator);
+}
+
 export function mutedHtml(html: string, margin = "24px 0 0 0"): string {
   return `<p style="margin:${margin};font-family:${FONT_STACK};font-size:13px;line-height:20px;color:${EMAIL_MUTED_TEXT};mso-line-height-rule:exactly;" class="email-text-muted">${html}</p>`;
 }
@@ -186,12 +205,12 @@ export function cardSummary({ title, subtitle, href }: { title: string; subtitle
     </table>`;
 }
 
+/** A quoted comment: a full ring and a light wash, never a leading-edge accent stripe. */
 export function quoteBlock(text: string): string {
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px 0;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 16px 0;">
       <tr>
-        <td width="4" bgcolor="${BRAND}" style="width:4px;background-color:${BRAND};font-size:0;line-height:0;">&nbsp;</td>
-        <td bgcolor="${EMAIL_PANEL}" style="padding:14px 16px;background-color:${EMAIL_PANEL};border-top:1px solid ${EMAIL_PANEL_BORDER};border-right:1px solid ${EMAIL_PANEL_BORDER};border-bottom:1px solid ${EMAIL_PANEL_BORDER};font-family:${FONT_STACK};font-size:14px;line-height:22px;color:${EMAIL_TEXT};mso-line-height-rule:exactly;" class="email-panel email-text">
+        <td bgcolor="${EMAIL_PANEL}" style="padding:14px 18px;background-color:${EMAIL_PANEL};border:1px solid ${EMAIL_PANEL_BORDER};border-radius:16px;font-family:${FONT_STACK};font-size:15px;line-height:24px;font-style:italic;color:${EMAIL_TEXT};mso-line-height-rule:exactly;" class="email-panel email-text">
           ${escapeHtml(text)}
         </td>
       </tr>
@@ -218,6 +237,23 @@ export function richHtml<K extends string>(render: (slots: Record<K, string>) =>
 /** Bold text without the heading colour, as expiry notices use it. */
 export function plainStrong(value: string): string {
   return `<strong>${escapeHtml(value)}</strong>`;
+}
+
+function footerLink(href: string, label: string): string {
+  return `<a href="${escapeAttr(href)}" target="_blank" class="email-link" style="color:${EMAIL_FOOTER_TEXT};text-decoration:underline;">${escapeHtml(label)}</a>`;
+}
+
+/** Bold link text for an email address inside a sentence. */
+export function mailtoLink(email: string): string {
+  return `<a href="mailto:${escapeAttr(email)}" class="email-link" style="color:${EMAIL_LINK};font-weight:600;text-decoration:underline;">${escapeHtml(email)}</a>`;
+}
+
+/**
+ * The card a notification is about, then a button to open it: the title link alone is easy to miss
+ * on a phone, so every card email ends with the same explicit action.
+ */
+export function cardBlock({ title, subtitle, href, locale }: { title: string; subtitle: string; href: string; locale: Locale }): string {
+  return `${cardSummary({ title, subtitle, href })}${button({ href, label: serverMessages(locale).common.openCard })}`;
 }
 
 // Attribute values escape the same four characters as text nodes.

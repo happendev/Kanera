@@ -775,8 +775,8 @@ staff, demo, seed, test, and load-test organisations.
 | `SMTP_FROM_EMAIL` | no | Default sender address. |
 | `SMTP_FROM_NAME` | no | Defaults to `Kanera`. |
 | `SMTP_IDENTITY_DOMAIN` | no | Domain used for SMTP EHLO and Message-ID headers. Defaults to `SMTP_FROM_EMAIL`'s domain; set this to your real sending domain, not `.local`. |
-| `INTERNAL_NOTIFICATION_EMAILS` | no | Comma-separated internal recipients for plain-text signup, invite-acceptance, and positive paid-subscription invoice alerts. Requires env SMTP. |
-| `LIFECYCLE_FEEDBACK_EMAIL` | no | Hosted mode only. Address that the inactive-account and active-customer lifecycle emails invite customers to write to. Defaults to `support@kanera.app`. |
+| `INTERNAL_NOTIFICATION_EMAILS` | no | Comma-separated internal recipients for plain-text alerts: signups (with their traffic source), invite acceptances and positive paid-subscription invoices, plus, in hosted mode, checkouts started and abandoned and self-serve trials ending within three days. Requires env SMTP. |
+| `LIFECYCLE_FEEDBACK_EMAIL` | no | Hosted mode only. Address that the inactive-account, active-customer and abandoned-checkout emails invite customers to write to. Defaults to `support@kanera.app`. |
 | `SUPPORT_SESSION_TTL_MINUTES` | no | Lifetime in minutes of a support-session token minted by the management portal (`POST /admin/orgs/:clientId/support-session`). Defaults to `60`. No refresh companion is issued. |
 | `S3_REGION` | no | Enables deployment-wide S3 storage when set with bucket and credentials. |
 | `S3_BUCKET` | no | S3 bucket for uploads. |
@@ -800,6 +800,12 @@ staff, demo, seed, test, and load-test organisations.
 | `GITHUB_APP_CLIENT_ID` | hosted | The App's OAuth client id. Enable "Request user authorization (OAuth) during installation" and set the Callback URL to `${WEB_ORIGIN}/settings/org`. Lets Kanera verify that the user connecting an installation can see it on GitHub; hosted deployments refuse to connect installations without it. |
 | `GITHUB_APP_CLIENT_SECRET` | hosted | An OAuth client secret generated for the App. Required alongside `GITHUB_APP_CLIENT_ID`. |
 | `GITHUB_APP_WEBHOOK_SECRET` | no | The App's webhook secret. Set the App's Webhook URL to `${API_PUBLIC_URL}/api/integrations/github/webhook` and subscribe it to "Pull request" events; pull requests whose branch, title or body name a card key are then linked to that card. Without it, webhooks are refused. |
+| `GOOGLE_OAUTH_CLIENT_ID` | hosted | Google OAuth client id for "Continue with Google". Ignored unless `KANERA_DEPLOYMENT_MODE=hosted`. Authorized redirect URI: `${API_PUBLIC_URL}/api/auth/providers/google/callback`. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | hosted | Required alongside `GOOGLE_OAUTH_CLIENT_ID`. |
+| `MICROSOFT_OAUTH_CLIENT_ID` | hosted | Microsoft Entra multi-tenant app (work, school and personal accounts) for "Continue with Microsoft". Redirect URI: `${API_PUBLIC_URL}/api/auth/providers/microsoft/callback`. Add the optional ID-token claims `email` and `xms_edov`; without `xms_edov` Kanera asks for an emailed code before linking. |
+| `MICROSOFT_OAUTH_CLIENT_SECRET` | hosted | Required alongside `MICROSOFT_OAUTH_CLIENT_ID`. |
+| `GITHUB_OAUTH_CLIENT_ID` | hosted | GitHub OAuth App (separate from the GitHub App) for "Continue with GitHub". Callback URL: `${API_PUBLIC_URL}/api/auth/providers/github/callback`. |
+| `GITHUB_OAUTH_CLIENT_SECRET` | hosted | Required alongside `GITHUB_OAUTH_CLIENT_ID`. |
 | `TRELLO_API_KEY` | no | Trello app API key for authenticated Trello attachment imports. See `trello_import.md`. |
 
 ## Notes

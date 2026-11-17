@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EMAIL_QUEUE_STATUS, type EmailQueue } from "@kanera/shared/schema";
 import { billingChangedEmail, proCancelledEmail, proTrialWarningEmail, seatBilledEmail, upgradedToProEmail } from "./email-templates/billing.js";
-import { emailSubject, isReservedEmailDomain, renderEmail, shouldSendDailyDigest } from "./mailer.js";
+import { emailHeaders, emailSubject, isReservedEmailDomain, renderEmail, shouldSendDailyDigest } from "./mailer.js";
 
 test("development email subjects are prefixed once", () => {
   assert.equal(emailSubject("Welcome to Kanera", "development"), "[Development] Welcome to Kanera");
@@ -41,7 +41,7 @@ test("assignee notification email types render", () => {
   const rows: EmailQueue[] = [
     {
       ...base,
-      subject: "You were assigned a Kanera card",
+      subject: "Assigned to you: Prepare launch",
       type: "card_assigned" as const,
       data: {
         displayName: "Member",
@@ -66,7 +66,7 @@ test("assignee notification email types render", () => {
     },
     {
       ...base,
-      subject: "Mentioned in a comment on Prepare launch",
+      subject: "Owner mentioned you on Prepare launch",
       type: "comment_mentioned" as const,
       data: {
         displayName: "Member",
@@ -79,7 +79,7 @@ test("assignee notification email types render", () => {
     },
     {
       ...base,
-      subject: "Due date changed on your Kanera card",
+      subject: "Due date changed: Prepare launch",
       type: "card_due_date_changed" as const,
       data: {
         displayName: "Member",
@@ -93,7 +93,7 @@ test("assignee notification email types render", () => {
     },
     {
       ...base,
-      subject: "A Kanera card is overdue",
+      subject: "Overdue: Prepare launch",
       type: "card_overdue" as const,
       data: {
         displayName: "Member",
@@ -105,7 +105,7 @@ test("assignee notification email types render", () => {
     },
     {
       ...base,
-      subject: "A Kanera invite was accepted",
+      subject: "Member joined Acme",
       type: "invite_accepted" as const,
       data: {
         displayName: "Owner",
@@ -123,6 +123,16 @@ test("assignee notification email types render", () => {
     assertRenderedEmail(html, row.subject);
     assert.match(html, /Prepare launch|Member|Acme/);
   }
+
+  // Card notifications follow the notification settings, so they link there and offer one-click
+  // unsubscribe; an invite-accepted notice is account mail and does neither.
+  const assigned = rows[0]!;
+  assert.match(renderEmail(assigned), /settings\/notifications"[^>]*>Manage email notifications</);
+  assert.match(renderEmail(assigned), />\s*Open card\s*</);
+  assert.match(emailHeaders(assigned)?.["List-Unsubscribe"] ?? "", /\/api\/email\/unsubscribe\/one-click\?token=n\./);
+  const accepted = rows.at(-1)!;
+  assert.doesNotMatch(renderEmail(accepted), /Manage email notifications/);
+  assert.equal(emailHeaders(accepted), undefined);
 });
 
 test("hosted billing email types render", () => {

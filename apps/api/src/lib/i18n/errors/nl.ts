@@ -384,6 +384,9 @@ export const nl: ErrorCatalog = {
   "work-history cursor does not match this query": "werkgeschiedeniscursor komt niet overeen met deze zoekopdracht",
   "workspace name does not match": "naam van de werkruimte komt niet overeen",
   "workspace not found": "werkruimte niet gevonden",
+  "organisation admins already have access to every board": "organisatiebeheerders hebben al toegang tot elk bord",
+  "duplicate board in invite": "dubbel bord in uitnodiging",
+  "board not in your organisation": "bord niet in je organisatie",
   "workspace not in your organisation": "werkruimte niet in je organisatie",
   "write-capable credential required": "schrijfgeschikte referentie vereist",
   "you are already a member of this organisation": "je bent al lid van deze organisatie",
@@ -455,4 +458,18 @@ export const nl: ErrorCatalog = {
   "cards must be in the same workspace to be related": "kaarten moeten in dezelfde werkruimte staan om te worden gerelateerd",
   "relation not found": "relatie niet gevonden",
   "this relation would create a blocking cycle": "deze relatie zou een blokkeringscyclus veroorzaken",
+  "This sign-in has expired. Start again.":
+    "Deze inlogpoging is verlopen. Begin opnieuw.",
+  "This sign-in can't create an account.":
+    "Met deze inlogpoging kan geen account worden aangemaakt.",
+  "This sign-in can't be linked to your account.":
+    "Deze inlogpoging kan niet aan je account worden gekoppeld.",
+  "Set a password or connect another sign-in method before removing this one.":
+    "Stel een wachtwoord in of koppel een andere inlogmethode voordat je deze verwijdert.",
+  "confirm with your current password":
+    "Bevestig met je huidige wachtwoord.",
+  "sign-in provider not available":
+    "Inlogprovider niet beschikbaar.",
+  "sign-in method not found":
+    "Inlogmethode niet gevonden.",
 };

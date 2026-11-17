@@ -1,12 +1,14 @@
-import { provideZonelessChangeDetection, signal } from "@angular/core";
+import { computed, provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ApiError } from "../../core/api/api.client";
+import { AuthService, type AuthUser, type OrgRole } from "../../core/auth/auth.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { PanelStackService } from "../../shared/panel-stack.service";
 import { ToastService } from "../../shared/toast.service";
 import { ConfirmService } from "../../shared/confirm.service";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { BoardMembersMenu, type BoardAccessMemberRow } from "./board-members-menu.popover";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,15 +27,21 @@ describe("BoardMembersMenu", () => {
   const socket = { on: vi.fn(), off: vi.fn() };
   const api = { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() };
   const joinBoard = vi.fn(() => vi.fn());
+  const authUser = signal<AuthUser | null>(null);
+  const upgradePrompt = { open: vi.fn() };
+  const signInAs = (role: OrgRole, activeClientId = "owner") => authUser.set({ id: "self", clientId: "home", activeClientId, role, timezone: "UTC" } as AuthUser);
 
   beforeEach(() => {
     vi.clearAllMocks();
+    authUser.set(null);
     TestBed.configureTestingModule({
       imports: [BoardMembersMenu],
       providers: [
         provideZonelessChangeDetection(),
         { provide: ApiClient, useValue: api },
         { provide: ConfirmService, useValue: { open: vi.fn() } },
+        { provide: AuthService, useValue: { user: authUser, isOrgAdmin: computed(() => ["owner", "admin"].includes(authUser()?.role ?? "")) } },
+        { provide: UpgradePromptService, useValue: upgradePrompt },
         { provide: SocketService, useValue: { activeWorkspaceIds: signal(new Set<string>()), connect: () => socket, joinBoard, joinWorkspace: () => vi.fn() } },
       ],
     });
@@ -472,5 +480,74 @@ describe("BoardMembersMenu", () => {
     await fixture.componentInstance.addMember();
 
     expect(added).toHaveBeenCalledWith(expect.objectContaining({ userId: "ben", displayName: "Ben", role: "editor", source: "board" }));
+  });
+
+  describe("invite by link", () => {
+    // A brand-new owner's board: nobody else in the organisation, so the add form has no candidates.
+    async function renderEmptyBoard() {
+      api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")
+        ? { scope: "organisation", members: [] }
+        : []));
+      const fixture = TestBed.createComponent(BoardMembersMenu);
+      fixture.componentRef.setInput("boardId", "board-1");
+      fixture.componentRef.setInput("ownerClientId", "owner");
+      fixture.componentRef.setInput("canManage", true);
+      fixture.detectChanges();
+      await vi.waitFor(() => expect(fixture.componentInstance.loading()).toBe(false));
+      fixture.detectChanges();
+      return { fixture, host: fixture.nativeElement as HTMLElement };
+    }
+
+    it("creates a member invite granting only this board with the chosen role, then shows the link", async () => {
+      signInAs("owner");
+      vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+      api.post.mockResolvedValue({ id: "invite-1", token: "tok-123", expiresAt: "2026-11-23T10:00:00.000Z" });
+      const { fixture, host } = await renderEmptyBoard();
+
+      // The dead-end note now sits with the next step.
+      const invite = host.querySelector<HTMLElement>(".bmp-invite");
+      expect(invite?.textContent).toContain("All organisation members are already on this board.");
+      expect(invite?.querySelector<HTMLSelectElement>(".bmp-invite-role")?.value).toBe("editor");
+      fixture.componentInstance.inviteRole.set("observer");
+      host.querySelector<HTMLButtonElement>(".bmp-invite-create")!.click();
+      await vi.waitFor(() => expect(fixture.componentInstance.createdInvite()).not.toBeNull());
+      fixture.detectChanges();
+
+      expect(api.post).toHaveBeenCalledExactlyOnceWith("/clients/me/invites", {
+        orgRole: "member", workspaces: [], boards: [{ boardId: "board-1", role: "observer" }], expiresInDays: 7,
+      });
+      expect(host.querySelector<HTMLInputElement>(".bmp-invite-url")?.value).toBe(`${location.origin}/signup?invite=tok-123`);
+      expect(host.querySelector(".bmp-invite-hint")?.textContent).toContain("Anyone with this link can join this board as an observer. It expires on");
+      expect(host.querySelector(".bmp-invite-copy")?.textContent).toContain("Copied");
+      vi.unstubAllGlobals();
+    });
+
+    it("hides the action from board managers who are not organisation admins, or on another organisation's board", async () => {
+      signInAs("member");
+      const { fixture, host } = await renderEmptyBoard();
+      expect(host.querySelector(".bmp-invite-create")).toBeNull();
+      expect(host.querySelector(".bmp-invite")?.textContent).toContain("An organisation admin can invite new people.");
+
+      signInAs("admin", "other-org");
+      fixture.detectChanges();
+      expect(host.querySelector(".bmp-invite-create")).toBeNull();
+      expect(fixture.componentInstance.canInvite()).toBe(false);
+    });
+
+    it("shows the error, and opens the upgrade prompt when the hosted member limit refuses the invite", async () => {
+      signInAs("admin");
+      const { fixture, host } = await renderEmptyBoard();
+      api.post.mockRejectedValueOnce(new ApiError(400, { message: "board not in your organisation" }));
+      await fixture.componentInstance.createInvite();
+      fixture.detectChanges();
+      expect(host.querySelector(".bmp-invite .bmp-error")?.textContent).toContain("board not in your organisation");
+      expect(fixture.componentInstance.busy()).toBe(false);
+
+      api.post.mockRejectedValueOnce(new ApiError(403, { code: "PLAN_LIMIT", limit: "members", current: 3, max: 3 }));
+      await fixture.componentInstance.createInvite();
+      expect(upgradePrompt.open).toHaveBeenCalledExactlyOnceWith({ reason: "member", source: "board_members", projectedSeats: 4 });
+      expect(fixture.componentInstance.inviteError()).toBeNull();
+      expect(fixture.componentInstance.createdInvite()).toBeNull();
+    });
   });
 });

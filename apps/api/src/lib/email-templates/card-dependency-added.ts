@@ -1,9 +1,11 @@
 import type { Locale } from "@kanera/shared/locales";
 import { serverMessages } from "../i18n/messages/index.js";
-import { cardSummary, emailLayout, heading, paragraph } from "./layout.js";
+import { cardBlock, emailLayout, heading, paragraph } from "./layout.js";
 
 export interface CardDependencyAddedEmailParams {
   locale: Locale;
+  /** Added when rendered: the notification settings page the footer links to. */
+  notificationSettingsUrl?: string;
   displayName: string;
   actorName: string;
   cardTitle: string;
@@ -16,19 +18,20 @@ export interface CardDependencyAddedEmailParams {
   otherCardTitle: string | null;
 }
 
-export function cardDependencyAddedEmail({ locale, displayName, actorName, cardTitle, boardName, cardUrl, direction, otherCardKey, otherCardTitle }: CardDependencyAddedEmailParams): string {
+export function cardDependencyAddedEmail({ locale, notificationSettingsUrl, displayName, actorName, cardTitle, boardName, cardUrl, direction, otherCardKey, otherCardTitle }: CardDependencyAddedEmailParams): string {
   const m = serverMessages(locale).email.cardDependencyAdded;
   const firstName = displayName.split(" ")[0] ?? displayName;
   const other = otherCardTitle ? `${otherCardKey} ${otherCardTitle}` : otherCardKey;
   const values = { firstName, actor: actorName, card: cardTitle, board: boardName, other };
   return emailLayout({
     locale,
+    manageUrl: notificationSettingsUrl,
     subject: direction === "blocked_by" ? m.subjectBlockedBy(values) : m.subjectBlocking(values),
     preheader: m.preheader(values),
     body: `
-      ${heading(m.heading)}
-      ${paragraph(direction === "blocked_by" ? m.introBlockedBy(values) : m.introBlocking(values), "0 0 20px 0")}
-      ${cardSummary({ title: cardTitle, subtitle: boardName, href: cardUrl })}
+      ${heading(direction === "blocked_by" ? m.headingBlockedBy : m.headingBlocking)}
+      ${paragraph(direction === "blocked_by" ? m.introBlockedBy(values) : m.introBlocking(values), "0 0 16px 0")}
+      ${cardBlock({ title: cardTitle, subtitle: boardName, href: cardUrl, locale })}
     `,
   });
 }

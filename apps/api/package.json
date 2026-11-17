@@ -41,6 +41,7 @@
     "@prometheus-io/client": "^0.16.1",
     "@scalar/fastify-api-reference": "^1.76.4",
     "@socket.io/redis-adapter": "^8.3.0",
+    "arctic": "3.7.0",
     "argon2": "^0.45.2",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.4",

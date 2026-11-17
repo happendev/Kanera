@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import type { OnInit } from "@angular/core";
 import { Router } from "@angular/router";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { isMfaEnrollmentRequired, MFA_ENROLLMENT_HANDOFF_KEY, type MfaEnrollmentRequiredResponse } from "../../core/auth/auth-response";
 import { AuthService, authenticatedLandingPath, type AuthUser } from "../../core/auth/auth.service";
 import { SocketService } from "../../core/realtime/socket.service";
+import { ProviderSignInComponent } from "../auth/provider-sign-in.component";
 import { LogoComponent } from "../../shared/logo.component";
 
 interface InviteDetails {
@@ -17,7 +18,7 @@ interface InviteDetails {
 @Component({
   selector: "k-org-invite",
   standalone: true,
-  imports: [LogoComponent],
+  imports: [LogoComponent, ProviderSignInComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./invite.page.html",
   styleUrl: "../board-invite/board-invite.page.scss",
@@ -29,6 +30,12 @@ export class InvitePage implements OnInit {
   private readonly sockets = inject(SocketService);
 
   readonly token = input<string | undefined>(undefined);
+  // An existing account that continues with a provider comes back here to accept; a new one joins
+  // through the token during signup.
+  protected readonly providerReturnUrl = computed(() => {
+    const token = this.token();
+    return token ? `/invite?token=${encodeURIComponent(token)}` : null;
+  });
   readonly invite = signal<InviteDetails | null>(null);
   readonly state = signal<"loading" | "ready" | "invalid">("loading");
   readonly busy = signal(false);
@@ -65,7 +72,7 @@ export class InvitePage implements OnInit {
         // Membership was granted and the active organisation already moved, but the new organisation
         // mandates MFA so no session for it was issued. The previous organisation's in-memory token is
         // dropped (a refresh would now be refused anyway) and the login page completes enrollment.
-        this.auth.clearSession();
+        void this.auth.clearSession();
         await this.router.navigateByUrl("/login", { replaceUrl: true, state: { [MFA_ENROLLMENT_HANDOFF_KEY]: session.challengeToken } });
         return;
       }

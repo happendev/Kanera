@@ -31,6 +31,7 @@
             @if (errorMessage()) { <p class="error-msg">{{ errorMessage() }}</p> }
           } @else {
             <p class="auth-prompt" i18n>Sign in to join with your existing account, or create a new account.</p>
+            <k-provider-sign-in [returnUrl]="providerReturnUrl()" [inviteToken]="token() ?? null" />
             <div class="actions actions--row">
               <a [href]="signupUrl()" class="btn-primary"><i aria-hidden="true" class="ti ti-user-plus"></i> <ng-container i18n="Button">Create account</ng-container></a>
               <a [href]="loginUrl()" class="btn-secondary"><i aria-hidden="true" class="ti ti-login"></i> <ng-container i18n="Button">Sign in</ng-container></a>

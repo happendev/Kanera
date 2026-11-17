@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { and, eq, gt, isNull } from "drizzle-orm";
-import { refreshTokens } from "@kanera/shared/schema";
+import { refreshTokens, type AuthMethod } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { hashOpaqueToken } from "../lib/tokens.js";
@@ -9,8 +9,8 @@ const REFRESH_BYTES = 48;
 export const REFRESH_REUSE_GRACE_MS = 30_000;
 
 type RefreshRotationResult =
-  | { status: "rotated"; userId: string; fresh: { raw: string; hash: string; expiresAt: Date } }
-  | { status: "grace"; userId: string }
+  | { status: "rotated"; userId: string; authMethod: AuthMethod; fresh: { raw: string; hash: string; expiresAt: Date } }
+  | { status: "grace"; userId: string; authMethod: AuthMethod }
   | { status: "reused"; userId: string }
   | { status: "invalid" };
 
@@ -54,7 +54,7 @@ export async function rotateRefresh(oldRaw: string): Promise<RefreshRotationResu
           // A restored tab or reconnecting socket can race a normal refresh with the same cookie.
           // During a tiny window, accept that old token without rotating again so we do not revoke
           // the brand-new session that the first request just established.
-          if (replacement) return { status: "grace", userId: existing.userId };
+          if (replacement) return { status: "grace", userId: existing.userId, authMethod: existing.authMethod };
         }
 
         await tx
@@ -74,7 +74,8 @@ export async function rotateRefresh(oldRaw: string): Promise<RefreshRotationResu
     const fresh = newRefreshToken();
     const [inserted] = await tx
       .insert(refreshTokens)
-      .values({ userId: existing.userId, tokenHash: fresh.hash, expiresAt: fresh.expiresAt })
+      // The replacement belongs to the same sign-in, so it keeps the family's auth method.
+      .values({ userId: existing.userId, tokenHash: fresh.hash, expiresAt: fresh.expiresAt, authMethod: existing.authMethod })
       .returning({ id: refreshTokens.id });
 
     await tx
@@ -82,6 +83,6 @@ export async function rotateRefresh(oldRaw: string): Promise<RefreshRotationResu
       .set({ revokedAt: new Date(), replacedById: inserted!.id })
       .where(eq(refreshTokens.id, existing.id));
 
-    return { status: "rotated", userId: existing.userId, fresh };
+    return { status: "rotated", userId: existing.userId, authMethod: existing.authMethod, fresh };
   });
 }

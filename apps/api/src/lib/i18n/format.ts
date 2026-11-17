@@ -28,6 +28,19 @@ export function formatDate(locale: Locale, date: Date, options: Intl.DateTimeFor
 }
 
 /**
+ * When something happened, in the reader's own zone and with the zone named so it cannot be misread
+ * ("26 May 2026 at 11:42 SAST"). A stored zone the runtime does not know falls back to UTC.
+ */
+export function formatMomentInZone(locale: Locale, at: Date, timeZone: string): string {
+  const options: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" };
+  try {
+    return formatDate(locale, at, { ...options, timeZone });
+  } catch {
+    return formatDate(locale, at, { ...options, timeZone: "UTC" });
+  }
+}
+
+/**
  * A calendar date ("YYYY-MM-DD", no time) as the recipient reads it. A calendar date has no zone:
  * it is formatted as that day in UTC, so it reads the same day for every reader (formatting noon UTC
  * in the date's own zone used to show the next day for UTC+13/+14 zones).
@@ -55,7 +68,8 @@ export function formatNumber(locale: Locale, value: number): string {
 /** Storage sizes ("208.4 MB", "208,4 MB" in de). Units stay as written, as the glossary asks. */
 export function formatBytes(locale: Locale, bytes: number): string {
   if (bytes < 1024) return `${formatNumber(locale, bytes)} B`;
-  const oneDecimal = numberFormatter(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  // Whole sizes drop the ".0": a 250 MB quota reads "250 MB", usage still shows "208.4 MB".
+  const oneDecimal = numberFormatter(locale, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
   if (bytes < 1024 * 1024) return `${oneDecimal.format(bytes / 1024)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${oneDecimal.format(bytes / 1024 / 1024)} MB`;
   return `${oneDecimal.format(bytes / 1024 / 1024 / 1024)} GB`;

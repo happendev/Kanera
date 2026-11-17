@@ -1252,6 +1252,56 @@
   > i { color: var(--success); }
 }
 
+.sign-in-methods {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sign-in-method {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+
+  & + & { border-top: 1px solid var(--divider); }
+
+  > i { font-size: 18px; color: var(--text-3); }
+
+  button { flex: none; }
+}
+
+.sign-in-method-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sign-in-method-name { font-weight: 500; }
+
+.sign-in-method-detail {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-up {
+  display: flex;
+  gap: 8px;
+
+  input { flex: 1; min-width: 0; }
+
+  button { flex: none; }
+}
+
 .storage-test-feedback {
   display: flex;
   align-items: center;
@@ -1528,6 +1578,16 @@
   gap: 8px;
 }
 
+.invite-email-field {
+  flex: 1 1 240px;
+  min-width: 0;
+
+  input {
+    font-size: var(--text-base);
+    font-weight: 400;
+  }
+}
+
 .ws-grant-label {
   font-size: var(--text-sm);
   font-weight: 600;
@@ -1569,6 +1629,32 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* A board's workspace disambiguates same-named boards; it yields width to the board name. */
+  .ws-grant-context {
+    flex: 0 1 auto;
+    min-width: 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+}
+
+.ws-grant-hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Workspace and board rows are tapped on phones and in the PWA: keep each row and its role select
+   at the 44px touch floor so the checkbox label and the select are separate, reachable targets. */
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .ws-grant-row {
+    min-height: 44px;
+
+    select {
+      height: 44px;
+    }
   }
 }
 
@@ -1952,6 +2038,11 @@
   // ── Invite form ── stack the email + role row.
   .invite-form-top {
     flex-direction: column;
+  }
+
+  // Stacked, the row's 240px basis would become a height.
+  .invite-email-field {
+    flex: none;
   }
 
   // ── GitHub App ── keep status and actions aligned without squeezing names.

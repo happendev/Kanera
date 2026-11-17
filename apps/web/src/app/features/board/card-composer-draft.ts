@@ -1,3 +1,4 @@
+import { sessionStorageBlocked } from "../../core/browser/session-storage";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { hasMarkdownContent } from "../../shared/markdown-content";
 import type { DueDateSlot } from "./due-date.util";
@@ -101,7 +102,7 @@ export function writeComposerDraft(key: string, draft: CardComposerDraft | null)
 }
 
 function readAll(): Record<string, CardComposerDraft> {
-  if (typeof localStorage === "undefined") return {};
+  if (typeof localStorage === "undefined" || sessionStorageBlocked()) return {};
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CARD_COMPOSER_DRAFTS);
     if (!raw) return {};
@@ -120,7 +121,7 @@ function readAll(): Record<string, CardComposerDraft> {
 }
 
 function write(all: Record<string, CardComposerDraft>): void {
-  if (typeof localStorage === "undefined") return;
+  if (typeof localStorage === "undefined" || sessionStorageBlocked()) return;
   try {
     if (Object.keys(all).length === 0) localStorage.removeItem(STORAGE_KEYS.CARD_COMPOSER_DRAFTS);
     else localStorage.setItem(STORAGE_KEYS.CARD_COMPOSER_DRAFTS, JSON.stringify(all));

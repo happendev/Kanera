@@ -4,12 +4,16 @@ import type { ServerToClientEvents, WireBoardMemberUser } from "@kanera/shared/e
 import { appLocale } from "../../core/i18n/locale";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { AuthService } from "../../core/auth/auth.service";
 import { ToastService } from "../../shared/toast.service";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { ConfirmService } from "../../shared/confirm.service";
+import { copyToClipboard } from "../../shared/clipboard";
+import { formatDate } from "../../shared/date-format";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
 type BoardRole = "editor" | "observer";
@@ -24,6 +28,10 @@ export type BoardAccessMemberRow = {
   isOrganisationMember?: boolean;
 };
 type RenderedMemberRow = WireBoardMemberUser | BoardAccessMemberRow;
+type CreatedInvite = { url: string; role: BoardRole; expiresAt: string };
+
+// Matches the settings page default, so a link made here lives as long as one made there.
+const INVITE_EXPIRES_IN_DAYS = 7;
 
 const memberRoleRank: Record<string, number> = {
   owner: 0,
@@ -72,6 +80,13 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : $localize`Something went wrong.`;
 }
 
+/** The hosted Free tier refuses invite creation once the team fills every seat (see assertOrgMemberLimit). */
+function memberLimitError(error: unknown): { current: number } | null {
+  if (!(error instanceof ApiError)) return null;
+  const body = error.body as { code?: string; limit?: string; current?: number } | undefined;
+  return body?.code === "PLAN_LIMIT" && body.limit === "members" ? { current: body.current ?? 0 } : null;
+}
+
 @Component({
   selector: "k-board-members-menu",
   standalone: true,
@@ -104,10 +119,46 @@ function errorMessage(error: unknown): string {
             <span i18n="Toggle: restrict a board member to cards assigned to them">Assigned items only</span>
           </button>
         </form>
-      } @else if (canManage() && !loading() && candidates().length === 0 && !error()) {
-        <div class="k-menu-note bmp-all-added">
-          <i aria-hidden="true" class="ti ti-user-check"></i>
-          <span>@if (candidateScope() === "organisation") { <ng-container i18n>All organisation members are already on this board.</ng-container> } @else { <ng-container i18n>All workspace members are already on this board.</ng-container> }</span>
+      }
+      <!-- Inviting by link is how people outside the organisation get here, so it sits right under
+           the add form. With nobody left to add, the "everyone is here" note joins it, making the
+           invite the obvious next step instead of a dead end. -->
+      @if (canManage() && !loading() && (canInvite() || (allAdded() && !error()))) {
+        <div class="bmp-invite">
+          @if (allAdded() && !error()) {
+            <div class="k-menu-note bmp-all-added">
+              <i aria-hidden="true" class="ti ti-user-check"></i>
+              <span>@if (candidateScope() === "organisation") { <ng-container i18n>All organisation members are already on this board.</ng-container> } @else { <ng-container i18n>All workspace members are already on this board.</ng-container> }
+                @if (!canInvite()) { <ng-container i18n="Hint in the board members menu for a board admin who cannot create organisation invites">An organisation admin can invite new people.</ng-container> }</span>
+            </div>
+          }
+          @if (canInvite()) {
+            @if (createdInvite(); as invite) {
+              <div class="bmp-invite-link">
+                <input class="bmp-invite-url" type="text" readonly [value]="invite.url" aria-label="Invite link" i18n-aria-label="Accessible name of the read-only field holding a new invite link" (focus)="$any($event.target).select()" />
+                <button class="bmp-invite-copy" type="button" (click)="copyInviteLink()" aria-label="Copy invite link" i18n-aria-label>
+                  @if (inviteCopied()) { <i aria-hidden="true" class="ti ti-check"></i> <span i18n="Button state after copying">Copied</span> }
+                  @else { <i aria-hidden="true" class="ti ti-copy"></i> <span i18n="Button: copy to clipboard">Copy</span> }
+                </button>
+              </div>
+              <p class="bmp-invite-hint"><i aria-hidden="true" class="ti ti-shield-check"></i> <span>{{ inviteHint(invite) }}</span></p>
+            } @else {
+              <div class="bmp-invite-row">
+                <span class="bmp-select-wrap">
+                  <select class="bmp-invite-role" aria-label="Role for people who join with the link" i18n-aria-label="Select: board role an invite link grants" [value]="inviteRole()" (input)="inviteRole.set($any($event.target).value)" [disabled]="busy()">
+                    <option value="editor" [selected]="inviteRole() === 'editor'" i18n="Board role: can edit">Editor</option>
+                    <option value="observer" [selected]="inviteRole() === 'observer'" i18n="Board role: can view but not edit">Observer</option>
+                  </select>
+                  <i aria-hidden="true" class="ti ti-chevron-down"></i>
+                </span>
+                <button class="bmp-invite-create" type="button" (click)="createInvite()" [disabled]="busy()">
+                  <i aria-hidden="true" [class]="inviting() ? 'ti ti-loader-2 kanera-spin' : 'ti ti-link'"></i>
+                  <span i18n="Button: create an invite link that grants this board">Invite by link</span>
+                </button>
+              </div>
+            }
+            @if (inviteError(); as message) { <p class="bmp-error"><i aria-hidden="true" class="ti ti-alert-circle"></i> {{ message }}</p> }
+          }
         </div>
       }
       @if (error()) { <p class="bmp-error"><i aria-hidden="true" class="ti ti-alert-circle"></i> {{ error() }}</p> }
@@ -224,6 +275,20 @@ function errorMessage(error: unknown): string {
        input). Inset to the rows' avatar edge rather than the note's usual icon-column indent. */
     .bmp-all-added{display:flex;align-items:flex-start;gap:6px;padding:0 6px;text-wrap:pretty}
     .bmp-all-added i{flex:none;font-size:var(--text-sm);line-height:inherit}
+    .bmp-invite{display:flex;flex-direction:column;gap:8px}
+    .bmp-invite-row,.bmp-invite-link{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+    .bmp-invite-row select.bmp-invite-role{appearance:none;width:100%;min-width:0;height:var(--h-md);padding:0 26px 0 9px;border:1px solid var(--overlay-border);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:var(--text-sm);outline:0;cursor:pointer}
+    .bmp-invite-row select.bmp-invite-role:focus-visible{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}
+    /* Secondary to Add: an outlined button, so the accent flood of the global button reset never applies. */
+    .bmp-invite-create,.bmp-invite-copy{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--h-md);padding:0 10px;border:1px solid var(--overlay-border);border-radius:var(--radius-sm);background:transparent;color:var(--text);font:inherit;font-size:var(--text-sm);font-weight:500;white-space:nowrap;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}
+    .bmp-invite-create:hover:not(:disabled),.bmp-invite-copy:hover:not(:disabled){background:var(--surface-hover);color:var(--text)}
+    .bmp-invite-create i,.bmp-invite-copy i{font-size:var(--text-md)}
+    .bmp-invite-copy .ti-check{color:var(--success)}
+    /* The token is long and opaque: the field truncates and copying is the real affordance; focus
+       selects the whole link for a manual copy where the clipboard API is unavailable. */
+    .bmp-invite-link input.bmp-invite-url{width:100%;min-width:0;height:var(--h-md);padding:0 9px;border:1px solid var(--overlay-border);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text-3);font-size:var(--text-sm);text-overflow:ellipsis}
+    .bmp-invite-hint{display:flex;align-items:flex-start;gap:6px;margin:0;padding:0 6px;color:var(--text-muted);font-size:var(--text-xs);text-wrap:pretty}
+    .bmp-invite-hint i{flex:none;font-size:var(--text-sm)}
     .bmp-section{display:flex;flex-direction:column;gap:4px}
     .bmp-guests{padding-top:8px;border-top:1px solid var(--overlay-separator)}
     /* The .k-menu-heading recipe, inset to the rows' avatar edge. */
@@ -273,6 +338,7 @@ function errorMessage(error: unknown): string {
       .bmp-add .bmp-add-access{height:44px}
       .bmp-access-toggle,.bmp-remove{width:44px;height:44px}
       .bmp-leave{min-height:44px}
+      .bmp-invite-row select.bmp-invite-role,.bmp-invite-link input.bmp-invite-url,.bmp-invite-create,.bmp-invite-copy{height:44px}
     }
   `,
   ],
@@ -285,6 +351,8 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly confirm = inject(ConfirmService);
   private readonly toasts = inject(ToastService);
+  private readonly auth = inject(AuthService);
+  private readonly upgradePrompt = inject(UpgradePromptService);
   /** The deferred removal usually completes after the popover has closed; see removeMember. */
   private destroyed = false;
   private readonly sockets = inject(SocketService);
@@ -306,7 +374,21 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
     if (!this.ownerClientId()) return [];
     return sortMembers(this.renderedMembers().filter((m) => !m.isOrganisationMember));
   });
+  /**
+   * Organisation invites are owner/admin only (the API enforces it) and are created in the viewer's
+   * active organisation, so the action only appears on that organisation's boards: a workspace admin
+   * who is a plain organisation member, or an admin looking at another organisation's board, would
+   * only get a rejection.
+   */
+  readonly canInvite = computed(() => {
+    const user = this.auth.user();
+    if (!user || !this.canManage() || !this.auth.isOrgAdmin()) return false;
+    const owner = this.ownerClientId();
+    return !owner || owner === (user.activeClientId ?? user.clientId);
+  });
+  readonly inviteRole = signal<BoardRole>("editor"); readonly inviting = signal(false); readonly inviteError = signal<string | null>(null); readonly createdInvite = signal<CreatedInvite | null>(null); readonly inviteCopied = signal(false);
   readonly candidates = computed(() => { const present = new Set(this.accessMembers().map((m) => m.userId)); return this.roster().filter((m) => !present.has(m.userId)); });
+  readonly allAdded = computed(() => this.candidates().length === 0);
   private socket: AppSocket | null = null; private leaveBoard?: () => void;
 
   constructor() {
@@ -349,6 +431,45 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   async addMember() { const userId = this.addUserId(); if (!userId || this.busy()) return; this.busy.set(true); this.error.set(null); try { await this.api.post(`/boards/${this.boardId()}/members`, { userId, role: this.addRole(), assignedItemsOnly: this.addAssignedItemsOnly() }); this.addUserId.set(""); this.addAssignedItemsOnly.set(false); await this.reload(false); const added = this.accessMembers().find((row) => row.userId === userId); if (added) this.memberAdded.emit({ userId: added.userId, displayName: added.displayName, avatarUrl: added.avatarUrl, lastOnlineAt: added.lastOnlineAt, role: added.role, source: "board", pinned: added.pinned, assignedItemsOnly: added.assignedItemsOnly, clientId: added.clientId, isOrganisationMember: added.isOrganisationMember }) } catch (e) { this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async changeRole(userId: string, role: BoardRole) { if (this.busy()) return; const previous = this.accessMembers(); this.accessMembers.update(rows => rows.map(row => row.userId === userId ? { ...row, role } : row)); this.busy.set(true); this.error.set(null); try { await this.api.patch(`/boards/${this.boardId()}/members/${userId}`, { role }) } catch (e) { this.accessMembers.set(previous); this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async changeRestriction(member: BoardAccessMemberRow, assignedItemsOnly: boolean) { if (this.busy()) return; const previous = this.accessMembers(); this.accessMembers.update(rows => rows.map(row => row.userId === member.userId ? { ...row, assignedItemsOnly } : row)); this.busy.set(true); this.error.set(null); try { await this.api.patch(`/boards/${this.boardId()}/members/${member.userId}`, { role: member.role, assignedItemsOnly }) } catch (e) { this.accessMembers.set(previous); this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
+  /**
+   * Creates an organisation member invite whose only grant is this board, the same request the
+   * settings invite form sends with one board ticked. Workspace membership comes with the board grant
+   * on acceptance, so the newcomer finds the board on Home and in the sidebar.
+   */
+  async createInvite() {
+    if (!this.canInvite() || this.busy()) return;
+    this.busy.set(true); this.inviting.set(true); this.inviteError.set(null);
+    let limit: { current: number } | null = null;
+    try {
+      const role = this.inviteRole();
+      const res = await this.api.post<{ token: string; expiresAt: string | Date }>("/clients/me/invites", {
+        orgRole: "member", workspaces: [], boards: [{ boardId: this.boardId(), role }], expiresInDays: INVITE_EXPIRES_IN_DAYS,
+      });
+      this.createdInvite.set({ url: `${location.origin}/signup?invite=${res.token}`, role, expiresAt: new Date(res.expiresAt).toISOString() });
+      this.inviteCopied.set(false);
+      await this.copyInviteLink();
+    } catch (e) {
+      limit = memberLimitError(e);
+      if (!limit) this.inviteError.set(errorMessage(e));
+    } finally {
+      this.busy.set(false); this.inviting.set(false);
+    }
+    // The hosted Free seat cap: the same upgrade prompt as the settings invite form, quoting the team
+    // this invite would make. Opened after busy clears so the popover can step aside for the dialog.
+    if (limit) await this.upgradePrompt.open({ reason: "member", source: "board_members", projectedSeats: limit.current + 1 });
+  }
+  async copyInviteLink() {
+    const invite = this.createdInvite();
+    if (!invite) return;
+    // A denied clipboard leaves the selectable field as the fallback, so "Copied" is only claimed on success.
+    try { await copyToClipboard(invite.url); this.inviteCopied.set(true); } catch { this.inviteCopied.set(false); }
+  }
+  inviteHint(invite: CreatedInvite): string {
+    const date = formatDate(invite.expiresAt, "short", { timeZone: this.auth.user()?.timezone });
+    return invite.role === "editor"
+      ? $localize`:Invite link hint in the board members menu; the placeholder is a date such as "23 Nov":Anyone with this link can join this board as an editor. It expires on ${date}:date:.`
+      : $localize`:Invite link hint in the board members menu; the placeholder is a date such as "23 Nov":Anyone with this link can join this board as an observer. It expires on ${date}:date:.`;
+  }
   canLeave(member: RenderedMemberRow): boolean {
     return member.userId === this.currentUserId() && !this.canManage() && !member.pinned
       && (member.role === "editor" || member.role === "observer");

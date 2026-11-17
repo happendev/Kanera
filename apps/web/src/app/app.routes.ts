@@ -99,6 +99,13 @@ export const routes: Routes = [
     loadComponent: () => import("./features/import/trello-auth-callback.page").then((m) => m.TrelloAuthCallbackPage),
   },
   {
+    // Landing page for the hosted Google / Microsoft / GitHub sign-in round-trip. No guard: it also
+    // finishes "connect an account" for a signed-in user, and it decides where to go itself.
+    path: "auth/callback",
+    title: $localize`:Browser tab title - finishing a third-party sign-in:Signing in`,
+    loadComponent: () => import("./features/auth/provider-callback.page").then((m) => m.ProviderCallbackPage),
+  },
+  {
     path: "oauth/authorize",
     title: $localize`:Browser tab title:Connect AI agent`,
     canActivate: [authGuard],

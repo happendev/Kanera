@@ -1,10 +1,12 @@
 import type { Locale } from "@kanera/shared/locales";
 import { serverMessages } from "../i18n/messages/index.js";
 import type { ServerMessages } from "../i18n/messages/types.js";
-import { cardSummary, emailLayout, heading, paragraph } from "./layout.js";
+import { cardBlock, emailLayout, heading, paragraph } from "./layout.js";
 
 export interface CardDueDateChangedEmailParams {
   locale: Locale;
+  /** Added when rendered: the notification settings page the footer links to. */
+  notificationSettingsUrl?: string;
   displayName: string;
   actorName: string;
   cardTitle: string;
@@ -31,20 +33,21 @@ export function cardDueDateChangedEmail(params: CardDueDateChangedEmailParams): 
   const lines = [dueChanged ? dueChangeLabel(m, params.previousDueLabel, params.nextDueLabel) : null, startLabel].filter((line): line is string => Boolean(line));
   return emailLayout({
     locale: params.locale,
+    manageUrl: params.notificationSettingsUrl,
     subject: cardDueDateChangedSubject(params),
     preheader: dueChanged ? m.preheader({ actor: params.actorName, card: params.cardTitle }) : m.startPreheader({ actor: params.actorName, card: params.cardTitle }),
     body: `
       ${heading(dueChanged ? m.heading : m.startHeading)}
-      ${paragraph(dueChanged ? m.intro({ firstName, actor: params.actorName }) : m.startIntro({ firstName, actor: params.actorName }), "0 0 16px 0")}
-      ${lines.map((line) => paragraph(line)).join("")}
-      ${cardSummary({ title: params.cardTitle, subtitle: params.boardName, href: params.cardUrl })}
+      ${paragraph(dueChanged ? m.intro({ firstName, actor: params.actorName }) : m.startIntro({ firstName, actor: params.actorName }), "0 0 12px 0")}
+      ${lines.map((line, index) => paragraph(line, index === lines.length - 1 ? "0 0 20px 0" : "0 0 4px 0")).join("")}
+      ${cardBlock({ title: params.cardTitle, subtitle: params.boardName, href: params.cardUrl, locale: params.locale })}
     `,
   });
 }
 
-export function cardDueDateChangedSubject(params: Pick<CardDueDateChangedEmailParams, "locale" | "dueChanged">): string {
+export function cardDueDateChangedSubject(params: Pick<CardDueDateChangedEmailParams, "locale" | "dueChanged" | "cardTitle">): string {
   const m = serverMessages(params.locale).email.cardDueDateChanged;
-  return params.dueChanged === false ? m.startSubject : m.subject;
+  return params.dueChanged === false ? m.startSubject({ card: params.cardTitle }) : m.subject({ card: params.cardTitle });
 }
 
 /** Null when the start did not move (both labels equal, including both empty). */

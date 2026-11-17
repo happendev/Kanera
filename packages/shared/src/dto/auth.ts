@@ -4,6 +4,7 @@ import { ACCENTS, THEMES } from "../appearance.js";
 import { LOCALES } from "../locales.js";
 import { CLIENT_ROLES } from "../schema/client-roles.js";
 import { CLIENT_BILLING_STATUSES, CLIENT_PLANS } from "../schema/client.js";
+import { SIGN_IN_PROVIDERS } from "../schema/user-identity.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 import { deploymentModeSchema, kaneraEnvironmentSchema } from "./deployment.js";
 
@@ -25,6 +26,23 @@ export type StorageUsageResponse = z.infer<typeof storageUsageResponse>;
 // 6-digit email verification code shared by signup and email-change confirmation.
 const verificationCode = z.string().regex(/^\d{6}$/);
 
+const analyticsAttribution = z.object({
+  source: z.string().trim().min(1).max(120),
+  medium: z.string().trim().min(1).max(120),
+  campaign: z.string().trim().min(1).max(120),
+  content: z.string().trim().min(1).max(120).optional(),
+  term: z.string().trim().min(1).max(120).optional(),
+  landing_page: z.string().max(256).regex(/^\/[^?#]*$/).optional(),
+  referring_domain: z.string().max(253).regex(/^[a-zA-Z0-9.-]+$/).optional(),
+  captured_at: isoTimestamp.optional(),
+  consented_at: isoTimestamp.optional(),
+  consent_version: z.literal(1).optional(),
+  fbclid: z.string().trim().min(1).max(1024).optional(),
+  gclid: z.string().trim().min(1).max(1024).optional(),
+  li_fat_id: z.string().trim().min(1).max(1024).optional(),
+  msclkid: z.string().trim().min(1).max(1024).optional(),
+});
+
 export const signupBody = z.object({
   orgName: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH).default("Private"),
   email: z.email().max(254),
@@ -36,22 +54,7 @@ export const signupBody = z.object({
   locale: z.enum(LOCALES).optional(),
   // Consent-stamped first-touch attribution is stored privately, outside public account DTOs.
   // Legacy callers may still send the original three fields without requesting persistence.
-  analyticsAttribution: z.object({
-    source: z.string().trim().min(1).max(120),
-    medium: z.string().trim().min(1).max(120),
-    campaign: z.string().trim().min(1).max(120),
-    content: z.string().trim().min(1).max(120).optional(),
-    term: z.string().trim().min(1).max(120).optional(),
-    landing_page: z.string().max(256).regex(/^\/[^?#]*$/).optional(),
-    referring_domain: z.string().max(253).regex(/^[a-zA-Z0-9.-]+$/).optional(),
-    captured_at: isoTimestamp.optional(),
-    consented_at: isoTimestamp.optional(),
-    consent_version: z.literal(1).optional(),
-    fbclid: z.string().trim().min(1).max(1024).optional(),
-    gclid: z.string().trim().min(1).max(1024).optional(),
-    li_fat_id: z.string().trim().min(1).max(1024).optional(),
-    msclkid: z.string().trim().min(1).max(1024).optional(),
-  }).optional(),
+  analyticsAttribution: analyticsAttribution.optional(),
   // Optional at the contract level so tests and self-hosted installs
   // configured keep working; the API requires it when Turnstile is enabled.
   turnstileToken: z.string().min(1).max(4096).optional(),
@@ -89,6 +92,8 @@ export const authConfigResponse = z.object({
   turnstileSiteKey: z.string().nullable(),
   kaneraEnvironment: kaneraEnvironmentSchema,
   deploymentMode: deploymentModeSchema,
+  // Hosted-only third-party sign-in providers this deployment offers; always empty when self-hosted.
+  signInProviders: z.array(z.enum(SIGN_IN_PROVIDERS)),
   analytics: z.object({
     enabled: z.literal(true),
     provider: z.literal("posthog"),
@@ -113,9 +118,16 @@ export type SwitchOrgBody = z.infer<typeof switchOrgBody>;
 export const mfaCode = z.string().trim().min(6).max(32);
 export const mfaChallengeBody = z.object({ challengeToken: z.string().min(1), code: mfaCode });
 // `code` is required only when the caller already has an enabled factor (replacing it).
-export const mfaEnrollmentStartBody = z.object({ currentPassword: z.string().min(1), code: mfaCode.optional() });
+// Password-gated settings re-confirm the account owner with the current password. Accounts that sign
+// in only through a provider have none, so they send `emailCode` from POST /auth/me/step-up-code.
+// The API requires whichever one the account can produce.
+const stepUp = {
+  currentPassword: z.string().min(1).optional(),
+  emailCode: verificationCode.optional(),
+};
+export const mfaEnrollmentStartBody = z.object({ ...stepUp, code: mfaCode.optional() });
 export const mfaEnrollmentConfirmBody = z.object({ code: mfaCode });
-export const mfaProtectedActionBody = z.object({ currentPassword: z.string().min(1), code: mfaCode });
+export const mfaProtectedActionBody = z.object({ ...stepUp, code: mfaCode });
 export type MfaChallengeBody = z.infer<typeof mfaChallengeBody>;
 export type MfaProtectedActionBody = z.infer<typeof mfaProtectedActionBody>;
 
@@ -193,8 +205,65 @@ export const updateMeBody = z.object({
 });
 export type UpdateMeBody = z.infer<typeof updateMeBody>;
 
+// Without a stored password this sets the first one, confirmed by `emailCode` instead.
 export const changePasswordBody = z.object({
-  currentPassword: z.string().min(1),
+  ...stepUp,
   newPassword: z.string().min(8).max(200),
 });
 export type ChangePasswordBody = z.infer<typeof changePasswordBody>;
+
+export const signInProviderSchema = z.enum(SIGN_IN_PROVIDERS);
+export const signInProviderParams = z.object({ provider: signInProviderSchema });
+
+// Same-origin path only: a provider round-trip must never become an open redirect.
+const returnPath = z.string().max(2048).regex(/^\/(?![/\\])/);
+
+export const providerSignInBeginBody = z.object({
+  returnUrl: returnPath.optional(),
+  inviteToken: z.string().min(1).max(512).optional(),
+  boardInviteToken: z.string().min(1).max(512).optional(),
+  locale: z.enum(LOCALES).optional(),
+  analyticsAttribution: analyticsAttribution.optional(),
+});
+export type ProviderSignInBeginBody = z.infer<typeof providerSignInBeginBody>;
+
+export const providerBeginResponse = z.object({ authorizeUrl: z.url() });
+export type ProviderBeginResponse = z.infer<typeof providerBeginResponse>;
+
+export const providerCompleteBody = z.object({
+  handoff: z.string().min(1).max(512),
+  // The emailed code, when the provider did not vouch for the address.
+  code: verificationCode.optional(),
+  // Account details, when the provider identity matches no account and signup is allowed.
+  signup: z.object({
+    orgName: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
+    displayName: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
+  }).optional(),
+});
+export type ProviderCompleteBody = z.infer<typeof providerCompleteBody>;
+
+// Why a provider round-trip ended without a session; the web app shows matching copy.
+export const PROVIDER_SIGN_IN_ERRORS = [
+  "cancelled",
+  "expired",
+  "failed",
+  "email_missing",
+  "account_unavailable",
+  "signups_closed",
+  "invalid_invite",
+  "board_invite_email_mismatch",
+  "identity_in_use",
+  "provider_already_linked",
+] as const;
+export type ProviderSignInError = (typeof PROVIDER_SIGN_IN_ERRORS)[number];
+
+export const signInMethodsResponse = z.object({
+  hasPassword: z.boolean(),
+  identities: z.array(z.object({
+    provider: signInProviderSchema,
+    email: z.string(),
+    createdAt: z.string(),
+    lastUsedAt: z.string().nullable(),
+  })),
+});
+export type SignInMethodsResponse = z.infer<typeof signInMethodsResponse>;

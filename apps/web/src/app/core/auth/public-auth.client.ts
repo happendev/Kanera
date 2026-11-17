@@ -1,4 +1,5 @@
-import { Injectable } from "@angular/core";
+import { Injectable, inject } from "@angular/core";
+import { SessionCleanupService } from "./session-cleanup.service";
 import { environment } from "../../../environments/environment";
 import { appLocale } from "../i18n/locale";
 
@@ -8,7 +9,10 @@ import { appLocale } from "../i18n/locale";
  */
 @Injectable({ providedIn: "root" })
 export class PublicAuthClient {
-  request(path: string, init: RequestInit = {}): Promise<Response> {
+  private readonly cleanup = inject(SessionCleanupService);
+
+  async request(path: string, init: RequestInit = {}): Promise<Response> {
+    await this.cleanup.ready();
     // Signed-out flows (signup codes, password resets) are written in the language on screen.
     const headers = new Headers(init.headers);
     headers.set("Accept-Language", appLocale());

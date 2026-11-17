@@ -23,7 +23,7 @@
     <k-page-header
       [title]="pageTitle()"
       [subtitle]="headerSubtitle"
-      [loading]="state.loading() && state.response().cards.length === 0"
+      [loading]="state.blockingLoad() && state.response().cards.length === 0"
     >
       <div phActions class="k-toolbar-group header-actions">
         @if (creationTargetUserId()) {
@@ -503,7 +503,9 @@
   <!-- Reconnect and foreground refreshes keep the loaded view in place. A transient banner
        shifts the entire work area on every return to the tab, even when nothing changed. -->
 
-  @if (state.loading() && state.response().cards.length === 0) {
+  <!-- The overview loads inside the page frame instead (see its branch below), so the Up next dock,
+       which needs no cards, is already in place beside the skeleton. -->
+  @if (state.blockingLoad() && state.response().cards.length === 0 && effectiveDisplay() !== "overview") {
     <div class="k-loading" role="status" aria-live="polite">
       <i aria-hidden="true" class="ti ti-loader-2"></i>
       <span i18n>Loading your cards…</span>
@@ -544,15 +546,19 @@
         (cardSummaryOpened)="openHistoryCard($event)"
       />
       }
+    } @else if (effectiveDisplay() === "overview" && state.blockingLoad() && state.response().cards.length === 0) {
+      <!-- The overview's shape is known before its cards are: a skeleton of its panels, so the first
+           render lands in place rather than replacing a centred spinner. -->
+      <k-overview-skeleton [solo]="lens() !== 'team'" />
     } @else if (effectiveDisplay() === "overview") {
       <!-- Whole-team summary, one panel per teammate. The card-derived sections follow scope,
            search and filters; the queue heads keep their true ranks (see TeamOverviewComponent).
            Per-person counts come from the loaded cards, so say when that is not every match:
            while paging in, and when the load cap stops it. -->
       @if (state.loadingMore()) {
-        <div class="board-priority-note">
+        <div class="board-priority-note" role="status">
           <span class="spinner"></span>
-          <span i18n><strong>Loading all matching cards…</strong> Counts settle when the full set is ready.</span>
+          <span i18n><strong>Still loading cards…</strong> Some numbers may go up as more cards arrive.</span>
         </div>
       } @else if (state.canLoadMore()) {
         <div class="board-priority-note overview-partial" role="status">
@@ -585,6 +591,8 @@
           (focusChanged)="setOverviewFocus($event)"
           (upNextToggled)="toggleOverviewDock($event)"
         />
+        } @placeholder {
+          <k-overview-skeleton />
         }
       } @else {
         <!-- The viewer's own panel, always focused; its Up next Edit opens the lens's own dock. -->
@@ -611,15 +619,17 @@
           (personFocused)="selectDisplay('board')"
           (upNextToggled)="toggleUpNextPanel()"
         />
+        } @placeholder {
+          <k-overview-skeleton [solo]="true" />
         }
       }
     } @else if (effectiveDisplay() === "dependencies") {
       <!-- Seeded with every loaded open card, so it waits for paging like the board display does;
            say so when the load cap stopped short of every match. -->
       @if (state.loadingMore()) {
-        <div class="board-priority-note">
+        <div class="board-priority-note" role="status">
           <span class="spinner"></span>
-          <span i18n><strong>Loading all matching cards…</strong> Chains settle when the full set is ready.</span>
+          <span i18n><strong>Still loading cards…</strong> More chains may appear as more cards arrive.</span>
         </div>
       } @else if (state.canLoadMore()) {
         <div class="board-priority-note overview-partial" role="status">
@@ -666,7 +676,7 @@
         <!-- Only the loading notice remains: it explains why dragging is inert until every
              matching card has arrived. The standing "how to prioritise" advice was removed. -->
         @if (state.loadingMore() || state.canLoadMore()) {
-          <div class="board-priority-note">
+          <div class="board-priority-note" role="status">
             <span class="spinner"></span>
             <span i18n><strong>Loading all matching cards…</strong> You can start dragging when the full list is ready.</span>
           </div>
@@ -785,9 +795,9 @@
              Group spans and the critical path are only true over every bar, so it waits for paging
              like the board display does and says so when the load cap stopped short. -->
         @if (state.loadingMore()) {
-          <div class="board-priority-note">
+          <div class="board-priority-note" role="status">
             <span class="spinner"></span>
-            <span i18n><strong>Loading all matching cards…</strong> The plan settles when the full set is ready.</span>
+            <span i18n><strong>Still loading cards…</strong> The plan may change as more cards arrive.</span>
           </div>
         } @else if (state.canLoadMore()) {
           <div class="board-priority-note overview-partial" role="status">
@@ -809,7 +819,7 @@
           [canEdit]="state.interactionReady()"
           [editableCardIds]="roleEditableCardIds()"
           [dependenciesEnabled]="dependenciesEnabled()"
-          [loading]="state.loading()"
+          [loading]="state.blockingLoad()"
           [preferenceScope]="'globalWork:' + lens()"
           [groupBy]="timelineGroupByState.groupBy()"
           [hideCompleted]="hideCompleted()"
@@ -853,7 +863,7 @@
           [hostCollapsedGroupKeys]="state.collapsedTableGroupKeys()"
           [selectedCardId]="selectedCard()?.id ?? null"
           [currentUserId]="state.auth.user()?.id ?? null"
-          [loading]="state.loading()"
+          [loading]="state.blockingLoad()"
           [canEdit]="state.interactionReady()"
           [editableCardIds]="roleEditableCardIds()"
           [showSearch]="false"

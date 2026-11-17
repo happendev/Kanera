@@ -69,6 +69,9 @@ test("members get only the personal steps; admins get the team steps and the wor
     assert.equal(member.teamTarget, null);
 
     const admin = await load(f, f.adminToken);
+    // Admins are offered inviteTeam second, right after createCard; members never receive it.
+    assert.deepEqual(Object.keys(stepState(admin)).slice(0, 3), ["createCard", "inviteTeam", "assignCard"]);
+    assert.equal("inviteTeam" in stepState(member), false);
     // The second organisation member already counts as an invited team.
     assert.deepEqual(stepState(admin), {
       createCard: false,

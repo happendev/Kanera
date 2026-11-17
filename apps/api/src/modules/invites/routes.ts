@@ -1,8 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { dto } from "@kanera/shared";
-import { boardInvitations, boardMembers, boards, clientGuestSeats, clientMembers, clients, inviteTokens, inviteWorkspaceGrants, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardInvitations, boardMembers, boards, clientGuestSeats, clientMembers, clients, inviteBoardGrants, inviteTokens, inviteWorkspaceGrants, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { db } from "../../db.js";
+import { env } from "../../env.js";
+import { formatDate } from "../../lib/i18n/format.js";
+import { serverMessages } from "../../lib/i18n/messages/index.js";
+import { requestLocale } from "../../lib/i18n/request-locale.js";
 import { assertOrgRole } from "../../lib/access.js";
 import { badRequest, conflict, forbidden, notFound, unauthorized } from "../../lib/errors.js";
 import { enforceUnauthenticatedLookupRateLimit } from "../../lib/lookup-rate-limit.js";
@@ -13,6 +17,7 @@ import { captureWorkspaceInvitationCreated, captureWorkspaceMemberJoined } from 
 import { pinAdminToWorkspaceBoards, pinOrgAdminToClientBoards } from "../../lib/board-membership.js";
 import { recordActivity } from "../../lib/activity.js";
 import { notifyAdminsOrgInviteAccepted } from "../../lib/invite-accepted-notifications.js";
+import { applyInviteBoardGrantsInTx, assertInviteBoardGrantsGrantable, emitInviteBoardGrants } from "../../lib/invite-board-grants.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { issueUserSession } from "../../auth/session.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
@@ -148,11 +153,19 @@ export async function inviteRoutes(app: FastifyInstance) {
             if (grant.role === "admin") await pinAdminToWorkspaceBoards(tx, grant.workspaceId, req.auth.sub);
           }
         }
+        // After workspace grants so a workspace-admin pin from this invite is kept over a board grant.
+        // Admin invites carry no board grants (create rejects them): org authority pins every board below.
+        const boardGrants = await applyInviteBoardGrantsInTx(tx, {
+          inviteId: invite.id,
+          clientId: invite.clientId,
+          userId: req.auth.sub,
+        });
         const [identity] = await tx.select({
           email: users.email,
           displayName: users.displayName,
           avatarUrl: users.avatarUrl,
           homeClientId: users.clientId,
+          lastOnlineAt: users.lastOnlineAt,
         }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
         if (!identity) throw unauthorized();
         await tx.update(boardInvitations).set({ revokedAt: new Date() }).where(and(
@@ -181,7 +194,7 @@ export async function inviteRoutes(app: FastifyInstance) {
           action: "added",
           payload: { userId: req.auth.sub, role: invite.orgRole, inviteId: invite.id, organisationMembership: true },
         });
-        return { ...invite, ...identity, grants, convertedBoardMemberships };
+        return { ...invite, ...identity, grants, boardGrants, convertedBoardMemberships };
       });
 
       const user = withSignedMedia(accepted.homeClientId, {
@@ -215,6 +228,15 @@ export async function inviteRoutes(app: FastifyInstance) {
         await emitToBoard(member.boardId, "board:member:updated", payload);
         emitToUser(req.auth.sub, "board:member:updated", payload);
       }
+      await emitInviteBoardGrants(accepted.boardGrants, {
+        id: req.auth.sub,
+        clientId: accepted.homeClientId,
+        email: accepted.email,
+        displayName: accepted.displayName,
+        avatarUrl: accepted.avatarUrl,
+        lastOnlineAt: accepted.lastOnlineAt,
+        orgRole: accepted.orgRole,
+      });
       await captureWorkspaceMemberJoined({
         organizationId: accepted.clientId,
         workspaceIds: accepted.grants.map((grant) => grant.workspaceId),
@@ -230,7 +252,7 @@ export async function inviteRoutes(app: FastifyInstance) {
         orgName: accepted.orgName,
         orgRole: accepted.orgRole,
       });
-      const session = await issueUserSession(app, req.auth.sub, reply, accepted.clientId);
+      const session = await issueUserSession(app, req.auth.sub, reply, accepted.clientId, undefined, req.auth.amr);
       disconnectUserRealtimeSockets(req.auth.sub);
       return session;
     });
@@ -252,6 +274,7 @@ export async function inviteRoutes(app: FastifyInstance) {
           .where(and(eq(workspaces.clientId, req.auth.cid), inArray(workspaces.id, ids), ne(workspaces.kind, "board")));
         if (owned.length !== ids.length) throw badRequest("workspace not in your organisation");
       }
+      await assertInviteBoardGrantsGrantable(req.auth.cid, body.orgRole, body.boards);
 
       const token = newOpaqueToken();
       const expiresAt = body.expiresInDays ? new Date(Date.now() + body.expiresInDays * 86_400_000) : null;
@@ -263,7 +286,7 @@ export async function inviteRoutes(app: FastifyInstance) {
             clientId: req.auth.cid,
             tokenHash: token.hash,
             orgRole: body.orgRole,
-            email: null,
+            email: body.email?.toLowerCase() ?? null,
             expiresAt,
             createdById: req.auth.sub,
           })
@@ -277,8 +300,32 @@ export async function inviteRoutes(app: FastifyInstance) {
             })),
           );
         }
+        if (body.boards.length > 0) {
+          await tx.insert(inviteBoardGrants).values(
+            body.boards.map((grant) => ({ inviteId: row!.id, boardId: grant.boardId, role: grant.role })),
+          );
+        }
         return row!;
       });
+
+      if (body.email) {
+        const [context] = await db
+          .select({ orgName: clients.name, inviterName: users.displayName })
+          .from(clients)
+          .innerJoin(users, eq(users.id, req.auth.sub))
+          .where(eq(clients.id, req.auth.cid))
+          .limit(1);
+        // The invitee may have no account, so the email uses the inviter's on-screen language.
+        const locale = requestLocale(req);
+        await app.mailer.sendOrgInvite(body.email, {
+          locale,
+          orgName: context?.orgName ?? "",
+          invitedByName: context?.inviterName ?? serverMessages(locale).common.fallbackInviterName,
+          orgRole: body.orgRole,
+          acceptUrl: `${env.WEB_ORIGIN}/signup?invite=${encodeURIComponent(token.raw)}`,
+          expiresAtLabel: expiresAt ? formatDate(locale, expiresAt, { dateStyle: "long", timeZone: "UTC" }) : null,
+        });
+      }
 
       emitToClient(req.auth.cid, "client:invite:created", {
         id: invite.id,
@@ -289,6 +336,7 @@ export async function inviteRoutes(app: FastifyInstance) {
         createdAt: invite.createdAt,
         createdById: invite.createdById,
         workspaces: body.workspaces,
+        boards: body.boards,
       });
 
       const targetedWorkspaceIds = body.workspaces.map((workspace) => workspace.workspaceId);
@@ -304,7 +352,7 @@ export async function inviteRoutes(app: FastifyInstance) {
 
       return reply
         .status(201)
-        .send({ id: invite.id, token: token.raw, expiresAt, orgRole: invite.orgRole, workspaces: body.workspaces });
+        .send({ id: invite.id, token: token.raw, expiresAt, orgRole: invite.orgRole, workspaces: body.workspaces, boards: body.boards });
     });
 
     authed.get("/clients/me/invites", async (req) => {
@@ -343,7 +391,25 @@ export async function inviteRoutes(app: FastifyInstance) {
         grantsByInvite.set(g.inviteId, list);
       }
 
-      return rows.map((r) => ({ ...r, workspaces: grantsByInvite.get(r.id) ?? [] }));
+      const boardGrants = await db
+        .select({
+          inviteId: inviteBoardGrants.inviteId,
+          boardId: inviteBoardGrants.boardId,
+          boardName: boards.name,
+          role: inviteBoardGrants.role,
+        })
+        .from(inviteBoardGrants)
+        .innerJoin(boards, eq(boards.id, inviteBoardGrants.boardId))
+        .where(inArray(inviteBoardGrants.inviteId, ids))
+        .orderBy(asc(boards.name));
+      const boardsByInvite = new Map<string, Array<{ boardId: string; boardName: string; role: string }>>();
+      for (const g of boardGrants) {
+        const list = boardsByInvite.get(g.inviteId) ?? [];
+        list.push({ boardId: g.boardId, boardName: g.boardName, role: g.role });
+        boardsByInvite.set(g.inviteId, list);
+      }
+
+      return rows.map((r) => ({ ...r, workspaces: grantsByInvite.get(r.id) ?? [], boards: boardsByInvite.get(r.id) ?? [] }));
     });
 
     authed.delete("/invites/:id", async (req, reply) => {

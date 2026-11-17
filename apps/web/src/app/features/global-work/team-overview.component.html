@@ -111,7 +111,9 @@
             </button>
           }
           <span class="person-active" [class.is-idle]="!item.lastActiveAt">
-            @if (showLastActive(item)) {
+            @if (activityPending()) {
+              <span class="k-skeleton person-active-skeleton" aria-hidden="true"></span>
+            } @else if (showLastActive(item)) {
               {{ lastActiveLabel(item) }}
             }
           </span>
@@ -167,7 +169,11 @@
                  which while aging is the "N in progress longer than the workspace alert" count. That
                  tooltip is the button's, so it already shows when the pointer is on the hourglass; a
                  kTooltip of its own here would stack a second bubble over the first. -->
+            @if (stat.key === "done" && activityPending()) {
+              <span class="stat-value"><span class="k-skeleton stat-skeleton" aria-hidden="true"></span></span>
+            } @else {
             <span class="stat-value">{{ stat.value }}@if (stat.tone === "aging") {<span class="stat-aging" role="img" [attr.aria-label]="stat.tooltip"><i aria-hidden="true" class="ti ti-hourglass"></i></span>}</span>
+            }
           </button>
         }
       </div>
@@ -227,6 +233,7 @@
                 </button><span class="section-count">{{ item.inProgress }}</span>
               </h4>
               @if (!isCollapsed("inProgress")) {
+              <div class="section-rows" [class.is-expanded]="item.inProgressExpanded">
               @for (row of item.inProgressRows; track row.card.id) {
                 <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
               } @empty {
@@ -236,8 +243,17 @@
                   <p class="section-empty" i18n="Team overview empty state">No lists are marked In progress yet — mark them in workspace settings</p>
                 }
               }
-              @if (item.inProgressMore) {
-                <p class="section-more" i18n>+{{ item.inProgressMore // i18n(ph="count") }} more in progress</p>
+              </div>
+              @if (item.inProgressMore && !canExpand()) {
+                <p class="section-more"><ng-container i18n>+{{ item.inProgressMore // i18n(ph="count") }} more in progress</ng-container></p>
+              } @else if (item.inProgressMore) {
+                <button type="button" class="section-more is-link" [attr.aria-expanded]="item.inProgressExpanded" (click)="toggleExpanded(item.person.userId, 'inProgress')">
+                  @if (item.inProgressExpanded) {
+                    <ng-container i18n="Team overview button folding an expanded section back to its first few cards">Show less</ng-container>
+                  } @else {
+                    <ng-container i18n>+{{ item.inProgressMore // i18n(ph="count") }} more in progress</ng-container>
+                  }
+                </button>
               }
               }
             </div>
@@ -317,16 +333,26 @@
                 >
                   <i aria-hidden="true" class="ti ti-chevron-down section-chevron" [class.is-collapsed]="isCollapsed('assigned')"></i>
                   <span class="section-icon"><i aria-hidden="true" class="ti ti-user-check"></i></span><ng-container i18n="Team overview section">Assigned</ng-container>
-                </button><span class="section-count">{{ item.assigned.length + item.assignedMore }}</span>
+                </button><span class="section-count">{{ item.assignedTotal }}</span>
               </h4>
               @if (!isCollapsed("assigned")) {
+              <div class="section-rows" [class.is-expanded]="item.assignedExpanded">
               @for (row of item.assigned; track row.card.id) {
                 <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
               } @empty {
                 <p class="section-empty" i18n>Nothing else assigned</p>
               }
-              @if (item.assignedMore) {
-                <p class="section-more" i18n="Count of further cards in a team overview section">+{{ item.assignedMore // i18n(ph="count") }} more</p>
+              </div>
+              @if (item.assignedMore && !canExpand()) {
+                <p class="section-more"><ng-container i18n="Count of further cards in a team overview section">+{{ item.assignedMore // i18n(ph="count") }} more</ng-container></p>
+              } @else if (item.assignedMore) {
+                <button type="button" class="section-more is-link" [attr.aria-expanded]="item.assignedExpanded" (click)="toggleExpanded(item.person.userId, 'assigned')">
+                  @if (item.assignedExpanded) {
+                    <ng-container i18n="Team overview button folding an expanded section back to its first few cards">Show less</ng-container>
+                  } @else {
+                    <ng-container i18n="Count of further cards in a team overview section">+{{ item.assignedMore // i18n(ph="count") }} more</ng-container>
+                  }
+                </button>
               }
               }
             </div>
@@ -407,7 +433,16 @@
       <span class="row-rank" [style.--rank-heat]="rankHeat(row.rank)">{{ row.rank }}</span>
     }
     <span class="row-main">
-      <span class="row-title">{{ row.card.title }}</span>
+      <!-- The rank sits beside the clamped title rather than inside it, so a long title clipped to two
+           lines never clips the number with it. -->
+      <span class="row-title-line">
+        <span class="row-title">{{ row.card.title }}</span>
+        @if (row.queueRank; as rank) {
+          <span class="row-queue-rank" [style.--rank-heat]="rankHeat(rank)" [kTooltip]="upNextRankLabel(rank)" role="img" [attr.aria-label]="upNextRankLabel(rank)">
+            <i aria-hidden="true" class="ti ti-list-numbers"></i>{{ rank }}
+          </span>
+        }
+      </span>
       <!-- One wrapping meta line: where the card is, then its chips. A line of their own made every
            row three lines tall; flex-wrap still drops the chips to a second line, whole, when the
            width runs out, so they never squeeze the board or list down to an ellipsis. -->
@@ -450,7 +485,9 @@
 
 </div>
 
-@if (quietPeople().length) {
+<!-- Who is quiet depends on activity too, so the row waits for it rather than claiming "no recent
+     activity" for someone the response is about to show. -->
+@if (quietPeople().length && !activityPending()) {
   <section class="quiet">
     <button type="button" class="quiet-toggle" [attr.aria-expanded]="showQuiet()" (click)="showQuiet.set(!showQuiet())">
       <i aria-hidden="true" class="ti ti-chevron-down section-chevron" [class.is-collapsed]="!showQuiet()"></i>

@@ -51,7 +51,6 @@ for (const consented of [true, false]) {
     await page.getByLabel("Your name", { exact: true }).fill("Test Owner");
     await page.getByLabel("Email", { exact: true }).fill("analytics@example.test");
     await page.getByLabel("Password", { exact: true }).fill("Abc12345");
-    await page.getByLabel("Confirm password", { exact: true }).fill("Abc12345");
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await expect.poll(() => signup).toBeDefined();
     if (consented) expect(signup?.analyticsAttribution).toMatchObject({
