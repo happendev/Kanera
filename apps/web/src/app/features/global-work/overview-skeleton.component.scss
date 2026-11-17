@@ -1,0 +1,227 @@
+// Mirrors TeamOverviewComponent's chrome (team-overview.component.scss): the same grid tracks,
+// panel frame, header band, stat cells, section bands and row padding, so nothing jumps when the
+// real panels replace these. Keep the two in step when either changes.
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.ovs-strip {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+// The strip's pills: --h-md like the person chips, never shrinking so the row clips at the edge
+// rather than squeezing into slivers on a phone.
+.ovs-chip {
+  flex: none;
+  height: var(--h-md);
+  border-radius: 999px;
+}
+
+.ovs-grid {
+  --overview-gap: 12px;
+
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(max(340px, calc((100% - 2 * var(--overview-gap)) / 3)), 1fr));
+  gap: var(--overview-gap);
+  align-items: start;
+}
+
+// My Cards is one panel across the row, and the size container for its wide layout below, as the
+// real .overview-grid.is-focused is.
+.is-solo .ovs-grid {
+  grid-template-columns: minmax(0, 1fr);
+  container: ovs-person / inline-size;
+}
+
+.ovs-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+// The bands are --surface-2, which is the shimmer's own base, so a bar on a band starts a step up.
+.ovs-head,
+.ovs-section-title {
+  .k-skeleton {
+    background-image: linear-gradient(
+      90deg,
+      var(--surface-3) 25%,
+      color-mix(in srgb, var(--surface-3) 80%, var(--text-muted)) 50%,
+      var(--surface-3) 75%
+    );
+  }
+}
+
+.ovs-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 10px 10px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--divider);
+}
+
+// The avatar's 32px, as in the real header.
+.ovs-avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.ovs-id {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ovs-name {
+  height: 13px;
+}
+
+.ovs-sub {
+  width: 30%;
+  height: 9px;
+}
+
+.ovs-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+// Label and value at the real cell's padding and line heights (--text-sm label, 20px value), so the
+// stats row is the height the loaded one will be.
+.ovs-stat {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+
+  & + & {
+    border-left: 1px solid var(--divider);
+  }
+}
+
+.ovs-stat-label {
+  width: 70%;
+  height: 9px;
+}
+
+.ovs-stat-value {
+  width: 36%;
+  height: 18px;
+}
+
+.ovs-sections {
+  display: contents;
+}
+
+.ovs-section {
+  display: grid;
+  min-width: 0;
+  border-top: 1px solid var(--border-raised);
+}
+
+.ovs-section-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 10px 7px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--divider);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+// The section's icon tile, empty: a neutral square in the real one's place and size.
+.ovs-section-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-raised);
+  border-radius: var(--radius-sm);
+}
+
+.ovs-section-label {
+  height: 11px;
+}
+
+.ovs-row {
+  display: grid;
+  gap: 8px;
+  padding: 11px 12px;
+
+  & + & {
+    border-top: 1px solid var(--divider);
+  }
+}
+
+.ovs-row-title {
+  height: 12px;
+}
+
+.ovs-row-meta {
+  height: 9px;
+}
+
+// My Cards' wide layout, as the real panel's @container person rule: the header and stats as one
+// card, the sections as cards of their own in two stacks, Assigned down the right.
+@container ovs-person (min-width: 680px) {
+  .ovs-panel {
+    gap: var(--space-3);
+    overflow: visible;
+    background: none;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .ovs-head {
+    border: 1px solid var(--border);
+    border-bottom-color: var(--divider);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .ovs-stats {
+    margin-top: calc(var(--space-3) * -1);
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 0;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+
+  .ovs-sections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto auto 1fr;
+    gap: var(--space-3);
+    align-items: start;
+  }
+
+  .ovs-section {
+    grid-column: 1;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+
+  .ovs-section.is-assigned {
+    grid-row: 1 / -1;
+    grid-column: 2;
+  }
+}

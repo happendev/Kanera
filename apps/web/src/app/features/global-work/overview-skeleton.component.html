@@ -1,0 +1,46 @@
+<div class="ovs" [class.is-solo]="solo()" role="status" aria-label="Loading your cards…" i18n-aria-label>
+  @if (!solo()) {
+    <div class="ovs-strip" aria-hidden="true">
+      @for (width of chipWidths; track $index) {
+        <span class="k-skeleton ovs-chip" [style.width.px]="width"></span>
+      }
+    </div>
+  }
+  <div class="ovs-grid" aria-hidden="true">
+    @for (panel of panels(); track $index) {
+      <div class="ovs-panel">
+        <div class="ovs-head">
+          <span class="k-skeleton ovs-avatar"></span>
+          <span class="ovs-id">
+            <span class="k-skeleton ovs-name" [style.width.%]="panel.name"></span>
+            <span class="k-skeleton ovs-sub"></span>
+          </span>
+        </div>
+        <div class="ovs-stats">
+          @for (stat of [0, 1, 2, 3]; track stat) {
+            <div class="ovs-stat">
+              <span class="k-skeleton ovs-stat-label"></span>
+              <span class="k-skeleton ovs-stat-value"></span>
+            </div>
+          }
+        </div>
+        <div class="ovs-sections">
+          @for (section of panel.sections; track $index) {
+            <div class="ovs-section" [class]="'is-' + section.kind">
+              <div class="ovs-section-title">
+                <span class="ovs-section-icon"></span>
+                <span class="k-skeleton ovs-section-label" [style.width.px]="section.label"></span>
+              </div>
+              @for (width of section.rows; track $index) {
+                <div class="ovs-row">
+                  <span class="k-skeleton ovs-row-title" [style.width.%]="width"></span>
+                  <span class="k-skeleton ovs-row-meta" [style.width.%]="width * 0.7"></span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>

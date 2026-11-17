@@ -80,6 +80,7 @@ import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
 import { SaveViewPopover } from "./save-view.popover";
 import { PhoneLaneHeightDirective } from "./phone-lane-height.directive";
 import { TeamOverviewComponent } from "./team-overview.component";
+import { OverviewSkeletonComponent } from "./overview-skeleton.component";
 import { DependencyMapComponent } from "../dependencies/dependency-map.component";
 import { BoardTimelineViewComponent, type TimelineScheduleScope } from "../board/timeline-view/board-timeline-view.component";
 import { timelineGroupByState } from "../board/timeline-view/timeline-preferences";
@@ -148,6 +149,7 @@ const MAX_UP_NEXT_ENTRIES = 50;
     TooltipDirective,
     WorkDoneViewComponent,
     TeamOverviewComponent,
+    OverviewSkeletonComponent,
     DependencyMapComponent,
     UpNextPanelComponent,
     CardComposerDialogComponent,

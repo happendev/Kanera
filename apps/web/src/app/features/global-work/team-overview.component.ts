@@ -1,6 +1,6 @@
 import { CdkDrag, CdkDropList } from "@angular/cdk/drag-drop";
 import { NgTemplateOutlet } from "@angular/common";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, linkedSignal, output, signal } from "@angular/core";
 import type {
   WorkCatalogBoard,
   WorkCatalogList,
@@ -64,6 +64,8 @@ const UP_NEXT_LIMIT = 3;
 const ASSIGNED_LIMIT = 5;
 const DONE_LIMIT = 3;
 const UNOWNED_LIMIT = 5;
+/** The summary sections whose "+N more" unfolds the rest in place (see expandedSections). */
+type ExpandableSection = "inProgress" | "assigned";
 /** A drill-down lists more than a summary section, but still hands off to the board past this. */
 const DRILL_DOWN_LIMIT = 12;
 
@@ -90,7 +92,10 @@ type OverviewRow = {
   blocked: string | null;
   /** What the person did and when ("Moved 2h ago", "Done yesterday"), for activity-derived rows. */
   note: string | null;
+  /** Its place in this person's Up next, leading the row inside the Up next section itself. */
   rank?: number;
+  /** The same place, trailing the title in the other sections, so a queued card says so wherever it shows. */
+  queueRank?: number;
 };
 
 /** The person stats double as toggles: each opens that set of cards in place of the summary. */
@@ -109,7 +114,9 @@ type PersonOverview = {
   stats: StatItem[];
   lastActiveAt: string | null;
   inProgressRows: OverviewRow[];
+  /** Cards past the summary's limit; still counted while expanded, so the fold-back button shows. */
   inProgressMore: number;
+  inProgressExpanded: boolean;
   recent: OverviewRow[];
   /** null when this viewer may not read the person's queue; the section is then omitted. */
   /**
@@ -119,6 +126,8 @@ type PersonOverview = {
   upNext: { rows: OverviewRow[]; total: number; hidden: number; canEdit: boolean } | null;
   assigned: OverviewRow[];
   assignedMore: number;
+  assignedTotal: number;
+  assignedExpanded: boolean;
   doneRows: OverviewRow[];
   /** The selected stat's cards, replacing the summary sections; null when none is selected. */
   drillDown: { stat: OverviewStat; label: string; icon: string; tone: string; rows: OverviewRow[]; more: number; empty: string } | null;
@@ -234,6 +243,13 @@ export class TeamOverviewComponent {
   readonly events = signal<WorkDoneEvent[]>([]);
   readonly activityError = signal<string | null>(null);
   readonly activityLoading = signal(false);
+  /**
+   * The first activity load, before any events: everything derived from it (the header's "Active …",
+   * Done 7d, who counts as quiet) is unknown rather than zero, so it shows as a skeleton instead of
+   * a confident "0" or "no recent activity" that the response then contradicts. Later refreshes keep
+   * the last numbers on screen.
+   */
+  readonly activityPending = computed(() => this.activityLoading() && this.events().length === 0);
   readonly showQuiet = signal(false);
 
   /** Viewer-local, like the folds: whether to leave guests out of the strip and the panels. */
@@ -295,6 +311,30 @@ export class TeamOverviewComponent {
       // Storage can be unavailable in privacy mode; the fold still applies for this visit.
     }
   }
+  /**
+   * Only a lone panel (My Cards, or one teammate picked) unfolds its "+N more": it has the room, while
+   * in the team grid the panels are a side-by-side summary and one long list would break the row.
+   */
+  readonly canExpand = computed(() => this.solo() || this.focusedUserId() !== null);
+
+  /**
+   * Sections showing every card rather than the summary's first few, by `userId:section`. Reset
+   * whenever the picked person changes, so going back to everyone (or on to someone else) is the
+   * summary again. Not stored, since a long list left open is the opposite of a summary the next
+   * time the page opens.
+   */
+  readonly expandedSections = linkedSignal<string | null, ReadonlySet<string>>({
+    source: this.focusedUserId,
+    computation: () => new Set(),
+  });
+
+  toggleExpanded(userId: string, section: ExpandableSection): void {
+    const next = new Set(this.expandedSections());
+    const key = `${userId}:${section}`;
+    if (!next.delete(key)) next.add(key);
+    this.expandedSections.set(next);
+  }
+
   /** Each person's selected stat, by user id. Absent means the summary. */
   readonly selectedStats = signal<ReadonlyMap<string, OverviewStat>>(new Map());
   private loadSeq = 0;
@@ -467,9 +507,14 @@ export class TeamOverviewComponent {
       const doneAll = [...(completions.get(person.userId)?.values() ?? [])]
         .sort((a, b) => b.at.localeCompare(a.at));
 
+      // Ranks over the whole queue, not the search-filtered head above: the number is the person's
+      // true place in their queue, whatever else the viewer has filtered out.
+      const queueRanks = new Map(queue?.items.flatMap((entry) => entry.card ? [[entry.card.id, entry.rank] as const] : []) ?? []);
+
       return {
         person,
         lastActiveAt: lastActive.get(person.userId) ?? null,
+        queueRanks,
         inProgressAll,
         recent,
         upNext,
@@ -484,8 +529,17 @@ export class TeamOverviewComponent {
     const nowMs = now.getTime();
     const selected = this.selectedStats();
 
+    const expanded = this.canExpand() ? this.expandedSections() : new Set<string>();
+
     return this.bases().map((base) => {
-      const inProgressRows = base.inProgressAll.slice(0, IN_PROGRESS_LIMIT).map((card) => this.row(card, nowMs));
+      const userId = base.person.userId;
+      const inProgressLimit = expanded.has(`${userId}:inProgress`) ? Number.POSITIVE_INFINITY : IN_PROGRESS_LIMIT;
+      const assignedLimit = expanded.has(`${userId}:assigned`) ? Number.POSITIVE_INFINITY : ASSIGNED_LIMIT;
+      const queuedRow = (card: WireCardSummary): OverviewRow => {
+        const queueRank = base.queueRanks.get(card.id);
+        return queueRank ? { ...this.row(card, nowMs), queueRank } : this.row(card, nowMs);
+      };
+      const inProgressRows = base.inProgressAll.slice(0, inProgressLimit).map(queuedRow);
       const recent = base.recent.map(({ touch, card }) =>
         this.row(card, nowMs, touchNote(touch.verb, formatRelativeTime(touch.at, { now })))
       );
@@ -499,9 +553,14 @@ export class TeamOverviewComponent {
       // carries its own due chip, so nothing due disappears by being listed elsewhere. While this
       // person's queue is docked the inline Up next section is not rendered, so its head rows must
       // not be subtracted either: the dock is a separate pane, and the panel would otherwise drop
-      // exactly the most important cards from its own sections.
+      // exactly the most important cards from its own sections. In progress claims all its cards,
+      // not just the rows it lists, so its "+N more" counts them once and unfolding it never
+      // reshuffles Assigned underneath.
       const upNextShown = upNext && !this.isDocked(base.person.userId) ? upNext.rows : [];
-      const shown = new Set([...inProgressRows, ...recent, ...upNextShown].map((row) => row.card.id));
+      const shown = new Set([
+        ...base.inProgressAll.map((card) => card.id),
+        ...[...recent, ...upNextShown].map((row) => row.card.id),
+      ]);
       const assignedAll = base.byAgenda.filter(({ card }) => !shown.has(card.id));
       const overdueCards = base.byAgenda
         .filter(({ card }) => isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone, now))
@@ -560,11 +619,11 @@ export class TeamOverviewComponent {
       let drillDown: PersonOverview["drillDown"] = null;
       if (stat) {
         const rows = stat === "open"
-          ? base.byAgenda.map(({ card }) => this.row(card, nowMs))
+          ? base.byAgenda.map(({ card }) => queuedRow(card))
           : stat === "inProgress"
-            ? base.inProgressAll.map((card) => this.row(card, nowMs))
+            ? base.inProgressAll.map(queuedRow)
             : stat === "overdue"
-              ? overdueCards.map((card) => this.row(card, nowMs))
+              ? overdueCards.map(queuedRow)
               : base.doneAll.map(doneRow);
         const empty = {
           open: $localize`:Team overview drill-down empty state:No open cards`,
@@ -598,11 +657,15 @@ export class TeamOverviewComponent {
         stats: stats.filter((stat) => this.inProgressEnabled() || stat.key !== "inProgress"),
         lastActiveAt: base.lastActiveAt,
         inProgressRows,
+        // Past the limit either way, so an expanded section still offers to fold back.
         inProgressMore: Math.max(0, base.inProgressAll.length - IN_PROGRESS_LIMIT),
+        inProgressExpanded: inProgressLimit > IN_PROGRESS_LIMIT,
         recent,
         upNext,
-        assigned: assignedAll.slice(0, ASSIGNED_LIMIT).map(({ card }) => this.row(card, nowMs)),
+        assigned: assignedAll.slice(0, assignedLimit).map(({ card }) => queuedRow(card)),
         assignedMore: Math.max(0, assignedAll.length - ASSIGNED_LIMIT),
+        assignedTotal: assignedAll.length,
+        assignedExpanded: assignedLimit > ASSIGNED_LIMIT,
         doneRows: base.doneAll.slice(0, DONE_LIMIT).map(doneRow),
         drillDown,
       };
@@ -628,6 +691,10 @@ export class TeamOverviewComponent {
 
   /** Everyone with a panel or a quiet row, in panel order, for the person strip. */
   readonly stripPeople = computed(() => this.overviews().map((item) => item.person));
+
+  upNextRankLabel(rank: number): string {
+    return $localize`:The card's position in the Up next queue:Up next #${rank}:rank:`;
+  }
 
   personChipLabel(name: string, focused: boolean): string {
     return focused
@@ -676,11 +743,10 @@ export class TeamOverviewComponent {
    * activity" right above "Done 7d 1" reads as a contradiction, so the line is left out instead.
    */
   showLastActive(item: PersonOverview): boolean {
-    return !!item.lastActiveAt || item.done === 0 || (this.activityLoading() && this.events().length === 0);
+    return !!item.lastActiveAt || item.done === 0;
   }
 
   lastActiveLabel(item: PersonOverview): string {
-    if (this.activityLoading() && this.events().length === 0) return $localize`:Team overview person header:Loading activity…`;
     return item.lastActiveAt
       ? $localize`:Team overview person header, e.g. "Active 2h ago":Active ${formatRelativeTime(item.lastActiveAt, { now: new Date(this.clock.now()) })}:time:`
       : $localize`:Team overview person header:No activity in ${OVERVIEW_ACTIVITY_DAYS}:days: days`;
