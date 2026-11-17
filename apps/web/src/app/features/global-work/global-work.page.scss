@@ -683,11 +683,11 @@ k-page-toolbar.is-table-toolbar {
 }
 
 
-.board-priority-note,
 .overview-partial > .ti {
   color: var(--warning);
 }
 
+.board-priority-note,
 .board-move-error {
   display: flex;
   align-items: center;
@@ -702,6 +702,12 @@ k-page-toolbar.is-table-toolbar {
 .board-priority-note {
   color: var(--text-muted);
   background: var(--surface);
+
+  // The note's text is --text-sm, so the 18px page spinner would outsize it.
+  .spinner {
+    width: 14px;
+    height: 14px;
+  }
 
   strong {
     color: var(--text);

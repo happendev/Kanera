@@ -1,5 +1,6 @@
 import { Injectable } from "@angular/core";
 import { hasMarkdownContent } from "../../shared/markdown-content";
+import { sessionStorageBlocked } from "./session-storage";
 import { STORAGE_KEYS } from "./browser-contracts";
 
 export type EditorDraftKind =
@@ -125,6 +126,7 @@ export class EditorDrafts {
   }
 
   private readStore(): DraftStore {
+    if (sessionStorageBlocked()) return {};
     try {
       const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS) ?? "{}");
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -135,6 +137,7 @@ export class EditorDrafts {
   }
 
   private writeStore(store: DraftStore): void {
+    if (sessionStorageBlocked()) return;
     try {
       const pruned = this.prune(store);
       localStorage.setItem(STORAGE_KEYS.EDITOR_DRAFTS, JSON.stringify(pruned));
@@ -155,7 +158,7 @@ export class EditorDrafts {
       if (!this.hasChanges(draft.markdown, draft.baseMarkdown)) continue;
       next[key] = draft;
     }
-    if (Object.keys(next).length !== Object.keys(store).length) {
+    if (!sessionStorageBlocked() && Object.keys(next).length !== Object.keys(store).length) {
       try {
         localStorage.setItem(STORAGE_KEYS.EDITOR_DRAFTS, JSON.stringify(next));
       } catch {

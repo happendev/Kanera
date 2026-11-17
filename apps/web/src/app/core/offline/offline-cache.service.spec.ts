@@ -35,6 +35,23 @@ describe("offline storage", () => {
     expect((await cache.loadBoard("board-1"))?.detailedCards).toHaveLength(1);
   });
 
+  // E2E cannot reliably pause an IndexedDB open between a save and logout. Force that ordering:
+  // an outgoing write that resumes after the clear must not repopulate any private snapshot.
+  it("discards writes waiting for the database when cleanup starts", async () => {
+    const cache = new OfflineCacheService();
+    await cache.saveBoard("board-1", board());
+    const database = cache as unknown as { db(): Promise<unknown> };
+    const original = database.db.bind(cache);
+    let resume!: () => void;
+    const gate = new Promise<void>((resolve) => { resume = resolve; });
+    vi.spyOn(database, "db").mockImplementationOnce(async () => { await gate; return original(); });
+    const outgoing = cache.saveBoard("board-1", board("Private outgoing write"));
+    await cache.clearAll();
+    resume();
+    await outgoing;
+    expect(await cache.loadBoard("board-1")).toBeNull();
+  });
+
   it("keeps newer board data and both details during concurrent saves", async () => {
     const cache = new OfflineCacheService();
     await cache.saveBoard("board-1", board());

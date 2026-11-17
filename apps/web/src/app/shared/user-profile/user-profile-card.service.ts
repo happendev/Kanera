@@ -61,6 +61,13 @@ export class UserProfileCardService {
     this.current.set(null);
   }
 
+  teardown(): void {
+    // This root service survives logout; neither an anchored profile nor its permission-sensitive
+    // response may be reused by the next account in the same SPA instance.
+    this.close();
+    this.cache.clear();
+  }
+
   isOpenFor(anchor: HTMLElement): boolean {
     return this.current()?.anchor === anchor;
   }

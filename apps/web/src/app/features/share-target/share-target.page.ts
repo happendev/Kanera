@@ -1,3 +1,4 @@
+import { sessionStorageBlocked } from "../../core/browser/session-storage";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
@@ -258,6 +259,7 @@ export class ShareTargetPage implements OnInit {
     const key = this.clean(this.shareKey());
     if (!key || !/^[0-9a-f-]{36}$/i.test(key) || typeof caches === "undefined") return queryPayload;
 
+    if (sessionStorageBlocked()) return queryPayload;
     try {
       const cache = await caches.open(SHARE_TARGET_CACHE);
       const payloadUrl = new URL(`${SHARE_PAYLOAD_PATH}${key}`, location.origin).toString();

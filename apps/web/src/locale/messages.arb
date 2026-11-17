@@ -10364,7 +10364,8 @@
     "description": "Button - fold a calendar day's cards back",
     "x-files": [
       "src/app/features/board/calendar-view/board-calendar-view.component.html",
-      "src/app/features/board/card-detail-description.component.html"
+      "src/app/features/board/card-detail-description.component.html",
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "3406674546225707827": "Blocked",
@@ -13170,7 +13171,8 @@
     "description": "Tooltip on a card's position in the viewer's Up next queue",
     "x-files": [
       "src/app/features/board/card.component.ts",
-      "src/app/features/board/table-view/board-table-view.component.ts"
+      "src/app/features/board/table-view/board-table-view.component.ts",
+      "src/app/features/global-work/team-overview.component.ts"
     ]
   },
   "4880952587019119931": "{total, plural, one {Collapse checklist: {done} of # item complete} other {Collapse checklist: {done} of # items complete}}",
@@ -17338,11 +17340,12 @@
   "2559848334566452330": "Loading your cards…",
   "@2559848334566452330": {
     "x-files": [
-      "src/app/features/global-work/global-work.page.html"
+      "src/app/features/global-work/global-work.page.html",
+      "src/app/features/global-work/overview-skeleton.component.html"
     ]
   },
-  "8371055686202976923": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} Counts settle when the full set is ready.",
-  "@8371055686202976923": {
+  "7810072214821220623": "{$START_TAG_STRONG}Still loading cards…{$CLOSE_TAG_STRONG} Some numbers may go up as more cards arrive.",
+  "@7810072214821220623": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -17353,8 +17356,8 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "1322380274988329022": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} Chains settle when the full set is ready.",
-  "@1322380274988329022": {
+  "1088233120631462892": "{$START_TAG_STRONG}Still loading cards…{$CLOSE_TAG_STRONG} More chains may appear as more cards arrive.",
+  "@1088233120631462892": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -17438,8 +17441,8 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "5467495180002234399": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} The plan settles when the full set is ready.",
-  "@5467495180002234399": {
+  "2327243097523862940": "{$START_TAG_STRONG}Still loading cards…{$CLOSE_TAG_STRONG} The plan may change as more cards arrive.",
+  "@2327243097523862940": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -18266,13 +18269,6 @@
   "6239338747020521018": "{$person}’s cards",
   "@6239338747020521018": {
     "description": "Group of one teammate's card counts",
-    "x-files": [
-      "src/app/features/global-work/team-overview.component.ts"
-    ]
-  },
-  "8225018754533371665": "Loading activity…",
-  "@8225018754533371665": {
-    "description": "Team overview person header",
     "x-files": [
       "src/app/features/global-work/team-overview.component.ts"
     ]

@@ -27,4 +27,6 @@ An organisation invite can now grant specific boards as **Editor** or **Observer
 
 ## Bug fixes
 
+- [Security] Signing out clears offline copies, drafts, recent history and pending shares
+
 - [Security] Malformed input returns validation errors, and exports can't inject formulas

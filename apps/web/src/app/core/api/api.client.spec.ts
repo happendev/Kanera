@@ -1,3 +1,5 @@
+import { Injector, runInInjectionContext } from "@angular/core";
+import { SessionCleanupService } from "../auth/session-cleanup.service";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -242,7 +244,8 @@ describe("ApiClient access-token renewal", { concurrent: false }, () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(T0);
-    auth = new RefreshingAuthService();
+    const injector = Injector.create({ providers: [{ provide: SessionCleanupService, useValue: { clear: () => Promise.resolve(), ready: () => Promise.resolve() } }] });
+    auth = runInInjectionContext(injector, () => new RefreshingAuthService());
     fetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
       .mockImplementation(async () => new Response(JSON.stringify({ count: 0 })));
     vi.stubGlobal("fetch", fetch);
