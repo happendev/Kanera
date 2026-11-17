@@ -1195,7 +1195,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     if (this.queryTimer !== null) clearTimeout(this.queryTimer);
     this.queryTimer = setTimeout(() => {
       this.queryTimer = null;
-      void this.state.queryFirstPage();
+      void this.state.queryFirstPage({ searchOnly: true });
     }, 260);
   }
 

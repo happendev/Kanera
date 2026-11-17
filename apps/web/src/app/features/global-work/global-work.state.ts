@@ -168,6 +168,13 @@ export class GlobalWorkState {
   readonly savedViews = signal<SavedWorkView[]>([]);
   readonly shareCandidates = signal<WorkViewShareCandidate[]>([]);
   readonly loading = signal(true);
+  /**
+   * The in-flight foreground query only changed the search text. Typing must not disable the
+   * search field it came from (a disabled input drops focus mid-word) or blank the page between
+   * keystrokes, so a refinement leaves the page interactive. Every other filter change keeps the
+   * full gate: it can change whose queue is shown, and the old one must not stay actionable.
+   */
+  private readonly searchRefining = signal(false);
   readonly loadingMore = signal(false);
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
@@ -179,8 +186,13 @@ export class GlobalWorkState {
    * and must not disable the page after ordinary realtime events such as the viewer's own drag.
    */
   readonly interactionReady = computed(() =>
-    this.sockets.online() && !this.loading() && !this.cachedAt()
+    this.sockets.online() && (!this.loading() || this.searchRefining()) && !this.cachedAt()
   );
+  /**
+   * A foreground query that replaces the projection on screen: the page shows loading states for
+   * it. A search refinement keeps the current cards in place until its results land instead.
+   */
+  readonly blockingLoad = computed(() => this.loading() && !this.searchRefining());
   /**
    * Group and Sort away from the default.
    *
@@ -394,6 +406,7 @@ export class GlobalWorkState {
     // and hiding it behind an unpressed toggle is how the old display mode went undiscovered.
     this.upNextPanelOpen.set(preference?.upNextPanelOpen !== false);
     this.error.set(null);
+    this.searchRefining.set(false);
     this.loading.set(true);
     this.reconciling.set(true);
     this.preferencesReady.set(true);
@@ -461,6 +474,7 @@ export class GlobalWorkState {
 
   async refresh(): Promise<void> {
     const version = ++this.requestVersion;
+    this.searchRefining.set(false);
     this.loading.set(true);
     this.reconciling.set(true);
     this.error.set(null);
@@ -483,7 +497,7 @@ export class GlobalWorkState {
     }
   }
 
-  async queryFirstPage(): Promise<void> {
+  async queryFirstPage(options: { searchOnly?: boolean } = {}): Promise<void> {
     if (!this.interactionReady()) return;
     // A reconcile in flight was started by a realtime event and will now be discarded, taking its
     // Work Done invalidation with it. The filter change that queued this query already made Work
@@ -494,6 +508,9 @@ export class GlobalWorkState {
     // This foreground query supersedes any in-flight background reconcile. Clear its status now;
     // the loading flag below owns readiness until the requested projection has settled.
     this.reconciling.set(false);
+    // A later keystroke supersedes an in-flight refinement through `requestVersion`; a filter
+    // change superseding it clears the flag and restores the full gate.
+    this.searchRefining.set(options.searchOnly === true);
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -507,6 +524,9 @@ export class GlobalWorkState {
         teamPrioritiesRequest,
         teamPrioritiesRequest.then((queues) => this.loadTeamPriorityCandidateCards(version, queues)),
       ]);
+      if (version !== this.requestVersion) return;
+      // A refinement leaves dragging enabled, so hold the swap until any drop lands, as reconciles do.
+      await this.whenCardDragIdle();
       if (version !== this.requestVersion) return;
       this.response.set(response);
       this.otherPriorities.set(priorities);
@@ -526,6 +546,7 @@ export class GlobalWorkState {
       if (version === this.requestVersion) this.error.set($localize`We couldn’t apply those filters.`);
     } finally {
       if (version === this.requestVersion) {
+        this.searchRefining.set(false);
         this.loading.set(false);
         this.flushQueuedRealtimeRefresh();
       }
@@ -534,7 +555,8 @@ export class GlobalWorkState {
 
   async loadMore(): Promise<void> {
     const cursor = this.response().nextCursor;
-    if (!cursor || this.loadingMore() || !this.interactionReady()) return;
+    // A refinement in flight is about to replace the response this cursor pages.
+    if (!cursor || this.loadingMore() || this.loading() || !this.interactionReady()) return;
     const version = this.requestVersion;
     this.loadingMore.set(true);
     try {

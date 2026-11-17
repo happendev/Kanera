@@ -23,7 +23,7 @@
     <k-page-header
       [title]="pageTitle()"
       [subtitle]="headerSubtitle"
-      [loading]="state.loading() && state.response().cards.length === 0"
+      [loading]="state.blockingLoad() && state.response().cards.length === 0"
     >
       <div phActions class="k-toolbar-group header-actions">
         @if (creationTargetUserId()) {
@@ -505,7 +505,7 @@
 
   <!-- The overview loads inside the page frame instead (see its branch below), so the Up next dock,
        which needs no cards, is already in place beside the skeleton. -->
-  @if (state.loading() && state.response().cards.length === 0 && effectiveDisplay() !== "overview") {
+  @if (state.blockingLoad() && state.response().cards.length === 0 && effectiveDisplay() !== "overview") {
     <div class="k-loading" role="status" aria-live="polite">
       <i aria-hidden="true" class="ti ti-loader-2"></i>
       <span i18n>Loading your cards…</span>
@@ -546,7 +546,7 @@
         (cardSummaryOpened)="openHistoryCard($event)"
       />
       }
-    } @else if (effectiveDisplay() === "overview" && state.loading() && state.response().cards.length === 0) {
+    } @else if (effectiveDisplay() === "overview" && state.blockingLoad() && state.response().cards.length === 0) {
       <!-- The overview's shape is known before its cards are: a skeleton of its panels, so the first
            render lands in place rather than replacing a centred spinner. -->
       <k-overview-skeleton [solo]="lens() !== 'team'" />
@@ -819,7 +819,7 @@
           [canEdit]="state.interactionReady()"
           [editableCardIds]="roleEditableCardIds()"
           [dependenciesEnabled]="dependenciesEnabled()"
-          [loading]="state.loading()"
+          [loading]="state.blockingLoad()"
           [preferenceScope]="'globalWork:' + lens()"
           [groupBy]="timelineGroupByState.groupBy()"
           [hideCompleted]="hideCompleted()"
@@ -863,7 +863,7 @@
           [hostCollapsedGroupKeys]="state.collapsedTableGroupKeys()"
           [selectedCardId]="selectedCard()?.id ?? null"
           [currentUserId]="state.auth.user()?.id ?? null"
-          [loading]="state.loading()"
+          [loading]="state.blockingLoad()"
           [canEdit]="state.interactionReady()"
           [editableCardIds]="roleEditableCardIds()"
           [showSearch]="false"
