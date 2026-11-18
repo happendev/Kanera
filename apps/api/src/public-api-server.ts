@@ -48,6 +48,7 @@ import { dependencyGraphRoutes } from "./modules/cards/dependency-graph.routes.j
 import { scheduleRoutes } from "./modules/cards/schedule.routes.js";
 import { commentRoutes } from "./modules/comments/routes.js";
 import { customFieldRoutes } from "./modules/custom-fields/routes.js";
+import { agentFeedbackRoutes, type SendAgentFeedback } from "./modules/agent-feedback/routes.js";
 import { agentRunRoutes } from "./modules/agent-runs/routes.js";
 import { externalLinkRoutes } from "./modules/external-links/routes.js";
 import { followRoutes } from "./modules/notifications/follow.routes.js";
@@ -131,6 +132,8 @@ export interface BuildPublicApiServerOptions {
   uploadsDir?: string;
   enableWebhookDeliveryScheduler?: boolean;
   mcpWebhookRequest?: McpWebhookRequest;
+  /** Test seam for the agent feedback email; defaults to the env SMTP internal notification. */
+  sendAgentFeedback?: SendAgentFeedback;
   slowRequestLogMs?: number;
   rateLimit?: PublicApiRateLimitOptions;
 }
@@ -483,6 +486,8 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
         webUrl: env.WEB_ORIGIN,
         timeZone,
         today: localParts(new Date(), timeZone).date,
+        // MCP clients hide Kanera Cloud-only tools (feedback.report) when this is self_hosted.
+        deploymentMode: env.KANERA_DEPLOYMENT_MODE,
       };
     });
 
@@ -521,6 +526,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     // Agent runs are the "someone is working on this now" signal for AI agents; the same handlers
     // serve the web app so activity, realtime, and access checks stay identical.
     await api.register(agentRunRoutes);
+    await api.register(agentFeedbackRoutes, { send: options.sendAgentFeedback });
     await api.register(cardLabelRoutes);
     await api.register(commentRoutes);
     await api.register(activityRoutes);

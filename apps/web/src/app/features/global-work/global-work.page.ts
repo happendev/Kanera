@@ -1099,7 +1099,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const known = this.state.catalog().people.some((person) => person.userId === userId);
     if (known && userId !== this.state.auth.user()?.id) {
       if (!this.teamPeople().some((person) => person.userId === userId)) this.state.setScope([], []);
-      this.selectTeamPerson(userId);
+      // The overview (the default display) hides the teammate filter, so a filter set here would be
+      // invisible; focus the person through the overview's own focus instead.
+      if (this.effectiveDisplay() === "overview") this.state.setOverviewFocus(userId);
+      else this.selectTeamPerson(userId);
     }
     void this.router.navigate([], { queryParams: { person: null }, queryParamsHandling: "merge", replaceUrl: true });
   }

@@ -5,42 +5,44 @@
     @if (renderableFeedItems().length) {
     <span class="count">{{ renderableFeedItems().length }}</span>
     }
-    <k-segmented
-      class="feed-filter"
-      [options]="feedFilterOptions()"
-      [value]="activeFeedFilter()"
-      [showLabels]="true"
-      [equalWidths]="true"
-      ariaLabel="Feed filter"
-      i18n-ariaLabel
-      (valueChange)="feedFilter.set($event)"
-    />
-    <div class="comment-search-wrap">
-      <button #commentSearchTrigger class="ghost icon comment-search-btn" [class.is-active]="commentSearchQuery().length > 0 || commentSearchOpen()" (click)="toggleCommentSearch()" kTooltip="Search comments" i18n-kTooltip>
-        <i aria-hidden="true" class="ti ti-search"></i>
-        @if (commentSearchQuery().length > 0) {
-        <span class="comment-search-badge"></span>
-        }
-      </button>
-      @if (commentSearchOpen()) {
-      <div
-        class="comment-search-popover"
-        kAnchoredPanel
-        [apAnchor]="commentSearchTrigger"
-        [apPlacement]="{ align: 'end', width: 240, maxHeight: 120, minHeight: 90 }"
-        (apDismissed)="commentSearchOpen.set(false)"
-      >
-        <div class="comment-search-field">
-          <i aria-hidden="true" class="ti ti-search comment-search-icon"></i>
-          <input class="comment-search-input" type="text" placeholder="Search comments..." i18n-placeholder [value]="commentSearchQuery()" (input)="commentSearchQuery.set($any($event.target).value)" autofocus />
+    <div class="feed-controls">
+      <k-segmented
+        class="feed-filter"
+        [options]="feedFilterOptions()"
+        [value]="activeFeedFilter()"
+        [showLabels]="true"
+        [equalWidths]="true"
+        ariaLabel="Feed filter"
+        i18n-ariaLabel
+        (valueChange)="feedFilter.set($event)"
+      />
+      <div class="comment-search-wrap">
+        <button #commentSearchTrigger class="ghost icon comment-search-btn" [class.is-active]="commentSearchQuery().length > 0 || commentSearchOpen()" (click)="toggleCommentSearch()" kTooltip="Search comments" i18n-kTooltip>
+          <i aria-hidden="true" class="ti ti-search"></i>
           @if (commentSearchQuery().length > 0) {
-          <button class="ghost icon comment-search-clear" (click)="commentSearchQuery.set('')" kTooltip="Clear" i18n-kTooltip="Button: clear the comment search">
-            <i aria-hidden="true" class="ti ti-x"></i>
-          </button>
+          <span class="comment-search-badge"></span>
           }
+        </button>
+        @if (commentSearchOpen()) {
+        <div
+          class="comment-search-popover"
+          kAnchoredPanel
+          [apAnchor]="commentSearchTrigger"
+          [apPlacement]="{ align: 'end', width: 240, maxHeight: 120, minHeight: 90 }"
+          (apDismissed)="commentSearchOpen.set(false)"
+        >
+          <div class="comment-search-field">
+            <i aria-hidden="true" class="ti ti-search comment-search-icon"></i>
+            <input class="comment-search-input" type="text" placeholder="Search comments..." i18n-placeholder [value]="commentSearchQuery()" (input)="commentSearchQuery.set($any($event.target).value)" autofocus />
+            @if (commentSearchQuery().length > 0) {
+            <button class="ghost icon comment-search-clear" (click)="commentSearchQuery.set('')" kTooltip="Clear" i18n-kTooltip="Button: clear the comment search">
+              <i aria-hidden="true" class="ti ti-x"></i>
+            </button>
+            }
+          </div>
         </div>
+        }
       </div>
-      }
     </div>
   </div>
 

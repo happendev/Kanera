@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SmtpConfig } from "@kanera/shared/schema";
 import {
+  sendInternalAgentFeedbackNotification,
   sendInternalCheckoutNotification,
   sendInternalSaleNotification,
   sendInternalSignupNotification,
@@ -200,4 +201,34 @@ test("internal trial ending notification carries usage and owners", async () => 
 
   assert.equal(sent[0]!.subject, "Kanera trial ending 2026-12-02: Compiler Co");
   assert.match(sent[0]!.text!, /Owners: Grace Hopper <grace@example.com>\nMembers: 3\nBoards: 2\nCards: 41\nLast active: 2026-11-28/);
+});
+
+test("agent feedback notification keeps the agent-written summary on the subject line", async () => {
+  const sent: SendEmailOptions[] = [];
+
+  const count = await sendInternalAgentFeedbackNotification(
+    {
+      kind: "improvement",
+      summary: "Add bulk\r\nBcc: victim@example.com",
+      details: "Line one\nLine two",
+      tool: "cards.bulk_move",
+      credential: 'OAuth agent "Claude"',
+      reporter: { userId: "u1", displayName: "Ada", email: "ada@example.com" },
+      orgName: "Analytical",
+      clientId: "c1",
+    },
+    {
+      config: { INTERNAL_NOTIFICATION_EMAILS: ["ops@example.com"], NODE_ENV: "production" },
+      resolveConfig: async () => smtpConfig,
+      deliverEmail: async (message) => {
+        sent.push(message);
+      },
+    },
+  );
+
+  assert.equal(count, 1);
+  assert.equal(sent[0]!.subject, "Kanera agent feedback (improvement): Add bulk Bcc: victim@example.com");
+  assert.match(sent[0]!.text!, /^Tool: cards\.bulk_move$/mu);
+  assert.match(sent[0]!.text!, /^Reported for: Ada <ada@example\.com>$/mu);
+  assert.ok(sent[0]!.text!.endsWith("Details:\nLine one\nLine two"));
 });

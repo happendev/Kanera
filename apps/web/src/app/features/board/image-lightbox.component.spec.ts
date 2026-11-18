@@ -397,6 +397,49 @@ describe("ImageLightboxComponent", () => {
     expect(host.querySelector(".lb-text h1, .lb-text b")).toBeNull();
   });
 
+  it("pretty-prints JSON attachments and shows invalid JSON as stored", async () => {
+    const files: Record<string, string> = {
+      "https://api.test/payload.json": '{"name":"Kanera","tags":["a"]}',
+      "https://api.test/broken.json": '{"name":',
+    };
+    vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve({
+      ok: true,
+      blob: () => Promise.resolve({ size: files[url]!.length, text: () => Promise.resolve(files[url]!) }),
+    })));
+
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        {
+          provide: DIALOG_DATA,
+          useValue: {
+            src: "https://api.test/payload.json",
+            images: [
+              { src: "https://api.test/payload.json", fileName: "payload.json", mediaType: "text", mimeType: "application/json" },
+              { src: "https://api.test/broken.json", fileName: "broken.json", mediaType: "text", mimeType: "application/octet-stream" },
+            ],
+          },
+        },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host.querySelector(".lb-text-body")?.textContent).toBe('{\n  "name": "Kanera",\n  "tags": [\n    "a"\n  ]\n}');
+    });
+
+    fixture.componentInstance.showNext();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host.querySelector(".lb-text-body")?.textContent).toBe('{"name":');
+    });
+  });
+
   it("loads a PDF reached through gallery navigation and aborts it when navigating away", async () => {
     let resolvePdf!: (response: Response) => void;
     let resolvePdfBlob!: (blob: Blob) => void;

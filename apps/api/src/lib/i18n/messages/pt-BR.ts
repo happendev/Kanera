@@ -262,7 +262,7 @@ const ptBR: ServerMessages = {
       subject: ({ card }) => `Lembrete: ${card}`,
       preheader: ({ card }) => `Você pediu um lembrete sobre “${card}”.`,
       heading: "Lembrete",
-      intro: ({ firstName }) => `Olá, ${firstName}. Você pediu ao Kanera para lembrá-lo deste cartão.`,
+      intro: ({ firstName }) => `Olá, ${firstName}. Você pediu ao Kanera para lembrar você deste cartão.`,
     },
     checklistItemOverdue: {
       subject: ({ item }) => `Item da checklist atrasado: ${item}`,

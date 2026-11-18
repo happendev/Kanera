@@ -27,6 +27,14 @@ describe("sanitizeAnalyticsProperties", () => {
     });
   });
 
+  it("keeps the Cloudflare country on every event type while GeoIP stays disabled", () => {
+    const country = { $geoip_country_code: "ZA", $geoip_country_name: "South Africa" };
+    for (const event of ["$pageview", "signup_step", "$identify", "$groupidentify", "unlisted_event"]) {
+      expect(sanitizeAnalyticsProperties({ ...country, $geoip_city_name: "Cape Town", $geoip_latitude: -33.9 }, event))
+        .toEqual({ ...country, $geoip_disable: true });
+    }
+  });
+
   it("uses a normalized route-template URL for the activity feed", () => {
     expect(sanitizeAnalyticsProperties({
       route_pattern: "/b/:boardId",

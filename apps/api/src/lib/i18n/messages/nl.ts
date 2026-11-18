@@ -54,7 +54,7 @@ const nl: ServerMessages = {
       button: "Kanera openen",
     },
     passwordReset: {
-      subject: "Reset je Kanera-wachtwoord",
+      subject: "Stel je Kanera-wachtwoord opnieuw in",
       preheader: ({ firstName }) => `Hallo ${firstName}, we hebben een verzoek ontvangen om je wachtwoord opnieuw in te stellen.`,
       heading: "Wachtwoord opnieuw instellen",
       intro: ({ firstName }) => `Hallo ${firstName}, we hebben een verzoek ontvangen om het wachtwoord voor je Kanera-account opnieuw in te stellen. Kies via de knop hieronder een nieuw wachtwoord.`,
@@ -74,7 +74,7 @@ const nl: ServerMessages = {
       heading: "Wat je aandacht nodig heeft",
       intro: ({ firstName, date }) => `Hallo ${firstName}, dit heeft op ${date} je aandacht nodig.`,
       dueToday: "Vervalt vandaag",
-      overdue: "Te laat",
+      overdue: "Achterstallig",
       priorities: "Je belangrijkste prioriteiten",
       itemToday: "Vandaag",
       itemDue: ({date})=>`Vervalt op ${date}`,
@@ -178,12 +178,12 @@ const nl: ServerMessages = {
       startClearedFrom: ({ from }) => `Startdatum verwijderd (was ${from}).`,
     },
     cardOverdue: {
-      subject: ({ card }) => `Te laat: ${card}`,
-      preheader: ({ card }) => `“${card}” is te laat.`,
-      heading: "Kaart te laat",
+      subject: ({ card }) => `Achterstallig: ${card}`,
+      preheader: ({ card }) => `“${card}” is achterstallig.`,
+      heading: "Kaart achterstallig",
       intro: ({ firstName, due }) => due
         ? `Hallo ${firstName}, deze aan jou toegewezen kaart verviel op ${due} en is nog niet voltooid.`
-        : `Hallo ${firstName}, deze aan jou toegewezen kaart is te laat.`,
+        : `Hallo ${firstName}, deze aan jou toegewezen kaart is achterstallig.`,
     },
     cardReminder: {
       subject: ({ card }) => `Herinnering: ${card}`,
@@ -192,12 +192,12 @@ const nl: ServerMessages = {
       intro: ({firstName})=>`Hallo ${firstName}, je hebt Kanera gevraagd je aan deze kaart te herinneren.`,
     },
     checklistItemOverdue: {
-      subject: ({ item }) => `Checklistitem te laat: ${item}`,
-      preheader: ({ item }) => `“${item}” is te laat.`,
-      heading: "Checklistitem te laat",
+      subject: ({ item }) => `Checklistitem achterstallig: ${item}`,
+      preheader: ({ item }) => `“${item}” is achterstallig.`,
+      heading: "Checklistitem achterstallig",
       intro: ({ firstName, item, due }) => due
         ? `Hallo ${firstName}, het aan jou toegewezen checklistitem “${item}” verviel op ${due} en is nog niet afgerond.`
-        : `Hallo ${firstName}, het aan jou toegewezen checklistitem “${item}” is te laat.`,
+        : `Hallo ${firstName}, het aan jou toegewezen checklistitem “${item}” is achterstallig.`,
     },
     inviteAccepted: {
       org: {
@@ -305,7 +305,7 @@ const nl: ServerMessages = {
         subject: "Je Kanera Pro-abonnement is verlengd",
         preheader: ({ org }) => `Kanera Pro blijft geldig voor ${org}.`,
         title: "Pro verlengd",
-        intro: ({ firstName, org }) => `Hallo ${firstName}, het Kanera Pro abonnement voor ${org} is succesvol verlengd.`,
+        intro: ({ firstName, org }) => `Hallo ${firstName}, het Kanera Pro-abonnement voor ${org} is succesvol verlengd.`,
         line: "Je hoeft niets te doen. Je toegang tot Pro blijft ononderbroken bestaan.",
         cta: "Bekijk facturering",
       },
@@ -389,7 +389,7 @@ const nl: ServerMessages = {
       },
       cancelled: {
         subject: ({ org }) => `${org} gebruikt nu Kanera Free`,
-        preheader: "Het abonnement Pro is beëindigd. Bekijk wat er is veranderd met Kanera Free.",
+        preheader: "Je Pro-abonnement is beëindigd. Bekijk wat er is veranderd met Kanera Free.",
         title: "Je Pro-abonnement is beëindigd",
         intro: ({ firstName, org }) => `Hallo ${firstName}, ${org} gebruikt nu Kanera Free.`,
         lines: [
@@ -567,8 +567,8 @@ const nl: ServerMessages = {
         intro: ({ firstName, org }) => `Hallo ${firstName}, je bent begonnen met het upgraden van ${org} naar Kanera Pro, maar de afrekening is niet afgerond. Er is niets in rekening gebracht en er is niets veranderd.`,
         question: {
           lead: "Zat er iets in de weg?",
-          withFeedback: ({ email }) => `Of het nu om de prijs, het aantal plaatsen, een betaalprobleem of een vraag over Pro ging: laat het ons weten via ${email}. Wij lezen elk bericht en antwoorden persoonlijk.`,
-          withoutFeedback: "Of het nu om de prijs, het aantal plaatsen, een betaalprobleem of een vraag over Pro ging: laat het ons weten. Wij lezen elk bericht en antwoorden persoonlijk.",
+          withFeedback: ({ email }) => `Of het nu om de prijs, het aantal licenties, een betaalprobleem of een vraag over Pro ging: laat het ons weten via ${email}. Wij lezen elk bericht en antwoorden persoonlijk.`,
+          withoutFeedback: "Of het nu om de prijs, het aantal licenties, een betaalprobleem of een vraag over Pro ging: laat het ons weten. Wij lezen elk bericht en antwoorden persoonlijk.",
         },
         resume: "Als je klaar bent, kun je verdergaan waar je gebleven was via je abonnementsinstellingen.",
         cta: "Bekijk je abonnement",
@@ -676,8 +676,8 @@ const nl: ServerMessages = {
     mentioned: { title: "Vermeld in een reactie", body: ({actor,board,card,excerpt})=>`${actor} heeft je genoemd in ${board} / ${card}: ${excerpt}` },
     dueDateChanged: { title: "Vervaldatum gewijzigd", body: ({ actor, card }) => `${actor} heeft de vervaldatum gewijzigd van ${card}.` },
     startDateChanged: { title: "Startdatum gewijzigd", body: ({ actor, card }) => `${actor} heeft de startdatum van ${card} gewijzigd` },
-    cardOverdue: { title: "Kaart te laat", body: ({ card }) => `${card} is te laat` },
-    checklistItemOverdue: { title: "Checklistitem te laat", body: ({ item, card }) => `${item} op ${card} is te laat` },
+    cardOverdue: { title: "Kaart achterstallig", body: ({ card }) => `${card} is achterstallig` },
+    checklistItemOverdue: { title: "Checklistitem achterstallig", body: ({ item, card }) => `${item} op ${card} is achterstallig` },
     reminder: { title: "Herinnering" },
     watchedActivity: { body: ({ actor, action }) => `${actor} ${action}` },
     test: { title: "Kanera testmelding", body: "Pushmeldingen zijn correct ingesteld." },
@@ -687,8 +687,8 @@ const nl: ServerMessages = {
   // These phrases follow the actor's name; trailing value chips are rendered separately.
   activity: {
   reminder: "herinnering",
-  checklistItemOverdue: "checklistitem is te laat",
-  cardOverdue: "kaart is te laat",
+  checklistItemOverdue: "checklistitem is achterstallig",
+  cardOverdue: "kaart is achterstallig",
   commented: "heeft gereageerd",
   editedComment: "een reactie aangepast",
   removedComment: "een reactie verwijderd",
@@ -725,7 +725,7 @@ const nl: ServerMessages = {
   removedStartDate: "de startdatum verwijderd",
   rescheduled: "de kaart opnieuw ingepland",
   updatedCard: "deze kaart bijgewerkt",
-  clearedField: (fieldName) => `gewist ${fieldName}`,
+  clearedField: (fieldName) => `heeft ${fieldName} gewist`,
   field: "veld",
   setFieldTo: (fieldName)=>`heeft ${fieldName} ingesteld op`,
   setCover: "heeft de omslagafbeelding ingesteld",

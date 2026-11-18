@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachmentPreviewType } from "./attachment-preview";
+import { attachmentPreviewType, isJsonAttachment } from "./attachment-preview";
 
 describe("attachmentPreviewType", () => {
   it("recognises Markdown MIME types and filename fallbacks", () => {
@@ -13,5 +13,11 @@ describe("attachmentPreviewType", () => {
     expect(attachmentPreviewType("text/plain", "notes.txt")).toBe("text");
     expect(attachmentPreviewType("application/octet-stream", "server.LOG")).toBe("text");
     expect(attachmentPreviewType("text/csv", "export.csv")).toBeNull();
+  });
+
+  it("previews JSON as text by MIME type or filename", () => {
+    expect(attachmentPreviewType("application/json", "payload")).toBe("text");
+    expect(attachmentPreviewType("application/octet-stream", "config.JSON")).toBe("text");
+    expect(isJsonAttachment("text/plain", "notes.txt")).toBe(false);
   });
 });

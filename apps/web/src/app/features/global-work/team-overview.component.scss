@@ -991,10 +991,10 @@
   align-items: flex-start;
   min-width: 0;
 
-  // Sized to its text, so the rank follows the title's last word on a short title and only reaches
-  // the row's end when the title wraps.
+  // The title takes the spare width so the Up next rank always sits at the row's end, in one
+  // column down the section where it is easy to scan, rather than trailing titles of every length.
   .row-title {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     min-width: 0;
   }
 }

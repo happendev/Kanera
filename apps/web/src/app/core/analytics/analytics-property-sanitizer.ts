@@ -3,6 +3,8 @@ import type { Properties } from "posthog-js";
 const allowedByEvent: Record<string, ReadonlySet<string>> = {
   registration_started: new Set(["anonymous_id", "source", "medium", "campaign", "landing_page", "content", "term", "event_version"]),
   signup_step: new Set(["step", "error_code", "event_version"]),
+  sign_in_provider_selected: new Set(["provider", "auth_page", "event_version"]),
+  sign_in_provider_step: new Set(["step", "provider", "error_code", "event_version"]),
   import_started: new Set(["import_source"]),
   premium_feature_attempted: new Set(["premium_feature", "limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),
   plan_limit_warning_seen: new Set(["limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),
@@ -74,7 +76,9 @@ const allowedTransportProperties = new Set([
 // PostHog assign each session a channel. Without it every board.kanera.app session is "Unknown".
 // It must ride on every event type, because a session's first event may be $identify or
 // $groupidentify rather than a $pageview.
-const allowedSessionContextProperties = new Set(["$referring_domain"]);
+// The visitor's country (from Cloudflare via /auth/config, never PostHog's IP lookup) rides on
+// every event for the same reason, under PostHog's standard names so its country reports work.
+const allowedSessionContextProperties = new Set(["$referring_domain", "$geoip_country_code", "$geoip_country_name"]);
 
 function isAllowedTransportProperty(property: string): boolean {
   return allowedTransportProperties.has(property) || allowedSessionContextProperties.has(property);

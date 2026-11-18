@@ -220,6 +220,45 @@ void test("HTTP MCP endpoint lists only read tools for a read-only credential an
   }
 });
 
+void test("HTTP MCP endpoint lists Kanera Cloud-only tools only when the API reports a hosted deployment", async () => {
+  const selfHostedToken = `kanera_u_test_${"S".repeat(43)}`;
+  const api = createServer((req, res) => {
+    const deploymentMode = req.headers.authorization === `Bearer ${selfHostedToken}` ? "self_hosted" : "hosted";
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ userId: "u", scope: "write", deploymentMode }));
+  });
+  await new Promise<void>((resolve) => api.listen(0, "127.0.0.1", resolve));
+  const address = api.address();
+  assert.ok(address && typeof address !== "string");
+  try {
+    await withHttpServer(async (baseUrl) => {
+      const toolNames = async (token: string) => {
+        const response = await fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            accept: "application/json, text/event-stream",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-06-18",
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+        });
+        assert.equal(response.status, 200);
+        const text = await response.text();
+        const payload = JSON.parse(text.startsWith("{") ? text : text.split("\n").find((line) => line.startsWith("data: "))!.slice(6)) as { result: { tools: Array<{ name: string }> } };
+        return payload.result.tools.map((tool) => tool.name);
+      };
+      // A self-hosted operator is not the Kanera team, so its agents never see feedback.report.
+      const selfHosted = await toolNames(selfHostedToken);
+      assert.ok(selfHosted.includes("cards.update"));
+      assert.ok(!selfHosted.includes("feedback.report"));
+      assert.ok((await toolNames(`kanera_u_test_${"H".repeat(43)}`)).includes("feedback.report"));
+    }, { publicApiUrl: `http://127.0.0.1:${address.port}` });
+  } finally {
+    await new Promise<void>((resolve) => api.close(() => resolve()));
+  }
+});
+
 void test("HTTP MCP endpoint caps request bodies and sends security headers", async () => {
   const server = createServer(createMcpHttpHandler({ bodyMaxBytes: 32 }));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

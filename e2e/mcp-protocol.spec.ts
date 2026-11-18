@@ -80,9 +80,10 @@ async function exercise(client: Client, cell: string, target: { boardId: string;
     expect(validateCreate(invalid), `${cell}: schema rejects ${JSON.stringify(invalid)}`).toMatchObject({ valid: false });
   }
   record("input-schema", { dialect: cardsCreate.inputSchema.$schema, validArguments: true, invalidArgumentsRejected: true });
-  // These operations stay inside a newly-created or private user scope. Other writes can
-  // dispatch the workspace outbox, MCP event callbacks, or previously configured automations.
-  const privateWrites = ["workspaces.create", "boards.create_standalone", "cards.create_upload_link", "cards.set_watching", "scratchpad.capture", "scratchpad.update"];
+  // These operations stay inside a newly-created or private user scope (feedback.report reaches
+  // only the Kanera team). Other writes can dispatch the workspace outbox, MCP event callbacks, or
+  // previously configured automations.
+  const privateWrites = ["workspaces.create", "boards.create_standalone", "cards.create_upload_link", "cards.set_watching", "scratchpad.capture", "scratchpad.update", "feedback.report"];
   const adminReads = ["automations.list", "automations.list_executions"];
   const repeatableWrites = ["automations.delete", "cards.delete_attachment", "cards.set_watching", "checklists.delete_item", "checklists.update", "comments.delete", "comments.set_reaction", "priorities.move", "priorities.remove", "separators.delete", "separators.move"];
   for (const tool of tools.tools) {

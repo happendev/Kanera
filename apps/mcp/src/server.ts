@@ -781,18 +781,28 @@ export interface KaneraMcpContext {
    * Unset means the full catalog; the public API still refuses every write a read-only key makes.
    */
   readOnly?: boolean;
+  /**
+   * The public API reports a hosted deployment (session.get deploymentMode). False hides Kanera
+   * Cloud-only tools (feedback.report): a self-hosted operator is not the Kanera team, so the tool
+   * could only fail there. Unset keeps them, so a failed lookup never shrinks the catalog.
+   */
+  hosted?: boolean;
 }
 
 /**
- * Resolve whether a credential is read-only. A failed lookup answers undefined, which callers treat
- * as "full catalog": that is the pre-existing behaviour and the public API remains the authority
- * on every write, so an outage must not hide tools.
+ * Resolve what a credential's catalog should contain: its read-only scope and whether the API is
+ * Kanera Cloud. A failed lookup answers undefined, which callers treat as "full catalog": that is
+ * the pre-existing behaviour and the public API remains the authority on every write, so an outage
+ * must not hide tools.
  */
-export async function credentialIsReadOnly(apiKey: string, publicApiUrl?: string): Promise<boolean | undefined> {
+export async function credentialCatalog(apiKey: string, publicApiUrl?: string): Promise<{ readOnly: boolean; hosted?: boolean } | undefined> {
   try {
     const session = await new KaneraClient({ baseUrl: publicApiUrl ?? env.KANERA_PUBLIC_API_URL, apiKey, timeoutMs: env.MCP_UPSTREAM_TIMEOUT_MS })
-      .get<{ scope?: string | null }>("/api/v1/session");
-    return session.scope === "read";
+      .get<{ scope?: string | null; deploymentMode?: string }>("/api/v1/session");
+    return {
+      readOnly: session.scope === "read",
+      ...(session.deploymentMode !== undefined && { hosted: session.deploymentMode === "hosted" }),
+    };
   } catch {
     return undefined;
   }
@@ -1009,6 +1019,7 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   "runs.start": SEND,
   "runs.update": SEND,
   "runs.list": READ,
+  "feedback.report": ADD,
 };
 
 function toolTitle(name: string) {
@@ -2332,6 +2343,13 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     includeEnded: z.boolean().default(false),
     limit: z.number().int().min(1).max(100).default(50),
   }, async (a, api) => api.get(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/agent-runs`, { includeEnded: a.includeEnded, limit: a.limit }), ctx);
+  if (ctx.hosted !== false) registerKaneraTool(server, "feedback.report", "Kanera Cloud only: report a Kanera error you could not work around, a missing capability, or a suggestion to the Kanera team, with steps and the exact error. Not for messaging members. Emailed with the user's name, email and organisation; omit secrets and private project content unless the user agreed. Max 10 per user per hour.", {
+    kind: z.enum(["error", "improvement", "other"]),
+    summary: z.string().trim().min(1).max(200).describe("One line; the email subject."),
+    details: z.string().trim().min(1).max(8000),
+    tool: z.string().trim().min(1).max(100).optional().describe("Tool involved, e.g. cards.move."),
+    agent: z.string().trim().min(1).max(200).optional().describe("Agent/host and model."),
+  }, (a, api) => api.post("/api/v1/feedback", { kind: a.kind, summary: a.summary, details: a.details, tool: a.tool, agent: a.agent }), ctx);
   registerKaneraTool(server, "comments.list", "List a card's comments, newest first. Cursor-paginated; pass the opaque nextCursor unchanged.", {
     cardId: cardReference,
     cursor: z.string().min(1).max(1000).optional(),

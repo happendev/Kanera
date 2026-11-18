@@ -34,7 +34,7 @@
           <input type="checkbox" [checked]="analytics()" (input)="analytics.set($any($event.target).checked)" aria-label="Allow analytics cookies" i18n-aria-label />
         </label>
 
-        <p class="policy" i18n>Separate server-side analytics include limited commercial lifecycle events sent by Kanera's backend, such as subscription starts, renewals, resumptions, cancellations, and plan or seat-band changes. These events exclude payment-method details and workspace content. See our <a href="https://www.kanera.app/privacy" target="_blank" rel="noopener noreferrer">privacy notice</a> for more information.</p>
+        <p class="policy" i18n>Separate server-side analytics include limited commercial lifecycle events sent by Kanera's backend, such as subscription starts, renewals, resumptions, cancellations, and plan or seat-count changes. These events exclude payment-method details and workspace content. See our <a href="https://www.kanera.app/privacy" target="_blank" rel="noopener noreferrer">privacy notice</a> for more information.</p>
         <div class="dialog-actions">
           <button type="button" class="secondary" (click)="save(false)" i18n="Cookie consent button: decline optional cookies">Reject non-essential</button>
           <button type="button" class="primary" (click)="save(analytics())" i18n="Cookie preferences dialog button">Save preferences</button>

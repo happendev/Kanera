@@ -1,3 +1,5 @@
+import type { SignInProvider } from "@kanera/shared/schema";
+
 export type ImportSource = "trello" | "kanera" | "csv" | "other";
 
 export type PremiumFeature = "members" | "boards" | "automation_rules" | "automation_executions" | "guests" | "api" | "integrations";
@@ -32,6 +34,13 @@ export type SignupStep =
   | "code_submitted"
   | "account_creation_failed";
 
+// Pages that show the Google / Microsoft / GitHub buttons. Any of them can create an account: a
+// provider sign-in with an unknown email continues into signup.
+export type ProviderAuthPage = "signup" | "login" | "invite" | "board_invite";
+// What happened after the provider sent the person back. The server's registration_completed
+// (signup_method = provider) is the success step; these are the stops before it.
+export type ProviderSignInStep = "signup_details_shown" | "signup_details_submitted" | "email_code_shown" | "failed";
+
 export interface AnalyticsEventMap {
   registration_started: {
     anonymous_id: string;
@@ -44,6 +53,8 @@ export interface AnalyticsEventMap {
     event_version: number;
   };
   signup_step: { step: SignupStep; error_code?: string; event_version: number };
+  sign_in_provider_selected: { provider: SignInProvider; auth_page: ProviderAuthPage; event_version: number };
+  sign_in_provider_step: { step: ProviderSignInStep; provider?: SignInProvider; error_code?: string; event_version: number };
   import_started: { import_source: ImportSource };
   premium_feature_attempted: PlanLimitAnalyticsProperties & { premium_feature: PremiumFeature };
   plan_limit_warning_seen: PlanLimitAnalyticsProperties;

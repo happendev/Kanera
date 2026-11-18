@@ -336,6 +336,7 @@ export async function announceCreatedAccount(app: FastifyInstance, result: Creat
     organizationId: result.user.clientId,
     properties: {
       user_id: result.user.id,
+      signup_method: context.signInMethod,
       source: attribution?.source ?? "direct",
       medium: attribution?.medium ?? "none",
       campaign: attribution?.campaign ?? "none",

@@ -38,7 +38,6 @@ test("a board-only owner invites someone by link from the board members menu", a
   // Phone first: the popover stays anchored and on screen, and the action is reachable.
   await page.setViewportSize(phone);
   await page.locator(".board-members-trigger").filter({ visible: true }).click();
-  await expect(invite).toContainText("All organisation members are already on this board.");
   await expect(invite.getByRole("button", { name: "Invite by link" })).toBeVisible();
   await expectInsideViewport(menu.locator(".bmp-panel"), phone);
   await menu.screenshot({ path: testInfo.outputPath("members-invite-phone.png") });
@@ -47,8 +46,7 @@ test("a board-only owner invites someone by link from the board members menu", a
 
   await page.setViewportSize(contextDefaults.viewport);
   await page.locator(".board-members-trigger").click();
-  // The dead-end note now sits with the invite action, which defaults to Editor.
-  await expect(invite).toContainText("All organisation members are already on this board.");
+  // The invite action defaults to Editor.
   await expect(invite.getByRole("combobox", { name: "Role for people who join with the link" })).toHaveValue("editor");
   await invite.getByRole("button", { name: "Invite by link" }).click();
 
@@ -58,6 +56,8 @@ test("a board-only owner invites someone by link from the board members menu", a
   await expect(invite).toContainText("Anyone with this link can join this board as an editor. It expires on");
   await expect(invite.getByRole("button", { name: "Copy invite link" })).toContainText("Copied");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(inviteUrl);
+  // The live link is listed with the board's pending invites, so it can be found and withdrawn later.
+  await expect(menu.locator(".bmp-invites")).toContainText("Invite link");
   await menu.screenshot({ path: testInfo.outputPath("members-invite-link-desktop.png") });
 
   // The long link truncates inside the panel instead of widening it, and stays copyable at phone width.

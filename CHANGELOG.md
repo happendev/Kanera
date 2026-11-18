@@ -11,10 +11,13 @@ All notable changes to Kanera are documented here.
 - **Example cards in templates:** boards created from a template start with a few example cards in its lists, so there is something to move and edit straight away. Blank and Hiring Pipeline start empty.
 - **Security emails:** Kanera now emails you when your password is changed or reset, two-factor authentication is turned on or off, recovery codes are regenerated, or your email address changes (sent to the old address). Members are also emailed when an organisation is deleted.
 - **AI agents link the cards they create:** over MCP and the CLI, a new card can be created already blocking, blocked by or related to other cards, including other cards created in the same batch, so plans arrive with their dependencies instead of card numbers written in descriptions.
+- **AI agents can send feedback** (hosted): a new `feedback.report` MCP tool, also in the CLI and as `POST /api/v1/feedback`, lets an agent report a Kanera error, a missing capability or a suggestion straight to the Kanera team.
+- **JSON attachment previews:** `.json` attachments open in the preview, pretty-printed, wherever they appear on a card. A file that isn't valid JSON is shown as stored.
 - **Emailed organisation invites:** add an address when creating an invite in Users and Kanera sends the invite link to it. The link still works however you share it.
 
 ### Changed
 
+- **Redesigned board members menu:** one field searches the board and adds people. Type an email address to invite someone outside the organisation as a guest, or (owners and admins) to the organisation, without going to workspace settings. Existing guests from other boards can be added by name. Admins are listed separately with the reason they have access, each person has a single access control for role, assigned-items-only and removal, and pending invites for the board are listed and can be withdrawn.
 - **Shorter signup:** creating an account asks only for your name, email and password. Your organisation starts as "Private" and can be renamed in settings, and the theme follows your device until you pick one.
 - **Clearer emails:** subjects name the card or person, card emails have an Open card button, footers say why you got the email, and every email includes a plain-text version.
 - On phones, setup keeps its Create board and Continue buttons in view instead of below every template.

@@ -107,7 +107,8 @@ function defaultDefinition(): WorkViewDefinition {
     },
     groupBy: "dueDate",
     sort: "dueAsc",
-    display: "board",
+    // Overview first: it answers "what needs me / my team" before the raw card lanes.
+    display: "overview",
     columns: ["source", "list", "assignees", "dueDate", "completion"],
     table: defaultTablePresentation(),
     collapsedWorkspaceIds: [],

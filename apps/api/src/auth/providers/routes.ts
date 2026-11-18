@@ -311,8 +311,10 @@ export async function providerAuthRoutes(app: FastifyInstance, helpers: Provider
       state: z.string().max(512).optional(),
       error: z.string().max(256).optional(),
     }).parse(req.query);
+    // `provider` is only for the web app's analytics: its funnel steps after the redirect are
+    // attributed to Google / Microsoft / GitHub. It is the validated route enum, never user input.
     const fail = (error: dto.ProviderSignInError, intent?: string) =>
-      reply.redirect(webCallbackUrl(intent === "link" ? { error, intent } : { error }));
+      reply.redirect(webCallbackUrl(intent === "link" ? { error, intent } : { error, provider }));
 
     if (!query.state) return fail("expired");
     const [flow] = await db
@@ -353,7 +355,7 @@ export async function providerAuthRoutes(app: FastifyInstance, helpers: Provider
       return fail("failed", flow.intent);
     }
     await db.update(authProviderFlows).set({ result }).where(eq(authProviderFlows.id, flow.id));
-    return reply.redirect(webCallbackUrl(flow.intent === "link" ? { h: handoff.raw, intent: "link" } : { h: handoff.raw }));
+    return reply.redirect(webCallbackUrl(flow.intent === "link" ? { h: handoff.raw, intent: "link" } : { h: handoff.raw, provider }));
   });
 
   app.post("/auth/providers/complete", { preHandler: helpers.authRateLimit("provider-complete") }, async (req, reply) => {

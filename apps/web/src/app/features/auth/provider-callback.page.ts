@@ -5,10 +5,13 @@ import { Router, RouterLink } from "@angular/router";
 import type { ProviderSignInError } from "@kanera/shared/dto";
 import type { SignInProvider } from "@kanera/shared/schema";
 import { AuthService } from "../../core/auth/auth.service";
+import type { ProviderSignInStep } from "../../core/analytics/analytics-events";
+import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { isMfaEnrollmentRequired, MFA_ENROLLMENT_HANDOFF_KEY, MFA_VERIFY_HANDOFF_KEY, parseAuthResponse } from "../../core/auth/auth-response";
 import { LogoComponent } from "../../shared/logo.component";
 import { LocaleSwitcherComponent } from "./locale-switcher.component";
+import { knownSignInProvider } from "./provider-sign-in.component";
 
 // Matches the email signup form: a new organisation takes this default name, renamed later.
 const DEFAULT_ORG_NAME = $localize`:Default name for a new organisation:Private`;
@@ -136,11 +139,14 @@ export class ProviderCallbackPage implements OnInit {
   private readonly publicAuth = inject(PublicAuthClient);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
+  private readonly analytics = inject(AnalyticsService);
 
   /** One-time handoff code from the API callback. */
   readonly h = input<string>();
   readonly error = input<string>();
   readonly intent = input<string>();
+  /** Which provider sent the person back; the API adds it for analytics attribution only. */
+  readonly provider = input<string>();
 
   protected readonly step = signal<Step>({ kind: "working" });
   protected readonly code = signal("");
@@ -164,6 +170,7 @@ export class ProviderCallbackPage implements OnInit {
   async ngOnInit() {
     const handoff = this.h();
     if (!handoff) {
+      this.trackStep("failed", this.error() || "unknown");
       this.step.set({ kind: "error", message: providerErrorMessage(this.error()) });
       return;
     }
@@ -181,6 +188,7 @@ export class ProviderCallbackPage implements OnInit {
     event.preventDefault();
     const displayName = this.displayName().trim();
     if (!displayName) { this.formError.set($localize`Name is required.`); return; }
+    this.trackStep("signup_details_submitted");
     await this.complete({ signup: { displayName, orgName: DEFAULT_ORG_NAME } });
   }
 
@@ -197,10 +205,26 @@ export class ProviderCallbackPage implements OnInit {
       await this.handleResponse(body ?? {});
     } catch {
       this.formError.set($localize`Unable to reach the server. Check your connection and try again.`);
-      if (this.step().kind === "working") this.step.set({ kind: "error", message: $localize`Unable to reach the server. Check your connection and try again.` });
+      if (this.step().kind === "working") {
+        this.trackStep("failed", "network");
+        this.step.set({ kind: "error", message: $localize`Unable to reach the server. Check your connection and try again.` });
+      }
     } finally {
       this.busy.set(false);
     }
+  }
+
+  // Stops between returning from the provider and registration_completed (or a sign-in). Linking a
+  // provider from Account security is not a signup, so it reports nothing.
+  private trackStep(step: ProviderSignInStep, errorCode?: string) {
+    if (this.intent() === "link") return;
+    const provider = knownSignInProvider(this.provider());
+    this.analytics.track("sign_in_provider_step", {
+      step,
+      ...(provider ? { provider } : {}),
+      ...(errorCode ? { error_code: errorCode.slice(0, 64) } : {}),
+      event_version: 1,
+    });
   }
 
   private handleFailure(status: number, body: { code?: string; message?: string; details?: { reason?: string } } | null, wasCode: boolean) {
@@ -209,6 +233,8 @@ export class ProviderCallbackPage implements OnInit {
       this.formError.set($localize`Invalid or expired verification code`);
       return;
     }
+    // Error codes only (API codes or provider reasons): never the server's message text.
+    this.trackStep("failed", body?.code === "PROVIDER_SIGN_IN_FAILED" ? body.details?.reason ?? "failed" : body?.code?.toLowerCase() ?? `http_${status}`);
     if (body?.code === "SEAT_LIMIT_REACHED") {
       this.step.set({ kind: "error", message: $localize`This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.` });
       return;
@@ -229,10 +255,12 @@ export class ProviderCallbackPage implements OnInit {
     switch (body.status) {
       case "email_code_required":
         this.code.set("");
+        this.trackStep("email_code_shown");
         this.step.set({ kind: "code", email: body.email ?? "" });
         return;
       case "signup_details_required":
         this.displayName.set(body.displayName ?? "");
+        this.trackStep("signup_details_shown");
         this.step.set({ kind: "signup", email: body.email ?? "", joiningOrganisation: body.joiningOrganisation ?? null });
         return;
       case "linked":

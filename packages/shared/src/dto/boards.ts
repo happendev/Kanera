@@ -90,6 +90,26 @@ export const updateBoardMemberBody = z.object({
 });
 export type UpdateBoardMemberBody = z.infer<typeof updateBoardMemberBody>;
 
+/** Why a pinned board member has access; null for an explicit board grant. */
+export type BoardMemberAccessSource = "organisation_owner" | "organisation_admin" | "workspace_admin" | null;
+
+/** guest: an email-bound invitation for someone outside the organisation. member: an organisation invite. */
+export const BOARD_INVITE_KINDS = ["guest", "member"] as const;
+export type BoardInviteKind = (typeof BOARD_INVITE_KINDS)[number];
+
+export const revokeBoardInviteQuery = z.object({ kind: z.enum(BOARD_INVITE_KINDS) });
+
+export type BoardInviteRow = {
+  id: string;
+  kind: BoardInviteKind;
+  /** Null for an organisation invite link that anyone holding it can redeem. */
+  email: string | null;
+  role: (typeof BOARD_ROLES)[number];
+  assignedItemsOnly: boolean;
+  expiresAt: string | null;
+  createdAt: string;
+};
+
 /** At most this many boards per tile-summary request: a settings page, never a catalog. */
 export const BOARD_TILE_SUMMARY_MAX_BOARDS = 100;
 

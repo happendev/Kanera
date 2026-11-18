@@ -99,6 +99,8 @@ export const authConfigResponse = z.object({
     provider: z.literal("posthog"),
     projectKey: z.string().min(1),
     apiHost: z.url(),
+    // ISO 3166-1 alpha-2 country from Cloudflare, or null when unknown. Analytics context only.
+    country: z.string().regex(/^[A-Z]{2}$/).nullable(),
   }).nullable(),
 });
 export type AuthConfigResponse = z.infer<typeof authConfigResponse>;

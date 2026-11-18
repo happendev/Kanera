@@ -239,6 +239,7 @@ const allToolCases: ToolCase[] = [
   { name: "runs.start", args: { cardId: C, title: "Drafting copy" }, method: "POST", path: `/api/v1/cards/${C}/agent-runs`, body: { title: "Drafting copy" } },
   { name: "runs.update", args: { runId: O, status: "succeeded", summary: "Done" }, method: "PATCH", path: `/api/v1/agent-runs/${O}`, body: { status: "succeeded", summary: "Done" } },
   { name: "runs.list", args: { cardId: C, includeEnded: false, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/agent-runs?includeEnded=false&limit=50` },
+  { name: "feedback.report", args: { kind: "error", summary: "Move failed", details: "400 on a valid list", tool: "cards.move" }, method: "POST", path: "/api/v1/feedback", body: { kind: "error", summary: "Move failed", details: "400 on a valid list", tool: "cards.move" } },
   { name: "kanera_bulk_add_comments", args: { boardId: B, comments: [{ cardId: C, body: "Hello" }] }, method: "POST", path: `/api/v1/boards/${B}/comments/bulk/create`, body: { comments: [{ cardId: C, body: "Hello" }] } },
   { name: "activity.list", args: { boardId: B, limit: 25 }, method: "GET", path: `/api/v1/boards/${B}/activity?limit=25` },
   { name: "notes.list", args: { boardId: B, scope: "team" }, method: "GET", path: `/api/v1/boards/${B}/notes?scope=team&limit=26&offset=0` },
@@ -544,7 +545,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 104);
+  assert.equal(expectedNames.length, 105);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -739,7 +740,8 @@ void test("every MCP tool declares structured output and explicit safety annotat
     assert.equal(typeof tool.annotations?.idempotentHint, "boolean", `${name} idempotentHint`);
     const repeatableWrites = ["automations.delete", "cards.delete_attachment", "cards.set_watching", "checklists.delete_item", "checklists.update", "comments.delete", "comments.set_reaction", "priorities.move", "priorities.remove", "separators.delete", "separators.move"];
     assert.equal(tool.annotations?.idempotentHint, tool.annotations?.readOnlyHint === true || repeatableWrites.includes(name), `${name} safe repeat guarantee`);
-    const privateWrites = ["workspaces.create", "boards.create_standalone", "cards.create_upload_link", "cards.set_watching", "scratchpad.capture", "scratchpad.update"];
+    // feedback.report emails only the Kanera team, never workspace members or webhooks.
+    const privateWrites = ["workspaces.create", "boards.create_standalone", "cards.create_upload_link", "cards.set_watching", "scratchpad.capture", "scratchpad.update", "feedback.report"];
     const external = name === "search.docs" || (tool.annotations?.readOnlyHint === false && !privateWrites.includes(name));
     assert.equal(tool.annotations?.openWorldHint, external, `${name} external delivery destinations`);
     if (external && tool.annotations?.readOnlyHint === false) assert.equal(tool.annotations.destructiveHint, true, `${name} irreversible outbound deliveries`);
@@ -930,8 +932,9 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // Relations on cards.create and cards.bulk_create items (so agents link the cards they mention
     // instead of writing keys as text) add ~2.2k: the schema ceiling moves to 210,000 and the
     // OAuth-inclusive one to 218,500.
-    assert.ok(schemaCatalogLength <= 210_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 218_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    // feedback.report (Kanera Cloud product feedback) adds ~1.4k: both ceilings move by 1.5k.
+    assert.ok(schemaCatalogLength <= 211_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 220_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8.5k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.
@@ -1238,6 +1241,26 @@ void test("tools/list offers a read-only credential only read tools and keeps th
     await client.close();
     await server.close();
   }
+});
+
+void test("tools/list hides Kanera Cloud-only tools from a self-hosted deployment", async () => {
+  const listedNames = async (hosted: boolean | undefined) => {
+    const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test", hosted });
+    const client = new Client({ name: "kanera-deployment-contract-test", version: "1" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      return (await client.listTools()).tools.map((tool) => tool.name);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  };
+  assert.ok(!(await listedNames(false)).includes("feedback.report"));
+  assert.ok((await listedNames(true)).includes("feedback.report"));
+  // An unknown deployment (failed session lookup) keeps the full catalog; the API still refuses.
+  assert.ok((await listedNames(undefined)).includes("feedback.report"));
 });
 
 void test("date phrases resolve in the user's zone before reaching the public API", async () => {

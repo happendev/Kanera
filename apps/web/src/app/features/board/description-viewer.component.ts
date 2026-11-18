@@ -1277,6 +1277,7 @@ export class DescriptionViewerComponent {
       if (["doc", "docx", "odt", "rtf"].includes(ext)) return "application/msword";
       if (["md", "markdown"].includes(ext)) return "text/markdown";
       if (ext === "txt") return "text/plain";
+      if (ext === "json") return "application/json";
       return "";
     } catch {
       return "";

@@ -433,14 +433,14 @@ describe("GlobalWorkState", () => {
     expect(saveGlobalWork).toHaveBeenCalled();
   });
 
-  it("defaults My Cards and Team Cards to board view", async () => {
+  it("defaults My Cards and Team Cards to overview", async () => {
     const { state } = setup();
 
     await state.initialize("my");
-    expect(state.definition().display).toBe("board");
+    expect(state.definition().display).toBe("overview");
 
     await state.initialize("team");
-    expect(state.definition().display).toBe("board");
+    expect(state.definition().display).toBe("overview");
   });
 
   it("reports Group and Sort as set only when they differ from the lens default", async () => {
@@ -1240,7 +1240,7 @@ describe("GlobalWorkState", () => {
     TestBed.tick();
     expect(readGlobalWorkPreference(userId, "team")?.definition).toMatchObject({
       groupBy: "dueDate",
-      display: "board",
+      display: "overview",
       filters: { assigneeIds: [] },
     });
   });
@@ -1412,23 +1412,24 @@ describe("GlobalWorkState priority queue", () => {
     expect(state.cards().length).toBeGreaterThan(0);
   });
 
-  it("loads team queues only on entering the overview and refreshes them on invalidation", async () => {
+  it("loads team queues only for the overview and refreshes them on invalidation", async () => {
     const { state, socket, get } = setup();
     const batchGets = () => get.mock.calls.filter(([path]) => path === "/work/priorities");
+    // The overview is the default display, so the first load already fetches the queue batch.
     await state.initialize("team");
-    expect(batchGets()).toHaveLength(0);
+    await vi.waitFor(() => expect(batchGets()).toHaveLength(1));
     state.setDisplay("table");
     await state.refresh();
-    expect(batchGets()).toHaveLength(0);
+    expect(batchGets()).toHaveLength(1);
     expect(state.cards().length).toBeGreaterThan(0);
 
     state.setDisplay("overview");
     await vi.waitFor(() => expect(state.reconciling()).toBe(false));
-    await vi.waitFor(() => expect(batchGets()).toHaveLength(1));
+    await vi.waitFor(() => expect(batchGets()).toHaveLength(2));
     await vi.waitFor(() => expect(state.teamPriorities()?.queues.map((lane) => lane.target.userId)).toEqual([VIEWER_ID, TEAMMATE_ID]));
 
     socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: TEAMMATE_ID });
-    await vi.waitFor(() => expect(batchGets()).toHaveLength(2));
+    await vi.waitFor(() => expect(batchGets()).toHaveLength(3));
     await vi.waitFor(() => expect(state.reconciling()).toBe(false));
 
     state.setDisplay("table");
@@ -1436,7 +1437,7 @@ describe("GlobalWorkState priority queue", () => {
     socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: TEAMMATE_ID });
     await vi.waitFor(() => expect(state.reconciliationVersion()).toBeGreaterThan(version));
     await state.refresh();
-    expect(batchGets()).toHaveLength(2);
+    expect(batchGets()).toHaveLength(3);
   });
 
   it("loads a filter-independent candidate pool for the one person the overview dock is on", async () => {
@@ -1633,7 +1634,7 @@ describe("GlobalWorkState priority queue", () => {
 
   it("opens the overview in place of the retired Priorities display", () => {
     // "priorities" was the team lanes display. A stored preference or saved view naming it lands on
-    // the overview, whose dock replaced it, on the team lens and falls back everywhere else.
+    // the overview, whose dock replaced it, on the team lens, and the default display (also the overview) everywhere else.
     const stored = { ...cachedDefinition, display: "priorities" } as WorkViewDefinition;
     writeGlobalWorkPreference(VIEWER_ID, "team", { definition: stored, selectedViewId: null });
     expect(readGlobalWorkPreference(VIEWER_ID, "team")?.definition.display).toBe("priorities");
@@ -1643,9 +1644,7 @@ describe("GlobalWorkState priority queue", () => {
       ...stored,
       filters: { ...stored.filters, assigneeIds: [TEAMMATE_ID] },
     }, "team", catalog, VIEWER_ID).filters.assigneeIds).toEqual([]);
-    const display = sanitizeGlobalWorkDefinition(stored, "my", catalog, VIEWER_ID).display;
-    expect(["board", "table"]).toContain(display);
-    expect(display).not.toBe("priorities");
+    expect(sanitizeGlobalWorkDefinition(stored, "my", catalog, VIEWER_ID).display).toBe("overview");
   });
 
   it("opens the Up next panel unless this person explicitly closed it", async () => {

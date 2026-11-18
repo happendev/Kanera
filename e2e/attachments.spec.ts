@@ -5,7 +5,7 @@ import { expect, test } from "./support/fixtures";
 import { createCard, openBoard, openCard } from "./support/ui";
 
 // Product rule (CLAUDE.md): attachments behave the same in the description, comments, the
-// attachment list and activity rows. Images, video, audio and PDFs open the shared lightbox; any
+// attachment list and activity rows. Images, video, audio, PDFs and text (JSON) open the shared lightbox; any
 // format it cannot render downloads instead. One file per behaviour class runs through each surface.
 const fixtureDirectory = path.join(__dirname, "fixtures");
 const fixtures = {
@@ -13,6 +13,7 @@ const fixtures = {
   pdf: { file: "sample.pdf", mimeType: "application/pdf", ext: "pdf", opens: "pdf" },
   audio: { file: path.join(__dirname, "fixtures/preview.wav"), mimeType: "audio/wav", ext: "wav", opens: "audio" },
   video: { file: path.join(__dirname, "fixtures/preview.webm"), mimeType: "video/webm", ext: "webm", opens: "video" },
+  json: { file: "sample.json", mimeType: "application/json", ext: "json", opens: "text" },
   docx: {
     file: "sample.docx",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -32,12 +33,12 @@ function upload(kind: Kind, surface: string) {
   };
 }
 
-async function expectLightbox(detail: Locator, kind: "image" | "pdf" | "audio" | "video", open: () => Promise<void>) {
+async function expectLightbox(detail: Locator, kind: "image" | "pdf" | "audio" | "video" | "text", open: () => Promise<void>) {
   const page = detail.page();
   await open();
   const lightbox = page.locator("k-image-lightbox");
   await expect(lightbox).toBeVisible();
-  const preview = lightbox.locator({ image: ".lb-img", pdf: ".lb-pdf", audio: "audio", video: "video" }[kind]);
+  const preview = lightbox.locator({ image: ".lb-img", pdf: ".lb-pdf", audio: "audio", video: "video", text: ".lb-text-body" }[kind]);
   await expect(preview).toBeVisible();
   if (kind === "image") {
     await expect.poll(() => lightbox.locator(".lb-img").evaluate((image: HTMLImageElement) =>
@@ -48,6 +49,9 @@ async function expectLightbox(detail: Locator, kind: "image" | "pdf" | "audio" |
     const bytes = await lightbox.locator(".lb-pdf").evaluate(async (frame: HTMLIFrameElement) =>
       Array.from(new Uint8Array(await (await fetch(frame.src)).arrayBuffer())));
     expect(Buffer.from(bytes)).toEqual(readFileSync(path.join(fixtureDirectory, fixtures.pdf.file)));
+  } else if (kind === "text") {
+    // The fixture is stored minified; the preview must show it pretty-printed.
+    await expect(preview).toHaveText(JSON.stringify(JSON.parse(readFileSync(path.join(fixtureDirectory, fixtures.json.file), "utf8")), null, 2));
   } else {
     // A mounted player is not proof its source loaded or decoded. Both fixtures are half a second
     // long; a decoded frame plus advancing playback catches bad URLs, MIME handling and bad bytes.

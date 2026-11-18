@@ -4,7 +4,7 @@ import type { CompactCardSummary } from "@kanera/shared/events";
 import { compactCardSummary } from "@kanera/shared/events";
 import { boardMembers, boards, boardSeparators, cardKeyPrefixReservations, cardLabels, cardSummaryView, clientMembers, clients, lists, standaloneBoardGroups, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS } from "@kanera/shared/workspace-defaults";
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, lte, notExists, or, sql, type SQL } from "drizzle-orm";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
 import { assignedCardVisibility } from "../../lib/access.js";
@@ -296,6 +296,37 @@ export async function loadCompletedCards({
   return response;
 }
 
+/**
+ * People from other organisations who already hold a board in this organisation. addBoardMember
+ * accepts them directly (an existing relationship), so the members menu offers them by name rather
+ * than making an admin retype an email. Seat effects are previewed by the client before adding.
+ */
+async function loadOrganisationGuests(clientId: string) {
+  return db
+    .select({
+      userId: users.id,
+      email: users.email,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+      lastOnlineAt: users.lastOnlineAt,
+      clientId: users.clientId,
+    })
+    .from(users)
+    .where(and(
+      isNull(users.deletedAt),
+      exists(db.select({ one: sql`1` }).from(boardMembers)
+        .innerJoin(boards, eq(boards.id, boardMembers.boardId))
+        .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+        .where(and(eq(boardMembers.userId, users.id), eq(workspaces.clientId, clientId), isNull(boards.archivedAt)))),
+      notExists(db.select({ one: sql`1` }).from(clientMembers).where(and(
+        eq(clientMembers.clientId, clientId),
+        eq(clientMembers.userId, users.id),
+        isNull(clientMembers.removedAt),
+      ))),
+    ))
+    .orderBy(asc(users.displayName));
+}
+
 export async function loadBoardMemberCandidates({ ctx }: { ctx: BoardAccessContext }) {
   const [workspace] = await db
     .select({ kind: workspaces.kind })
@@ -326,12 +357,16 @@ export async function loadBoardMemberCandidates({ ctx }: { ctx: BoardAccessConte
         isNull(users.deletedAt),
       ))
       .orderBy(asc(clientMembers.addedAt));
+    const guests = await loadOrganisationGuests(ctx.clientId);
     // A standalone board has no product-facing workspace roster. Its board permissions picker
     // therefore offers every active organisation member; the mutation route keeps any required
     // hidden membership as an implementation detail.
     return {
       scope: "organisation" as const,
-      members: organisationMembers.map((member) => ({
+      members: [
+        ...organisationMembers.map((member) => ({ ...member, isGuest: false })),
+        ...guests.map((guest) => ({ ...guest, isGuest: true })),
+      ].map((member) => ({
         ...member,
         avatarUrl: withSignedMedia(member.clientId, { avatarUrl: member.avatarUrl }).avatarUrl,
       })),
@@ -340,7 +375,7 @@ export async function loadBoardMemberCandidates({ ctx }: { ctx: BoardAccessConte
 
   // The two rosters are independent; read them concurrently so opening the board members menu
   // waits on one round-trip here instead of two.
-  const [explicitMembers, inheritedAdmins] = await Promise.all([
+  const [explicitMembers, inheritedAdmins, guests] = await Promise.all([
     db.select({
       userId: users.id,
       email: users.email,
@@ -371,11 +406,17 @@ export async function loadBoardMemberCandidates({ ctx }: { ctx: BoardAccessConte
       isNull(users.deletedAt),
     ))
     .orderBy(asc(clientMembers.addedAt)),
+    loadOrganisationGuests(ctx.clientId),
   ]);
   const explicitUserIds = new Set(explicitMembers.map((member) => member.userId));
+  const sameOrg = [...explicitMembers, ...inheritedAdmins.filter((member) => !explicitUserIds.has(member.userId))];
+  const sameOrgIds = new Set(sameOrg.map((member) => member.userId));
   return {
     scope: "workspace" as const,
-    members: [...explicitMembers, ...inheritedAdmins.filter((member) => !explicitUserIds.has(member.userId))]
+    members: [
+      ...sameOrg.map((member) => ({ ...member, isGuest: false })),
+      ...guests.filter((guest) => !sameOrgIds.has(guest.userId)).map((guest) => ({ ...guest, isGuest: true })),
+    ]
       .map((member) => ({
         ...member,
         avatarUrl: withSignedMedia(member.clientId, { avatarUrl: member.avatarUrl }).avatarUrl,
@@ -410,11 +451,19 @@ export async function listBoardMembers({ auth, boardId }: { auth: AuthClaims; bo
     ))
     .where(eq(boardMembers.boardId, boardId))
     .orderBy(asc(boardMembers.addedAt));
-  return rows.map((row) => ({
-    ...row,
-    role: row.orgRole === "owner" || row.orgRole === "admin" ? "editor" as const : row.role,
-    pinned: row.pinned || row.orgRole === "owner" || row.orgRole === "admin",
-    isOrganisationMember: row.orgRole !== null,
-    avatarUrl: withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }).avatarUrl,
-  }));
+  return rows.map((row) => {
+    const orgAdmin = row.orgRole === "owner" || row.orgRole === "admin";
+    return {
+      ...row,
+      role: orgAdmin ? "editor" as const : row.role,
+      pinned: row.pinned || orgAdmin,
+      // Why a pinned row exists, so the members menu can say where the access is changed: an
+      // organisation role in organisation settings, a workspace admin role in workspace settings.
+      accessSource: orgAdmin
+        ? (row.orgRole === "owner" ? "organisation_owner" as const : "organisation_admin" as const)
+        : row.pinned ? "workspace_admin" as const : null,
+      isOrganisationMember: row.orgRole !== null,
+      avatarUrl: withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }).avatarUrl,
+    };
+  });
 }
