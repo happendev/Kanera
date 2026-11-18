@@ -933,5 +933,147 @@
         }
       }
     }
+  },
+  {
+    "id": "XPo7UM85",
+    "before": null,
+    "after": {
+      "id": "XPo7UM85",
+      "name": "Signups by method",
+      "description": "Weekly registration_completed split by signup_method (password, google, microsoft, github). Server-side, so not limited by cookie consent. Signups from before signup_method shipped (18 Nov 2026 code) show as None.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "TrendsQuery",
+          "tags": {
+            "productKey": "product_analytics"
+          },
+          "series": [
+            {
+              "kind": "EventsNode",
+              "math": "total",
+              "name": "registration_completed",
+              "event": "registration_completed",
+              "properties": [
+                {
+                  "key": "event_version",
+                  "type": "event",
+                  "value": [
+                    1
+                  ],
+                  "operator": "exact"
+                }
+              ],
+              "custom_name": "Completed signup"
+            }
+          ],
+          "version": 4,
+          "interval": "week",
+          "dateRange": {
+            "date_from": "-90d"
+          },
+          "trendsFilter": {
+            "display": "ActionsBar"
+          },
+          "breakdownFilter": {
+            "breakdowns": [
+              {
+                "type": "event",
+                "property": "signup_method"
+              }
+            ]
+          },
+          "filterTestAccounts": true
+        }
+      }
+    }
+  },
+  {
+    "id": "rBtJQhQa",
+    "before": null,
+    "after": {
+      "id": "rBtJQhQa",
+      "name": "Provider signup funnel (Google, Microsoft, GitHub)",
+      "description": "Signup-page provider click -> back at the name form (sign_in_provider_step = signup_details_shown) -> registration_completed via a provider. By provider, first touch, 1-day window. Steps 1-2 are browser events (consent needed); step 3 is server-side. For drop-off reasons see sign_in_provider_step = failed by error_code.",
+      "query": {
+        "kind": "InsightVizNode",
+        "source": {
+          "kind": "FunnelsQuery",
+          "tags": {
+            "productKey": "product_analytics"
+          },
+          "series": [
+            {
+              "kind": "EventsNode",
+              "name": "sign_in_provider_selected",
+              "event": "sign_in_provider_selected",
+              "properties": [
+                {
+                  "key": "auth_page",
+                  "type": "event",
+                  "value": [
+                    "signup"
+                  ],
+                  "operator": "exact"
+                }
+              ],
+              "custom_name": "Clicked a provider on signup"
+            },
+            {
+              "kind": "EventsNode",
+              "name": "sign_in_provider_step",
+              "event": "sign_in_provider_step",
+              "properties": [
+                {
+                  "key": "step",
+                  "type": "event",
+                  "value": [
+                    "signup_details_shown"
+                  ],
+                  "operator": "exact"
+                }
+              ],
+              "custom_name": "Returned to the name form"
+            },
+            {
+              "kind": "EventsNode",
+              "name": "registration_completed",
+              "event": "registration_completed",
+              "properties": [
+                {
+                  "key": "signup_method",
+                  "type": "event",
+                  "value": [
+                    "google",
+                    "microsoft",
+                    "github"
+                  ],
+                  "operator": "exact"
+                }
+              ],
+              "custom_name": "Completed signup"
+            }
+          ],
+          "version": 2,
+          "dateRange": {
+            "date_from": "-30d"
+          },
+          "funnelsFilter": {
+            "layout": "horizontal",
+            "funnelVizType": "steps",
+            "funnelOrderType": "ordered",
+            "funnelStepReference": "total",
+            "funnelWindowInterval": 1,
+            "breakdownAttributionType": "first_touch",
+            "funnelWindowIntervalUnit": "day"
+          },
+          "breakdownFilter": {
+            "breakdown": "provider",
+            "breakdown_type": "event"
+          },
+          "filterTestAccounts": true
+        }
+      }
+    }
   }
 ]

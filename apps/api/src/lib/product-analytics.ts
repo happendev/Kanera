@@ -1,5 +1,5 @@
 import { requestContext } from "@fastify/request-context";
-import { clients, userAcquisitions, type SignupAcquisition } from "@kanera/shared/schema";
+import { clients, userAcquisitions, type SignInProvider, type SignupAcquisition } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import { PostHog } from "posthog-node";
 import { db } from "../db.js";
@@ -47,6 +47,8 @@ export function analyticsDaysSince(startedAt: Date, now = new Date()): number {
 export interface ServerAnalyticsEventMap {
   registration_completed: {
     user_id: string;
+    // How the account was created, so provider signups can be compared with the email form.
+    signup_method: "password" | SignInProvider;
     source: string;
     medium: string;
     campaign: string;
@@ -113,6 +115,7 @@ export interface ServerAnalyticsEventMap {
     plan_code: PlanCode;
     billing_period: BillingPeriod;
     seat_band: string;
+    seats: number;
     event_version: number;
   };
   checkout_started: {
@@ -120,6 +123,7 @@ export interface ServerAnalyticsEventMap {
     plan_code: PlanCode;
     billing_period: BillingPeriod;
     seat_band: string;
+    seats: number;
     upgrade_source: "account_plan";
     event_version: number;
   };
@@ -128,6 +132,7 @@ export interface ServerAnalyticsEventMap {
     plan_code: PlanCode;
     billing_period: BillingPeriod;
     seat_band: string;
+    seats: number;
     upgrade_source: "account_plan";
     event_version: number;
   };
@@ -143,6 +148,7 @@ export interface ServerAnalyticsEventMap {
     plan_code: PlanCode;
     billing_period: BillingPeriod;
     seat_band: string;
+    seats: number;
     currency: string;
     event_version: number;
   };
@@ -151,10 +157,20 @@ export interface ServerAnalyticsEventMap {
     plan_code: PlanCode;
     billing_period: BillingPeriod;
     seat_band: string;
+    seats: number;
     // Stripe and PostHog revenue events both represent money in the currency's minor unit.
     revenue: number;
     currency: string;
     billing_reason: SubscriptionPaymentReason;
+    event_version: number;
+  };
+  seats_changed: {
+    workspace_id: string;
+    plan_code: PlanCode;
+    billing_period: BillingPeriod;
+    previous_seats: number;
+    seats: number;
+    seat_change: "increase" | "decrease";
     event_version: number;
   };
   subscription_cancelled: {
@@ -170,7 +186,10 @@ export type ServerAnalyticsEventName = keyof ServerAnalyticsEventMap;
 export type ServerAnalyticsEvent<TEvent extends ServerAnalyticsEventName = ServerAnalyticsEventName> = {
   [K in TEvent]: {
     event: K;
-    distinctId: string;
+    // Omit for commercial events (checkout, trial, subscription, seats): they are attributed to the
+    // organisation creator's person so its first-touch acquisition applies, falling back to an
+    // opaque organization:<id> person only when the creator account no longer exists.
+    distinctId?: string;
     organizationId: string;
     properties: ServerAnalyticsEventMap[K];
     supportSession?: boolean;
@@ -208,7 +227,7 @@ export interface ProductAnalytics {
 }
 
 const allowedProperties: { [K in ServerAnalyticsEventName]: ReadonlySet<keyof ServerAnalyticsEventMap[K]> } = {
-  registration_completed: new Set(["user_id", "source", "medium", "campaign", "event_version"]),
+  registration_completed: new Set(["user_id", "signup_method", "source", "medium", "campaign", "event_version"]),
   workspace_created: new Set(["user_id", "workspace_id", "plan_code", "event_version"]),
   board_created: new Set(["user_id", "workspace_id", "board_count_band", "event_version"]),
   board_imported: new Set(["user_id", "workspace_id", "import_source_category", "event_version"]),
@@ -220,21 +239,23 @@ const allowedProperties: { [K in ServerAnalyticsEventName]: ReadonlySet<keyof Se
   trial_activated: new Set(["workspace_id", "plan_code", "billing_period", "event_version"]),
   trial_converted: new Set(["workspace_id", "plan_code", "billing_period", "event_version"]),
   trial_ended: new Set(["workspace_id", "plan_code", "cancellation_category", "event_version"]),
-  subscription_checkout_created: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "event_version"]),
-  checkout_started: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "upgrade_source", "event_version"]),
-  checkout_abandoned: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "upgrade_source", "event_version"]),
+  subscription_checkout_created: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "seats", "event_version"]),
+  checkout_started: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "seats", "upgrade_source", "event_version"]),
+  checkout_abandoned: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "seats", "upgrade_source", "event_version"]),
   premium_feature_used: new Set(["workspace_id", "premium_feature", "plan_code", "current_usage", "event_version"]),
-  subscription_started: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "currency", "event_version"]),
+  subscription_started: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "seats", "currency", "event_version"]),
   subscription_payment_succeeded: new Set([
     "workspace_id",
     "plan_code",
     "billing_period",
     "seat_band",
+    "seats",
     "revenue",
     "currency",
     "billing_reason",
     "event_version",
   ]),
+  seats_changed: new Set(["workspace_id", "plan_code", "billing_period", "previous_seats", "seats", "seat_change", "event_version"]),
   subscription_cancelled: new Set(["workspace_id", "plan_code", "cancellation_category", "tenure_band", "event_version"]),
 };
 
@@ -307,13 +328,17 @@ class PostHogProductAnalytics implements ProductAnalytics {
   private async captureInternal<TEvent extends ServerAnalyticsEventName>(input: ServerAnalyticsEvent<TEvent>, country: string | null): Promise<void> {
     try {
       if (!this.client || input.supportSession) return;
-      const [organization] = await db.select({ excluded: clients.analyticsExcluded, attribution: userAcquisitions.attribution })
+      const [organization] = await db.select({
+        excluded: clients.analyticsExcluded,
+        creatorUserId: clients.createdByUserId,
+        attribution: userAcquisitions.attribution,
+      })
         .from(clients)
         .leftJoin(userAcquisitions, eq(userAcquisitions.userId, clients.createdByUserId))
         .where(eq(clients.id, input.organizationId)).limit(1);
       if (!organization || organization.excluded) return;
       this.client!.capture({
-        distinctId: input.distinctId,
+        distinctId: input.distinctId ?? organization.creatorUserId ?? `organization:${input.organizationId}`,
         event: input.event,
         groups: { organization: input.organizationId },
         properties: {

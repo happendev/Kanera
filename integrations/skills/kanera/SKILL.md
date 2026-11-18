@@ -254,3 +254,4 @@ retries of that same write, so a lost response does not create duplicate runs or
 - On `RATE_LIMITED`, respect `retryAfter` before retrying.
 - On validation errors, read `error.issues`: each `path` (such as `items[2].subChecklists[0].items[1].text`) names the exact field to fix. Correct that input from current Kanera context rather than guessing or resending the rest.
 - On `AMBIGUOUS_TARGET`, choose from the returned `candidates` by ID, or ask the user; never pick one silently.
+- When a Kanera tool fails in a way you cannot work around, behaves unexpectedly, or lacks something the task needs, report it once with `feedback.report` (kind, one-line summary, steps and the exact error) and tell the user you did. It reaches the Kanera team, not workspace members, with the user's name, email and organisation; leave out secrets and private project content unless the user agreed.

@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { after, before, test } from "node:test";
+import { after, before, mock, test } from "node:test";
 import { and, desc, eq } from "drizzle-orm";
 import { clients, emailQueue, mfaCredentials, userIdentities, users } from "@kanera/shared/schema";
 import type { SignInProvider } from "@kanera/shared/schema";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
+import { productAnalytics, type ServerAnalyticsEvent } from "../../lib/product-analytics.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import type { ProviderProfile } from "./adapters.js";
 
@@ -146,8 +147,15 @@ void test("a provider signup creates a passwordless account that signs straight 
   assert.equal(first.res.statusCode, 200, first.res.body);
   assert.equal(first.res.json<{ status: string }>().status, "signup_details_required");
 
+  const captured: ServerAnalyticsEvent[] = [];
+  const capture = mock.method(productAnalytics, "capture", async (input: ServerAnalyticsEvent) => { captured.push(input); });
   const created = await complete(app, first.flow, first.handoff, { signup: { displayName: "New Person" } });
+  await passwordSignup(app, "password-person@example.com");
+  capture.mock.restore();
   assert.equal(created.statusCode, 200, created.body);
+  // PostHog splits signups by method from this property; without it provider signups are invisible.
+  assert.deepEqual(captured.filter((item) => item.event === "registration_completed")
+    .map((item) => (item.properties as { signup_method: string }).signup_method), ["github", "password"]);
   assert.ok(created.json<{ accessToken: string }>().accessToken);
   assert.ok(created.cookies.find((cookie) => cookie.name === "kanera_rt"));
   const [user] = await db.select().from(users).where(eq(users.email, "new@example.com"));
@@ -170,6 +178,8 @@ void test("the callback and the handoff only work in the browser that started th
   const forged = await callback(app, "google", flow, profile(), "someone-elses-cookie");
   assert.equal(forged.get("error"), "expired");
   assert.equal(forged.get("h"), null);
+  // The web app attributes its post-redirect analytics steps to the provider from this value.
+  assert.equal(forged.get("provider"), "google");
 
   const next = await begin(app, "google");
   const handoff = (await callback(app, "google", next, profile())).get("h")!;

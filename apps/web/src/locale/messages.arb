@@ -396,8 +396,8 @@
       "src/app/core/consent/cookie-consent.component.html"
     ]
   },
-  "6524673892826792451": "Separate server-side analytics include limited commercial lifecycle events sent by Kanera's backend, such as subscription starts, renewals, resumptions, cancellations, and plan or seat-band changes. These events exclude payment-method details and workspace content. See our {$START_LINK}privacy notice{$CLOSE_LINK} for more information.",
-  "@6524673892826792451": {
+  "2559272877926970005": "Separate server-side analytics include limited commercial lifecycle events sent by Kanera's backend, such as subscription starts, renewals, resumptions, cancellations, and plan or seat-count changes. These events exclude payment-method details and workspace content. See our {$START_LINK}privacy notice{$CLOSE_LINK} for more information.",
+  "@2559272877926970005": {
     "x-files": [
       "src/app/core/consent/cookie-consent.component.html"
     ]

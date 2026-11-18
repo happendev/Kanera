@@ -12,7 +12,7 @@
     </div>
 
     @if (!challengeToken()) {
-    <k-provider-sign-in [returnUrl]="providerReturnUrl()" [inviteToken]="providerInviteToken()" [boardInviteToken]="providerBoardInviteToken()" />
+    <k-provider-sign-in authPage="login" [returnUrl]="providerReturnUrl()" [inviteToken]="providerInviteToken()" [boardInviteToken]="providerBoardInviteToken()" />
     }
 
     <form (submit)="submit($event)">

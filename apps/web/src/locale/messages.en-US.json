@@ -51,7 +51,7 @@
     "8793455315729550695": "Analytics cookies",
     "7599424238288352907": "Help us understand how visitors find Kanera, use key parts of the service, and progress through registration and subscription.",
     "3427507135490473459": "Allow analytics cookies",
-    "6524673892826792451": "Separate server-side analytics include limited commercial lifecycle events sent by Kanera's backend, such as subscription starts, renewals, resumptions, cancellations, and plan or seat-band changes. These events exclude payment-method details and workspace content. See our {$START_LINK}privacy notice{$CLOSE_LINK} for more information.",
+    "2559272877926970005": "Separate server-side analytics include limited commercial lifecycle events sent by Kanera's backend, such as subscription starts, renewals, resumptions, cancellations, and plan or seat-count changes. These events exclude payment-method details and workspace content. See our {$START_LINK}privacy notice{$CLOSE_LINK} for more information.",
     "5134745148043977084": "Save preferences",
     "2681254231733856514": "reminder",
     "7639426603278752591": "checklist item is overdue",

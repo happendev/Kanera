@@ -486,6 +486,8 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
         webUrl: env.WEB_ORIGIN,
         timeZone,
         today: localParts(new Date(), timeZone).date,
+        // MCP clients hide Kanera Cloud-only tools (feedback.report) when this is self_hosted.
+        deploymentMode: env.KANERA_DEPLOYMENT_MODE,
       };
     });
 

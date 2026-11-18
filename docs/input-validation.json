@@ -3065,7 +3065,7 @@
   },
   "evidenceFiles": {
     "apps/api/src/auth/plugin.ts": "00e5c813bba04d26d00219e37a110d1fee87696e46e55e4df2bb594c2e9b9aaa",
-    "apps/api/src/public-api-server.ts": "23fd9a927d84241483e6893e5b3cb8212cca78b16b7be0b34bca65d5606f1442",
+    "apps/api/src/public-api-server.ts": "f43719873d6b03137063d0bd895e8cab4568ac8f86ccd055f41b9e62786b7d86",
     "apps/api/src/server.ts": "e5eeda9b3a7125a19ff02275e7a0719fb7ca44662a64f8d2f9c288cc5edd5611",
     "apps/api/src/admin/plugin.ts": "285e7dd8ce6eefcd51458f4ab7c68423c884d81645526e6d806616a33a2139da",
     "apps/api/src/auth/routes.ts": "2a6bb5de90b5b24f1c62ebfe075c02a40ddc653151ef2adec9b3037e882a107d",
@@ -3143,7 +3143,7 @@
     "apps/api/src/modules/workspaces/routes.ts": "8944c55a0a6bd2fc16e8d94d826651e6bb390e40ddd9779f1bd1ed7ac6dfa38c",
     "apps/api/src/oauth/routes.ts": "043fd7f32d7f6bf303a1c1734e10d53b383db8d32b054fd7eb4a27fb1ed70c39",
     "apps/api/src/realtime/io.ts": "8760710e5aa85838a869169dcc22b2276fce498ae2851ae0bb775faf6e9e5c9c",
-    "apps/mcp/src/server.ts": "7ca2371a923fb953814088f2b6325fe77f6e89e5d494ed4ae9e7e3645f032396",
+    "apps/mcp/src/server.ts": "1532a2ffb3ed34f4a53066e3e39981295a32420a8ab7c6cb0ead0233034101cd",
     "packages/shared/src/dto/_colors.ts": "ab56baaaae121135856e8b06c544de99ae6106f43812d254188e531f14eb2f89",
     "packages/shared/src/dto/_icons.ts": "01e77b71b24b4b1cba94b725d58b423687322c7943cf8389dbca4579716f4bb2",
     "packages/shared/src/dto/_pagination.ts": "7ca05eb5e2a9d8523e33f00593446f66751f1e49ce3ed4e1360ea9a8f0e36d6f",
@@ -3203,7 +3203,7 @@
     "packages/shared/src/dto/work-done.ts": "06d73cd2782df0ab953d9a51f1a0c388dbe63e848ad6c0ee7a622ac3eb0af904",
     "packages/shared/src/dto/work.ts": "81b27900d924c3fa01fda83f211ad47e7277659bb5d351411476d01326b1598a",
     "packages/shared/src/dto/workspaces.ts": "1fcc9863ed337aed30e47101105f31c4246913a31ebcbd1c597f202cd17da24d",
-    "apps/mcp/src/http.ts": "392132b2e41e5d2cdaa6ba2e6dea34e7ea486085ec52648351665c35fa83fa00",
+    "apps/mcp/src/http.ts": "d48b20c2fbae52eb06e853cf21f2dbc3c019cfc70a316fe34319772e443a6bda",
     "apps/api/src/modules/imports/kanera-parser.ts": "6e0017b2dc021e0c4d9360d40b0a341ad1e95f8ebc1eb613c49beaa04185e6f2",
     "apps/api/src/modules/imports/csv/parse.ts": "562d42997551a0dc4b61ffe4220fd473da9d1f0c747c2153a59b4b7b2f0d248e",
     "apps/api/src/modules/imports/csv/decode.ts": "c49ab2d6612a628312e653e2cf58f3d56b67ba83a56c6763e8e11e1e38655d7b",
@@ -3227,7 +3227,7 @@
     "apps/api/src/modules/imports/kanera-importer.ts": "fbde2a7a1c80cf5ebb198510685611b1fb00a699a8e73140a09fcc32e7c0def7",
     "apps/api/src/modules/imports/csv/derive.ts": "d07b049f10bb3c19f290b623982543bf069ebb5785330db3d64728bea6df18b9",
     "apps/api/src/modules/imports/trello-attachment-download.ts": "4640eb115653842ee6f0537a0813fc16c61b3dea6880b1f1850aaabe689de040",
-    "apps/web/src/app/features/board/description-viewer.component.ts": "e286e9f7817e90c088583ce20d3d92ab5422fd9f8f212b522dfbd1d37671e860",
+    "apps/web/src/app/features/board/description-viewer.component.ts": "9a286736032aaf1a4edfcc9fae58236b07b69ab739a1caba9ad7741dfe639374",
     "apps/api/src/modules/boards/board-queries.ts": "586142204ae67dd36d837fed49a319bdbb6f7ffa259ac69513102f9b1868d72b",
     "apps/api/src/lib/work-done.ts": "325d8063c4923244062fa8c95d9ded90dc86631cc491760914cfb54a0be9886c",
     "packages/shared/src/schema/_icon-text.ts": "67ee8d2ba5512740e9fff3fb38d33c71a6e340b5af09663f527176aa895c3afc",
@@ -3240,7 +3240,7 @@
     "apps/api/src/env.ts": "05962e216ff9676371ab682bd24e9d018e7e858483154b28124c680d13c4a1bd",
     "apps/api/src/modules/media/authorise-media.ts": "eaa61def92d95aca4e899ce12bc688e36eb355e158f995caa7947b4582684e59",
     "apps/api/src/lib/mcp-event-webhooks.ts": "72137c18b5a80b256ab3f18159fba65341842ea0d772d83483dbc2d7b410ce9a",
-    "apps/api/src/auth/providers/routes.ts": "6becff650ee1d954cfd49074402454fbd407cac11863ac6ad5f2e04ff7309e80"
+    "apps/api/src/auth/providers/routes.ts": "d6fbe81f68585acd58f6709534ed5921b763833c0b941133e5a4b13c4ee627b1"
   },
   "operations": {
     "apps/api/src/admin-server.ts#http:GET /health": {
@@ -3684,7 +3684,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/auth/providers/routes.ts#http:GET /auth/providers/:provider/callback": {
-      "handlerSha256": "4968cf73cb0e05cf98fd091568e2db5d1d8f209d6eba62507d7cc7e9cac9767d",
+      "handlerSha256": "657740bc72cddf63cf05f99d881c099f09a18e0c034be26b65f3237e08ac2d6e",
       "params": "v7189e398e39c",
       "query": "vf9f7cb7310c0",
       "body": "v322750628d67",
@@ -6950,7 +6950,7 @@
       "cookies": "v66f21e980a63"
     },
     "apps/api/src/public-api-server.ts#http:GET /session": {
-      "handlerSha256": "81d13f95ed057fab8c4af2f2110c03418a28e4e1da6ef54745cfa3f5342b5e7e",
+      "handlerSha256": "7631e661b48a8a3a1444a5a4ce21303ae6c789ec1a33ed6f4812836f04279d72",
       "params": "v322750628d67",
       "query": "v322750628d67",
       "body": "v322750628d67",

@@ -13,7 +13,7 @@ import type { ElementRef, OnDestroy } from "@angular/core";
 import type { SafeResourceUrl } from "@angular/platform-browser";
 import { DomSanitizer } from "@angular/platform-browser";
 import { MediaDownloadService } from "../../core/media/media-download.service";
-import type { AttachmentPreviewType } from "../../shared/attachment-preview";
+import { isJsonAttachment, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionViewerComponent } from "./description-viewer.component";
 import { appLocale } from "../../core/i18n/locale";
@@ -141,7 +141,7 @@ class PreviewTooLargeError extends Error {}
           </article>
         } @else if (isText()) {
           <article class="lb-markdown lb-text" (click)="$event.stopPropagation()">
-            @if (text(); as value) {
+            @if (displayText(); as value) {
             <pre class="lb-text-body">{{ value }}</pre>
             } @else {
             <div class="lb-file-card lb-markdown-state">
@@ -603,6 +603,17 @@ export class ImageLightboxComponent implements OnDestroy {
   readonly markdown = signal<string | null>(null);
   // Markdown and plain text share one fetch path; the active media type picks how it renders.
   readonly text = this.markdown;
+  // JSON is shown pretty-printed; a file that does not parse is shown as stored so it stays readable.
+  readonly displayText = computed(() => {
+    const value = this.text();
+    const image = this.activeImage();
+    if (value === null || !isJsonAttachment(image.mimeType, image.fileName)) return value;
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  });
   readonly textCopied = signal(false);
   private textCopiedTimer: number | null = null;
   readonly markdownLoading = signal(false);
@@ -642,7 +653,7 @@ export class ImageLightboxComponent implements OnDestroy {
 
   async copyText(event: Event) {
     event.stopPropagation();
-    const value = this.text();
+    const value = this.displayText();
     if (value === null) return;
     await navigator.clipboard?.writeText(value).catch(() => undefined);
     this.textCopied.set(true);

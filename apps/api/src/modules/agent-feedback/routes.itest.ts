@@ -22,7 +22,8 @@ async function setup(sent: InternalAgentFeedbackNotification[], delivered = 1) {
     },
   });
   const post = (payload: unknown) => publicApi.inject({ method: "POST", url: "/api/v1/feedback", headers: owner.auth, payload: payload as Record<string, unknown> });
-  return { publicApi, owner, post };
+  const session = () => publicApi.inject({ method: "GET", url: "/api/v1/session", headers: owner.auth });
+  return { publicApi, owner, post, session };
 }
 
 async function inMode<T>(mode: "hosted" | "self_hosted", run: () => Promise<T>): Promise<T> {
@@ -56,12 +57,15 @@ void test("agent feedback is emailed to the team on hosted with the reporter's i
 
 void test("agent feedback does not exist on self-hosted installs", async () => {
   const sent: InternalAgentFeedbackNotification[] = [];
-  const { publicApi, post } = await setup(sent);
+  const { publicApi, post, session } = await setup(sent);
   try {
     // The self-hosted operator is not the Kanera team; nothing may be sent anywhere.
     const response = await inMode("self_hosted", () => post(report));
     assert.equal(response.statusCode, 404, response.body);
     assert.equal(sent.length, 0);
+    // MCP reads this to leave feedback.report out of a self-hosted catalog.
+    assert.equal((await inMode("self_hosted", session)).json<{ deploymentMode: string }>().deploymentMode, "self_hosted");
+    assert.equal((await inMode("hosted", session)).json<{ deploymentMode: string }>().deploymentMode, "hosted");
   } finally {
     await publicApi.close();
   }

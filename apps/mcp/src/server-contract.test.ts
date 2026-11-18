@@ -1243,6 +1243,26 @@ void test("tools/list offers a read-only credential only read tools and keeps th
   }
 });
 
+void test("tools/list hides Kanera Cloud-only tools from a self-hosted deployment", async () => {
+  const listedNames = async (hosted: boolean | undefined) => {
+    const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test", hosted });
+    const client = new Client({ name: "kanera-deployment-contract-test", version: "1" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      return (await client.listTools()).tools.map((tool) => tool.name);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  };
+  assert.ok(!(await listedNames(false)).includes("feedback.report"));
+  assert.ok((await listedNames(true)).includes("feedback.report"));
+  // An unknown deployment (failed session lookup) keeps the full catalog; the API still refuses.
+  assert.ok((await listedNames(undefined)).includes("feedback.report"));
+});
+
 void test("date phrases resolve in the user's zone before reaching the public API", async () => {
   const tools = internals()._registeredTools;
   const originalFetch = globalThis.fetch;

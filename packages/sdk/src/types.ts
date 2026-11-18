@@ -43,6 +43,8 @@ export interface Session {
   timeZone: string;
   /** Today's date in `timeZone`, for resolving "today" or "tomorrow" without a clock of your own. */
   today: LocalDate;
+  /** `hosted` on Kanera Cloud; Cloud-only operations such as feedback are unavailable on `self_hosted`. */
+  deploymentMode: "hosted" | "self_hosted";
 }
 
 export type WorkspaceKind = "standard" | "board";

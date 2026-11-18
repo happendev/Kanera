@@ -454,7 +454,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       Health: { type: "object", required: ["ok", "service"], properties: { ok: { type: "boolean" }, service: { type: "string" } } },
       Session: {
         type: "object",
-        required: ["userId", "organisationId", "credentialKind", "organisationScope", "workspaceId", "webUrl", "timeZone", "today"],
+        required: ["userId", "organisationId", "credentialKind", "organisationScope", "workspaceId", "webUrl", "timeZone", "today", "deploymentMode"],
         properties: {
           userId: uuid,
           organisationId: uuid,
@@ -467,6 +467,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           webUrl: { type: "string", format: "uri" },
           timeZone: { type: "string", description: "IANA time zone of the credential's user (a workspace key's creator); due dates are set in this zone." },
           today: { type: "string", format: "date", description: "Today's date in timeZone." },
+          deploymentMode: { type: "string", enum: ["hosted", "self_hosted"], description: "`hosted` on Kanera Cloud; Cloud-only operations such as `POST /feedback` are unavailable on `self_hosted`." },
         },
       },
       User: {
