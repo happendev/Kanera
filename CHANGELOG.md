@@ -11,6 +11,7 @@ All notable changes to Kanera are documented here.
 - **Example cards in templates:** boards created from a template start with a few example cards in its lists, so there is something to move and edit straight away. Blank and Hiring Pipeline start empty.
 - **Security emails:** Kanera now emails you when your password is changed or reset, two-factor authentication is turned on or off, recovery codes are regenerated, or your email address changes (sent to the old address). Members are also emailed when an organisation is deleted.
 - **AI agents link the cards they create:** over MCP and the CLI, a new card can be created already blocking, blocked by or related to other cards, including other cards created in the same batch, so plans arrive with their dependencies instead of card numbers written in descriptions.
+- **AI agents can send feedback** (hosted): a new `feedback.report` MCP tool, also in the CLI and as `POST /api/v1/feedback`, lets an agent report a Kanera error, a missing capability or a suggestion straight to the Kanera team.
 - **Emailed organisation invites:** add an address when creating an invite in Users and Kanera sends the invite link to it. The link still works however you share it.
 
 ### Changed

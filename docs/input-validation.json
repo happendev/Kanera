@@ -3053,11 +3053,19 @@
         "apps/api/src/server.ts"
       ],
       "directValidator": "visitorCountryFromHeaders(req.headers)"
+    },
+    "v0733a61204de": {
+      "status": "validated",
+      "reason": "Runtime schema: dto.reportAgentFeedbackBody. Zod enforces declared fields; unrecognised object keys follow that schema's strip/strict policy.",
+      "references": [
+        "apps/api/src/modules/agent-feedback/routes.ts"
+      ],
+      "directValidator": "dto.reportAgentFeedbackBody.parse(req.body"
     }
   },
   "evidenceFiles": {
     "apps/api/src/auth/plugin.ts": "00e5c813bba04d26d00219e37a110d1fee87696e46e55e4df2bb594c2e9b9aaa",
-    "apps/api/src/public-api-server.ts": "17f9b99badc006e2f1e6e3d11bc95c11bd404c99eef9eced78a1daead8282f59",
+    "apps/api/src/public-api-server.ts": "23fd9a927d84241483e6893e5b3cb8212cca78b16b7be0b34bca65d5606f1442",
     "apps/api/src/server.ts": "e5eeda9b3a7125a19ff02275e7a0719fb7ca44662a64f8d2f9c288cc5edd5611",
     "apps/api/src/admin/plugin.ts": "285e7dd8ce6eefcd51458f4ab7c68423c884d81645526e6d806616a33a2139da",
     "apps/api/src/auth/routes.ts": "2a6bb5de90b5b24f1c62ebfe075c02a40ddc653151ef2adec9b3037e882a107d",
@@ -3135,7 +3143,7 @@
     "apps/api/src/modules/workspaces/routes.ts": "8944c55a0a6bd2fc16e8d94d826651e6bb390e40ddd9779f1bd1ed7ac6dfa38c",
     "apps/api/src/oauth/routes.ts": "043fd7f32d7f6bf303a1c1734e10d53b383db8d32b054fd7eb4a27fb1ed70c39",
     "apps/api/src/realtime/io.ts": "8760710e5aa85838a869169dcc22b2276fce498ae2851ae0bb775faf6e9e5c9c",
-    "apps/mcp/src/server.ts": "a6f3cf0f664883b845420d5927c3e78a666ae81101b22448c12471f02cea692b",
+    "apps/mcp/src/server.ts": "7ca2371a923fb953814088f2b6325fe77f6e89e5d494ed4ae9e7e3645f032396",
     "packages/shared/src/dto/_colors.ts": "ab56baaaae121135856e8b06c544de99ae6106f43812d254188e531f14eb2f89",
     "packages/shared/src/dto/_icons.ts": "01e77b71b24b4b1cba94b725d58b423687322c7943cf8389dbca4579716f4bb2",
     "packages/shared/src/dto/_pagination.ts": "7ca05eb5e2a9d8523e33f00593446f66751f1e49ce3ed4e1360ea9a8f0e36d6f",
@@ -3170,7 +3178,7 @@
     "packages/shared/src/dto/github-links.ts": "77cad54df7e458c20afdc594162182d1c913d3b9bb200149cf441a13f67cb448",
     "packages/shared/src/dto/home.ts": "39d61a810e225bbb4e5215f2f040def7d3190bc12d4ac4b5c8a49bc7745cd7b9",
     "packages/shared/src/dto/imports.ts": "a1334d43800886036dcf1865e7b5b6608ba586c07d0e35188e2cf075bcd3dcbf",
-    "packages/shared/src/dto/index.ts": "2cb21fdcd1d9b519ec09aed78c22a871fbd8bc04bbc30668e7d75b9ec5013184",
+    "packages/shared/src/dto/index.ts": "0837882c6f962ff97e8fcc8439fe0ea9f4504da470b56f7497ce952b1be5e8c8",
     "packages/shared/src/dto/internal-links.ts": "efc5d2f210c878566baa2961f11de4470da808c74da38ecf6a256dd02b2e720f",
     "packages/shared/src/dto/invites.ts": "5792f134ce0e7bbd9cc6b58748ffbe7e78cd7a8dc8b2bd3e0ec23ce5c5e65588",
     "packages/shared/src/dto/lists.ts": "59dd5e41a6b349186e013f23db13406be9ce4d69dee9c9511fa881a9560dc608",
@@ -3936,6 +3944,14 @@
       "params": "vddedb70ecea1",
       "query": "vffb65bb4e3c8",
       "body": "v322750628d67",
+      "headers": "v990063495562",
+      "cookies": "v66f21e980a63"
+    },
+    "apps/api/src/modules/agent-feedback/routes.ts#http:POST /feedback": {
+      "handlerSha256": "5e202c0edd09b47f529300f45119341fc857b165ab0e2aa97e5f5bf953e58fed",
+      "params": "v322750628d67",
+      "query": "v322750628d67",
+      "body": "v0733a61204de",
       "headers": "v990063495562",
       "cookies": "v66f21e980a63"
     },
@@ -7239,6 +7255,10 @@
     },
     "apps/mcp/src/server.ts#mcp:comments.update": {
       "handlerSha256": "9592cb44aa70975000db9291457c7572f9fdd3aefd62545b3d36a88872175e78",
+      "payload": "v9c1f945ff8fe"
+    },
+    "apps/mcp/src/server.ts#mcp:feedback.report": {
+      "handlerSha256": "0db81acb6c8c695ed45d7b2149e010dbf57bcd935acbd5b2f4754e86a61a7030",
       "payload": "v9c1f945ff8fe"
     },
     "apps/mcp/src/server.ts#mcp:lists.archive_cards": {

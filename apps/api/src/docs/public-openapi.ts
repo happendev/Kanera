@@ -384,6 +384,10 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       name: "Agent Runs",
       description: "Live \"an agent is working on this\" sessions on cards. Start a run before multi-step work, heartbeat it during, and finish it with a terminal status; boards show a live chip and card detail keeps the history. Live runs without a heartbeat for 15 minutes are marked stalled.",
     },
+    {
+      name: "Feedback",
+      description: "Kanera Cloud only. Report errors, missing capabilities and other suggestions about Kanera itself to the Kanera team.",
+    },
     { name: "Media", description: "Read signed media URLs returned by API responses. Treat signed URLs as opaque and short-lived." },
     {
       name: "Webhooks",
@@ -585,6 +589,17 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           title: { type: "string", minLength: 1, maxLength: 200 },
           summary: { type: "string", maxLength: 4000 },
           externalUrl: nullable({ type: "string", format: "uri", maxLength: 2000, description: "Where a person can watch or resume the work (a PR, session log, chat thread)." }),
+        },
+      },
+      ReportFeedbackBody: {
+        type: "object",
+        required: ["kind", "summary", "details"],
+        properties: {
+          kind: { type: "string", enum: ["error", "improvement", "other"] },
+          summary: { type: "string", minLength: 1, maxLength: 200 },
+          details: { type: "string", minLength: 1, maxLength: 8000, description: "What happened or what would help, with steps or the exact error where relevant." },
+          tool: { type: "string", minLength: 1, maxLength: 100, description: "MCP tool or API operation involved, if any." },
+          agent: { type: "string", minLength: 1, maxLength: 200, description: "Agent or host name and model, if known." },
         },
       },
       UpdateAgentRunBody: {
@@ -2969,6 +2984,13 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         responses: authedResponses({ "200": ok(ref("AgentRun")), "409": { $ref: "#/components/responses/Conflict" } }),
       }),
     },
+    "/feedback": pathItem("post", operation({
+      tags: ["Feedback"], summary: "Send feedback to the Kanera team", operationId: "reportFeedback",
+      description: "Kanera Cloud only; self-hosted installs return 404. Emails the report to the Kanera team together with the reporting user's name, email and organisation. Limited to 10 reports per user per hour. Returns 503 when the report could not be delivered.",
+      parameters: [idempotencyKeyHeader()],
+      requestBody: jsonBody(ref("ReportFeedbackBody")),
+      responses: authedResponses({ "202": { description: "Feedback delivered.", content: { "application/json": { schema: { type: "object", required: ["received"], properties: { received: { type: "boolean", const: true } } } } } } }),
+    })),
     "/comments/{id}/reactions/{type}": pathItem("delete", operation({ tags: ["Comments"], summary: "Remove a comment reaction", operationId: "removeCommentReaction", parameters: [idParam(), { name: "type", in: "path", required: true, schema: { type: "string" } }], responses: authedResponses({ "204": noContent }) })),
     "/boards/{id}/activity": pathItem("get", operation({ tags: ["Activity"], summary: "List recent board activity", description: "Returns a cursor-paginated board-wide feed of activity and comments.", operationId: "listBoardActivity", parameters: [idParam(), queryParam("limit", { type: "integer", minimum: 1, maximum: 200, default: 50 }), queryParam("cursor", { type: "string", minLength: 1, maxLength: 2048 })], responses: authedResponses({ "200": ok(ref("CardFeedPage")) }) })),
   },

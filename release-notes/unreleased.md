@@ -18,6 +18,7 @@ An organisation invite can now grant specific boards as **Editor** or **Observer
 - [Members] Kanera emails an invite link to the address you add
 - [Onboarding] Boards from a template start with a few example cards
 - [Security] Emails when your password, two-factor settings or email address change
+- [MCP] On Kanera Cloud, AI agents can report errors and suggestions to the Kanera team
 
 ## Improvements
 

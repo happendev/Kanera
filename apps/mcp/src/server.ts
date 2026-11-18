@@ -1009,6 +1009,7 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   "runs.start": SEND,
   "runs.update": SEND,
   "runs.list": READ,
+  "feedback.report": ADD,
 };
 
 function toolTitle(name: string) {
@@ -2332,6 +2333,13 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     includeEnded: z.boolean().default(false),
     limit: z.number().int().min(1).max(100).default(50),
   }, async (a, api) => api.get(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/agent-runs`, { includeEnded: a.includeEnded, limit: a.limit }), ctx);
+  registerKaneraTool(server, "feedback.report", "Kanera Cloud only: report a Kanera error you could not work around, a missing capability, or a suggestion to the Kanera team, with steps and the exact error. Not for messaging members. Emailed with the user's name, email and organisation; omit secrets and private project content unless the user agreed. Max 10 per user per hour.", {
+    kind: z.enum(["error", "improvement", "other"]),
+    summary: z.string().trim().min(1).max(200).describe("One line; the email subject."),
+    details: z.string().trim().min(1).max(8000),
+    tool: z.string().trim().min(1).max(100).optional().describe("Tool involved, e.g. cards.move."),
+    agent: z.string().trim().min(1).max(200).optional().describe("Agent/host and model."),
+  }, (a, api) => api.post("/api/v1/feedback", { kind: a.kind, summary: a.summary, details: a.details, tool: a.tool, agent: a.agent }), ctx);
   registerKaneraTool(server, "comments.list", "List a card's comments, newest first. Cursor-paginated; pass the opaque nextCursor unchanged.", {
     cardId: cardReference,
     cursor: z.string().min(1).max(1000).optional(),
