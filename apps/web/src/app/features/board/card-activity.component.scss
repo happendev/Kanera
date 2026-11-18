@@ -1,7 +1,10 @@
 @use "../../shared/list-chip" as chip;
 @use "../../shared/reactions";
+// A container so the header can react to the section's own width: the same component sits in the
+// wide drawer column, the tabbed phone panel and everything between.
 :host {
   display: block;
+  container: card-activity / inline-size;
 }
 
 .detail-section {
@@ -48,17 +51,38 @@
   font-variant-numeric: tabular-nums;
 }
 
-.comment-search-wrap {
-  position: relative;
+// The All / Comments / Agents switch (k-segmented) and search travel together, right-aligned
+// beside the heading.
+.feed-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin-left: auto;
+  min-width: 0;
 }
 
-// The All / Comments / Agents switch is k-segmented; only its placement belongs here.
-.feed-filter {
-  margin-left: auto;
+.comment-search-wrap {
+  position: relative;
+}
 
-  +.comment-search-wrap {
+// Too narrow for the heading, switch and search on one row (a phone's tabbed panel, or longer
+// translations), the switch's labelled track overflowed its slot and ran under the search button
+// and off screen. The controls take a row of their own and the switch shares it equally.
+@container card-activity (max-width: 479px) {
+  .section-label {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .feed-controls {
+    flex: 1 0 100%;
     margin-left: 0;
+  }
+
+  .feed-filter {
+    flex: 1 1 0;
+    --sg-fill-width: 100%;
+    --sg-fill-flex: 1 1 0;
   }
 }
 
