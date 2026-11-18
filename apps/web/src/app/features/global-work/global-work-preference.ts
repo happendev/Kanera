@@ -309,7 +309,7 @@ export function sanitizeGlobalWorkDefinition(
   const requestedDisplay = lens === "team" && definition.display === "priorities" ? "overview" : definition.display;
   const display = allowedDisplays.has(requestedDisplay)
     ? requestedDisplay
-    : lens === "team" ? "board" : "table";
+    : "overview";
   const progressEnabled = catalog.boards.some((board) => board.inProgressEnabled !== false);
   const builtinTableColumns = new Set([
     "status", "board", "assignees", "due", "inProgress", "labels", "checklist", "description", "created", "updated",

@@ -127,9 +127,11 @@ test("a card-tile avatar opens the person's profile instead of the card, and Vie
   await expect(profile).toHaveAttribute("aria-busy", "false");
   await profile.getByRole("link", { name: "View cards" }).click();
   await expect(page).toHaveURL(/\/team-cards$/, { timeout: 15_000 });
-  // The teammate trigger shows the focused person once the deep link has been applied.
-  await expect(page.locator(".k-toolbar-trigger.is-set").filter({ hasText: users.marcus.name })).toBeVisible({ timeout: 15_000 });
-  await expect.poll(() => cardTile(page, title).count(), { timeout: 15_000 }).toBeGreaterThan(0);
+  // Team Cards opens on the overview, which focuses the person once the deep link has been applied.
+  const overview = page.locator("k-team-overview");
+  await expect(overview.locator(".person-name", { hasText: users.marcus.name })).toBeVisible({ timeout: 15_000 });
+  await expect(overview.locator(".person-name", { hasText: users.amelia.name })).toHaveCount(0);
+  await expect(overview.locator("button.row .row-title", { hasText: title })).not.toHaveCount(0, { timeout: 15_000 });
   await page.screenshot({ path: testInfo.outputPath("team-cards-focused.png") });
 });
 

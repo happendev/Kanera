@@ -392,6 +392,7 @@ test("the Blocked quick filter in Global Work keeps only cards waiting on an ope
 
   try {
     await page.goto("/my-cards");
+    await page.getByRole("button", { name: "Board view", exact: true }).click();
     await expect(cardTile(page, waiting.title)).toHaveCount(1);
     await expect(cardTile(page, free.title)).toHaveCount(1);
     await expect(cardTile(page, waiting.title).locator(".card-blocked")).toHaveText("Blocked");
