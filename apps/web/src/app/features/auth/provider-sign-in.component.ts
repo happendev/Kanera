@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, signal } from "@angular/core";
 import type { OnInit } from "@angular/core";
 import type { SignInProvider } from "@kanera/shared/schema";
+import type { ProviderAuthPage } from "../../core/analytics/analytics-events";
+import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { signupAcquisition } from "../../core/analytics/signup-attribution";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { CookieConsentService } from "../../core/consent/cookie-consent.service";
@@ -12,6 +14,11 @@ export const PROVIDER_ICONS: Record<SignInProvider, string> = { google: "ti-bran
 export const PROVIDER_NAMES: Record<SignInProvider, string> = { google: "Google", microsoft: "Microsoft", github: "GitHub" };
 
 let providersRequest: Promise<SignInProvider[]> | null = null;
+
+/** The callback's `provider` query value, accepted only when it names a known provider. */
+export function knownSignInProvider(value: string | null | undefined): SignInProvider | undefined {
+  return PROVIDER_ORDER.find((provider) => provider === value);
+}
 
 /** /auth/config is static per deployment, so every auth page on screen shares one request. */
 export function loadSignInProviders(client: PublicAuthClient): Promise<SignInProvider[]> {
@@ -108,12 +115,15 @@ function providerButtonLabel(provider: SignInProvider): string {
 export class ProviderSignInComponent implements OnInit {
   private readonly publicAuth = inject(PublicAuthClient);
   private readonly consent = inject(CookieConsentService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly destroyRef = inject(DestroyRef);
 
   /** Where to land after signing in, e.g. an invite page waiting for an accept click. */
   readonly returnUrl = input<string | null>(null);
   readonly inviteToken = input<string | null>(null);
   readonly boardInviteToken = input<string | null>(null);
+  /** Which auth page hosts the buttons, so PostHog can tell signup clicks from sign-in clicks. */
+  readonly authPage = input.required<ProviderAuthPage>();
 
   protected readonly providers = signal<SignInProvider[]>([]);
   protected readonly busy = signal<SignInProvider | null>(null);
@@ -135,6 +145,9 @@ export class ProviderSignInComponent implements OnInit {
   protected async begin(provider: SignInProvider) {
     this.busy.set(provider);
     this.error.set(null);
+    // Recorded before leaving for the provider: the redirect unloads the page, and a person who
+    // abandons at the provider's consent screen never comes back to report it.
+    this.analytics.track("sign_in_provider_selected", { provider, auth_page: this.authPage(), event_version: 1 });
     const returnUrl = this.returnUrl();
     try {
       const res = await this.publicAuth.post(`/auth/providers/${provider}/begin`, {

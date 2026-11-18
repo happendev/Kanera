@@ -1,7 +1,7 @@
 # External input validation
 
-The operation matrix is [input-validation.json](input-validation.json): 467 HTTP registrations
-(including app/public shared routes and admin routes), 104 MCP tools, and four client Socket.IO
+The operation matrix is [input-validation.json](input-validation.json): 470 HTTP registrations
+(including app/public shared routes and admin routes), 105 MCP tools, and four client Socket.IO
 operations. Each HTTP row declares path, query, body, headers and cookies; signature webhooks also
 declare raw bytes. The keys identify the source module, method and route. Repeated registrations
 in one module have an occurrence suffix because app/public implementations can differ.

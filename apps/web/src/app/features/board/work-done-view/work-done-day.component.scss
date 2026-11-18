@@ -212,7 +212,8 @@
   min-width: 20px;
   height: 20px;
   margin-left: -5px;
-  padding: 0 4px;
+  // 3px, not 4px: "+N" with one digit then fits inside min-width and stays a circle.
+  padding: 0 3px;
   border-radius: 999px;
   background: var(--surface-3, var(--surface-hover));
   border: 1px solid var(--border);

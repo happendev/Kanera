@@ -4,8 +4,7 @@ import { InProgressHintService } from "./in-progress-hint.service";
 import type { CdkDragDrop, CdkDragMove} from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragPreview, CdkDropList } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Directive, ElementRef, HostBinding, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
-import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
+import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
 import type { CardAttachmentRow, WireCard, WireCardSummary, WireList } from "@kanera/shared/events";
 import type { Card, CardCustomFieldValue, List } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
@@ -19,6 +18,7 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
+import { CloseCardChecklistsBeforeDragDirective } from "./close-card-checklists-before-drag.directive";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardMotionService } from "./card-motion.service";
 import { CardComponent, type CardAssigneePresentation, type CardBulkMenuIntent, type CardLabelPresentation, type CardSelectionIntent } from "./card.component";
@@ -106,25 +106,6 @@ export interface BulkListSelectionPayload {
   orderedCardIds: string[];
   /** Replace/add cover list-menu and table-header selection; remove lets a group checkbox toggle off. */
   mode: "replace" | "add" | "remove";
-}
-
-@Directive({
-  selector: "[kCloseCardChecklistsBeforeDrag]",
-  standalone: true,
-})
-class CloseCardChecklistsBeforeDragDirective {
-  private readonly drag = inject(CdkDrag);
-  private readonly state = inject(BoardState);
-  private readonly changeDetectorRef = inject(ChangeDetectorRef);
-
-  constructor() {
-    this.drag._dragRef.beforeStarted.pipe(takeUntilDestroyed()).subscribe(() => {
-      // CDK captures the source rectangle immediately after `beforeStarted`. Render the collapsed
-      // card first so its preview and placeholder are measured from the compact tile geometry.
-      this.state.closeCardChecklists();
-      this.changeDetectorRef.detectChanges();
-    });
-  }
 }
 
 @Component({

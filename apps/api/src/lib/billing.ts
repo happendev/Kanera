@@ -14,6 +14,7 @@ import { followUpAbandonedCheckout } from "./checkout-recovery.js";
 import { sendInternalCheckoutNotification, sendInternalSaleNotification } from "./internal-notification-emails.js";
 import {
   ANALYTICS_EVENT_VERSION,
+  analyticsPlanCode,
   productAnalytics,
   seatBand,
   type SubscriptionPaymentReason,
@@ -143,6 +144,32 @@ export async function countActiveSeats(clientId: string, tx: Tx = db): Promise<n
   return Math.max(1, (memberRow?.count ?? 0) + (guestSeatRow?.count ?? 0));
 }
 
+// seat_limit has exactly three writers (setSeatCapacity, settleSeatCapacity, applySubscription), each
+// changing it under the tenant row lock and only when the value differs, so emitting from each after
+// commit records every paid-capacity change once. A first purchase is subscription_started, not this.
+function captureSeatsChanged(
+  clientId: string,
+  billingStatus: string,
+  interval: ClientBillingInterval | null,
+  previousSeats: number,
+  seats: number,
+): void {
+  if (previousSeats === seats) return;
+  void productAnalytics.capture({
+    event: "seats_changed",
+    organizationId: clientId,
+    properties: {
+      workspace_id: clientId,
+      plan_code: analyticsPlanCode(billingStatus),
+      billing_period: interval ?? "not_selected",
+      previous_seats: previousSeats,
+      seats,
+      seat_change: seats > previousSeats ? "increase" : "decrease",
+      event_version: ANALYTICS_EVENT_VERSION,
+    },
+  });
+}
+
 // Set the org's purchased seat capacity (seat_limit) — the "buy more" / "reduce seats" operation.
 // Capacity, not headcount, is what Stripe bills, so this is the only interactive path that changes the
 // subscription quantity. Returns whether the change was applied immediately or needs in-app payment
@@ -155,7 +182,7 @@ export async function setSeatCapacity(
 ): Promise<SetSeatCapacityResult> {
   type TxResult =
     | { kind: "unchanged" }
-    | { kind: "applied"; previousLimit: number }
+    | { kind: "applied"; previousLimit: number; billingStatus: string; billingInterval: ClientBillingInterval | null }
     | { kind: "requires_confirmation"; clientSecret: string; currentLimit: number };
   const result = await db.transaction(async (tx): Promise<TxResult> => {
     // Serialize capacity changes with member/guest assignment paths, which take the same tenant row lock
@@ -168,6 +195,7 @@ export async function setSeatCapacity(
         stripeSubscriptionId: clients.stripeSubscriptionId,
         stripeSubscriptionItemId: clients.stripeSubscriptionItemId,
         seatLimit: clients.seatLimit,
+        billingInterval: clients.billingInterval,
       })
       .from(clients)
       .where(eq(clients.id, clientId))
@@ -284,7 +312,7 @@ export async function setSeatCapacity(
     // Persist only after Stripe confirms payment (or none was due). The requires_confirmation path above
     // returns before reaching here, leaving seat_limit untouched until the payment settles.
     await tx.update(clients).set({ seatLimit: newLimit, updatedAt: new Date() }).where(eq(clients.id, clientId));
-    return { kind: "applied", previousLimit: client.seatLimit };
+    return { kind: "applied", previousLimit: client.seatLimit, billingStatus: client.billingStatus, billingInterval: client.billingInterval };
   });
 
   if (result.kind === "unchanged") return { status: "applied", seatLimit: newLimit };
@@ -293,6 +321,7 @@ export async function setSeatCapacity(
     return { status: "requires_confirmation", seatLimit: result.currentLimit, clientSecret: result.clientSecret, publishableKey: config.STRIPE_PUBLISHABLE_KEY! };
   }
   emitClientEntitlementsChanged(clientId);
+  captureSeatsChanged(clientId, result.billingStatus, result.billingInterval, result.previousLimit, newLimit);
   if (notify?.mailer) {
     await sendHostedSeatCapacityEmail(notify.mailer, {
       clientId,
@@ -309,10 +338,11 @@ export async function setSeatCapacity(
 // webhook), and idempotently by the invoice.paid webhook. Returns the resolved seat_limit. Throws if the
 // payment has not completed yet, so the caller can keep prompting for confirmation.
 export async function settleSeatCapacity(clientId: string, config: StripeEnv = env, notify?: { mailer?: Mailer; log?: FastifyBaseLogger }): Promise<number> {
-  const settled = await db.transaction(async (tx): Promise<{ seatLimit: number; previousSeatLimit: number } | null> => {
+  type Settled = { seatLimit: number; previousSeatLimit: number; billingStatus: string; billingInterval: ClientBillingInterval | null };
+  const settled = await db.transaction(async (tx): Promise<Settled | null> => {
     await tx.execute(sql`select 1 from ${clients} where ${clients.id} = ${clientId} for update`);
     const [client] = await tx
-      .select({ stripeSubscriptionId: clients.stripeSubscriptionId, stripeSubscriptionItemId: clients.stripeSubscriptionItemId, billingStatus: clients.billingStatus, seatLimit: clients.seatLimit })
+      .select({ stripeSubscriptionId: clients.stripeSubscriptionId, stripeSubscriptionItemId: clients.stripeSubscriptionItemId, billingStatus: clients.billingStatus, seatLimit: clients.seatLimit, billingInterval: clients.billingInterval })
       .from(clients)
       .where(eq(clients.id, clientId))
       .limit(1);
@@ -345,13 +375,14 @@ export async function settleSeatCapacity(clientId: string, config: StripeEnv = e
     const resolved = Math.max(targetQuantity, used);
     if (resolved === client.seatLimit) return null; // already settled (e.g. webhook beat us here)
     await tx.update(clients).set({ seatLimit: resolved, updatedAt: new Date() }).where(eq(clients.id, clientId));
-    return { seatLimit: resolved, previousSeatLimit: client.seatLimit };
+    return { seatLimit: resolved, previousSeatLimit: client.seatLimit, billingStatus: client.billingStatus, billingInterval: client.billingInterval };
   });
   if (settled === null) {
     const [client] = await db.select({ seatLimit: clients.seatLimit }).from(clients).where(eq(clients.id, clientId)).limit(1);
     return client?.seatLimit ?? 0;
   }
   emitClientEntitlementsChanged(clientId);
+  captureSeatsChanged(clientId, settled.billingStatus, settled.billingInterval, settled.previousSeatLimit, settled.seatLimit);
   if (notify?.mailer) {
     await sendHostedSeatCapacityEmail(notify.mailer, {
       clientId,
@@ -436,29 +467,29 @@ export async function createCheckoutSession(
   if (!session.url) throw badRequest("Stripe did not return a checkout URL");
   if (!created) return { url: session.url };
 
-  // Server-authoritative funnel step preceding subscription_started. Distinct id is the org, matching the
-  // other commercial events, since checkout is initiated on behalf of the billing account, not a person.
+  // Server-authoritative funnel step preceding subscription_started. Like every commercial event it is
+  // attributed to the organisation creator (see ServerAnalyticsEvent.distinctId), not the starting admin.
   void productAnalytics.capture({
     event: "subscription_checkout_created",
-    distinctId: `organization:${clientId}`,
     organizationId: clientId,
     properties: {
       workspace_id: clientId,
       plan_code: "pro",
       billing_period: interval,
       seat_band: seatBand(quantity),
+      seats: quantity,
       event_version: ANALYTICS_EVENT_VERSION,
     },
   });
   void productAnalytics.capture({
     event: "checkout_started",
-    distinctId: `organization:${clientId}`,
     organizationId: clientId,
     properties: {
       workspace_id: clientId,
       plan_code: "pro",
       billing_period: interval,
       seat_band: seatBand(quantity),
+      seats: quantity,
       upgrade_source: "account_plan",
       event_version: ANALYTICS_EVENT_VERSION,
     },
@@ -781,6 +812,9 @@ async function applySubscription(
       updatedAt: new Date(),
     })
     .where(eq(clients.id, client.id));
+  if (previous && isPaidTier(previous.billingStatus) && nextSeatLimit !== undefined) {
+    afterCommit.push(() => captureSeatsChanged(client.id, target.billingStatus, interval, previous.seatLimit, nextSeatLimit));
+  }
   if (target.billingStatus === "active" && !previous?.analyticsSubscriptionStartedAt && interval) {
     const capturedAt = new Date();
     const claimed = await tx.update(clients)
@@ -791,13 +825,13 @@ async function applySubscription(
       const seats = firstItem?.quantity ?? previous?.seatLimit ?? 1;
       afterCommit.push(() => productAnalytics.capture({
         event: "subscription_started",
-        distinctId: `organization:${client.id}`,
         organizationId: client.id,
         properties: {
           workspace_id: client.id,
           plan_code: "pro",
           billing_period: interval,
           seat_band: seatBand(seats),
+          seats,
           currency: firstItem?.price.currency?.toUpperCase() ?? "EUR",
           event_version: ANALYTICS_EVENT_VERSION,
         },
@@ -810,7 +844,6 @@ async function applySubscription(
       if (previous?.billingStatus === "trialing") {
         afterCommit.push(() => productAnalytics.capture({
           event: "trial_converted",
-          distinctId: `organization:${client.id}`,
           organizationId: client.id,
           properties: {
             workspace_id: client.id,
@@ -842,7 +875,6 @@ async function applySubscription(
     if (claimed.length > 0) {
       afterCommit.push(() => productAnalytics.capture({
         event: "subscription_cancelled",
-        distinctId: `organization:${client.id}`,
         organizationId: client.id,
         properties: {
           workspace_id: client.id,
@@ -937,15 +969,16 @@ export async function handleStripeEvent(
             ? "monthly"
             : "not_selected";
           const parsedSeats = Number.parseInt(session.metadata?.seatLimit ?? "1", 10);
+          const seats = Number.isFinite(parsedSeats) ? parsedSeats : 1;
           afterCommit.push(() => productAnalytics.capture({
             event: "checkout_abandoned",
-            distinctId: `organization:${clientId}`,
             organizationId: clientId,
             properties: {
               workspace_id: clientId,
               plan_code: "pro",
               billing_period: interval,
-              seat_band: seatBand(Number.isFinite(parsedSeats) ? parsedSeats : 1),
+              seat_band: seatBand(seats),
+              seats,
               upgrade_source: "account_plan",
               event_version: ANALYTICS_EVENT_VERSION,
             },
@@ -998,20 +1031,17 @@ export async function handleStripeEvent(
             afterCommit.push(async () => {
               const firstItem = (subscription as SubscriptionLike).items.data[0] ?? null;
               const billingReason = analyticsPaymentReason(invoice.billing_reason);
-              // Attribute revenue to the organisation creator's PostHog person so its first-touch
-              // $initial_utm_* properties apply; the organization group still carries the rollup.
-              // Later members and guests never replace that acquisition.
-              const [creator] = await db.select({ userId: clients.createdByUserId })
-                .from(clients).where(eq(clients.id, clientId)).limit(1);
+              // Revenue is attributed to the organisation creator's PostHog person (the capture default),
+              // so its first-touch $initial_utm_* properties apply; the organization group carries the rollup.
               await productAnalytics.capture({
                 event: "subscription_payment_succeeded",
-                distinctId: creator?.userId ?? `organization:${clientId}`,
                 organizationId: clientId,
                 properties: {
                   workspace_id: clientId,
                   plan_code: "pro",
                   billing_period: intervalForPrice(firstItem?.price.id, config) ?? "not_selected",
                   seat_band: seatBand(firstItem?.quantity ?? 1),
+                  seats: firstItem?.quantity ?? 1,
                   revenue: invoice.amount_paid,
                   currency: invoice.currency.toUpperCase(),
                   billing_reason: billingReason,

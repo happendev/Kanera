@@ -13,5 +13,12 @@ export function attachmentPreviewType(mimeType: string, fileName = ""): Attachme
   if (mime === "text/markdown" || mime === "text/x-markdown" || /\.(?:md|markdown)$/i.test(fileName)) return "markdown";
   // Plain text gets the same filename fallback; other text/* formats (CSV, HTML) keep downloading.
   if (mime === "text/plain" || /\.(?:txt|log)$/i.test(fileName)) return "text";
+  // JSON previews as text; the lightbox pretty-prints it (see isJsonAttachment).
+  if (isJsonAttachment(mime, fileName)) return "text";
   return null;
+}
+
+// Same filename fallback as Markdown: uploads of .json often arrive as text/plain or octet-stream.
+export function isJsonAttachment(mimeType = "", fileName = ""): boolean {
+  return mimeType.toLowerCase() === "application/json" || /\.json$/i.test(fileName);
 }

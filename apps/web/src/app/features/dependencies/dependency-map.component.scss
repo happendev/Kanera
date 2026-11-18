@@ -740,7 +740,8 @@
   place-items: center;
   min-width: 20px;
   height: 20px;
-  padding: 0 4px;
+  // 3px, not 4px: "+N" with one digit then fits inside min-width and stays a circle.
+  padding: 0 3px;
   border-radius: 999px;
   background: var(--surface-2);
   // 10px, off the scale: the "+N" sits inside a 20px avatar circle, where --text-xs crowded it.

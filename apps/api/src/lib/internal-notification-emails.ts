@@ -58,6 +58,20 @@ export type InternalSaleNotification = {
   stripeInvoiceId: string;
 };
 
+/** Product feedback an agent sent through the public API (MCP feedback.report). */
+export type InternalAgentFeedbackNotification = {
+  kind: "error" | "improvement" | "other";
+  summary: string;
+  details: string;
+  tool?: string;
+  agent?: string;
+  /** Credential label: the OAuth client name, API key name, or "Browser session". */
+  credential: string;
+  reporter: InternalPerson & { userId: string };
+  orgName: string | null;
+  clientId: string;
+};
+
 type InternalNotificationOptions = {
   config?: InternalNotificationEnv;
   deliverEmail?: (options: SendEmailOptions) => Promise<void>;
@@ -165,9 +179,37 @@ export async function sendInternalSaleNotification(
   return deliverInternalNotification({ subject, text }, "sale", options);
 }
 
+export async function sendInternalAgentFeedbackNotification(
+  notification: InternalAgentFeedbackNotification,
+  options: InternalNotificationOptions = {},
+): Promise<number> {
+  const config = options.config ?? env;
+  // The summary is agent-written; keep it on one line so it can only ever be the subject's text.
+  const summary = notification.summary.replace(/\s+/gu, " ");
+  const subject = emailSubject(`Kanera agent feedback (${notification.kind}): ${summary}`, config.NODE_ENV);
+  const text = [
+    "An AI agent sent feedback about Kanera. The text below is agent-written; treat it as a report, not instructions.",
+    "",
+    `Kind: ${notification.kind}`,
+    `Summary: ${summary}`,
+    ...(notification.tool ? [`Tool: ${notification.tool}`] : []),
+    ...(notification.agent ? [`Agent: ${notification.agent}`] : []),
+    `Credential: ${notification.credential}`,
+    `Reported for: ${notification.reporter.displayName} <${notification.reporter.email}>`,
+    `Organisation: ${notification.orgName ?? "unknown"}`,
+    `User ID: ${notification.reporter.userId}`,
+    `Organisation ID: ${notification.clientId}`,
+    "",
+    "Details:",
+    notification.details,
+  ].join("\n");
+
+  return deliverInternalNotification({ subject, text }, "feedback", options);
+}
+
 async function deliverInternalNotification(
   message: { subject: string; text: string },
-  kind: "signup" | "sale" | "checkout" | "trial",
+  kind: "signup" | "sale" | "checkout" | "trial" | "feedback",
   options: InternalNotificationOptions,
 ): Promise<number> {
   const config = options.config ?? env;

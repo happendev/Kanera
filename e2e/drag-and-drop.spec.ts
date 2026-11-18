@@ -161,8 +161,12 @@ for (const surface of MID_DRAG_SURFACES) {
     await expect.poll(() => renderedOrder(viewer, wishlist, titles)).toEqual([anchor]);
 
     if (surface.route === "board") await openBoard(page, testWorkspace.boardName);
-    else await page.goto("/my-cards");
-    // Both pages open on their kanban. Wait for its lanes before switching: the board ignores a
+    else {
+      // My Cards opens on the overview; its kanban is one switch away.
+      await page.goto("/my-cards");
+      await page.getByRole("button", { name: "Board view", exact: true }).click();
+    }
+    // Both surfaces now show their kanban. Wait for its lanes before switching: the board ignores a
     // view change until its payload has hydrated, and the heading alone renders earlier than that.
     await expect.poll(() => renderedOrder(page, wishlist, titles)).toEqual([anchor]);
     const table = surface.display === "table";

@@ -384,6 +384,10 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       name: "Agent Runs",
       description: "Live \"an agent is working on this\" sessions on cards. Start a run before multi-step work, heartbeat it during, and finish it with a terminal status; boards show a live chip and card detail keeps the history. Live runs without a heartbeat for 15 minutes are marked stalled.",
     },
+    {
+      name: "Feedback",
+      description: "Kanera Cloud only. Report errors, missing capabilities and other suggestions about Kanera itself to the Kanera team.",
+    },
     { name: "Media", description: "Read signed media URLs returned by API responses. Treat signed URLs as opaque and short-lived." },
     {
       name: "Webhooks",
@@ -450,7 +454,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       Health: { type: "object", required: ["ok", "service"], properties: { ok: { type: "boolean" }, service: { type: "string" } } },
       Session: {
         type: "object",
-        required: ["userId", "organisationId", "credentialKind", "organisationScope", "workspaceId", "webUrl", "timeZone", "today"],
+        required: ["userId", "organisationId", "credentialKind", "organisationScope", "workspaceId", "webUrl", "timeZone", "today", "deploymentMode"],
         properties: {
           userId: uuid,
           organisationId: uuid,
@@ -463,6 +467,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           webUrl: { type: "string", format: "uri" },
           timeZone: { type: "string", description: "IANA time zone of the credential's user (a workspace key's creator); due dates are set in this zone." },
           today: { type: "string", format: "date", description: "Today's date in timeZone." },
+          deploymentMode: { type: "string", enum: ["hosted", "self_hosted"], description: "`hosted` on Kanera Cloud; Cloud-only operations such as `POST /feedback` are unavailable on `self_hosted`." },
         },
       },
       User: {
@@ -587,6 +592,17 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           externalUrl: nullable({ type: "string", format: "uri", maxLength: 2000, description: "Where a person can watch or resume the work (a PR, session log, chat thread)." }),
         },
       },
+      ReportFeedbackBody: {
+        type: "object",
+        required: ["kind", "summary", "details"],
+        properties: {
+          kind: { type: "string", enum: ["error", "improvement", "other"] },
+          summary: { type: "string", minLength: 1, maxLength: 200 },
+          details: { type: "string", minLength: 1, maxLength: 8000, description: "What happened or what would help, with steps or the exact error where relevant." },
+          tool: { type: "string", minLength: 1, maxLength: 100, description: "MCP tool or API operation involved, if any." },
+          agent: { type: "string", minLength: 1, maxLength: 200, description: "Agent or host name and model, if known." },
+        },
+      },
       UpdateAgentRunBody: {
         type: "object",
         description: "Every field is optional; an empty body is a heartbeat.",
@@ -641,6 +657,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           role: { type: "string", enum: ["editor", "observer"] },
           assignedItemsOnly: { type: "boolean" },
           pinned: { type: "boolean", description: "Inherited administrators are pinned and cannot be changed or removed through board permission methods." },
+          accessSource: nullable({ type: "string", enum: ["organisation_owner", "organisation_admin", "workspace_admin"], description: "Why a pinned member has access; null for an explicit board grant." }),
           email: { type: "string", format: "email" },
           displayName: { type: "string" },
           avatarUrl: nullable({ type: "string", format: "uri" }),
@@ -659,8 +676,23 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           avatarUrl: nullable({ type: "string", format: "uri" }),
           lastOnlineAt: nullable(dateTime),
           clientId: uuid,
+          isGuest: { type: "boolean", description: "True for someone outside the organisation who already holds another board in it. Adding them may use a paid guest seat." },
         },
         additionalProperties: true,
+      },
+      BoardInvite: {
+        type: "object",
+        required: ["id", "kind", "email", "role", "assignedItemsOnly", "expiresAt", "createdAt"],
+        properties: {
+          id: uuid,
+          kind: { type: "string", enum: ["guest", "member"], description: "guest: an email invitation for someone outside the organisation. member: an organisation invite." },
+          email: nullable({ type: "string", format: "email", description: "Null for a reusable organisation invite link." }),
+          role: { type: "string", enum: ["editor", "observer"] },
+          assignedItemsOnly: { type: "boolean" },
+          expiresAt: nullable(dateTime),
+          createdAt: dateTime,
+        },
+        additionalProperties: false,
       },
       BoardMemberCandidates: {
         type: "object",
@@ -2254,6 +2286,22 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       parameters: [idParam()],
       responses: authedResponses({ "200": ok(ref("BoardMemberCandidates")) }),
     })),
+    "/boards/{id}/invites": pathItem("get", operation({
+      tags: ["Board Access"],
+      summary: "List pending board invites",
+      description: "Returns open guest invitations and organisation invites that grant this board. Requires board-management access.",
+      operationId: "listBoardInvites",
+      parameters: [idParam()],
+      responses: authedResponses({ "200": ok(arrayOf(ref("BoardInvite"))) }),
+    })),
+    "/boards/{id}/invites/{inviteId}": pathItem("delete", operation({
+      tags: ["Board Access"],
+      summary: "Withdraw a board invite",
+      description: "Removes this board from the invite and revokes the invite once it grants nothing else. Organisation invites require an organisation owner or admin.",
+      operationId: "revokeBoardInvite",
+      parameters: [idParam(), idParam("inviteId"), queryParam("kind", { type: "string", enum: ["guest", "member"] }, "The invite kind returned by listBoardInvites.", true)],
+      responses: authedResponses({ "204": noContent }),
+    })),
     "/boards/{id}/members/{userId}": {
       patch: operation({ tags: ["Board Access"], summary: "Update a board member", description: "Changes an explicit board permission. Pinned inherited administrators cannot be changed here.", operationId: "updateBoardMember", parameters: [idParam(), idParam("userId")], requestBody: jsonBody(ref("UpdateBoardMemberBody")), responses: authedResponses({ "200": ok(ref("BoardMember")) }) }),
       delete: operation({ tags: ["Board Access"], summary: "Remove a board member", description: "Removes explicit board access and cleans up board participation. Editors and observers, including guests, may remove themselves; removing another user requires workspace-admin access. Inherited workspace and organisation administrators cannot leave or be removed from individual boards.", operationId: "removeBoardMember", parameters: [idParam(), idParam("userId")], responses: authedResponses({ "204": noContent }) }),
@@ -2937,6 +2985,13 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         responses: authedResponses({ "200": ok(ref("AgentRun")), "409": { $ref: "#/components/responses/Conflict" } }),
       }),
     },
+    "/feedback": pathItem("post", operation({
+      tags: ["Feedback"], summary: "Send feedback to the Kanera team", operationId: "reportFeedback",
+      description: "Kanera Cloud only; self-hosted installs return 404. Emails the report to the Kanera team together with the reporting user's name, email and organisation. Limited to 10 reports per user per hour. Returns 503 when the report could not be delivered.",
+      parameters: [idempotencyKeyHeader()],
+      requestBody: jsonBody(ref("ReportFeedbackBody")),
+      responses: authedResponses({ "202": { description: "Feedback delivered.", content: { "application/json": { schema: { type: "object", required: ["received"], properties: { received: { type: "boolean", const: true } } } } } } }),
+    })),
     "/comments/{id}/reactions/{type}": pathItem("delete", operation({ tags: ["Comments"], summary: "Remove a comment reaction", operationId: "removeCommentReaction", parameters: [idParam(), { name: "type", in: "path", required: true, schema: { type: "string" } }], responses: authedResponses({ "204": noContent }) })),
     "/boards/{id}/activity": pathItem("get", operation({ tags: ["Activity"], summary: "List recent board activity", description: "Returns a cursor-paginated board-wide feed of activity and comments.", operationId: "listBoardActivity", parameters: [idParam(), queryParam("limit", { type: "integer", minimum: 1, maximum: 200, default: 50 }), queryParam("cursor", { type: "string", minLength: 1, maxLength: 2048 })], responses: authedResponses({ "200": ok(ref("CardFeedPage")) }) })),
   },

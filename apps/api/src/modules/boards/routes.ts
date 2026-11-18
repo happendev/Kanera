@@ -17,6 +17,7 @@ import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { moveStandaloneBoard } from "../../lib/move-standalone-board.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
 import { emitToBoardAudience, emitToWorkspace } from "../../realtime/emit.js";
+import { emitRevokeBoardInvite, loadBoardInvites, revokeBoardInvite } from "./board-invites.js";
 import { boardPayload, listBoardMembers, loadBoardMemberCandidates, loadBoardTransferTargets, loadCompletedCards } from "./board-queries.js";
 import { createBoard, emitBoardCreated } from "./create-board.js";
 import { updateBoard, updateBoardBackground } from "./update-board.js";
@@ -367,6 +368,23 @@ export async function boardRoutes(app: FastifyInstance) {
     const { id } = dto.uuidParams("id").parse(req.params);
     await assertBoardManageAccess(req.auth, id);
     return listBoardMembers({ auth: req.auth, boardId: id });
+  });
+
+  app.get("/boards/:id/invites", async (req) => {
+    const { id } = dto.uuidParams("id").parse(req.params);
+    const ctx = await assertBoardManageAccess(req.auth, id);
+    return loadBoardInvites({ ctx, boardId: id });
+  });
+
+  app.delete("/boards/:id/invites/:inviteId", async (req, reply) => {
+    const { id, inviteId } = dto.uuidParams("id", "inviteId").parse(req.params);
+    const ctx = await assertBoardManageAccess(req.auth, id);
+    const { kind } = dto.revokeBoardInviteQuery.parse(req.query);
+
+    const revoked = await revokeBoardInvite({ auth: req.auth, ctx, boardId: id, inviteId, kind });
+
+    emitRevokeBoardInvite(revoked);
+    return reply.status(204).send();
   });
 
   app.patch("/boards/:id/members/:userId", async (req) => {

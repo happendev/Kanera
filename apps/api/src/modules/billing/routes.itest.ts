@@ -282,9 +282,24 @@ void test("POST /billing/seats rejects trial capacity changes, invoices active i
     const [beforeValidBump] = await db.select({ seatLimit: clients.seatLimit }).from(clients).where(eq(clients.id, clientId));
     assert.equal(beforeValidBump?.seatLimit, 5);
     assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "seat_billed")), 0);
+    const captured: ServerAnalyticsEvent[] = [];
+    const capture = mock.method(productAnalytics, "capture", async (input: ServerAnalyticsEvent) => {
+      captured.push(input);
+    });
     const activeBump = await app.inject({ method: "POST", url: "/billing/seats", headers: auth, payload: { seatLimit: 10 } });
+    capture.mock.restore();
     assert.equal(activeBump.statusCode, 200, activeBump.body);
     assert.equal(activeBump.json<{ seatLimit: number }>().seatLimit, 10);
+    // Exact counts, not a band: 5 -> 10 would otherwise read as no change inside "5_10".
+    assert.deepEqual(captured.filter((item) => item.event === "seats_changed").map((item) => item.properties), [{
+      workspace_id: clientId,
+      plan_code: "pro",
+      billing_period: "not_selected",
+      previous_seats: 5,
+      seats: 10,
+      seat_change: "increase",
+      event_version: ANALYTICS_EVENT_VERSION,
+    }]);
     assert.equal(updateQuantity, 10);
     // pending_if_incomplete holds the seat bump as a Stripe pending update until paid, so a failed/abandoned
     // payment can never put the existing subscription into dunning (and thus never cancels it).
@@ -558,13 +573,13 @@ void test("Stripe checkout expiry captures one privacy-safe abandonment event", 
       await handleStripeEvent(expired);
       assert.deepEqual(captured.filter((item) => item.event === "checkout_abandoned"), [{
         event: "checkout_abandoned",
-        distinctId: `organization:${clientId}`,
         organizationId: clientId,
         properties: {
           workspace_id: clientId,
           plan_code: "pro",
           billing_period: "annual",
           seat_band: "5_10",
+          seats: 5,
           upgrade_source: "account_plan",
           event_version: ANALYTICS_EVENT_VERSION,
         },
@@ -723,13 +738,13 @@ void test("Stripe invoice paid captures one privacy-safe subscription payment ev
       const payments = captured.filter((item) => item.event === "subscription_payment_succeeded");
       assert.deepEqual(payments, [{
         event: "subscription_payment_succeeded",
-        distinctId: creator.id,
         organizationId: clientId,
         properties: {
           workspace_id: clientId,
           plan_code: "pro",
           billing_period: "monthly",
           seat_band: "5_10",
+          seats: 5,
           revenue: 14_500,
           currency: "EUR",
           billing_reason: "subscription_cycle",

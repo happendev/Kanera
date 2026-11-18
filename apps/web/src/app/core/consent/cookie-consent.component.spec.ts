@@ -59,7 +59,7 @@ describe("CookieConsentComponent", () => {
     const dialog = root.querySelector(".consent-dialog")?.textContent ?? "";
     expect(dialog).toContain("Analytics cookies");
     expect(dialog).toContain("Separate server-side analytics");
-    expect(dialog).toContain("subscription starts, renewals, resumptions, cancellations, and plan or seat-band changes");
+    expect(dialog).toContain("subscription starts, renewals, resumptions, cancellations, and plan or seat-count changes");
     expect(dialog).toContain("exclude payment-method details and workspace content");
   });
 });

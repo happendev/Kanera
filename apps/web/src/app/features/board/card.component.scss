@@ -1142,11 +1142,14 @@ k-card-labels {
     display: block;
   }
 
+  // k-avatar is the wrapper's full size and covers its ring, so the count drops the ring to match
+  // (24px, 20px compact) rather than shrinking to the ring's inside.
   &.assignee-overflow {
+    border: 0;
     background: var(--surface-hover);
     color: var(--text-muted);
-    // Off-scale on purpose: two digits ("+12") must fit inside the 20px compact avatar's 16px of
-    // content, which --text-xs does not.
+    // Off-scale on purpose: two digits ("+12") must fit the 20px compact circle, which --text-xs
+    // does not.
     font-size: 10px;
     letter-spacing: -0.5px;
   }

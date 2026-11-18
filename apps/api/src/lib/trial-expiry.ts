@@ -35,7 +35,6 @@ export async function runTrialExpirySweep(log?: FastifyBaseLogger, mailer?: Mail
     if (claimed.length > 0) {
       void productAnalytics.capture({
         event: "trial_ended",
-        distinctId: `organization:${client.id}`,
         organizationId: client.id,
         properties: {
           workspace_id: client.id,

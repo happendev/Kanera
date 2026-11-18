@@ -16,7 +16,7 @@ here first, then update every use.
 | nl | Informal **je/jij** | Dutch. Sentence case. |
 | nb | Informal **du** | Norwegian Bokmål. Sentence case. Accept browser `no` preferences as `nb`. |
 | zh-CN | Neutral **你** | Simplified Chinese. Use Chinese punctuation and concise labels. Keep product and plan names unchanged. |
-| zh-TW | Neutral **你** | Traditional Chinese with Taiwan terminology: 使用者、檔案、連結、設定. No grammatical plural inflection. |
+| zh-TW | Neutral **你** | Traditional Chinese with Taiwan terminology: 使用者、檔案、連結、設定、登入/登出、金鑰、批次、自託管. No grammatical plural inflection. |
 | ja | Polite **です/ます** | No spaces between words. Full-width `。` `、` `（）`. Keep button labels short (verb stem or noun, no です/ます). |
 
 Everywhere:
@@ -46,7 +46,7 @@ Everywhere:
 | guest board | guest board | tablero de invitado | quadro de convidado | tableau invité | Gast-Board | ゲストボード | gastbord | gjestetavle | 访客看板 | 訪客看板 |
 | list | list | lista | lista | liste | Liste | リスト | lijst | liste | 列表 | 列表 |
 | card | card | tarjeta | cartão | carte | Karte | カード | kaart | kort | 卡片 | 卡片 |
-| card key | card key | clave de tarjeta | chave do cartão | clé de carte | Kartenschlüssel | カードキー | kaartsleutel | kortnøkkel | 卡片标识 | 卡片標識 |
+| card key | card key | clave de tarjeta | chave do cartão | clé de carte | Kartenschlüssel | カードキー | kaartsleutel | kortnøkkel | 卡片标识 | 卡片識別碼 |
 | label | label | etiqueta | etiqueta | étiquette | Label | ラベル | label | etikett | 标签 | 標籤 |
 | checklist | checklist | lista de verificación | checklist | checklist | Checkliste | チェックリスト | checklist | sjekkliste | 检查清单 | 檢查清單 |
 | checklist item | checklist item | elemento de la lista | item da checklist | élément de checklist | Checklistenpunkt | チェックリスト項目 | checklistitem | sjekklistepunkt | 清单项 | 清單項 |
@@ -93,12 +93,12 @@ Everywhere:
 | trigger / action (automation) | trigger / action | desencadenante / acción | gatilho / ação | déclencheur / action | Auslöser / Aktion | トリガー / アクション | trigger / actie | utløser / handling | 触发条件 / 操作 | 觸發條件 / 操作 |
 | source / target (mirror) | source / target | origen / destino | origem / destino | source / cible | Quelle / Ziel | コピー元 / コピー先 | bron / doel | kilde / mål | 来源 / 目标 | 來源 / 目標 |
 | board linking | board linking | vinculación de tableros | vinculação de quadros | liaison de tableaux | Board-Verknüpfung | ボードのリンク | bordkoppeling | tavlekobling | 看板关联 | 看板關聯 |
-| saved view | saved view | vista guardada | visualização salva | vue enregistrée | gespeicherte Ansicht | 保存したビュー | opgeslagen weergave | lagret visning | 已保存视图 | 已保存檢視 |
+| saved view | saved view | vista guardada | visualização salva | vue enregistrée | gespeicherte Ansicht | 保存したビュー | opgeslagen weergave | lagret visning | 已保存视图 | 已儲存檢視 |
 | quick edit | quick edit | edición rápida | edição rápida | modification rapide | Schnell bearbeiten | クイック編集 | snel bewerken | hurtigredigering | 快速编辑 | 快速編輯 |
 | unassign | unassign | quitar la asignación | remover atribuição | désassigner | Zuweisung aufheben | 割り当てを解除 | toewijzing verwijderen | fjern tilordning | 取消分配 | 取消分配 |
-| bulk actions | bulk actions | acciones en bloque | ações em massa | actions groupées | Massenaktionen | 一括操作 | bulkacties | massehandlinger | 批量操作 | 批量操作 |
+| bulk actions | bulk actions | acciones en bloque | ações em massa | actions groupées | Massenaktionen | 一括操作 | bulkacties | massehandlinger | 批次操作 | 批量操作 |
 | unattended agent | unattended agent | agente desatendido | agente autônomo | agent autonome | unbeaufsichtigter Agent | 無人エージェント | onbeheerde agent | ubemannet agent | 无人值守代理 | 無人值守代理 |
-| self-hosted / deployment | self-hosted / deployment | autoalojado / instalación | auto-hospedado / instalação | auto-hébergé / installation | selbst gehostet / Installation | セルフホスト / 環境 | zelfgehost / implementatie | selvhostet / utrulling | 自托管 / 部署 | 自托管 / 部署 |
+| self-hosted / deployment | self-hosted / deployment | autoalojado / instalación | auto-hospedado / instalação | auto-hébergé / installation | selbst gehostet / Installation | セルフホスト / 環境 | zelfgehost / implementatie | selvhostet / utrulling | 自託管 / 部署 | 自托管 / 部署 |
 | member | member | miembro | membro | membre | Mitglied | メンバー | lid | medlem | 成员 | 成員 |
 | guest | guest | invitado | convidado | invité | Gast | ゲスト | gast | gjest | 访客 | 訪客 |
 | owner | owner | propietario | proprietário | propriétaire | Inhaber | オーナー | eigenaar | eier | 所有者 | 所有者 |
@@ -107,12 +107,12 @@ Everywhere:
 | seat (billing) | seat | puesto | licença | siège | Lizenz | シート | licentie | lisens | 席位 | 席位 |
 | trial | trial | prueba | avaliação | essai | Testphase | トライアル | proefperiode | prøveperiode | 试用 | 試用 |
 | plan | plan | plan | plano | forfait | Tarif | プラン | abonnement | abonnement | 订阅方案 | 訂閱方案 |
-| API key | API key | clave de API | chave de API | clé API | API-Schlüssel | APIキー | API-sleutel | API-nøkkel | API 密钥 | API 密鑰 |
+| API key | API key | clave de API | chave de API | clé API | API-Schlüssel | APIキー | API-sleutel | API-nøkkel | API 密钥 | API 金鑰 |
 | AI agent | AI agent | agente de IA | agente de IA | agent IA | KI-Agent | AIエージェント | AI-agent | KI-agent | AI 代理 | AI 代理 |
-| run (agent run) | run | ejecución | execução | exécution | Ausführung | 実行 | uitvoering | kjøring | 运行 | 運行 |
-| sign in / log in | sign in / log in | iniciar sesión | entrar | se connecter | anmelden | ログイン | inloggen | logg inn | 登录 | 登錄 |
+| run (agent run) | run | ejecución | execução | exécution | Ausführung | 実行 | uitvoering | kjøring | 运行 | 執行 |
+| sign in / log in | sign in / log in | iniciar sesión | entrar | se connecter | anmelden | ログイン | inloggen | logg inn | 登录 | 登入 |
 | sign up | sign up | registrarse | criar conta | s'inscrire | registrieren | 新規登録 | registreren | registrer deg | 注册 | 註冊 |
-| log out | log out | cerrar sesión | sair | se déconnecter | abmelden | ログアウト | uitloggen | logg ut | 退出登录 | 退出登錄 |
+| log out | log out | cerrar sesión | sair | se déconnecter | abmelden | ログアウト | uitloggen | logg ut | 退出登录 | 登出 |
 | settings | settings | configuración | configurações | paramètres | Einstellungen | 設定 | instellingen | innstillinger | 设置 | 設定 |
 | two-factor authentication | two-factor authentication | verificación en dos pasos | autenticação de dois fatores | authentification à deux facteurs | Zwei-Faktor-Authentifizierung | 二要素認証 | tweefactorauthenticatie | tofaktorautentisering | 双重验证 | 雙重驗證 |
 | storage | storage | almacenamiento | armazenamento | stockage | Speicher | ストレージ | opslag | lagring | 存储 | 儲存 |
