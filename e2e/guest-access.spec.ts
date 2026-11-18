@@ -44,6 +44,7 @@ test("removing a live board guest ejects their open board and blocks cached reop
   await openBoard(page, boardName);
   await page.locator(".board-members-trigger").click();
   await expect(page.locator(".bmp-guests")).toContainText(users.maya.name);
+  // Each person has a visible remove button beside their role.
   await page.getByRole("button", { name: `Remove ${users.maya.name}` }).click();
 
   // The DELETE waits out the 10s undo toast (UNDO_WINDOW_MS); the guest is ejected by the
@@ -54,4 +55,40 @@ test("removing a live board guest ejects their open board and blocks cached reop
   await expectBoardDenied(guest, boardName);
   await guest.reload();
   await expect(guest.locator(`a.board-link[href="${href}"]`)).toHaveCount(0);
+});
+
+test("board members menu invites an outsider by email, withdraws it, and adds an existing guest by name", async ({ page, signIn, apiAs, uniqueName }) => {
+  const sharedBoard = uniqueName("E2E guest source");
+  const boardName = uniqueName("E2E members menu");
+  await signIn(page, "amelia");
+  const api = await apiAs("amelia");
+  // Maya holds one board here, which makes her a known guest the menu can offer by name elsewhere.
+  await boardSharedWithMaya(page, api, sharedBoard);
+  const workspaceId = (await workspaceSettingsHref(page, "E2E primary board")).split("/")[2]!;
+  const created = await api.post(`/api/workspaces/${workspaceId}/boards`, { data: { name: boardName } });
+  expect(created.ok(), await created.text()).toBe(true);
+
+  await openBoard(page, boardName);
+  const menu = page.locator("k-board-members-menu");
+  await page.locator(".board-members-trigger").click();
+  await expect(menu.locator(".bmp-section-title").first()).toHaveText("Admins");
+  const search = menu.getByRole("searchbox", { name: "Search or add people" });
+
+  const email = `${boardName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@client.test`;
+  await search.fill(email);
+  await menu.getByRole("button", { name: `Invite ${email} as a guest` }).click();
+  await expect(page.getByText(`Invitation emailed to ${email}.`)).toBeVisible();
+  const invites = menu.locator(".bmp-invites");
+  await expect(invites).toContainText(email);
+  await expect(invites).toContainText("Guest invite · Editor");
+  await menu.screenshot({ path: test.info().outputPath("members-pending-invite.png") });
+  await menu.getByRole("button", { name: `Withdraw invite for ${email}` }).click();
+  await expect(invites).toHaveCount(0);
+
+  await search.fill("maya");
+  const result = menu.locator(".bmp-result").filter({ hasText: users.maya.name });
+  await expect(result).toContainText("Guest");
+  await result.click();
+  await expect(menu.locator(".bmp-guests")).toContainText(users.maya.name);
+  await expect(search).toHaveValue("");
 });

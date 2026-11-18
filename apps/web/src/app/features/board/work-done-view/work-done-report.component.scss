@@ -656,10 +656,25 @@
   gap: 2px;
 }
 
-.rp-more-pill,
 .rp-cards-more {
   color: var(--text-muted);
   font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+// The same 20px circle as the avatars beside it, so the count reads as more people in the stack.
+.rp-more-pill {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  // 3px, not 4px: "+N" with one digit then fits inside min-width and stays a circle.
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  // 10px, off the scale: "+N" inside a 20px circle, as in the dependency map.
+  font-size: 10px;
   font-weight: 600;
 }
 

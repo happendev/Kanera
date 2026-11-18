@@ -3,6 +3,8 @@ export type AnalyticsRuntimeConfig = {
   provider: "posthog";
   projectKey: string;
   apiHost: string;
+  /** ISO country code from Cloudflare, or null when unknown. Older APIs omit it. */
+  country?: string | null;
 };
 
 export type AnalyticsUserIdentity = {

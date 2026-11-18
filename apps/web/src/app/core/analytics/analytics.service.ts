@@ -11,6 +11,14 @@ import type { AnalyticsOrganizationIdentity, AnalyticsPageView, AnalyticsRuntime
 
 const DEVELOPMENT_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
+/** PostHog's standard country fields from the API-supplied code; GeoIP itself stays disabled. */
+export function analyticsCountryProperties(country: string | null | undefined): { $geoip_country_code?: string; $geoip_country_name?: string } {
+  if (!country || !/^[A-Z]{2}$/.test(country)) return {};
+  let name: string | undefined;
+  try { name = new Intl.DisplayNames(["en"], { type: "region" }).of(country); } catch { name = undefined; }
+  return { $geoip_country_code: country, ...(name && name !== country ? { $geoip_country_name: name } : {}) };
+}
+
 export function analyticsRuntimeAllowed(
   config: AnalyticsRuntimeConfig | null,
   production: boolean,
@@ -118,7 +126,7 @@ export class AnalyticsService {
         ...POSTHOG_PRIVACY_CONFIG,
         api_host: config.apiHost,
         loaded: (instance) => {
-          instance.register({ $geoip_disable: true });
+          instance.register({ $geoip_disable: true, ...analyticsCountryProperties(config.country) });
           if (this.policySuppressed || !this.consentGranted) instance.opt_out_capturing();
           else (instance as PostHog).opt_in_capturing({ captureEventName: false });
         },
@@ -229,9 +237,11 @@ export class AnalyticsService {
   private registerRoute(pattern: string): void {
     // PostHog's activity feed reads `$current_url`. Register a route-template URL so every
     // browser event has useful screen context without exposing entity IDs or query strings.
+    // The country is re-registered with each route because reset() clears super properties.
     this.instance!.register({
       route_pattern: pattern,
       $current_url: `${window.location.origin}${pattern}`,
+      ...analyticsCountryProperties(this.runtimeConfig?.country),
     });
   }
 }

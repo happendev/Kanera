@@ -441,7 +441,9 @@ k-empty-state.board-empty {
 
 }
 
+// The avatar (26px) spills over its wrapper's 2px ring; a 1px ring leaves the count the same 26px.
 .board-member-overflow {
+  border-width: 1px;
   background: var(--surface-2);
   color: var(--text-muted);
   font-size: var(--text-xs);

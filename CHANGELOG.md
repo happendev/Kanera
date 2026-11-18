@@ -15,6 +15,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Redesigned board members menu:** one field searches the board and adds people. Type an email address to invite someone outside the organisation as a guest, or (owners and admins) to the organisation, without going to workspace settings. Existing guests from other boards can be added by name. Admins are listed separately with the reason they have access, each person has a single access control for role, assigned-items-only and removal, and pending invites for the board are listed and can be withdrawn.
 - **Shorter signup:** creating an account asks only for your name, email and password. Your organisation starts as "Private" and can be renamed in settings, and the theme follows your device until you pick one.
 - **Clearer emails:** subjects name the card or person, card emails have an Open card button, footers say why you got the email, and every email includes a plain-text version.
 - On phones, setup keeps its Create board and Continue buttons in view instead of below every template.

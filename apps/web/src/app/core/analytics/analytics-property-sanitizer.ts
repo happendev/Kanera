@@ -74,7 +74,9 @@ const allowedTransportProperties = new Set([
 // PostHog assign each session a channel. Without it every board.kanera.app session is "Unknown".
 // It must ride on every event type, because a session's first event may be $identify or
 // $groupidentify rather than a $pageview.
-const allowedSessionContextProperties = new Set(["$referring_domain"]);
+// The visitor's country (from Cloudflare via /auth/config, never PostHog's IP lookup) rides on
+// every event for the same reason, under PostHog's standard names so its country reports work.
+const allowedSessionContextProperties = new Set(["$referring_domain", "$geoip_country_code", "$geoip_country_name"]);
 
 function isAllowedTransportProperty(property: string): boolean {
   return allowedTransportProperties.has(property) || allowedSessionContextProperties.has(property);

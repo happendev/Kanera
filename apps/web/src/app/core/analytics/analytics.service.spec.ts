@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyticsRuntimeAllowed, POSTHOG_PRIVACY_CONFIG } from "./analytics.service";
+import { analyticsCountryProperties, analyticsRuntimeAllowed, POSTHOG_PRIVACY_CONFIG } from "./analytics.service";
 
 describe("PostHog privacy configuration", () => {
   it("explicitly disables automatic and recording capabilities", () => {
@@ -39,5 +39,12 @@ describe("PostHog privacy configuration", () => {
     expect(analyticsRuntimeAllowed(config, true, "board.kanera.app", "self_hosted")).toBe(false);
     expect(analyticsRuntimeAllowed(config, true, "board.kanera.app", undefined)).toBe(false);
     expect(analyticsRuntimeAllowed(config, true, "board.kanera.app", "hosted")).toBe(true);
+  });
+
+  it("maps the API-supplied country to PostHog's standard country fields", () => {
+    expect(analyticsCountryProperties("JP")).toEqual({ $geoip_country_code: "JP", $geoip_country_name: "Japan" });
+    expect(analyticsCountryProperties(null)).toEqual({});
+    expect(analyticsCountryProperties(undefined)).toEqual({});
+    expect(analyticsCountryProperties("not-a-country")).toEqual({});
   });
 });

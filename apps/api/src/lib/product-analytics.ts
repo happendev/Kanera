@@ -1,8 +1,10 @@
+import { requestContext } from "@fastify/request-context";
 import { clients, userAcquisitions, type SignupAcquisition } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import { PostHog } from "posthog-node";
 import { db } from "../db.js";
 import { env } from "../env.js";
+import { analyticsCountryProperties } from "./visitor-country.js";
 
 export type PlanCode = "free" | "pro_trial" | "pro";
 export type BillingPeriod = "monthly" | "annual" | "not_selected";
@@ -297,10 +299,12 @@ class PostHogProductAnalytics implements ProductAnalytics {
   }
 
   capture<TEvent extends ServerAnalyticsEventName>(input: ServerAnalyticsEvent<TEvent>): Promise<void> {
-    return this.track(this.captureInternal(input));
+    // Read the country while still inside the triggering request. Browser requests to the app API
+    // carry it; worker jobs, provider webhooks, and the public API/MCP (machine traffic) do not.
+    return this.track(this.captureInternal(input, requestContext.get("visitorCountry") ?? null));
   }
 
-  private async captureInternal<TEvent extends ServerAnalyticsEventName>(input: ServerAnalyticsEvent<TEvent>): Promise<void> {
+  private async captureInternal<TEvent extends ServerAnalyticsEventName>(input: ServerAnalyticsEvent<TEvent>, country: string | null): Promise<void> {
     try {
       if (!this.client || input.supportSession) return;
       const [organization] = await db.select({ excluded: clients.analyticsExcluded, attribution: userAcquisitions.attribution })
@@ -315,6 +319,7 @@ class PostHogProductAnalytics implements ProductAnalytics {
         properties: {
           ...acquisitionEventProperties(organization.attribution),
           ...sanitizeEventProperties(input.event, input.properties),
+          ...analyticsCountryProperties(country),
           // PostHog excludes personless events from group indexing. Processing the opaque actor
           // identity is required for organisation funnels, even without browser identification.
           $process_person_profile: true,

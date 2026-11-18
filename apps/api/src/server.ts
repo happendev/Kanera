@@ -70,6 +70,7 @@ import { cardPriorityRoutes } from "./modules/card-priorities/routes.js";
 import { setupIo } from "./realtime/io.js";
 import { setRealtimeLogger } from "./realtime/metrics.js";
 import { initRedis } from "./redis.js";
+import { visitorCountryFromHeaders } from "./lib/visitor-country.js";
 
 declare module "@fastify/request-context" {
   interface RequestContextData {
@@ -78,8 +79,14 @@ declare module "@fastify/request-context" {
     clientId?: string;
     userId?: string;
     workspaceId?: string;
+    /** Cloudflare's country for browser requests; analytics context only. Null for webhooks. */
+    visitorCountry?: string | null;
   }
 }
+
+// Provider webhooks (Stripe, GitHub) arrive through Cloudflare from the provider's own servers, so
+// their country describes the provider, not the customer the resulting events belong to.
+const PROVIDER_WEBHOOK_PATH = /\/webhooks?(?:[/?]|$)/;
 
 const REQUEST_ID_HEADER = "x-request-id";
 const LOGGER_REDACT_PATHS = [
@@ -190,7 +197,11 @@ export async function buildServer(options: BuildServerOptions = {}) {
   setRealtimeLogger(app.log);
 
   await app.register(fastifyRequestContext, {
-    defaultStoreValues: (req) => ({ requestId: req.id, requestStartedAt: performance.now() }),
+    defaultStoreValues: (req) => ({
+      requestId: req.id,
+      requestStartedAt: performance.now(),
+      visitorCountry: PROVIDER_WEBHOOK_PATH.test(req.url) ? null : visitorCountryFromHeaders(req.headers),
+    }),
   });
 
   app.addHook("onSend", async (req, reply, payload) => {

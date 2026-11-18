@@ -44,6 +44,7 @@ import { newRefreshToken, rotateRefresh } from "./jwt.js";
 import { hashPassword, needsPasswordRehash, verifyPassword, verifyPasswordTimingSafe } from "./password.js";
 import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, regenerateRecoveryCodes, resetMfa, verifyMfaCode, verifyMfaLoginCode } from "./mfa.js";
 import { ANALYTICS_EVENT_VERSION, productAnalytics } from "../lib/product-analytics.js";
+import { visitorCountryFromHeaders } from "../lib/visitor-country.js";
 import { captureWorkspaceMemberJoined } from "../lib/analytics-milestones.js";
 import { isClientAdminRole, resolveActiveOrganisation, resolveActiveOrganisationContext, type ActiveOrganisation } from "../lib/client-membership.js";
 import { disconnectSupportSessionSockets, disconnectUserRealtimeSockets } from "../realtime/io.js";
@@ -202,15 +203,24 @@ export async function authRoutes(app: FastifyInstance) {
     await authRateLimiter.penalty(refreshFailureKey(req), refreshFailurePolicy);
   }
 
-  app.get("/auth/config", async (): Promise<dto.AuthConfigResponse> => {
+  app.get("/auth/config", async (req, reply): Promise<dto.AuthConfigResponse> => {
     const analytics = env.ANALYTICS_ENABLED
       && env.ANALYTICS_PROVIDER === "posthog"
       && env.KANERA_DEPLOYMENT_MODE === "hosted"
       && (env.KANERA_ENVIRONMENT === "production" || env.KANERA_ENVIRONMENT === "staging")
       && env.POSTHOG_PROJECT_KEY
       && env.POSTHOG_API_HOST
-      ? { enabled: true as const, provider: "posthog" as const, projectKey: env.POSTHOG_PROJECT_KEY, apiHost: env.POSTHOG_API_HOST }
+      ? {
+        enabled: true as const,
+        provider: "posthog" as const,
+        projectKey: env.POSTHOG_PROJECT_KEY,
+        apiHost: env.POSTHOG_API_HOST,
+        // Cloudflare's country for the browser, so web events can record it without PostHog's IP lookup.
+        country: visitorCountryFromHeaders(req.headers),
+      }
       : null;
+    // The analytics country is per visitor, so this response must never be shared from a cache.
+    if (analytics) reply.header("cache-control", "private, no-store");
     return {
       emailVerificationEnabled: env.EMAIL_VERIFICATION_ENABLED,
       signupsEnabled: env.SIGNUPS_ENABLED,

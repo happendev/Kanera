@@ -7457,7 +7457,8 @@
   "@5946907078796323107": {
     "description": "Settings section heading",
     "x-files": [
-      "src/app/features/account-settings/users/users.page.html"
+      "src/app/features/account-settings/users/users.page.html",
+      "src/app/features/shared/board-members-menu.popover.ts"
     ]
   },
   "7797469196073290861": "Anyone holding one of these links can join until it expires or is revoked. Revoking a link does not affect people who already joined with it.",
@@ -12031,6 +12032,7 @@
     "x-files": [
       "src/app/features/board/card-detail-checklists.component.html",
       "src/app/features/board/card-relations.component.ts",
+      "src/app/features/shared/board-members-menu.popover.ts",
       "src/app/features/workspace-settings/api/api.page.html",
       "src/app/features/workspace-settings/members/members.page.html",
       "src/app/features/workspace-settings/templates/templates.page.html"
@@ -12216,7 +12218,6 @@
     "description": "Button: assign a person to the card",
     "x-files": [
       "src/app/features/board/card-detail-metadata.component.html",
-      "src/app/features/shared/board-members-menu.popover.ts",
       "src/app/features/workspace-settings/members/members.page.html"
     ]
   },
@@ -23015,19 +23016,85 @@
       "src/app/features/share-target/share-target.page.ts"
     ]
   },
-  "2446670069667869859": "Member to add",
-  "@2446670069667869859": {
+  "8932880281843594632": "Search or add people",
+  "@8932880281843594632": {
+    "description": "Placeholder of the board members search field for board managers; it also adds people",
     "x-files": [
       "src/app/features/shared/board-members-menu.popover.ts"
     ]
   },
-  "4145496584631696119": "Role",
-  "@4145496584631696119": {
-    "description": "Select: board role for the new member",
+  "8044124817059226642": "Search members",
+  "@8044124817059226642": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "123888571953579687": "Role for people you add",
+  "@123888571953579687": {
+    "description": "Select: board role given to people added or invited from the members menu",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "8563305452988157980": "Add to board",
+  "@8563305452988157980": {
+    "description": "Heading over the people a manager can add to the board from the members menu",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "268369328039605234": "Guest",
+  "@268369328039605234": {
+    "description": "Badge: this person is a guest from outside the organisation",
     "x-files": [
       "src/app/features/shared/board-members-menu.popover.ts",
       "src/app/features/workspace-settings/guests/guests.page.html",
-      "src/app/features/workspace-settings/members/members.page.html"
+      "src/app/shared/user-profile/user-profile-popover.component.ts"
+    ]
+  },
+  "1183857382765763455": "Invite {$EMAIL} as a guest",
+  "@1183857382765763455": {
+    "description": "Option: invite someone outside the organisation to this board by email",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "1826513615568718686": "They see only the boards you share with them.",
+  "@1826513615568718686": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "8164486266763838436": "Invite {$EMAIL} to your organisation",
+  "@8164486266763838436": {
+    "description": "Option: invite someone by email to join the organisation with access to this board",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "8182440084722077553": "Organisation members see the whole board.",
+  "@8182440084722077553": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "5525264631175358979": "They join as an organisation member.",
+  "@5525264631175358979": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "3625614583168312662": "No one matches. Enter an email address to invite someone.",
+  "@3625614583168312662": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "5704979384726087546": "Everyone you can add is already on this board. Enter an email address to invite someone.",
+  "@5704979384726087546": {
+    "description": "Shown under the empty board members search when nobody else can be added by name",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
     ]
   },
   "7185483827919343173": "Assigned items only",
@@ -23038,23 +23105,45 @@
       "src/app/features/workspace-settings/guests/guests.page.html"
     ]
   },
-  "8143308720055855797": "All organisation members are already on this board.",
-  "@8143308720055855797": {
+  "2199445424284781535": "Loading members…",
+  "@2199445424284781535": {
     "x-files": [
       "src/app/features/shared/board-members-menu.popover.ts"
     ]
   },
-  "6237834722321988039": "All workspace members are already on this board.",
-  "@6237834722321988039": {
+  "4506803456670769268": "Admins",
+  "@4506803456670769268": {
+    "description": "Section heading: people who always have access to every board through their admin role",
     "x-files": [
       "src/app/features/shared/board-members-menu.popover.ts"
     ]
   },
-  "5839207226129095307": "An organisation admin can invite new people.",
-  "@5839207226129095307": {
-    "description": "Hint in the board members menu for a board admin who cannot create organisation invites",
+  "720557322859638078": "You",
+  "@720557322859638078": {
+    "description": "Badge next to the current user's own name",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/shared/user-profile/user-profile-popover.component.html"
+    ]
+  },
+  "3107245155501390829": "No board members",
+  "@3107245155501390829": {
     "x-files": [
       "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "5591072087351796539": "No members match.",
+  "@5591072087351796539": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "7184318772253450841": "Guests",
+  "@7184318772253450841": {
+    "description": "Section heading: board members from other organisations",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
   "4369824653976054484": "Role for people who join with the link",
@@ -23071,46 +23160,6 @@
       "src/app/features/shared/board-members-menu.popover.ts"
     ]
   },
-  "2199445424284781535": "Loading members…",
-  "@2199445424284781535": {
-    "x-files": [
-      "src/app/features/shared/board-members-menu.popover.ts"
-    ]
-  },
-  "720557322859638078": "You",
-  "@720557322859638078": {
-    "description": "Badge next to the current user's own name",
-    "x-files": [
-      "src/app/features/shared/board-members-menu.popover.ts",
-      "src/app/shared/user-profile/user-profile-popover.component.html"
-    ]
-  },
-  "7867939937018750791": "This member can only see cards assigned directly or through a checklist item.",
-  "@7867939937018750791": {
-    "x-files": [
-      "src/app/features/shared/board-members-menu.popover.ts"
-    ]
-  },
-  "3107245155501390829": "No board members",
-  "@3107245155501390829": {
-    "x-files": [
-      "src/app/features/shared/board-members-menu.popover.ts"
-    ]
-  },
-  "7184318772253450841": "Guests",
-  "@7184318772253450841": {
-    "description": "Section heading: board members from other organisations",
-    "x-files": [
-      "src/app/features/shared/board-members-menu.popover.ts",
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "6370571938696927600": "This guest can only see cards assigned directly or through a checklist item.",
-  "@6370571938696927600": {
-    "x-files": [
-      "src/app/features/shared/board-members-menu.popover.ts"
-    ]
-  },
   "7170708910374883691": "Leave board",
   "@7170708910374883691": {
     "description": "Button: leave this board",
@@ -23118,16 +23167,16 @@
       "src/app/features/shared/board-members-menu.popover.ts"
     ]
   },
-  "2464113172273004556": "Select an organisation member…",
-  "@2464113172273004556": {
-    "description": "Select placeholder",
+  "341430854996906050": "{count, plural, one {# more person matches. Keep typing to narrow it down.} other {# more people match. Keep typing to narrow it down.}}",
+  "@341430854996906050": {
+    "description": "Under the add list in the board members menu when more people match than are shown",
     "x-files": [
       "src/app/features/shared/board-members-menu.popover.ts"
     ]
   },
-  "4103109098542598261": "Select a workspace member…",
-  "@4103109098542598261": {
-    "description": "Select placeholder",
+  "586087051821038980": "{count, plural, one {Type a name or email to find # more person.} other {Type a name or email to find # more people.}}",
+  "@586087051821038980": {
+    "description": "Under the add list in the board members menu when more people can be added than are shown",
     "x-files": [
       "src/app/features/shared/board-members-menu.popover.ts"
     ]
@@ -23163,6 +23212,117 @@
   "@3598999512262112211": {
     "x-files": [
       "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "5381547152671735599": "Organisation owner",
+  "@5381547152671735599": {
+    "description": "Why a board admin has access - they own the organisation",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "3391694041917439769": "Organisation admin",
+  "@3391694041917439769": {
+    "description": "Why a board admin has access - they are an organisation admin",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "8294881057263792632": "Workspace admin",
+  "@8294881057263792632": {
+    "description": "Role badge on a profile card",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/shared/user-profile/user-profile-popover.component.ts"
+    ]
+  },
+  "6896666981233043069": "Admins have access to every board. Change their role in workspace settings.",
+  "@6896666981233043069": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "5653356839895745779": "Admins have access to every board. Change their role in organisation settings.",
+  "@5653356839895745779": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "8163633583048193642": "Admins have access to every board.",
+  "@8163633583048193642": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "2967431309222199420": "Guest invite",
+  "@2967431309222199420": {
+    "description": "Pending invite kind - for someone outside the organisation",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "2875606590229481601": "Member invite",
+  "@2875606590229481601": {
+    "description": "Pending invite kind - to join the organisation",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "2119651351858997822": "Expires {$date}",
+  "@2119651351858997822": {
+    "description": "Pending invite expiry in the board members menu; the placeholder is a short date",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "1076103530356563113": "Withdraw invite for {$email}",
+  "@1076103530356563113": {
+    "description": "Accessible name of a button withdrawing a pending invite",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "4704319986872818416": "Withdraw invite link",
+  "@4704319986872818416": {
+    "description": "Accessible name of a button withdrawing a pending invite link",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "7425216704017043402": "Invitation emailed to {$email}.",
+  "@7425216704017043402": {
+    "description": "Toast after inviting someone to a board by email",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "776770360321037965": "Use a paid seat for this guest?",
+  "@776770360321037965": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "6445584062832406513": "A guest's first board is free. Adding their second board uses one of your purchased seats; further boards reuse that seat. Your bill will not change right now, and the seat becomes available again when their access returns to one board.",
+  "@6445584062832406513": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "189313816799208921": "Use seat",
+  "@189313816799208921": {
+    "description": "Confirm button",
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "5341513062281822744": "Adding this guest needs a seat, but all purchased seats are in use. Buy more seats on the Account Plan page, then try again.",
+  "@5341513062281822744": {
+    "x-files": [
+      "src/app/features/shared/board-members-menu.popover.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
   "6444940540758118947": "Anyone with this link can join this board as an editor. It expires on {$date}.",
@@ -26723,12 +26883,12 @@
       "src/app/features/workspace-settings/guests/guests.page.html"
     ]
   },
-  "268369328039605234": "Guest",
-  "@268369328039605234": {
+  "4145496584631696119": "Role",
+  "@4145496584631696119": {
     "description": "Column heading",
     "x-files": [
       "src/app/features/workspace-settings/guests/guests.page.html",
-      "src/app/shared/user-profile/user-profile-popover.component.ts"
+      "src/app/features/workspace-settings/members/members.page.html"
     ]
   },
   "4822669826824948424": "Card access",
@@ -28450,31 +28610,6 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "776770360321037965": "Use a paid seat for this guest?",
-  "@776770360321037965": {
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "6445584062832406513": "A guest's first board is free. Adding their second board uses one of your purchased seats; further boards reuse that seat. Your bill will not change right now, and the seat becomes available again when their access returns to one board.",
-  "@6445584062832406513": {
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "189313816799208921": "Use seat",
-  "@189313816799208921": {
-    "description": "Confirm button",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "5341513062281822744": "Adding this guest needs a seat, but all purchased seats are in use. Buy more seats on the Account Plan page, then try again.",
-  "@5341513062281822744": {
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
   "4872833636346806633": "{$person} removed from \"{$board}\".",
   "@4872833636346806633": {
     "description": "Undo toast",
@@ -29733,13 +29868,6 @@
     "description": "Link",
     "x-files": [
       "src/app/shared/user-profile/user-profile-popover.component.html"
-    ]
-  },
-  "8294881057263792632": "Workspace admin",
-  "@8294881057263792632": {
-    "description": "Role badge on a profile card",
-    "x-files": [
-      "src/app/shared/user-profile/user-profile-popover.component.ts"
     ]
   },
   "2880714857243057395": "Owns this organisation",
