@@ -315,6 +315,12 @@ export const ja: ErrorCatalog = {
     "外部リンクが見つかりません。",
   "failed to persist web push configuration":
     "Webプッシュの設定を保存できませんでした。",
+  "feedback could not be delivered right now":
+    "現在、フィードバックを送信できませんでした。",
+  "feedback limit reached; try again later":
+    "フィードバックの送信上限に達しました。しばらくしてからもう一度お試しください。",
+  "feedback reporting is only available on Kanera Cloud":
+    "フィードバックの送信は Kanera Cloud でのみ利用できます。",
   "file too large":
     "ファイルが大きすぎます。",
   "following and reminders need a personal API key or OAuth connection":

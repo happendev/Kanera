@@ -80,7 +80,8 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
   {
     name: "BoardMember",
     table: schema.boardMembers,
-    synthetic: ["email", "displayName", "avatarUrl", "lastOnlineAt", "clientId"],
+    // `accessSource` is derived from organisation roles and pinned board memberships.
+    synthetic: ["email", "displayName", "avatarUrl", "lastOnlineAt", "clientId", "accessSource"],
     omitted: ["addedAt"],
   },
   { name: "WorkspaceMember", table: schema.workspaceMembers, synthetic: ["user"], omitted: ["addedAt"] },

@@ -315,6 +315,12 @@ export const de: ErrorCatalog = {
     "Externer Link nicht gefunden.",
   "failed to persist web push configuration":
     "Die Web-Push-Konfiguration konnte nicht gespeichert werden.",
+  "feedback could not be delivered right now":
+    "Das Feedback konnte gerade nicht zugestellt werden.",
+  "feedback limit reached; try again later":
+    "Das Feedback-Limit ist erreicht. Versuche es später erneut.",
+  "feedback reporting is only available on Kanera Cloud":
+    "Feedback kann nur über Kanera Cloud gesendet werden.",
   "file too large":
     "Die Datei ist zu groß.",
   "following and reminders need a personal API key or OAuth connection":

@@ -315,6 +315,12 @@ export const fr: ErrorCatalog = {
     "Lien externe introuvable.",
   "failed to persist web push configuration":
     "Impossible d'enregistrer la configuration des notifications push web.",
+  "feedback could not be delivered right now":
+    "Le retour n’a pas pu être transmis pour le moment.",
+  "feedback limit reached; try again later":
+    "La limite d’envoi de retours est atteinte. Réessayez plus tard.",
+  "feedback reporting is only available on Kanera Cloud":
+    "L’envoi de retours est disponible uniquement sur Kanera Cloud.",
   "file too large":
     "Le fichier est trop volumineux.",
   "following and reminders need a personal API key or OAuth connection":
