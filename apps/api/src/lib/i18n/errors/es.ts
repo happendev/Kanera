@@ -315,6 +315,12 @@ export const es: ErrorCatalog = {
     "No se encontró el enlace externo.",
   "failed to persist web push configuration":
     "No se pudo guardar la configuración de las notificaciones push web.",
+  "feedback could not be delivered right now":
+    "No se ha podido enviar el comentario en este momento.",
+  "feedback limit reached; try again later":
+    "Has alcanzado el límite de envíos de comentarios. Inténtalo de nuevo más tarde.",
+  "feedback reporting is only available on Kanera Cloud":
+    "Solo puedes enviar comentarios desde Kanera Cloud.",
   "file too large":
     "El archivo es demasiado grande.",
   "following and reminders need a personal API key or OAuth connection":
