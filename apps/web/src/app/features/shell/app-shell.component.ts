@@ -299,13 +299,22 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly upNextLabel = computed(() => {
     const total = this.myPriorities.totalCount();
     const overdue = this.myPriorities.overdueCount();
-    if (total === 0) return $localize`:Button — the Up next panel:Up next`;
-    return overdue > 0
-      ? icu($localize`:Accessible name of the Up next button:Up next ({total, plural, other {# cards}}, {overdue, plural, other {# overdue}})`, { total, overdue })
-      : icu($localize`:Accessible name of the Up next button:Up next ({total, plural, other {# cards}})`, { total });
+    const name = total === 0
+      ? $localize`:Button — the Up next panel:Up next`
+      : overdue > 0
+        ? icu($localize`:Accessible name of the Up next button:Up next ({total, plural, other {# cards}}, {overdue, plural, other {# overdue}})`, { total, overdue })
+        : icu($localize`:Accessible name of the Up next button:Up next ({total, plural, other {# cards}})`, { total });
+    return this.myPriorities.changedSinceSeen()
+      ? $localize`:Accessible name of the Up next button after someone else changed the user's queue; the button's usual name comes first:${name}:name:, changed by someone else`
+      : name;
   });
   readonly upNextTooltip = computed(() => {
     const overdue = this.myPriorities.overdueCount();
+    if (this.myPriorities.changedSinceSeen()) {
+      return overdue > 0
+        ? icu($localize`:Tooltip of the Up next button after someone else changed the user's queue; U is its keyboard shortcut:Up next · Changed by someone else · {overdue, plural, other {# overdue}} · U`, { overdue })
+        : $localize`:Tooltip of the Up next button after someone else changed the user's queue; U is its keyboard shortcut:Up next · Changed by someone else · U`;
+    }
     return overdue > 0
       ? icu($localize`:Tooltip of the Up next button; U is its keyboard shortcut:Up next · {overdue, plural, other {# overdue}} · U`, { overdue })
       : $localize`:Tooltip of the Up next button; U is its keyboard shortcut:Up next · U`;
@@ -840,14 +849,17 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Overdue Up next is the only drawer state the header's menu button marks: unread notifications
-   * have the header's own bell, and a plain Up next count is not news, as its badge is a quiet count.
+   * Overdue or changed-by-someone-else Up next are the only drawer states the header's menu button
+   * marks: unread notifications have the header's own bell, and a plain Up next count is not news,
+   * as its badge is a quiet count. On a phone the Up next button sits inside the closed drawer, so
+   * without this dot a re-sequenced queue would go unnoticed until the drawer happened to open.
    */
   private readonly navOverdue = computed(() => this.myPriorities.overdueCount() > 0);
 
   private readonly disconnectShellNav = this.shellNav.connect({
     drawerMode: this.isMobile,
     overdue: this.navOverdue,
+    upNextChanged: this.myPriorities.changedSinceSeen,
     label: this.text.expandSidebar,
     open: () => this.openMobileSidebar(),
     unreadNotifications: this.notifications.unreadCount,

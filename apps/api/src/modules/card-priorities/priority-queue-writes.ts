@@ -14,6 +14,7 @@ import { db, type Tx } from "../../db.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { recordActivity } from "../../lib/activity.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
+import { stampPriorityQueueChange } from "../../lib/card-priority-queue.js";
 import { rebalanceCardPriorities } from "../../lib/rebalance.js";
 import {
   lockQueueForWrite,
@@ -94,6 +95,7 @@ export async function addPriority({
       action: ACTIVITY_ACTION.CREATED,
       payload: { position },
     });
+    await stampPriorityQueueChange(tx, targetUserId, auth.sub);
   });
 }
 
@@ -150,6 +152,7 @@ export async function movePriority({
       action: ACTIVITY_ACTION.MOVED,
       payload: { prevPosition: moved.position, position },
     });
+    await stampPriorityQueueChange(tx, current.targetUserId, auth.sub);
     return false;
   });
   return noOp;
@@ -189,6 +192,7 @@ export async function removePriority({
       action: ACTIVITY_ACTION.DELETED,
       payload: { position: deleted.position },
     });
+    await stampPriorityQueueChange(tx, current.targetUserId, auth.sub);
     return false;
   });
   return alreadyGone;

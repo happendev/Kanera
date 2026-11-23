@@ -48,6 +48,7 @@ describe("PageHeaderComponent", () => {
   it("carries the phone drawer's button, an overdue dot and an unread bell, only in drawer mode", async () => {
     const drawerMode = signal(false);
     const overdue = signal(false);
+    const upNextChanged = signal(false);
     const unreadNotifications = signal(0);
     const open = vi.fn();
     const openNotifications = vi.fn();
@@ -56,6 +57,7 @@ describe("PageHeaderComponent", () => {
     const disconnect = nav.connect({
       drawerMode,
       overdue,
+      upNextChanged,
       label: "Expand sidebar",
       open,
       unreadNotifications,
@@ -80,9 +82,17 @@ describe("PageHeaderComponent", () => {
     button?.click();
     expect(open).toHaveBeenCalledOnce();
 
+    // Someone else changed Up next: the same dot, in the accent.
+    upNextChanged.set(true);
+    fixture.detectChanges();
+    expect(host.querySelector(".ph-menu-dot.is-changed")).not.toBeNull();
+
+    // Overdue is the more urgent of the two, so it wins the colour.
     overdue.set(true);
     fixture.detectChanges();
     expect(host.querySelector(".ph-menu-dot")).not.toBeNull();
+    expect(host.querySelector(".ph-menu-dot.is-changed")).toBeNull();
+    upNextChanged.set(false);
 
     // Unread notifications are one tap away, paid for with the lead icon.
     unreadNotifications.set(3);

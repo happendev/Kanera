@@ -22,6 +22,7 @@ import { loadAccessibleBoards, type AccessibleBoard } from "../../lib/accessible
 import { cardAccessCondition, cardDueColumns } from "../../lib/card-due-sql.js";
 import {
   liveQueueCardCondition,
+  loadUnseenPriorityChangeAt,
   priorityQueueLabels,
   priorityQueueRows,
   toPriorityQueueItem,
@@ -141,9 +142,12 @@ export async function loadPriorities(
 
   // Redaction, not filtering: an entry the viewer cannot see must still occupy its rank, so
   // visibility is resolved as a separate id set rather than folded into the WHERE clause.
-  const [visibleIds, rows] = await Promise.all([
+  const self = targetUserId === auth.sub;
+  const [visibleIds, rows, unseenChangeAt] = await Promise.all([
     visibleLiveEntryIds(auth, targetUserId, accessibleBoards, db),
     priorityQueueRows(and(eq(cardPriorities.targetUserId, targetUserId), liveQueueCardCondition)),
+    // The receipt is the target's own; a manager's read neither sees nor needs it.
+    self ? loadUnseenPriorityChangeAt(targetUserId) : Promise.resolve(undefined),
   ]);
 
   // Only for entries this viewer may actually see: a redacted row discloses no board, list or label.
@@ -167,6 +171,7 @@ export async function loadPriorities(
     hiddenCount: ranked.filter((item) => item.card === null).length,
     canReorder: writableIds.length > 0,
     reorderableWorkspaceIds: writableIds,
+    ...(unseenChangeAt === undefined ? {} : { unseenChangeAt }),
   };
 }
 

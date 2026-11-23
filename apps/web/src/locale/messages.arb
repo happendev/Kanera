@@ -23620,6 +23620,27 @@
       "src/app/features/shell/app-shell.component.ts"
     ]
   },
+  "3382081449101168012": "{$name}, changed by someone else",
+  "@3382081449101168012": {
+    "description": "Accessible name of the Up next button after someone else changed the user's queue; the button's usual name comes first",
+    "x-files": [
+      "src/app/features/shell/app-shell.component.ts"
+    ]
+  },
+  "5102304484597541530": "Up next · Changed by someone else · {overdue, plural, other {# overdue}} · U",
+  "@5102304484597541530": {
+    "description": "Tooltip of the Up next button after someone else changed the user's queue; U is its keyboard shortcut",
+    "x-files": [
+      "src/app/features/shell/app-shell.component.ts"
+    ]
+  },
+  "5920516779942547454": "Up next · Changed by someone else · U",
+  "@5920516779942547454": {
+    "description": "Tooltip of the Up next button after someone else changed the user's queue; U is its keyboard shortcut",
+    "x-files": [
+      "src/app/features/shell/app-shell.component.ts"
+    ]
+  },
   "2142995538276574176": "Up next · {overdue, plural, other {# overdue}} · U",
   "@2142995538276574176": {
     "description": "Tooltip of the Up next button; U is its keyboard shortcut",

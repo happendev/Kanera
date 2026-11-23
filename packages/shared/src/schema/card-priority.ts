@@ -58,3 +58,24 @@ export const cardPriorities = pgTable(
 export const MAX_CARD_PRIORITIES_PER_USER = 50;
 
 export type CardPriority = typeof cardPriorities.$inferSelect;
+
+/**
+ * Read receipt for one person's queue: "someone else re-sequenced your work since you last looked".
+ *
+ * A coordinator who reorders a teammate's queue otherwise has to tell them so out of band; this is
+ * what lets the Up next trigger say it instead. Only add/move/remove by somebody *other* than the
+ * target stamps `changedAt`. The target's own gestures, and cards leaving the live set (completed,
+ * archived, unassigned), are not news to them.
+ *
+ * Server-side rather than per-device, so seeing the change on a phone clears it on the desktop too,
+ * and a fresh browser does not flag a queue nobody touched. `seenAt` records the `changedAt` the
+ * target actually saw, not the wall clock, so a change that lands between render and acknowledgement
+ * still flags.
+ */
+export const cardPriorityReceipts = pgTable("card_priority_receipt", {
+  targetUserId: uuid("target_user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  changedAt: timestamp("changed_at", { withTimezone: true }),
+  seenAt: timestamp("seen_at", { withTimezone: true }),
+});

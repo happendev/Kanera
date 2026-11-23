@@ -6,7 +6,8 @@ import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
 import { assertCardAccess } from "../../lib/access.js";
 import { forbidden, notFound } from "../../lib/errors.js";
-import { emitCardPriorityInvalidated } from "../../realtime/emit.js";
+import { markPriorityQueueSeen } from "../../lib/card-priority-queue.js";
+import { emitCardPriorityInvalidated, emitOwnPriorityQueueSnapshot } from "../../realtime/emit.js";
 import { assertGlobalWorkSeparatorContext } from "../global-work-separators/routes.js";
 import { loadPriorities, loadPriorityQueues, loadPriorityTargets } from "./priority-queries.js";
 import { addPriority, movePriority, removePriority } from "./priority-queue-writes.js";
@@ -93,5 +94,28 @@ export async function cardPriorityRoutes(app: FastifyInstance) {
 
     if (!alreadyGone) await emitCardPriorityInvalidated(current.targetUserId);
     return loadPriorities(req.auth, current.targetUserId);
+  });
+}
+
+/**
+ * `POST /work/priorities/:userId/seen`: the target opened Up next and saw the change flagged by
+ * `unseenChangeAt`.
+ *
+ * App API only. The receipt answers "has the person seen what their coordinator changed", so an
+ * agent or integration reading the queue on their behalf must not be able to clear it.
+ */
+export async function cardPrioritySeenRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", app.authenticate);
+
+  app.post("/work/priorities/:userId/seen", async (req, reply) => {
+    const { userId: targetUserId } = dto.uuidParams("userId").parse(req.params);
+    const body = dto.markCardPrioritiesSeenBody.parse(req.body);
+    // Only the target can acknowledge their own queue; a manager has nothing to acknowledge.
+    if (targetUserId !== req.auth.sub) throw forbidden();
+    // No activity row: this is a read receipt, not a change to anyone's work.
+    if (await markPriorityQueueSeen(targetUserId, new Date(body.changedAt))) {
+      await emitOwnPriorityQueueSnapshot(targetUserId);
+    }
+    return reply.status(204).send();
   });
 }
