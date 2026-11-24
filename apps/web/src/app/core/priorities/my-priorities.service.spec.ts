@@ -5,7 +5,6 @@ import type { WorkPrioritiesResponse, WorkPriorityItem } from "@kanera/shared/dt
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CardDragCoordinator } from "../../features/board/card-drag-coordinator.service";
-import { viewPreferenceKey } from "../browser/browser-contracts";
 import { ApiClient } from "../api/api.client";
 import { AuthService } from "../auth/auth.service";
 import type { AppSocket } from "../realtime/socket.service";
@@ -447,27 +446,29 @@ describe("MyPrioritiesService", () => {
     await vi.waitFor(() => expect(f.service.items()).toHaveLength(2));
   });
 
-  it("pulses until seen, keeping the dock's existing read receipt", async () => {
-    // The dock has always written this key for (viewer, viewer); reusing it means nobody's pulse
-    // resets when the drawer ships.
-    localStorage.setItem(viewPreferenceKey("upNextSeen", `${VIEWER_ID}:${VIEWER_ID}`), "p1|p2");
+  it("flags a change by someone else until seen, acknowledging the change it rendered", async () => {
     const f = setup();
     f.service.initialise();
     await vi.waitFor(() => expect(f.service.items()).toHaveLength(2));
     expect(f.service.changedSinceSeen()).toBe(false);
 
+    const changedAt = "2026-08-09T09:59:59.123Z";
     f.socket.trigger(SERVER_EVENTS.CARD_PRIORITY_QUEUE_CHANGED, {
       targetUserId: VIEWER_ID,
       items: [entry("p2", 1), entry("p1", 2)],
       totalCount: 2,
+      unseenChangeAt: changedAt,
       snapshotAt: "2026-08-09T10:00:00.000Z",
     });
-    // A reorder pulses; an unrelated card edit does not, because the signature is the entry ids.
     expect(f.service.changedSinceSeen()).toBe(true);
 
     f.service.markSeen();
+    // The change's own timestamp, never "now": a later change must still flag after this lands.
+    expect(f.post).toHaveBeenCalledWith(`/work/priorities/${VIEWER_ID}/seen`, { changedAt });
     expect(f.service.changedSinceSeen()).toBe(false);
-    expect(localStorage.getItem(viewPreferenceKey("upNextSeen", `${VIEWER_ID}:${VIEWER_ID}`))).toBe("p2|p1");
+    // An open drawer re-runs this on every queue change; nothing new means no second request.
+    f.service.markSeen();
+    expect(f.post.mock.calls.filter(([path]) => path.endsWith("/seen"))).toHaveLength(1);
   });
 
   it("patches a queued card in place from ordinary board events", async () => {

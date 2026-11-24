@@ -107,6 +107,11 @@
   border-radius: 50%;
   background: var(--danger);
   box-shadow: 0 0 0 2px var(--ph-menu-ring, var(--surface));
+
+  // Up next changed by someone else: the accent the sidebar's Up next badge fills with.
+  &.is-changed {
+    background: var(--accent);
+  }
 }
 
 // Only ever shown with something unread, so the glyph takes full text colour, like the drawer's

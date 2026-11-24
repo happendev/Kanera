@@ -66,7 +66,7 @@ import { userRoutes } from "./modules/users/routes.js";
 import { scratchpadRoutes } from "./modules/scratchpad/routes.js";
 import { agentWorkRoutes, workRoutes } from "./modules/work/routes.js";
 import { globalWorkSeparatorRoutes } from "./modules/global-work-separators/routes.js";
-import { cardPriorityRoutes } from "./modules/card-priorities/routes.js";
+import { cardPriorityRoutes, cardPrioritySeenRoutes } from "./modules/card-priorities/routes.js";
 import { setupIo } from "./realtime/io.js";
 import { setRealtimeLogger } from "./realtime/metrics.js";
 import { initRedis } from "./redis.js";
@@ -271,6 +271,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   // Priority queues serve both the first-party UI and the public API/MCP through the same handlers,
   // keeping access rules, audit activity and realtime invalidation identical on every surface.
   await app.register(cardPriorityRoutes);
+  await app.register(cardPrioritySeenRoutes);
   // Internal only: deliberately not registered on public-api-server.ts, and absent from the
   // hand-maintained public OpenAPI document. Home is a personal view, not a published contract.
   await app.register(homeRoutes);

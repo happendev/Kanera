@@ -96,6 +96,7 @@ concurrent request bursts do not replace deterministic database race tests.
 | [timeline](timeline.spec.ts) | Date/dependency editing, cross-board updates, filters, conflicts/critical paths, observer/touch access, and bounded rendering for large boards with focused rows pinned across scrolling. |
 | [timeline-notifications](timeline-notifications.spec.ts) | Progress-limit settings syncing live and worker-generated scheduling conflicts notifying the right person once. |
 | [unchanged-edits](unchanged-edits.spec.ts) | Unchanged single/bulk card and checklist edits preserving activity counts and timestamps. |
+| [up-next-changed](up-next-changed.spec.ts) | A queue changed by someone else flagging its owner's Up next button and phone menu live, ignoring the owner's own changes, and clearing for good once opened. |
 | [user-profile](user-profile.spec.ts) | Popover lifecycle/focus, exact work counts and completion grid, assignee actions, person deep links, and guest privacy/revocation. |
 | [work-table-folds](work-table-folds.spec.ts) | Saved-view folds and expanded rows surviving reload and realtime reconciliation without stale data. |
 | [workspace-board-order](workspace-board-order.spec.ts) | Grouped board ordering matching navigation through drag, realtime changes, and reload without phone overflow. |

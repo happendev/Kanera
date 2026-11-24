@@ -6,13 +6,14 @@ import {
   cardLabelAssignments,
   cardLabels,
   cardPriorities,
+  cardPriorityReceipts,
   cardSummaryView,
   lists,
   users,
   workspaces,
 } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
-import { db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { toWireCardSummary } from "./card-summary.js";
 
 /**
@@ -164,9 +165,10 @@ export function toPriorityQueueItem(
  * `GET /work/priorities/:userId` body cannot drift apart.
  */
 export async function loadOwnPriorityQueueSnapshot(targetUserId: string): Promise<WorkPriorityQueueSnapshot> {
-  const [ownerRows, rows] = await Promise.all([
+  const [ownerRows, rows, unseenChangeAt] = await Promise.all([
     db.select({ clientId: users.clientId }).from(users).where(eq(users.id, targetUserId)).limit(1),
     priorityQueueRows(and(eq(cardPriorities.targetUserId, targetUserId), liveQueueCardCondition)),
+    loadUnseenPriorityChangeAt(targetUserId),
   ]);
   const clientId = ownerRows[0]?.clientId ?? "";
   // Every entry is visible here (this snapshot only ever goes to the target), so every card's
@@ -182,8 +184,55 @@ export async function loadOwnPriorityQueueSnapshot(targetUserId: string): Promis
     targetUserId,
     items,
     totalCount: items.length,
+    unseenChangeAt,
     // Stamped at read time, not send time: two mutations can drain from the outbox out of order, and
     // this is what lets a client discard the older queue instead of resurrecting a stale order.
     snapshotAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Record that someone other than the target changed their queue, inside the write's transaction.
+ *
+ * The target's own add/move/remove is deliberately not news to them (see `cardPriorityReceipts`).
+ * Stamped from the JS clock rather than `now()`: the client echoes this value back to acknowledge
+ * it, and a millisecond ISO string cannot round-trip Postgres's microseconds, so a `now()` stamp
+ * would compare greater than its own acknowledgement forever.
+ */
+export async function stampPriorityQueueChange(tx: Tx, targetUserId: string, actorId: string): Promise<void> {
+  if (targetUserId === actorId) return;
+  const changedAt = new Date();
+  await tx
+    .insert(cardPriorityReceipts)
+    .values({ targetUserId, changedAt })
+    .onConflictDoUpdate({ target: cardPriorityReceipts.targetUserId, set: { changedAt } });
+}
+
+/** The latest change by someone else that the target has not acknowledged, or `null`. */
+export async function loadUnseenPriorityChangeAt(targetUserId: string): Promise<string | null> {
+  const [receipt] = await db
+    .select({ changedAt: cardPriorityReceipts.changedAt, seenAt: cardPriorityReceipts.seenAt })
+    .from(cardPriorityReceipts)
+    .where(eq(cardPriorityReceipts.targetUserId, targetUserId))
+    .limit(1);
+  if (!receipt?.changedAt) return null;
+  if (receipt.seenAt && receipt.seenAt >= receipt.changedAt) return null;
+  return receipt.changedAt.toISOString();
+}
+
+/**
+ * Acknowledge the queue as of `changedAt`, the change the client actually rendered. Never moves the
+ * receipt backwards, so a stale tab acknowledging an older change cannot re-flag a newer one as seen
+ * or unseen. Returns whether anything changed, so the caller only fans out a real acknowledgement.
+ */
+export async function markPriorityQueueSeen(targetUserId: string, changedAt: Date): Promise<boolean> {
+  const updated = await db
+    .update(cardPriorityReceipts)
+    .set({ seenAt: changedAt })
+    .where(and(
+      eq(cardPriorityReceipts.targetUserId, targetUserId),
+      sql`(${cardPriorityReceipts.seenAt} is null or ${cardPriorityReceipts.seenAt} < ${changedAt})`,
+    ))
+    .returning({ targetUserId: cardPriorityReceipts.targetUserId });
+  return updated.length > 0;
 }

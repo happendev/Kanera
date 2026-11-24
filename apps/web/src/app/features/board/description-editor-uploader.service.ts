@@ -20,22 +20,50 @@ export type AttachmentTarget =
   | { kind: "note"; id: string }
   | { kind: "scratchpad"; id: string };
 
+function mediaPath(url: string): string {
+  const query = url.indexOf("?");
+  return query === -1 ? url : url.slice(0, query);
+}
+
 @Injectable()
 export class DescriptionEditorUploader {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
-  private attachmentIds: string[] = [];
+  private uploads: { id: string; url: string }[] = [];
 
   private readonly activeUploads = signal(0);
   readonly uploading = computed(() => this.activeUploads() > 0);
   readonly error = signal<string | null>(null);
 
   attachmentIdsSnapshot(): string[] {
-    return this.attachmentIds.slice();
+    return this.uploads.map((upload) => upload.id);
+  }
+
+  /**
+   * Comment uploads are stored before the comment exists and only join it when it is saved. Uploads
+   * the author abandons (cancelled composer, or embed removed before saving) would otherwise stay on
+   * the card as attachments that belong to no comment, so delete them. `keepReferencedIn` keeps the
+   * uploads still embedded in the body being saved. Returns the ids that were kept.
+   */
+  discardUnsavedCommentUploads(target: AttachmentTarget, keepReferencedIn = ""): string[] {
+    if (target.kind !== "card") return this.attachmentIdsSnapshot();
+    const kept: string[] = [];
+    for (const upload of this.uploads) {
+      // The editor may hold a signed or unsigned form of the media URL; the path identifies it.
+      if (keepReferencedIn.includes(mediaPath(upload.url))) {
+        kept.push(upload.id);
+        continue;
+      }
+      void this.api.request(`/cards/${target.id}/attachments/${upload.id}`, { method: "DELETE" }).catch(() => {
+        // Best-effort: the attachment stays visible in the card's attachment list for manual removal.
+      });
+    }
+    this.uploads = this.uploads.filter((upload) => kept.includes(upload.id));
+    return kept;
   }
 
   reset() {
-    this.attachmentIds = [];
+    this.uploads = [];
     this.error.set(null);
   }
 
@@ -88,7 +116,7 @@ export class DescriptionEditorUploader {
         this.error.set($localize`Couldn't insert the uploaded file`);
         return;
       }
-      this.attachmentIds.push(uploaded.id);
+      this.uploads.push(uploaded);
     } catch (err) {
       if (target.kind === "scratchpad" && uploaded) {
         await this.rollbackScratchpadUpload(target.id, uploaded.id);

@@ -365,6 +365,22 @@ export async function emitCardPriorityInvalidated(targetUserId: string): Promise
   ]);
 }
 
+/**
+ * The target's own queue, to their other sessions only, after they acknowledged it.
+ *
+ * Not `emitCardPriorityInvalidated`: an acknowledgement changes nothing a manager can see and is no
+ * queue change for MCP subscribers, so it must not ping either. The snapshot carries the cleared
+ * `unseenChangeAt`, which is what stops the trigger flagging on the user's other devices.
+ */
+export async function emitOwnPriorityQueueSnapshot(targetUserId: string): Promise<void> {
+  try {
+    const snapshot = await loadOwnPriorityQueueSnapshot(targetUserId);
+    await emitToUserDurable(targetUserId, SERVER_EVENTS.CARD_PRIORITY_QUEUE_CHANGED, snapshot);
+  } catch (err) {
+    logRealtimePublishFailure(err, { scope: "user", scopeId: targetUserId, event: SERVER_EVENTS.CARD_PRIORITY_QUEUE_CHANGED });
+  }
+}
+
 export function emitToWorkspace<E extends keyof ServerToClientEvents>(
   workspaceId: string,
   event: E,

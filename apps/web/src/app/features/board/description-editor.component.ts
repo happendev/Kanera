@@ -526,7 +526,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
           @if (showActions()) {
             <div class="de-compact-spacer"></div>
             @if (showCancel()) {
-              <button type="button" class="ghost sm" (click)="cancel.emit()" [disabled]="saving()" i18n>Cancel</button>
+              <button type="button" class="ghost sm" (click)="onCancel()" [disabled]="saving()" i18n>Cancel</button>
             }
             <button type="button" class="primary sm" (click)="onSave()" [disabled]="saving() || uploader.uploading()">
               @if (saving()) {
@@ -540,7 +540,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       } @else if (showActions()) {
         <div class="de-actions">
           @if (showCancel()) {
-            <button type="button" class="ghost sm" (click)="cancel.emit()" [disabled]="saving()" i18n>Cancel</button>
+            <button type="button" class="ghost sm" (click)="onCancel()" [disabled]="saving()" i18n>Cancel</button>
           }
           <button type="button" class="primary sm" (click)="onSave()" [disabled]="saving() || uploader.uploading()">
             @if (saving()) {
@@ -1967,7 +1967,16 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     if (!this.showActions()) return;
     const md = this.markdown();
     this.setSaving(true);
-    this.save.emit({ markdown: md, attachmentIds: this.uploader.attachmentIdsSnapshot() });
+    const attachmentIds = this.attachmentSource() === "comment"
+      ? this.uploader.discardUnsavedCommentUploads(this.uploadTarget(), md)
+      : this.uploader.attachmentIdsSnapshot();
+    this.save.emit({ markdown: md, attachmentIds });
+  }
+
+  protected onCancel() {
+    // Cancelling a comment throws its text away, so its uploads go with it.
+    if (this.attachmentSource() === "comment") this.uploader.discardUnsavedCommentUploads(this.uploadTarget());
+    this.cancel.emit();
   }
 
   markdown(): string {

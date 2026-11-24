@@ -13,6 +13,7 @@ All notable changes to Kanera are documented here.
 - **AI agents link the cards they create:** over MCP and the CLI, a new card can be created already blocking, blocked by or related to other cards, including other cards created in the same batch, so plans arrive with their dependencies instead of card numbers written in descriptions.
 - **AI agents can send feedback** (hosted): a new `feedback.report` MCP tool, also in the CLI and as `POST /api/v1/feedback`, lets an agent report a Kanera error, a missing capability or a suggestion straight to the Kanera team.
 - **JSON attachment previews:** `.json` attachments open in the preview, pretty-printed, wherever they appear on a card. A file that isn't valid JSON is shown as stored.
+- **See when someone changes your Up next:** when somebody else adds, moves or removes cards in your Up next, its button lights up until you open it (on phones, the menu button shows a dot), so there's no need to tell people their priorities changed. Opening Up next on one device clears it everywhere.
 - **Emailed organisation invites:** add an address when creating an invite in Users and Kanera sends the invite link to it. The link still works however you share it.
 
 ### Changed

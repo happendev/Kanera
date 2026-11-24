@@ -20,6 +20,7 @@ An organisation invite can now grant specific boards as **Editor** or **Observer
 - [Security] Emails when your password, two-factor settings or email address change
 - [MCP] On Kanera Cloud, AI agents can report errors and suggestions to the Kanera team
 - [Cards] JSON attachments open in the preview, pretty-printed
+- [Up next] Up next lights up when someone else changes it, until you open it
 
 ## Improvements
 
