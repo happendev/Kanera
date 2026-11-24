@@ -19,7 +19,6 @@ import {
 } from "../../shared/priority-queue/priority-queue-math";
 import { ApiClient } from "../api/api.client";
 import { AuthService } from "../auth/auth.service";
-import { viewPreferenceKey } from "../browser/browser-contracts";
 import { registerSocketHandlers } from "../realtime/socket-handlers";
 import { SocketService } from "../realtime/socket.service";
 
@@ -126,18 +125,15 @@ export class MyPrioritiesService {
   });
 
   /**
-   * "Your queue changed since you last looked at it", for the drawer trigger's pulse.
+   * "Someone else changed your queue since you last looked at it", for the Up next trigger's cue.
    *
-   * The signature is the ordered entry ids, so a reorder pulses but an unrelated card edit does not.
-   * Stored per viewer in localStorage rather than on the server — a read receipt is viewer-local
-   * chrome, and losing it costs one spurious pulse. Same key the Global Work dock has always used
-   * (`upNextSeen` for viewer:viewer), so nobody's pulse resets when this ships.
+   * Server-owned (`unseenChangeAt`): your own gestures never flag, and acknowledging on one device
+   * clears every other one through the queue snapshot. That is what lets a coordinator re-sequence
+   * somebody's week without also having to tell them so.
    */
-  private readonly seenSignature = signal<string | null>(null);
-  private readonly signature = computed(() => this.items().map((item) => item.id).join("|"));
-  readonly changedSinceSeen = computed(() =>
-    this.signature() !== "" && this.seenSignature() !== this.signature(),
-  );
+  readonly changedSinceSeen = computed(() => Boolean(this.queue()?.unseenChangeAt));
+  /** The change an acknowledgement is in flight for, so an open drawer's effect posts it once. */
+  private seenInFlight: string | null = null;
 
   private detach: (() => void) | null = null;
   private roomLeaves: (() => void)[] = [];
@@ -187,7 +183,6 @@ export class MyPrioritiesService {
   initialise(): void {
     if (this.initialised()) return;
     this.initialised.set(true);
-    this.restoreSeenSignature();
     void this.refresh();
     this.attachSocket();
     if (typeof document !== "undefined") {
@@ -224,6 +219,7 @@ export class MyPrioritiesService {
     this.refreshRequired = false;
     this.pendingSnapshotAt = null;
     this.pendingResync = false;
+    this.seenInFlight = null;
   }
 
   async refresh(): Promise<void> {
@@ -473,32 +469,25 @@ export class MyPrioritiesService {
     return card ? cardPath(card.organisationKey, card.key) : null;
   }
 
+  /**
+   * Acknowledge the change on screen. Sends the change's own timestamp, not "now", so a second
+   * change that lands while this request is in flight still flags afterwards.
+   */
   markSeen(): void {
-    const key = this.seenKey();
-    const signature = this.signature();
-    this.seenSignature.set(signature);
-    if (!key) return;
-    try {
-      if (typeof localStorage !== "undefined") localStorage.setItem(key, signature);
-    } catch {
-      // Storage can be unavailable in privacy mode; the pulse just resets next visit.
-    }
-  }
-
-  private seenKey(): string | null {
-    const viewerId = this.auth.user()?.id;
-    // Keyed (viewer, target) with both the same person, matching the Global Work dock's own key so
-    // an existing read receipt carries over rather than pulsing once for everybody on release.
-    return viewerId ? viewPreferenceKey("upNextSeen", `${viewerId}:${viewerId}`) : null;
-  }
-
-  private restoreSeenSignature(): void {
-    const key = this.seenKey();
-    try {
-      this.seenSignature.set(key && typeof localStorage !== "undefined" ? localStorage.getItem(key) : null);
-    } catch {
-      this.seenSignature.set(null);
-    }
+    const queue = this.queue();
+    const changedAt = queue?.unseenChangeAt;
+    const userId = this.auth.user()?.id;
+    if (!queue || !changedAt || !userId || !this.online() || this.seenInFlight === changedAt) return;
+    this.seenInFlight = changedAt;
+    const session = this.sessionVersion;
+    this.queue.set({ ...queue, unseenChangeAt: null });
+    this.saveQueue();
+    this.api.post<void>(`/work/priorities/${userId}/seen`, { changedAt }).catch(() => {
+      // The receipt stays unseen on the server, so the next queue read flags it again; there is
+      // nothing the person could do about a failed read receipt, so no error is shown.
+    }).finally(() => {
+      if (session === this.sessionVersion && this.seenInFlight === changedAt) this.seenInFlight = null;
+    });
   }
 
   private cacheKey(): string | null {
@@ -611,6 +600,7 @@ export class MyPrioritiesService {
           targetUserId: snapshot.targetUserId,
           items: snapshot.items,
           totalCount: snapshot.totalCount,
+          unseenChangeAt: snapshot.unseenChangeAt,
           // Never redacted for the target — the snapshot is only ever sent to them.
           hiddenCount: 0,
         }));

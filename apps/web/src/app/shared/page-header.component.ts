@@ -83,7 +83,8 @@ export type PageHeaderVariant = "chrome" | "page";
   template: `
     <!--
       Phones have no sidebar rail, so the navigation drawer opens from here, the first thing on
-      every page (ShellNavService). Its dot marks overdue Up next.
+      every page (ShellNavService). Its dot marks Up next: red when something is overdue (the more
+      urgent of the two), accent when someone else changed it since the user last looked.
 
       Unread notifications get a bell of their own joined to the menu button, so the most-visited
       drawer stays one tap away instead of two. It shows only while something is unread: a
@@ -93,8 +94,8 @@ export type PageHeaderVariant = "chrome" | "page";
       <div class="ph-nav">
         <button type="button" class="ph-menu" (click)="nav.open()" [attr.aria-label]="nav.label()" [kTooltip]="nav.label()">
           <i class="ti ti-menu-2" aria-hidden="true"></i>
-          @if (nav.overdue()) {
-            <span class="ph-menu-dot" aria-hidden="true"></span>
+          @if (nav.overdue() || nav.upNextChanged()) {
+            <span class="ph-menu-dot" [class.is-changed]="!nav.overdue()" aria-hidden="true"></span>
           }
         </button>
         @if (nav.unreadNotifications(); as unread) {

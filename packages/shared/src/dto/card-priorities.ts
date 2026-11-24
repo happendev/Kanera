@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { offsetTimestamp } from "./_dates.js";
 import type { ColorToken } from "../lib/colors.js";
 import { MAX_CARD_PRIORITIES_PER_USER } from "../schema/card-priority.js";
 import type { WorkCard } from "./work.js";
@@ -139,7 +140,17 @@ export type WorkPrioritiesResponse = {
   canReorder: boolean;
   /** Workspaces where this viewer may add/move/remove. Mirrors `separatorWorkspaceIds`. */
   reorderableWorkspaceIds: string[];
+  /**
+   * When somebody else last changed this queue, while the target has not yet acknowledged it.
+   * `null` when there is nothing new. Only present when the viewer is the target: the receipt is
+   * theirs, and a manager's own read must neither see nor clear it.
+   */
+  unseenChangeAt?: string | null;
 };
+
+/** Acknowledge the queue as of the change the client rendered (`POST /work/priorities/:userId/seen`). */
+export const markCardPrioritiesSeenBody = z.object({ changedAt: offsetTimestamp });
+export type MarkCardPrioritiesSeenBody = z.infer<typeof markCardPrioritiesSeenBody>;
 
 /**
  * One user's own queue, pushed to that user over realtime.
@@ -161,6 +172,8 @@ export type WorkPriorityQueueSnapshot = {
   items: WorkPriorityItem[];
   /** Live queue length. Equal to `items.length` — snapshots are never truncated. */
   totalCount: number;
+  /** Same as `WorkPrioritiesResponse.unseenChangeAt`; the snapshot always goes to the target. */
+  unseenChangeAt: string | null;
   /**
    * When the server read this queue. Snapshots for one user can overtake each other in flight
    * (two mutations, two independent outbox drains), so clients drop any snapshot older than the last

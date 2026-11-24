@@ -916,3 +916,56 @@ void test("the completed-priority sweep still publishes nothing", async () => {
   // here would wake every open client for a change none of them can see.
   assert.equal((await queueSnapshots(f.target.id)).length, 0);
 });
+
+void test("a change by someone else flags the target's queue until the target acknowledges it", async () => {
+  const f = await seed();
+  const markSeen = (token: string, changedAt: string) => f.app.inject({
+    method: "POST",
+    url: `/work/priorities/${f.target.id}/seen`,
+    headers: auth(token),
+    payload: { changedAt },
+  });
+
+  // The target's own gestures are not news to them.
+  assert.equal((await addPriority(f, f.targetToken, f.cardA1.id)).statusCode, 201);
+  assert.equal((await readQueue(f, f.targetToken)).unseenChangeAt, null);
+
+  // A coordinator re-sequencing the queue flags it, for the target only.
+  assert.equal((await addPriority(f, f.wsAdminToken, f.cardA2.id)).statusCode, 201);
+  const flagged = await readQueue(f, f.targetToken);
+  assert.ok(flagged.unseenChangeAt);
+  assert.equal("unseenChangeAt" in await readQueue(f, f.wsAdminToken), false);
+  // The realtime snapshot carries the same flag, which is how the trigger lights up live.
+  const [snapshot] = await db
+    .select({ payload: directRealtimeOutbox.payload })
+    .from(directRealtimeOutbox)
+    .where(and(eq(directRealtimeOutbox.eventType, "cardPriority:queueChanged"), eq(directRealtimeOutbox.userId, f.target.id)))
+    .orderBy(asc(directRealtimeOutbox.id))
+    .offset(1);
+  assert.equal((snapshot?.payload as WorkPriorityQueueSnapshot | undefined)?.unseenChangeAt, flagged.unseenChangeAt);
+
+  // Only the target can acknowledge, and a manager cannot clear it on their behalf.
+  assert.equal((await markSeen(f.wsAdminToken, flagged.unseenChangeAt)).statusCode, 403);
+
+  // A second change lands before the target's acknowledgement of the first: it must still flag.
+  const moved = await f.app.inject({
+    method: "POST",
+    url: `/card-priorities/${flagged.items[1]!.id}/move`,
+    headers: auth(f.wsAdminToken),
+    payload: { beforeId: flagged.items[0]!.id },
+  });
+  assert.equal(moved.statusCode, 200);
+  assert.equal((await markSeen(f.targetToken, flagged.unseenChangeAt)).statusCode, 204);
+  const second = (await readQueue(f, f.targetToken)).unseenChangeAt;
+  assert.ok(second && second > flagged.unseenChangeAt);
+
+  await db.delete(directRealtimeOutbox);
+  assert.equal((await markSeen(f.targetToken, second)).statusCode, 204);
+  assert.equal((await readQueue(f, f.targetToken)).unseenChangeAt, null);
+  // The acknowledgement reaches the target's other sessions, and no one else: it changed nothing a
+  // manager can see.
+  const echoes = await db
+    .select({ userId: directRealtimeOutbox.userId, eventType: directRealtimeOutbox.eventType })
+    .from(directRealtimeOutbox);
+  assert.deepEqual(echoes, [{ userId: f.target.id, eventType: "cardPriority:queueChanged" }]);
+});

@@ -971,6 +971,14 @@ k-support-session-banner {
     color: var(--accent-fg);
   }
 
+  // Up next changed by someone else but now empty: nothing to count, still news.
+  &.is-dot {
+    min-width: 10px;
+    width: 10px;
+    height: 10px;
+    padding: 0;
+  }
+
   // The 44px touch button puts the glyph 4px lower; the badge follows it.
   @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
     top: 1px;

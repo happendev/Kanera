@@ -4,8 +4,10 @@ import { Injectable, computed, signal } from "@angular/core";
 type ShellNavSource = {
   /** True while the sidebar is an off-canvas drawer with no rail beside the page (phones). */
   drawerMode: Signal<boolean>;
-  /** Something in Up next is overdue: the one drawer state the menu button marks with a dot. */
+  /** Something in Up next is overdue: the menu button's dot, in --danger. */
   overdue: Signal<boolean>;
+  /** Someone else changed Up next since the user last looked: the same dot, in the accent. */
+  upNextChanged: Signal<boolean>;
   /** The drawer button's accessible name; the shell's own sidebar toggle string, so both match. */
   label: string;
   open: () => void;
@@ -31,6 +33,7 @@ export class ShellNavService {
 
   readonly drawerMode = computed(() => this.source()?.drawerMode() ?? false);
   readonly overdue = computed(() => this.source()?.overdue() ?? false);
+  readonly upNextChanged = computed(() => this.source()?.upNextChanged() ?? false);
   readonly label = computed(() => this.source()?.label ?? "");
   readonly unreadNotifications = computed(() => this.source()?.unreadNotifications() ?? 0);
   readonly notificationsLabel = computed(() => this.source()?.notificationsLabel() ?? "");

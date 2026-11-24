@@ -1605,6 +1605,11 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           hiddenCount: { type: "integer", minimum: 0, description: "Entries whose card is not visible to you (`card: null`)." },
           canReorder: { type: "boolean" },
           reorderableWorkspaceIds: arrayOf(uuid),
+          unseenChangeAt: {
+            type: ["string", "null"],
+            format: "date-time",
+            description: "Your own queue only: when someone else last added, moved or removed one of your entries, if you have not opened Up next in the web app since. `null` when there is nothing new.",
+          },
         },
         additionalProperties: false,
       },
