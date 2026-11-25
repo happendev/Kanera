@@ -298,6 +298,53 @@
   line-height: 1;
 }
 
+// A count that doubles as a filter: icon, bold number, label, pressed while its filter is on. The
+// Dependencies view's summary and the Global Work totals share it, so a count you can press reads
+// the same everywhere. Container buttons: the global reset pins buttons to 36px with an accent
+// hover, so this restates both.
+@mixin stat-button {
+  display: inline-flex;
+  align-items: center;
+  // A word space between the count and its label; the icon sits a little further off.
+  gap: 4px;
+  // The shared toolbar height, so the counts line up with the toggles beside them (.k-toolbar-btn)
+  // and with the Timeline and Calendar toolbars.
+  height: var(--h-lg);
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  white-space: nowrap;
+  cursor: pointer;
+
+  strong { color: var(--text); font-weight: 600; }
+  i { margin-right: 2px; font-size: 15px; }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+
+  // Dim the content, not the button: opacity would let a board's background gradient show through
+  // the fill and wash the whole chip out.
+  &:disabled {
+    cursor: default;
+    opacity: 1;
+    color: color-mix(in srgb, var(--text-muted) 70%, var(--surface));
+    strong { color: inherit; }
+  }
+
+  &.is-active,
+  &.is-active:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    color: var(--text);
+  }
+}
+
 // Row of controls inside a toolbar slot. A plain flex row that wraps rather than clipping its
 // tail when the content column is narrow (wide sidebar + mid viewport).
 .k-toolbar-group {

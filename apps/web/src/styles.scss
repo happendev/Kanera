@@ -146,7 +146,8 @@
 // paints while dragging. Non-dragged board cards remain fully rendered.
 .cdk-drag-preview,
 .lists.is-card-dragging .cdk-drag-dragging {
-  &:not(.is-multi) {
+  &:not(.is-multi),
+  .card-drag-preview:not(.is-multi) {
     box-shadow: none !important;
   }
 
@@ -1604,9 +1605,22 @@ k-card.cdk-drag-placeholder {
   }
 }
 
-// Pickup: the tile lifts off the board, a slight scale and tilt that eases in once. `scale` and
-// `rotate` are separate from `transform`, which CDK owns for pointer tracking, so they compose
-// without fighting it, and they stay on the compositor.
+// The preview root is a bare frame: CDK sizes it to the tile and positions it with an inline
+// translate from the viewport origin. The tile inside fills it and carries the look and the lift.
+.card-drag-preview-frame {
+  display: block;
+  box-sizing: border-box;
+
+  > .card-drag-preview {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// Pickup: the tile lifts off the board, a slight scale and tilt that eases in once. They sit on the
+// inner tile, not the frame CDK translates: on the frame they would pivot around the viewport origin
+// and scale/rotate the translate itself, sliding the tile tens of pixels away from the pointer on a
+// wide screen. On the inner tile they pivot around its own centre and stay on the compositor.
 .card-drag-preview {
   scale: 1.02;
   rotate: 1deg;
@@ -1623,7 +1637,7 @@ k-card.cdk-drag-placeholder {
 // Several selected cards: a deck of offset tiles behind the preview says "these all move" before
 // the count badge is read. Box shadows without blur, so the stack is two flat fills and borders.
 // The global preview rule that strips shadows skips .is-multi so the deck can animate out.
-.card-drag-preview.is-multi.cdk-drag-preview {
+.cdk-drag-preview .card-drag-preview.is-multi {
   box-shadow:
     4px 4px 0 -1px var(--card-bg),
     4px 4px 0 0 var(--border-strong),
@@ -1672,24 +1686,34 @@ k-up-next-panel .panel-rows k-card.cdk-drag-placeholder {
 
 // The lightweight card preview is a div, so the large-board k-card transition rule does not
 // reach it. Keep release feedback short without changing list-reorder or sibling animations.
-.card-drag-preview.cdk-drag-animating {
-  // The tile sets back down as it settles. CDK waits on the transform transition alone, so the
-  // lift's scale and rotate must not outlast it.
-  scale: 1;
-  rotate: 0deg;
-  transition-property: transform, scale, rotate;
+.card-drag-preview-frame.cdk-drag-animating {
   transition-duration: 80ms;
+
+  // The tile sets back down as it settles. CDK waits on the frame's transform transition alone,
+  // so the lift's scale and rotate must not outlast it.
+  > .card-drag-preview {
+    scale: 1;
+    rotate: 0deg;
+    transition-property: scale, rotate;
+    transition-duration: 80ms;
+  }
 }
 
 // Large boards already suppress sibling/hover animations. Their matched-size preview can commit
 // directly; waiting for a settle transition adds latency on top of the larger DOM handoff.
-body.is-large-board .card-drag-preview.cdk-drag-animating {
-  transition: none;
+body.is-large-board .card-drag-preview-frame.cdk-drag-animating {
+  &,
+  > .card-drag-preview {
+    transition: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card-drag-preview.cdk-drag-animating {
-    transition: none;
+  .card-drag-preview-frame.cdk-drag-animating {
+    &,
+    > .card-drag-preview {
+      transition: none;
+    }
   }
 }
 

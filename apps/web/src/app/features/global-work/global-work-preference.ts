@@ -172,6 +172,8 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
     dueFrom: nullableDate(filters["dueFrom"]),
     dueTo: nullableDate(filters["dueTo"]),
     overdueOnly: filters["overdueOnly"] === true,
+    dueSoonOnly: filters["dueSoonOnly"] === true,
+    completedOnly: filters["completedOnly"] === true,
     overdueChecklistOnly: filters["overdueChecklistOnly"] === true,
     unreadOnly: filters["unreadOnly"] === true,
     prioritySetOnly: filters["prioritySetOnly"] === true,

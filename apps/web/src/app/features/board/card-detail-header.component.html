@@ -79,6 +79,10 @@
           <i aria-hidden="true" class="ti ti-git-branch"></i>
           <span i18n="Menu item - copy a git branch name that starts with the card's key, so GitHub pull requests from it link back to the card">Copy branch name</span>
         </button>
+        <button class="card-actions-item" (click)="vm.copyAgentPrompt()">
+          <i aria-hidden="true" class="ti ti-robot"></i>
+          <span i18n="Menu item - copy a ready-to-paste prompt that asks a coding agent to carry out this card">Copy prompt</span>
+        </button>
         <button class="card-actions-item" (click)="vm.duplicateCard()" [disabled]="vm.duplicating()">
           <i aria-hidden="true" class="ti ti-copy"></i>
           <span i18n="Menu item">Duplicate card</span>

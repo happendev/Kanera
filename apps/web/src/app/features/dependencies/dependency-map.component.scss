@@ -55,53 +55,13 @@
   min-width: 0;
 }
 
-// Container buttons: the global reset pins buttons to 36px with an accent hover, so restate both.
 .dm-stat {
-  display: inline-flex;
-  align-items: center;
-  // A word space between the count and its label; the icon sits a little further off.
-  gap: 4px;
-  // The shared toolbar height, so the counts line up with the toggles beside them (.k-toolbar-btn)
-  // and with the Timeline and Calendar toolbars.
-  height: var(--h-lg);
-  padding: 0 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: var(--text-base);
-  white-space: nowrap;
-  cursor: pointer;
-
-  strong { color: var(--text); font-weight: 600; }
-  i { margin-right: 2px; font-size: 15px; }
-
-  &:hover:not(:disabled) {
-    background: var(--surface-hover);
-    color: var(--text);
-    border-color: var(--border-strong);
-  }
-
-  // Dim the content, not the button: opacity would let a board's background gradient show through
-  // the fill and wash the whole chip out.
-  &:disabled {
-    cursor: default;
-    opacity: 1;
-    color: color-mix(in srgb, var(--text-muted) 70%, var(--surface));
-    strong { color: inherit; }
-  }
+  @include toolbar.stat-button;
 
   &.is-blocked.has-count i { color: var(--dm-blocked); }
   &.is-atRisk.has-count i { color: var(--dm-risk); }
   &.is-starter.has-count i { color: var(--dm-starter); }
   &.is-ready.has-count i { color: var(--dm-ready); }
-
-  &.is-active,
-  &.is-active:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-    color: var(--text);
-  }
 }
 
 .dm-controls {

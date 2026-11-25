@@ -1,6 +1,7 @@
 import { CompletionWarningService } from "../../shared/completion-warning.service";
 import { MenuDirective } from "../../shared/menu.directive";
 import { ToastService } from "../../shared/toast.service";
+import { copyToClipboard } from "../../shared/clipboard";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -12,7 +13,7 @@ import {
   signal,
 } from "@angular/core";
 import { Router } from "@angular/router";
-import type { WireCard, WireList } from "@kanera/shared/events";
+import type { WireCard, WireCardDetail, WireList } from "@kanera/shared/events";
 import { cardBranchName, cardPath } from "@kanera/shared/card-links";
 import { ApiClient } from "../../core/api/api.client";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -20,6 +21,7 @@ import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
 import { BoardState } from "./board-state";
+import { buildCardAgentPrompt } from "./card-agent-prompt";
 import { CardQuickEditPopover } from "./card-quick-edit.popover";
 import { ReminderPopoverComponent } from "./reminder-popover.component";
 import { CardRelationsPopoverComponent } from "./card-relations-popover.component";
@@ -187,6 +189,10 @@ import type { DueDateSlotSelection } from "./due-date.util";
       <button type="button" class="k-menu-item cam-item" (click)="copyBranchName($event)">
         <i aria-hidden="true" class="ti ti-git-branch"></i>
         <span i18n="Menu item - copy a git branch name that starts with the card's key, so GitHub pull requests from it link back to the card">Copy branch name</span>
+      </button>
+      <button type="button" class="k-menu-item cam-item" (click)="copyAgentPrompt($event)">
+        <i aria-hidden="true" class="ti ti-robot"></i>
+        <span i18n="Menu item - copy a ready-to-paste prompt that asks a coding agent to carry out this card">Copy prompt</span>
       </button>
       }
       <div class="k-menu-separator" role="separator"></div>
@@ -459,6 +465,41 @@ export class CardActionsMenuPopover {
     const key = this.cardKey();
     if (key) await navigator.clipboard?.writeText(cardBranchName(key, this.title())).catch(() => undefined);
     this.close.emit();
+  }
+
+  async copyAgentPrompt(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const key = this.cardKey();
+    if (!key) return;
+    const url = new URL(this.cardUrl(), window.location.origin).toString();
+    // The tile only carries summary fields, so the description and checklists come from a fresh
+    // detail read rather than whatever detail BoardState happens to have cached.
+    const prompt = this.api.get<WireCardDetail>(`/cards/${this.cardId()}/detail`).then((detail) =>
+      buildCardAgentPrompt({
+        key,
+        url,
+        title: detail.card.title,
+        description: detail.card.description,
+        checklists: detail.checklists,
+      }),
+    );
+    // The menu closes at once; the copy and its toast outlive it, so nothing below reads its inputs.
+    this.close.emit();
+    try {
+      // Safari drops the click's user activation while the detail loads, so a plain writeText after
+      // the await is refused there; a ClipboardItem handed the pending text keeps the gesture.
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "text/plain": prompt.then((text) => new Blob([text], { type: "text/plain" })) }),
+        ]);
+      } else {
+        await copyToClipboard(await prompt);
+      }
+      this.toasts.success($localize`:Toast after copying a coding-agent prompt for a card:Prompt copied.`, "robot");
+    } catch {
+      this.toasts.error($localize`:Toast when copying a coding-agent prompt for a card fails:Couldn't copy the prompt.`);
+    }
   }
 
   async duplicate(event: MouseEvent) {

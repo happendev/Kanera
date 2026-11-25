@@ -109,48 +109,52 @@
     <ng-template cdkDragPreview [matchSize]="true">
       @let dragCoverUrl = coverUrlForCard(item.card);
       @let dragBoard = boardSummaryForCard(item.card);
-      <div class="card-drag-preview" [class.has-cover]="dragCoverUrl" [class.is-completed]="item.card.completedAt" [class.is-multi]="isBulkSelectedCard(item.card.id) && bulkSelectedCardIds().size > 1"
-        [style.--drag-cover-color]="coverColorForCard(item.card)">
-        @if (isBulkSelectedCard(item.card.id) && bulkSelectedCardIds().size > 1) {
-        <strong class="bulk-drag-count" i18n="Shown while dragging several selected cards">{ bulkSelectedCardIds().size, plural, one {{{ bulkSelectedCardIds().size }} card} other {{{ bulkSelectedCardIds().size }} cards} }</strong>
-      }
+      <!-- CDK owns this frame's transform for pointer tracking. The lift (scale/tilt) lives on the
+           tile inside it so it pivots on the tile, not on the viewport origin CDK translates from. -->
+      <div class="card-drag-preview-frame">
+        <div class="card-drag-preview" [class.has-cover]="dragCoverUrl" [class.is-completed]="item.card.completedAt" [class.is-multi]="isBulkSelectedCard(item.card.id) && bulkSelectedCardIds().size > 1"
+          [style.--drag-cover-color]="coverColorForCard(item.card)">
+          @if (isBulkSelectedCard(item.card.id) && bulkSelectedCardIds().size > 1) {
+          <strong class="bulk-drag-count" i18n="Shown while dragging several selected cards">{ bulkSelectedCardIds().size, plural, one {{{ bulkSelectedCardIds().size }} card} other {{{ bulkSelectedCardIds().size }} cards} }</strong>
+        }
 
-        @if (dragCoverUrl) {
-        <div class="card-drag-preview-cover" aria-hidden="true"
-          [style.aspect-ratio]="$any(item.card).coverImageWidth > 0 && $any(item.card).coverImageHeight > 0 ? $any(item.card).coverImageWidth + ' / ' + $any(item.card).coverImageHeight : null"
-          [style.height]="$any(item.card).coverImageWidth > 0 && $any(item.card).coverImageHeight > 0 ? null : '160px'">
-          <i aria-hidden="true" class="ti ti-photo"></i>
-          @if (dragBoard) {
-          <span class="card-drag-preview-board-badge">
-            <i aria-hidden="true" [class]="'ti ti-' + (dragBoard.icon || 'layout-kanban')" [style.color]="dragBoard.iconColor ? 'var(--color-' + dragBoard.iconColor + ')' : null"></i>
-            <span class="card-drag-preview-board-name">{{ dragBoard.name }}</span>
+          @if (dragCoverUrl) {
+          <div class="card-drag-preview-cover" aria-hidden="true"
+            [style.--cover-ratio]="$any(item.card).coverImageWidth > 0 && $any(item.card).coverImageHeight > 0 ? $any(item.card).coverImageWidth + ' / ' + $any(item.card).coverImageHeight : null"
+            [style.--cover-height]="$any(item.card).coverImageWidth > 0 && $any(item.card).coverImageHeight > 0 ? null : '128px'">
+            <i aria-hidden="true" class="ti ti-photo"></i>
+            @if (dragBoard) {
+            <span class="card-drag-preview-board-badge">
+              <i aria-hidden="true" [class]="'ti ti-' + (dragBoard.icon || 'layout-kanban')" [style.color]="dragBoard.iconColor ? 'var(--color-' + dragBoard.iconColor + ')' : null"></i>
+              <span class="card-drag-preview-board-name">{{ dragBoard.name }}</span>
+            </span>
+            }
+          </div>
+          }
+          <!-- Same order as the tile: key and board on one row, the title, then its labels. -->
+          @if (showCardKeys() || (!dragCoverUrl && dragBoard)) {
+          <span class="card-drag-preview-key-row">
+            @if (showCardKeys()) { <span class="card-drag-preview-key">{{ item.card.key }}</span> }
+            @if (!dragCoverUrl && dragBoard) {
+            <span class="card-drag-preview-board-badge">
+              <i aria-hidden="true" [class]="'ti ti-' + (dragBoard.icon || 'layout-kanban')" [style.color]="dragBoard.iconColor ? 'var(--color-' + dragBoard.iconColor + ')' : null"></i>
+              <span class="card-drag-preview-board-name">{{ dragBoard.name }}</span>
+            </span>
+            }
           </span>
+          }
+          <span class="card-drag-preview-body">
+            @if (item.card.completedAt) {
+            <i class="ti ti-circle-check card-drag-preview-complete-icon" aria-hidden="true"></i>
+            }
+            <span class="card-drag-preview-title">{{ item.card.title }}</span>
+          </span>
+          @if (labelsForCard(item.card.id); as dragLabels) {
+          @if (dragLabels.length) {
+          <k-card-labels class="card-drag-preview-labels" [labels]="dragLabels" [interactive]="false" />
+          }
           }
         </div>
-        }
-        <!-- Same order as the tile: key and board on one row, the title, then its labels. -->
-        @if (showCardKeys() || (!dragCoverUrl && dragBoard)) {
-        <span class="card-drag-preview-key-row">
-          @if (showCardKeys()) { <span class="card-drag-preview-key">{{ item.card.key }}</span> }
-          @if (!dragCoverUrl && dragBoard) {
-          <span class="card-drag-preview-board-badge">
-            <i aria-hidden="true" [class]="'ti ti-' + (dragBoard.icon || 'layout-kanban')" [style.color]="dragBoard.iconColor ? 'var(--color-' + dragBoard.iconColor + ')' : null"></i>
-            <span class="card-drag-preview-board-name">{{ dragBoard.name }}</span>
-          </span>
-          }
-        </span>
-        }
-        <span class="card-drag-preview-body">
-          @if (item.card.completedAt) {
-          <i class="ti ti-circle-check card-drag-preview-complete-icon" aria-hidden="true"></i>
-          }
-          <span class="card-drag-preview-title">{{ item.card.title }}</span>
-        </span>
-        @if (labelsForCard(item.card.id); as dragLabels) {
-        @if (dragLabels.length) {
-        <k-card-labels class="card-drag-preview-labels" [labels]="dragLabels" [interactive]="false" />
-        }
-        }
       </div>
     </ng-template>
   </k-card>

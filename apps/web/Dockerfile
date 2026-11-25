@@ -22,7 +22,7 @@ RUN pnpm --filter @kanera/web build
 # by odd ones, both published as plain 1.x.y-alpine tags: 1.30.x here is what nginx:stable-alpine
 # resolves to, while 1.31.x is nginx:mainline-alpine. Keep this on an even minor — Dependabot is
 # restricted to patch updates for nginx so it cannot cross over on its own.
-FROM nginx:1.30.6-alpine AS runtime
+FROM nginx:1.30.8-alpine AS runtime
 RUN apk upgrade --no-cache
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/web/dist/web/browser /usr/share/nginx/html

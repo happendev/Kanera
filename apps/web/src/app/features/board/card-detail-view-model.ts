@@ -12,7 +12,7 @@ function sectionModel<K extends keyof CardDetailComponent>(parent: CardDetailCom
 }
 
 const headerKeys = [
-  "actionsMenuPlacement", "copyBranchName", "copyCardKey", "copyCardLink", "copyToBoard",
+  "actionsMenuPlacement", "copyAgentPrompt", "copyBranchName", "copyCardKey", "copyCardLink", "copyToBoard",
   "duplicateCard", "moveToBoard", "moveToList", "moveToListPlacement", "saveTitle",
   "setArchived", "setCover", "toggleCompletion", "actionsMenuOpen", "archiving",
   "boardId", "boardSummary", "canArchive", "canArchiveRole", "canEdit",

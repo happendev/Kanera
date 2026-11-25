@@ -96,6 +96,8 @@ function defaultDefinition(): WorkViewDefinition {
       dueFrom: null,
       dueTo: null,
       overdueOnly: false,
+      dueSoonOnly: false,
+      completedOnly: false,
       overdueChecklistOnly: false,
       unreadOnly: false,
       prioritySetOnly: false,
