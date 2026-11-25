@@ -85,7 +85,13 @@ export class CookieConsentService {
   readonly analyticsAllowed = computed(() => this._available() && this._choice()?.analytics === true);
   readonly settingsRequest = this._settingsRequest.asReadonly();
 
-  configure(available: boolean): void {
+  /**
+   * Outside opt-in regions analytics is on by default. The default is stored like a real choice so
+   * the shared .kanera.app cookie agrees with the marketing site, and account settings can still
+   * switch it off.
+   */
+  configure(available: boolean, requiresOptIn = true): void {
+    if (available && !requiresOptIn && !this._choice()) this.save(true);
     this._available.set(available);
   }
 

@@ -15,14 +15,12 @@ import { NotificationsService } from "../../core/notifications/notifications.ser
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { MenuDirective } from "../../shared/menu.directive";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
-import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CloseCardChecklistsBeforeDragDirective } from "./close-card-checklists-before-drag.directive";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardMotionService } from "./card-motion.service";
 import { CardComponent, type CardAssigneePresentation, type CardBulkMenuIntent, type CardLabelPresentation, type CardSelectionIntent } from "./card.component";
-import { CardLabelsComponent } from "./card-labels.component";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { BoardState, committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, type AnyCustomField, type AnySeparator, type BoardLaneItem, type LaneAnchor } from "./board-state";
 import { suppressDropCommitTransitions } from "./drop-commit-transition";
@@ -111,7 +109,7 @@ export interface BulkListSelectionPayload {
 @Component({
   selector: "k-list",
   standalone: true,
-  imports: [CdkDropList, CdkDrag, CdkDragPreview, CloseCardChecklistsBeforeDragDirective, CardComponent, CardLabelsComponent, SeparatorComponent, AnchoredPanelDirective, MenuDirective, TooltipDirective, ViewportDropTargetDirective],
+  imports: [CdkDropList, CdkDrag, CdkDragPreview, CloseCardChecklistsBeforeDragDirective, CardComponent, SeparatorComponent, AnchoredPanelDirective, MenuDirective, TooltipDirective, ViewportDropTargetDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./list.component.html",
   styleUrl: "./list.component.scss",
@@ -127,7 +125,6 @@ export class ListComponent implements OnDestroy {
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly dragCoordinator = inject(CardDragCoordinator);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
-  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private readonly cardsEl = viewChild<ElementRef<HTMLElement>>("cardsEl");
   // Touch requires a long-press before a drag starts so swipes scroll the list; mouse is immediate.
   protected readonly dragStartDelay = CARD_DRAG_START_DELAY;

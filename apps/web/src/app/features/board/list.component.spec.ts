@@ -15,6 +15,7 @@ import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { BoardState, type BoardLaneItem } from "./board-state";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
+import { CardComponent } from "./card.component";
 import { ListComponent } from "./list.component";
 
 function laneCardIds(items: BoardLaneItem[]): string[] {
@@ -780,32 +781,47 @@ describe("ListComponent", () => {
     expect(fixture.componentInstance.coverColorForCard(card)).toBe("var(--accent)");
   });
 
-  it("keeps completion styling and the check icon in the lightweight drag preview", async () => {
+  function createDragPreview() {
+    const drag = fixture.debugElement.query(By.directive(CdkDrag)).injector.get(CdkDrag) as unknown as {
+      _previewTemplate: CdkDragPreview;
+    };
+    const view = drag._previewTemplate.templateRef.createEmbeddedView({});
+    view.detectChanges();
+    const frame = view.rootNodes.find((node: unknown): node is HTMLElement => node instanceof HTMLElement);
+    return { view, frame, tile: frame?.querySelector<HTMLElement>("k-card.card-drag-preview") ?? null };
+  }
+
+  it("renders the drag preview as the tile itself, completion included", async () => {
     fixture.componentRef.setInput("cards", [
       { ...summaryCard("card-1"), completedAt: new Date("2026-05-21T10:00:00.000Z") },
     ]);
     await fixture.whenStable();
 
-    const drag = fixture.debugElement.query(By.directive(CdkDrag)).injector.get(CdkDrag) as unknown as {
-      _previewTemplate: CdkDragPreview;
-    };
-    const preview = drag._previewTemplate;
-    const previewView = preview.templateRef.createEmbeddedView({});
-    previewView.detectChanges();
-
+    const { view, frame, tile } = createDragPreview();
     try {
-      const frame = previewView.rootNodes.find((node: unknown): node is HTMLElement => node instanceof HTMLElement);
-      // CDK positions the root frame; the lift and completion styling live on the tile inside it.
+      // CDK positions the root frame; the lift lives on the tile inside it.
       expect(frame?.classList.contains("card-drag-preview-frame")).toBe(true);
-      const element = frame?.querySelector(".card-drag-preview");
-      expect(element?.classList.contains("is-completed")).toBe(true);
-      expect(element?.querySelector(".card-drag-preview-complete-icon")?.classList.contains("ti-circle-check")).toBe(true);
+      expect(tile?.querySelector(".card-link")?.classList.contains("is-completed")).toBe(true);
+      expect(tile?.querySelector(".card-complete-icon")?.classList.contains("ti-circle-check")).toBe(true);
     } finally {
-      previewView.destroy();
+      view.destroy();
     }
   });
 
-  it("keeps the source-board badge in the lightweight Global Work drag preview", async () => {
+  it("paints a placeholder instead of the cover bitmap in the drag preview", async () => {
+    fixture.componentRef.setInput("cards", [{ ...summaryCard("card-1"), coverUrl: signedCoverUrl(Date.now() + 60 * 60_000) }]);
+    await fixture.whenStable();
+
+    const { view, tile } = createDragPreview();
+    try {
+      expect(tile?.querySelector(".card-cover.is-drag-placeholder")).not.toBeNull();
+      expect(tile?.querySelector(".card-cover img")).toBeNull();
+    } finally {
+      view.destroy();
+    }
+  });
+
+  it("keeps the source-board badge in the Global Work drag preview", async () => {
     const sourceBoard = {
       id: "board-1",
       name: "Roadmap",
@@ -816,20 +832,26 @@ describe("ListComponent", () => {
     fixture.componentRef.setInput("boardSummariesById", new Map([[sourceBoard.id, sourceBoard]]));
     await fixture.whenStable();
 
-    const drag = fixture.debugElement.query(By.directive(CdkDrag)).injector.get(CdkDrag) as unknown as {
-      _previewTemplate: CdkDragPreview;
-    };
-    const previewView = drag._previewTemplate.templateRef.createEmbeddedView({});
-    previewView.detectChanges();
-
+    const { view, tile } = createDragPreview();
     try {
-      const element = previewView.rootNodes.find((node: unknown): node is HTMLElement => node instanceof HTMLElement);
-      const badge = element?.querySelector<HTMLElement>(".card-drag-preview-board-badge");
-      expect(badge?.textContent?.trim()).toBe("Roadmap");
-      expect(badge?.querySelector("i")?.classList.contains("ti-map")).toBe(true);
+      expect(tile?.querySelector(".card-board-badge")?.textContent?.trim()).toBe("Roadmap");
     } finally {
-      previewView.destroy();
+      view.destroy();
     }
+  });
+
+  it("leaves the dragged tile's actions menu registered after the preview is torn down", async () => {
+    fixture.componentRef.setInput("cards", [summaryCard("card-1")]);
+    await fixture.whenStable();
+
+    // The preview is a second CardComponent for the same card. If it registered its own menu, its
+    // teardown at drop would unregister the board tile's, and the tile's menu would stop opening.
+    const { view } = createDragPreview();
+    view.destroy();
+    TestBed.inject(BoardMenuCoordinator).openCardMenu("card-1");
+
+    const boardTile = fixture.debugElement.query(By.directive(CardComponent)).componentInstance as CardComponent;
+    expect(boardTile.actionsMenuOpen()).toBe(true);
   });
 
   it("treats a near-expiry attachment cover as stale to avoid a reload-time 404 race", () => {

@@ -5,26 +5,28 @@
 
 button, a { font: inherit; }
 
+/* A small corner card, matching the marketing site, so it never covers the board or a dialog's
+   primary action. Only visitors in opt-in regions see it (consent-region.ts). */
 .consent-banner {
   position: fixed;
-  inset: auto 16px 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  left: 16px;
   z-index: 2000;
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 18px 20px;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px 14px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--shadow-pop);
 }
 
-.consent-copy { flex: 1; min-width: 0; }
 h2 { margin: 0 0 6px; font-size: 17px; line-height: 1.25; }
 p { margin: 0; color: var(--text-muted); font-size: var(--text-base); line-height: 1.5; }
+.consent-banner p { font-size: var(--text-sm); line-height: 1.45; }
+.consent-banner a { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
 
 .consent-actions, .dialog-actions { display: flex; align-items: center; gap: 8px; }
 button { border-radius: var(--radius); cursor: pointer; }
@@ -35,6 +37,11 @@ button.secondary { border-color: var(--border-strong); background: var(--surface
 button.secondary:hover { background: var(--surface-hover); }
 button.text { padding: 8px 5px; border: 0; background: transparent; color: var(--text-muted); }
 button.text:hover { color: var(--text); }
+.consent-banner .consent-actions { gap: 6px; }
+.consent-banner button { height: var(--h-md); }
+button.decision { flex: 1 1 0; min-width: 0; padding: 0 12px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); font-size: var(--text-sm); font-weight: 650; }
+button.decision:hover:not(:disabled) { background: var(--surface-hover); }
+.consent-banner button.text { padding: 0 8px; font-size: var(--text-sm); }
 
 .consent-layer { position: fixed; inset: 0; z-index: 2100; display: grid; place-items: center; padding: 16px; }
 .consent-backdrop { position: absolute; inset: 0; background: rgba(2, 6, 12, 0.7); backdrop-filter: blur(3px); }
@@ -66,8 +73,11 @@ button.text:hover { color: var(--text); }
 .dialog-actions { justify-content: flex-end; margin-top: 20px; }
 
 @media (max-width: 760px) {
-  .consent-banner { align-items: stretch; flex-direction: column; gap: 14px; padding: 16px; }
-  .consent-actions { align-items: stretch; flex-direction: column; }
+  .consent-banner { right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); left: 8px; width: auto; }
   .dialog-actions { align-items: stretch; flex-direction: column-reverse; }
   button.text { min-height: 36px; }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .consent-banner button { height: 44px; }
 }

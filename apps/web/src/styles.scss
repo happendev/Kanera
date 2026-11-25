@@ -141,13 +141,11 @@
   }
 }
 
-// CDK drag previews are moved under <body>, outside component-scoped styles. Keep the active
-// dragged card's box the same size for measurement, but hide expensive chrome so only the title
-// paints while dragging. Non-dragged board cards remain fully rendered.
-.cdk-drag-preview,
+// The dragged source tile: keep its box the same size for measurement, but hide expensive chrome
+// while it is hidden for the drag. Not the preview (a .card-drag-preview tile, see
+// list.component.html): that renders exactly like the tile it replaces so nothing moves at pickup.
 .lists.is-card-dragging .cdk-drag-dragging {
-  &:not(.is-multi),
-  .card-drag-preview:not(.is-multi) {
+  &:not(.is-multi) {
     box-shadow: none !important;
   }
 
@@ -162,6 +160,11 @@
   .card-title-text {
     color: var(--text) !important;
   }
+}
+
+// The preview stays shadowless, as it always has; the multi-card deck below draws its own stack.
+.cdk-drag-preview .card-drag-preview:not(.is-multi) {
+  box-shadow: none !important;
 }
 
 .lists.is-card-dragging k-card.cdk-drag-dragging {
@@ -1617,19 +1620,18 @@ k-card.cdk-drag-placeholder {
   }
 }
 
-// Pickup: the tile lifts off the board, a slight scale and tilt that eases in once. They sit on the
-// inner tile, not the frame CDK translates: on the frame they would pivot around the viewport origin
-// and scale/rotate the translate itself, sliding the tile tens of pixels away from the pointer on a
-// wide screen. On the inner tile they pivot around its own centre and stay on the compositor.
+// Pickup: the tile tilts slightly as it comes off the board, easing in once. No scale: the preview
+// keeps the tile's exact size, and a card that grew on pickup read as a jump rather than a lift.
+// The tilt sits on the inner tile, not the frame CDK translates: on the frame it would pivot around
+// the viewport origin and rotate the translate itself, sliding the tile tens of pixels away from the
+// pointer on a wide screen. On the inner tile it pivots around its own centre.
 .card-drag-preview {
-  scale: 1.02;
   rotate: 1deg;
   animation: card-drag-lift var(--dur) var(--ease-out);
 }
 
 @keyframes card-drag-lift {
   from {
-    scale: 1;
     rotate: 0deg;
   }
 }
@@ -1664,7 +1666,6 @@ body.is-large-board {
   }
 
   .card-drag-preview {
-    scale: none;
     rotate: none;
   }
 }
@@ -1684,17 +1685,15 @@ k-up-next-panel .panel-rows k-card.cdk-drag-placeholder {
   transition: transform var(--dur) cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-// The lightweight card preview is a div, so the large-board k-card transition rule does not
-// reach it. Keep release feedback short without changing list-reorder or sibling animations.
+// Keep release feedback short without changing list-reorder or sibling animations.
 .card-drag-preview-frame.cdk-drag-animating {
   transition-duration: 80ms;
 
-  // The tile sets back down as it settles. CDK waits on the frame's transform transition alone,
-  // so the lift's scale and rotate must not outlast it.
+  // The tile straightens as it settles. CDK waits on the frame's transform transition alone, so
+  // the tilt must not outlast it.
   > .card-drag-preview {
-    scale: 1;
     rotate: 0deg;
-    transition-property: scale, rotate;
+    transition-property: rotate;
     transition-duration: 80ms;
   }
 }

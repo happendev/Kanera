@@ -60,27 +60,14 @@
     (selectionIntent)="onCardSelectionIntent($event)"
     (bulkMenuIntent)="onCardBulkMenuIntent($event)"
   >
-    <!-- CDK's default preview deep-clones the tile, cover bitmap included. A light preview keeps the
-         first drag frame cheap. -->
+    <!-- The tile itself in drag-preview mode (see list.component.html), so nothing moves when the
+         preview replaces it. -->
     <ng-template cdkDragPreview [matchSize]="true">
-      <!-- CDK owns this frame's transform for pointer tracking. The lift (scale/tilt) lives on the
-           tile inside it so it pivots on the tile, not on the viewport origin CDK translates from. -->
       <div class="card-drag-preview-frame">
-        <div class="card-drag-preview" [class.has-cover]="coverUrlForCard(card)" [class.is-completed]="card.completedAt" [style.--drag-cover-color]="coverColorForCard(card)">
-          <!-- Same order as the tile: key, title, then its labels. -->
-          @if (showCardKeys()) { <span class="card-drag-preview-key">{{ card.key }}</span> }
-          <span class="card-drag-preview-body">
-            @if (card.completedAt) {
-            <i class="ti ti-circle-check card-drag-preview-complete-icon" aria-hidden="true"></i>
-            }
-            <span class="card-drag-preview-title">{{ card.title }}</span>
-          </span>
-          @if (labelsForCard(card.id); as dragLabels) {
-          @if (dragLabels.length) {
-          <k-card-labels class="card-drag-preview-labels" [labels]="dragLabels" [interactive]="false" />
-          }
-          }
-        </div>
+        <k-card class="card-drag-preview" [dragPreview]="true" [style.--drag-cover-color]="coverColorForCard(card)" [card]="card" [customFields]="customFields()"
+          [customFieldValuesByField]="customFieldValuesForCard(card.id)" [labels]="labelsForCard(card.id)" [assignees]="assigneesForCard(card.id)" [coverUrl]="coverUrlForCard(card)"
+          [attachmentCount]="attachmentCountForCard(card.id)" [commentCount]="commentCountForCard(card.id)" [selected]="isSelectedCard(card.id)" [bulkSelected]="isBulkSelectedCard(card.id)"
+          [showActions]="canEditRole()" [sourceListsOverride]="lists()" [workspaceIdOverride]="workspaceId()" [priorityRank]="priorityRanksByCard().get(card.id) ?? null" />
       </div>
     </ng-template>
   </k-card>

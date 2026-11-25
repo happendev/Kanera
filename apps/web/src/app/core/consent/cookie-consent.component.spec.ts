@@ -23,10 +23,9 @@ describe("CookieConsentComponent", () => {
     fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
 
-    expect(root.querySelector(".consent-banner")?.textContent).toContain("Analytics stays off unless you accept it");
-    expect(root.querySelector(".consent-banner")?.textContent).toContain("progress through registration and subscription");
+    expect(root.querySelector(".consent-banner")?.textContent).toContain("They stay off unless you accept.");
     expect(root.textContent).not.toContain("Marketing");
-    (root.querySelector("button.secondary") as HTMLButtonElement).click();
+    (root.querySelector("button[aria-label='Reject non-essential']") as HTMLButtonElement).click();
     fixture.detectChanges();
 
     expect(consent.choice()).toMatchObject({ analytics: false, marketing: false });
@@ -61,5 +60,24 @@ describe("CookieConsentComponent", () => {
     expect(dialog).toContain("Separate server-side analytics");
     expect(dialog).toContain("subscription starts, renewals, resumptions, cancellations, and plan or seat-count changes");
     expect(dialog).toContain("exclude payment-method details and workspace content");
+  });
+
+  it("turns analytics on without a banner outside opt-in regions", () => {
+    const consent = TestBed.inject(CookieConsentService);
+    consent.configure(true, false);
+    const fixture = TestBed.createComponent(CookieConsentComponent);
+    fixture.detectChanges();
+
+    expect(consent.analyticsAllowed()).toBe(true);
+    expect(document.cookie).toContain(KANERA_CONSENT_COOKIE);
+    expect((fixture.nativeElement as HTMLElement).querySelector(".consent-banner")).toBeNull();
+  });
+
+  it("keeps an earlier rejection outside opt-in regions", () => {
+    const consent = TestBed.inject(CookieConsentService);
+    consent.save(false);
+    consent.configure(true, false);
+
+    expect(consent.analyticsAllowed()).toBe(false);
   });
 });
