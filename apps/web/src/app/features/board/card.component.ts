@@ -114,6 +114,11 @@ export class CardComponent implements OnChanges, OnDestroy {
   // Offers the hover "+ Up next" affordance. Eligibility (curation rights, capacity, not already
   // ranked) is the host's call — the tile only draws the button and reports the click.
   readonly canAddToPriority = input<boolean>(false);
+  // Renders this tile as the CDK drag preview: the same layout as the tile being dragged, so nothing
+  // moves when the preview replaces it, but the cover paints a tinted placeholder instead of the
+  // bitmap (the drag's first frame is latency-critical) and the instance stays out of the per-card
+  // registries. The tile it mirrors is still mounted and owns the card's menu and motion slots.
+  readonly dragPreview = input<boolean>(false);
 
   // Drives the rank pill's --rank-heat: the top of the queue wears a deeper accent tint.
   protected readonly rankHeat = priorityRankHeat;
@@ -233,6 +238,7 @@ export class CardComponent implements OnChanges, OnDestroy {
 
   constructor() {
     effect((onCleanup) => {
+      if (this.dragPreview()) return;
       const unregister = this.menuCoordinator.registerCardMenu(this.cardIdForMenu(), this.actionsMenuOpen);
       onCleanup(unregister);
     });
@@ -245,6 +251,7 @@ export class CardComponent implements OnChanges, OnDestroy {
     if (!change) return;
     const previous = change.previousValue as AnyCard | undefined;
     const current = change.currentValue as AnyCard;
+    if (this.dragPreview()) return;
     if (previous?.id !== current.id) {
       this.detachMotion?.();
       this.detachMotion = this.cardMotion.attach(current.id, this.host.nativeElement);

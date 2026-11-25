@@ -472,6 +472,22 @@
   }
 }
 
+// The drag preview's cover: the tile's exact frame, filled with a tint of the cover's colour
+// (--drag-cover-color, set by the list) instead of the bitmap.
+.card-cover.is-drag-placeholder {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg,
+      color-mix(in srgb, var(--drag-cover-color, var(--accent)) 58%, var(--surface-2)),
+      color-mix(in srgb, var(--drag-cover-color, var(--accent)) 18%, var(--surface)));
+  color: var(--text-muted);
+}
+
+.card-cover-placeholder-icon {
+  font-size: 24px;
+  opacity: 0.55;
+}
+
 // Block flow, not flex: the leading marks sit inline with the title's first line so a wrapped title
 // returns to the tile's left edge instead of hanging indented past every mark.
 .card-body {

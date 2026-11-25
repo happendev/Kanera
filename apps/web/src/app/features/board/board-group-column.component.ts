@@ -8,13 +8,11 @@ import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { vibrateCardDragEnd, vibrateCardDragStart } from "../../core/browser/haptics";
 import { AvatarComponent } from "../../shared/avatar.component";
-import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import type { AnyCustomField } from "./board-state";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CardComponent, type CardAssigneePresentation, type CardBulkMenuIntent, type CardLabelPresentation, type CardSelectionIntent } from "./card.component";
-import { CardLabelsComponent } from "./card-labels.component";
 import { CardMotionService } from "./card-motion.service";
 import type { BulkCardMenuPayload, BulkCardSelectionPayload } from "./list.component";
 import type { CardGroup } from "./table-view/table-view.types";
@@ -59,7 +57,7 @@ export interface GroupCardDropPayload {
 @Component({
   selector: "k-board-group-column",
   standalone: true,
-  imports: [CdkDropList, CdkDrag, CdkDragPreview, AvatarComponent, CardComponent, CardLabelsComponent, TooltipDirective],
+  imports: [CdkDropList, CdkDrag, CdkDragPreview, AvatarComponent, CardComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board-group-column.component.html",
   styleUrl: "./board-group-column.component.scss",
@@ -67,7 +65,6 @@ export interface GroupCardDropPayload {
 export class BoardGroupColumnComponent implements OnDestroy {
   private readonly dragCoordinator = inject(CardDragCoordinator);
   private readonly cardMotion = inject(CardMotionService);
-  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private readonly cardsEl = viewChild<ElementRef<HTMLElement>>("cardsEl");
   protected readonly dragStartDelay = CARD_DRAG_START_DELAY;
   private edgeScrollFrame: number | null = null;

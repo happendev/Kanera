@@ -1,5 +1,3 @@
-@use "../../shared/card-key" as key;
-
 // Geometry deliberately matches `k-list`: switching the grouping axis should change what the
 // columns *mean*, not resize the board under the user's cursor.
 :host {
@@ -155,72 +153,3 @@ h3 {
   }
 }
 
-// Attached to document.body by CDK, so it is styled here rather than inside `k-card`. Kept in step
-// with the list column's preview so a tile looks the same mid-drag on either grouping.
-.card-drag-preview {
-  display: flex;
-  box-sizing: border-box;
-  flex-direction: column;
-  padding: 6px 10px 8px;
-  overflow: hidden;
-  color: var(--text);
-  background: var(--card-bg);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: 0 12px 28px rgb(0 0 0 / 28%);
-}
-
-// Completion stays visible in the deliberately stripped-down drag tile: it is status, not chrome.
-.card-drag-preview.is-completed {
-  background: color-mix(in srgb, var(--success) 10%, var(--card-bg));
-  border-color: color-mix(in srgb, var(--success) 32%, var(--border));
-}
-
-// Under the title, spaced as on the tile (card.component.scss k-card-labels).
-k-card-labels.card-drag-preview-labels {
-  display: block;
-  --label-bar-margin-top: 6px;
-  --label-bar-gap: 0;
-}
-
-// The tile's key, lifted: same mixin and the same deliberate 10px / 70% as .card-key in
-// card.component.scss, so the key does not change size or tone the moment a drag starts.
-.card-drag-preview-key {
-  @include key.card-key;
-  display: block;
-  flex: none;
-  margin-bottom: 5px;
-  font-size: 10px;
-  line-height: 1.3;
-  opacity: 0.7;
-}
-
-.card-drag-preview-body {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: baseline;
-  // Match CardComponent's title row exactly so the title does not shift when the preview replaces it.
-  gap: 5px;
-  font-size: var(--text-md);
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.card-drag-preview-complete-icon {
-  flex: 0 0 auto;
-  margin-right: 4px;
-  color: var(--success);
-  font-size: 15px;
-}
-
-.card-drag-preview-title {
-  min-width: 0;
-  font-size: var(--text-md);
-  font-weight: 400;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.card-drag-preview.is-completed .card-drag-preview-title {
-  color: var(--text-muted);
-}

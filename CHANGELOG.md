@@ -27,7 +27,7 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
-- Picking up a card on a board no longer makes it slide away from the cursor, which happened most on wide screens and on cards far from the top-left corner. Cards with a cover image also stay the same shape when you pick them up, so the title doesn't jump.
+- Picking up a card on a board no longer makes it slide away from the cursor, which happened most on wide screens and on cards far from the top-left corner. The card you drag now looks exactly like the card on the board, at the same size, with everything in the same place.
 - Signing out or losing a session clears offline copies, local drafts, recent history and pending shares from the browser. Cleanup failures recover automatically without interrupting sign-in.
 
 - Security hardening: malformed IDs, dates, numbers and import data return validation errors, outbound integrations and push reject unsafe destinations, rich text, search results and CSV exports cannot inject markup or formulas, and self-hosted trust-proxy settings accept a proxy count.
