@@ -12,6 +12,7 @@ import { AnalyticsService } from "./core/analytics/analytics.service";
 import type { AnalyticsRuntimeConfig } from "./core/analytics/analytics.types";
 import { AuthService } from "./core/auth/auth.service";
 import { PublicAuthClient } from "./core/auth/public-auth.client";
+import { analyticsRequiresOptIn } from "./core/consent/consent-region";
 import { CookieConsentService } from "./core/consent/cookie-consent.service";
 import { PwaInstallService } from "./core/install/pwa-install.service";
 
@@ -78,7 +79,7 @@ export const appConfig: ApplicationConfig = {
           // configure returns false for self-hosted, local, and non-production clients, so those
           // deployments neither initialise analytics nor display a redundant consent banner.
           const available = analytics.configure(config?.analytics ?? null, config?.deploymentMode);
-          consent.configure(available);
+          consent.configure(available, analyticsRequiresOptIn(config?.analytics?.country));
           syncIdentity();
         })
         .catch(() => consent.configure(analytics.configure(null, undefined)));
