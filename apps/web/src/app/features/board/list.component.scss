@@ -74,8 +74,12 @@
   overflow: hidden;
   border-top-left-radius: var(--radius);
   border-top-right-radius: var(--radius);
+  aspect-ratio: var(--cover-ratio, auto);
+  height: var(--cover-height, auto);
   min-height: 72px;
-  max-height: 160px;
+  // Same cap, fallback and phone frame as .card-cover: a taller preview cover pushed the title
+  // down the moment the preview replaced the tile.
+  max-height: 128px;
   background:
     linear-gradient(135deg,
       color-mix(in srgb, var(--drag-cover-color, var(--accent)) 58%, var(--surface-2)),
@@ -86,6 +90,21 @@
     font-size: 24px;
     opacity: 0.55;
   }
+
+  @media (max-width: 480px) {
+    aspect-ratio: 16 / 9;
+    height: auto;
+    max-height: none;
+  }
+
+  :host-context([data-density="compact"]) & {
+    margin: -5px -8px 6px;
+    width: calc(100% + 16px);
+  }
+}
+
+:host-context([data-density="compact"]) .card-drag-preview {
+  padding: 5px 8px 6px;
 }
 
 // Global Work cards retain their source-board identity while the rest of the expensive card chrome
