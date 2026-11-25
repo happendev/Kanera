@@ -16,6 +16,7 @@ All notable changes to Kanera are documented here.
 - **See when someone changes your Up next:** when somebody else adds, moves or removes cards in your Up next, its button lights up until you open it (on phones, the menu button shows a dot), so there's no need to tell people their priorities changed. Opening Up next on one device clears it everywhere.
 - **Copy prompt for coding agents:** a card's menu, and the ⋯ menu in an open card, can copy a ready-to-paste prompt with the card's key, link, title, description and checklists, asking a coding agent to carry out the card and track its work there through the Kanera MCP.
 - **Emailed organisation invites:** add an address when creating an invite in Users and Kanera sends the invite link to it. The link still works however you share it.
+- **Clickable totals on My Cards and Team Cards:** the overdue, due next 7 days and completed counts above the list are now buttons, like the Dependencies view's, that filter the list to exactly those cards. Click it again to clear the filter.
 
 ### Changed
 

@@ -953,6 +953,8 @@ describe("GlobalWorkPage toolbar state", () => {
         dueFrom: null,
         dueTo: null,
         overdueOnly: false,
+        dueSoonOnly: false,
+        completedOnly: false,
         overdueChecklistOnly: false,
         unreadOnly: false,
         prioritySetOnly: false,
@@ -1126,6 +1128,29 @@ describe("GlobalWorkPage toolbar state", () => {
       });
 
       expect(updateFilters.mock.calls.at(-1)![0]).toMatchObject({ prioritySetOnly: true });
+      fixture.destroy();
+    });
+  });
+
+  it("toggles the totals counts as exclusive quick filters", () => {
+    return mount().then(({ fixture, updateFilters, definition }) => {
+      const page = fixture.componentInstance;
+      const applyPatch = () => {
+        const patch = updateFilters.mock.calls.at(-1)![0] as Record<string, unknown>;
+        definition.update((current) => ({ ...current, filters: { ...current.filters, ...patch } }));
+        return patch;
+      };
+
+      page.toggleTotalsFilter("overdueOnly");
+      expect(applyPatch()).toEqual({ overdueOnly: true, dueSoonOnly: false, completedOnly: false });
+
+      // Picking another count replaces the first: overdue AND due soon would always be empty.
+      page.toggleTotalsFilter("dueSoonOnly");
+      expect(applyPatch()).toEqual({ overdueOnly: false, dueSoonOnly: true, completedOnly: false });
+
+      // Clicking the active count turns it off.
+      page.toggleTotalsFilter("dueSoonOnly");
+      expect(applyPatch()).toEqual({ overdueOnly: false, dueSoonOnly: false, completedOnly: false });
       fixture.destroy();
     });
   });
@@ -1421,6 +1446,8 @@ describe("GlobalWorkPage search shortcut", () => {
           dueFrom: null,
           dueTo: null,
           overdueOnly: false,
+          dueSoonOnly: false,
+          completedOnly: false,
           overdueChecklistOnly: false,
           unreadOnly: false,
           archived: false,

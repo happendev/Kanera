@@ -17400,6 +17400,13 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
+  "2869825839740952090": "{VAR_PLURAL, plural, one {{START_TAG_STRONG}{INTERPOLATION}{CLOSE_TAG_STRONG} checklist item} other {{START_TAG_STRONG}{INTERPOLATION}{CLOSE_TAG_STRONG} checklist items}}",
+  "@2869825839740952090": {
+    "description": "Totals strip",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
   "9472241685279736": "{$START_TAG_STRONG}{$COUNT}{$CLOSE_TAG_STRONG} overdue",
   "@9472241685279736": {
     "description": "Totals strip",
@@ -17417,13 +17424,6 @@
   },
   "6450470172937930542": "{$START_TAG_STRONG}{$COUNT}{$CLOSE_TAG_STRONG} completed",
   "@6450470172937930542": {
-    "description": "Totals strip",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "2869825839740952090": "{VAR_PLURAL, plural, one {{START_TAG_STRONG}{INTERPOLATION}{CLOSE_TAG_STRONG} checklist item} other {{START_TAG_STRONG}{INTERPOLATION}{CLOSE_TAG_STRONG} checklist items}}",
-  "@2869825839740952090": {
     "description": "Totals strip",
     "x-files": [
       "src/app/features/global-work/global-work.page.html"

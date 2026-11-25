@@ -42,6 +42,7 @@ import { applyWorkScope, type AccessibleBoard } from "../../lib/accessible-board
 import {
   cardAccessCondition as accessCondition,
   cardDueColumns,
+  type CardDueColumns,
   cardSummaryDueColumns as cardColumns,
   dependencyAtRiskSql,
   dueSoonSql,
@@ -51,7 +52,7 @@ import {
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
 import { liveQueueRanksByCardId } from "../card-priorities/routes.js";
 import { attachFieldOptions } from "../../lib/custom-fields.js";
-import { isDueDateOverdue } from "../../lib/due-date.js";
+import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { badRequest } from "../../lib/errors.js";
 import { isOrgAdmin } from "../../lib/access.js";
 import { signedAvatarUrl } from "../../lib/media-keys.js";
@@ -170,6 +171,19 @@ function customFieldConditions(filters: WorkFilters, cardId: typeof cardColumns.
   )));
 }
 
+/**
+ * The overdue / due-soon / completed quick filters, which are also the totals the strip counts.
+ * The due ones drop completed cards, like the board's Overdue filter and the totals: a finished
+ * card is not overdue work, whatever its date says.
+ */
+function totalsFilterConditions(filters: WorkFilters, columns: CardDueColumns): SQL[] {
+  const conditions: SQL[] = [];
+  if (filters.overdueOnly) conditions.push(overdueSql(columns), isNull(columns.completedAt));
+  if (filters.dueSoonOnly) conditions.push(dueSoonSql(columns), isNull(columns.completedAt));
+  if (filters.completedOnly) conditions.push(isNotNull(columns.completedAt));
+  return conditions;
+}
+
 export function baseCardConditions(
   authUserId: string,
   scopeBoards: AccessibleBoard[],
@@ -215,7 +229,7 @@ export function baseCardConditions(
   if (filters.completedTo) conditions.push(lte(columns.completedAt, new Date(filters.completedTo)));
   if (filters.dueFrom) conditions.push(gte(columns.dueDateLocalDate, filters.dueFrom));
   if (filters.dueTo) conditions.push(lte(columns.dueDateLocalDate, filters.dueTo));
-  if (filters.overdueOnly) conditions.push(overdueSql(columns));
+  conditions.push(...totalsFilterConditions(filters, columns));
   if (filters.lastActivityBefore) {
     conditions.push(sql`not exists (
       select 1 from activity_event work_activity
@@ -516,6 +530,7 @@ async function visibleChecklistCardIds(
       dueFrom: null,
       dueTo: null,
       overdueOnly: false,
+      dueSoonOnly: false,
       overdueChecklistOnly: false,
     },
     // portfolio: true only means "do not require a card assignee"; the assignee filters are cleared
@@ -531,6 +546,13 @@ async function visibleChecklistCardIds(
   return new Set(rows.map((row) => row.id));
 }
 
+/** An item's own due date falls today through seven days out in its zone, as `dueSoonSql` does for cards. */
+function isDueDateSoon(row: { dueDateLocalDate: string | null; dueDateTimezone: string | null }): boolean {
+  if (!row.dueDateLocalDate) return false;
+  const today = localDateInTimezone(new Date(), row.dueDateTimezone || "UTC");
+  return row.dueDateLocalDate >= today && row.dueDateLocalDate <= addDays(today, 7);
+}
+
 async function checklistAssignments(
   authUserId: string,
   scopeBoards: AccessibleBoard[],
@@ -538,7 +560,8 @@ async function checklistAssignments(
   filters: WorkFilters,
   includeAllVisible = false,
 ) {
-  if ((!targetUserIds?.length && !includeAllVisible) || filters.archived || filters.completion === "completed") {
+  // Checklist rows are open items to do, so a completed-only query has none to list.
+  if ((!targetUserIds?.length && !includeAllVisible) || filters.archived || filters.completion === "completed" || filters.completedOnly) {
     return [];
   }
   const unrestrictedBoardIds = scopeBoards.filter((board) => !board.assignedItemsOnly).map((board) => board.id);
@@ -567,6 +590,7 @@ async function checklistAssignments(
     .filter((row) => !filters.dueFrom || Boolean(row.dueDateLocalDate && row.dueDateLocalDate >= filters.dueFrom))
     .filter((row) => !filters.dueTo || Boolean(row.dueDateLocalDate && row.dueDateLocalDate <= filters.dueTo))
     .filter((row) => !filters.overdueOnly || isDueDateOverdue(row))
+    .filter((row) => !filters.dueSoonOnly || isDueDateSoon(row))
     .filter((row) => !filters.overdueChecklistOnly || isDueDateOverdue(row));
   const visibleCardIds = await visibleChecklistCardIds(
     authUserId,
@@ -662,12 +686,20 @@ export async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], 
   const requestedTeamIds = filters.assigneeIds.length
     ? filters.assigneeIds.filter((id) => visibleTeamUserIds.includes(id))
     : visibleTeamUserIds;
-  const conditions = baseCardConditions(authUserId, scopeBoards, query.filters, {
+  const conditionOptions = {
     forceUserId: query.lens === "my" ? authUserId : undefined,
     teamUserIds: query.lens === "team" ? requestedTeamIds : undefined,
     portfolio: query.lens === "portfolio",
     blockerBoards: allBoards,
-  }, cardDueColumns);
+  };
+  const conditions = baseCardConditions(authUserId, scopeBoards, filters, conditionOptions, cardDueColumns);
+  // The overdue / due-soon / completed totals are counted before their own quick filters apply, so
+  // with one on the others still say what switching to them would show. `cards` stays the size of
+  // the filtered list, which paging and "Showing N of M" rely on.
+  const totalsFilters = totalsFilterConditions(filters, cardDueColumns);
+  const totalsConditions = totalsFilters.length
+    ? baseCardConditions(authUserId, scopeBoards, { ...filters, overdueOnly: false, dueSoonOnly: false, completedOnly: false }, conditionOptions, cardDueColumns)
+    : conditions;
   const cursor = decodeCursor(query.cursor);
   const asOf = cursor ? new Date(cursor.asOf) : new Date();
   // Each cursor carries the already-returned ids. Re-sorting only the unseen set prevents a card
@@ -690,7 +722,9 @@ export async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], 
       .limit(query.limit + 1),
     query.includeMetadata ? db
       .select({
-        cards: sql<number>`count(*)::integer`,
+        cards: totalsFilters.length
+          ? sql<number>`count(*) filter (where ${and(...totalsFilters)})::integer`
+          : sql<number>`count(*)::integer`,
         overdue: sql<number>`count(*) filter (where ${overdueSql(cardDueColumns)} and ${cards.completedAt} is null)::integer`,
         dueSoon: sql<number>`count(*) filter (where ${dueSoonSql(cardDueColumns)} and ${cards.completedAt} is null)::integer`,
         completed: sql<number>`count(*) filter (where ${cards.completedAt} is not null)::integer`,
@@ -698,7 +732,7 @@ export async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], 
       .from(cards)
       .innerJoin(boards, eq(boards.id, cards.boardId))
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-      .where(and(...conditions)) : Promise.resolve([]),
+      .where(and(...totalsConditions)) : Promise.resolve([]),
   ]);
 
   const page = pageRows.slice(0, query.limit);
