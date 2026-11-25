@@ -719,7 +719,7 @@ services:
         condition: service_healthy
 
   postgres-exporter:
-    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.21.1
     restart: unless-stopped
     profiles: ["monitoring"]
     # pg_stat_statements comes from the exporter's built-in collector. The older
@@ -755,7 +755,7 @@ services:
 
   cadvisor:
     # cAdvisor releases moved from gcr.io to GHCR starting with v0.53.0.
-    image: ghcr.io/google/cadvisor:v0.60.6
+    image: ghcr.io/google/cadvisor:v0.61.1
     restart: unless-stopped
     profiles: ["monitoring"]
     # cAdvisor needs broad read access to the host's cgroup/container state for per-container CPU/mem.
@@ -776,7 +776,7 @@ services:
       - "8080"
 
   node-exporter:
-    image: prom/node-exporter:v1.12.1
+    image: prom/node-exporter:v1.13.1
     restart: unless-stopped
     profiles: ["monitoring"]
     command:
