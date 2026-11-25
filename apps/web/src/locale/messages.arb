@@ -10552,6 +10552,14 @@
       "src/app/features/board/card-detail-header.component.html"
     ]
   },
+  "672359310150014762": "Copy prompt",
+  "@672359310150014762": {
+    "description": "Menu item - copy a ready-to-paste prompt that asks a coding agent to carry out this card",
+    "x-files": [
+      "src/app/features/board/card-actions-menu.popover.ts",
+      "src/app/features/board/card-detail-header.component.html"
+    ]
+  },
   "1936837046207394927": "Unarchive card",
   "@1936837046207394927": {
     "description": "Card menu item",
@@ -10572,6 +10580,22 @@
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
       "src/app/features/board/card-detail-header.component.html"
+    ]
+  },
+  "5770609479736021819": "Prompt copied.",
+  "@5770609479736021819": {
+    "description": "Toast after copying a coding-agent prompt for a card",
+    "x-files": [
+      "src/app/features/board/card-actions-menu.popover.ts",
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "7568655446731529996": "Couldn't copy the prompt.",
+  "@7568655446731529996": {
+    "description": "Toast when copying a coding-agent prompt for a card fails",
+    "x-files": [
+      "src/app/features/board/card-actions-menu.popover.ts",
+      "src/app/features/board/card-detail.component.ts"
     ]
   },
   "1078727787042510511": "Card duplicated.",

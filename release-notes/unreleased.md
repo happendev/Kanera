@@ -21,6 +21,7 @@ An organisation invite can now grant specific boards as **Editor** or **Observer
 - [MCP] On Kanera Cloud, AI agents can report errors and suggestions to the Kanera team
 - [Cards] JSON attachments open in the preview, pretty-printed
 - [Up next] Up next lights up when someone else changes it, until you open it
+- [Cards] Copy prompt in the card menu hands a card to a coding agent, ready to paste
 
 ## Improvements
 

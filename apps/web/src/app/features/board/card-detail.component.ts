@@ -9,6 +9,7 @@ import { afterRenderEffect, ChangeDetectionStrategy, Component, computed, Destro
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
 import { cardBranchName, cardPath } from "@kanera/shared/card-links";
+import { buildCardAgentPrompt } from "./card-agent-prompt";
 import type { CardLinkedItemsResponse, CardMirrorStatus, CardRelationCard, CardRelationsResponse, LinkedInternalSummary } from "@kanera/shared/dto";
 import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type ServerToClientEvents, type WireAgentRun, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
 import { barDurationDays, plannedBar } from "@kanera/shared/schedule";
@@ -43,6 +44,7 @@ import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { MinuteClockService } from "../../shared/minute-clock.service";
 import { PendingCustomFieldIds } from "../../shared/pending-custom-field-ids";
 import { ToastService } from "../../shared/toast.service";
+import { copyToClipboard } from "../../shared/clipboard";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import type { UserProfileAction } from "../../shared/user-profile/user-profile-card.service";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
@@ -299,6 +301,25 @@ export class CardDetailComponent {
   async copyBranchName() {
     const card = this.card();
     await navigator.clipboard?.writeText(cardBranchName(card.key, card.title)).catch(() => undefined);
+  }
+
+  async copyAgentPrompt() {
+    const card = this.card();
+    // The drawer already holds the description and checklists, so this copies synchronously.
+    const prompt = buildCardAgentPrompt({
+      key: card.key,
+      url: new URL(cardPath(card.organisationKey, card.key), window.location.origin).toString(),
+      title: card.title,
+      // The published description, not an unsaved draft: the summary card lacks one until detail loads.
+      description: this.state.detailForCard(card.id)?.card.description ?? ("description" in card ? card.description : null),
+      checklists: this.checklists(),
+    });
+    try {
+      await copyToClipboard(prompt);
+      this.toasts.success($localize`:Toast after copying a coding-agent prompt for a card:Prompt copied.`, "robot");
+    } catch {
+      this.toasts.error($localize`:Toast when copying a coding-agent prompt for a card fails:Couldn't copy the prompt.`);
+    }
   }
 
   async toggleCardWatch() {
