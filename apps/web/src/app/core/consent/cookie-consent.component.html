@@ -1,14 +1,12 @@
 @if (consent.available()) {
   @if (!consent.choice() && !preferencesOpen()) {
-    <section class="consent-banner" aria-labelledby="cookie-consent-title" aria-describedby="cookie-consent-description">
-      <div class="consent-copy">
-        <h2 id="cookie-consent-title" i18n="Cookie consent banner heading">Your privacy choices</h2>
-        <p id="cookie-consent-description" i18n>We use necessary storage to operate Kanera. With your permission, analytics cookies help us understand how visitors find Kanera, use key parts of the service, and progress through registration and subscription. Analytics stays off unless you accept it.</p>
-      </div>
+    <section class="consent-banner" aria-label="Your privacy choices" i18n-aria-label="Cookie consent banner heading" aria-describedby="cookie-consent-description">
+      <p id="cookie-consent-description"><ng-container i18n="Cookie consent banner text">Optional analytics cookies help us see how visitors find and use Kanera. They stay off unless you accept.</ng-container>&ngsp;<a href="https://www.kanera.app/privacy" target="_blank" rel="noopener noreferrer" i18n="Cookie consent banner link to the privacy notice">Privacy</a></p>
+      <!-- Accept and Reject share one style and width so neither is the easier choice. -->
       <div class="consent-actions">
-        <button type="button" class="primary" (click)="save(true)" i18n="Cookie consent button">Accept analytics</button>
-        <button type="button" class="secondary" (click)="save(false)" i18n="Cookie consent button: decline optional cookies">Reject non-essential</button>
-        <button type="button" class="text" (click)="openPreferences()" i18n="Cookie consent button">Manage preferences</button>
+        <button type="button" class="decision" (click)="save(true)" aria-label="Accept analytics" i18n-aria-label="Cookie consent button" i18n="Cookie consent button - accept optional analytics">Accept</button>
+        <button type="button" class="decision" (click)="save(false)" aria-label="Reject non-essential" i18n-aria-label="Cookie consent button: decline optional cookies" i18n="Cookie consent button - decline optional analytics">Reject</button>
+        <button type="button" class="text" (click)="openPreferences()" aria-label="Manage preferences" i18n-aria-label="Cookie consent button" i18n="Cookie consent button - open detailed cookie choices">Preferences</button>
       </div>
     </section>
   }

@@ -312,10 +312,19 @@
       "src/app/core/consent/cookie-consent.component.html"
     ]
   },
-  "7675868728034572754": "We use necessary storage to operate Kanera. With your permission, analytics cookies help us understand how visitors find Kanera, use key parts of the service, and progress through registration and subscription. Analytics stays off unless you accept it.",
-  "@7675868728034572754": {
+  "4576850960921549296": "Optional analytics cookies help us see how visitors find and use Kanera. They stay off unless you accept.",
+  "@4576850960921549296": {
+    "description": "Cookie consent banner text",
     "x-files": [
       "src/app/core/consent/cookie-consent.component.html"
+    ]
+  },
+  "8440128775129354214": "Privacy",
+  "@8440128775129354214": {
+    "description": "Cookie consent banner link to the privacy notice",
+    "x-files": [
+      "src/app/core/consent/cookie-consent.component.html",
+      "src/app/features/account-settings/profile/profile.page.html"
     ]
   },
   "1033925530046032386": "Accept analytics",
@@ -325,9 +334,24 @@
       "src/app/core/consent/cookie-consent.component.html"
     ]
   },
+  "8905995985388209337": "Accept",
+  "@8905995985388209337": {
+    "description": "Cookie consent button - accept optional analytics",
+    "x-files": [
+      "src/app/core/consent/cookie-consent.component.html",
+      "src/app/features/home/home.page.html"
+    ]
+  },
   "1095952943550513341": "Reject non-essential",
   "@1095952943550513341": {
     "description": "Cookie consent button: decline optional cookies",
+    "x-files": [
+      "src/app/core/consent/cookie-consent.component.html"
+    ]
+  },
+  "7378878529334768232": "Reject",
+  "@7378878529334768232": {
+    "description": "Cookie consent button - decline optional analytics",
     "x-files": [
       "src/app/core/consent/cookie-consent.component.html"
     ]
@@ -337,6 +361,14 @@
     "description": "Cookie consent button",
     "x-files": [
       "src/app/core/consent/cookie-consent.component.html"
+    ]
+  },
+  "8951128623878467862": "Preferences",
+  "@8951128623878467862": {
+    "description": "Cookie consent button - open detailed cookie choices",
+    "x-files": [
+      "src/app/core/consent/cookie-consent.component.html",
+      "src/app/features/account-settings/account-settings.page.html"
     ]
   },
   "6986476289052332969": "Cookie preferences",
@@ -4376,13 +4408,6 @@
       "src/app/features/account-settings/integrations/integrations.page.html"
     ]
   },
-  "8951128623878467862": "Preferences",
-  "@8951128623878467862": {
-    "description": "Settings tab",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.html"
-    ]
-  },
   "5851560788527570644": "Notifications",
   "@5851560788527570644": {
     "description": "Settings tab",
@@ -6539,13 +6564,6 @@
   },
   "2443800505573922384": "Used across Kanera on every device you sign in to, and for your emails and notifications. Dates follow the language you choose.",
   "@2443800505573922384": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "8440128775129354214": "Privacy",
-  "@8440128775129354214": {
-    "description": "Settings section heading",
     "x-files": [
       "src/app/features/account-settings/profile/profile.page.html"
     ]
@@ -19153,13 +19171,6 @@
   "6433816626158650803": "{$BOARDS} · invited by {$PERSON}",
   "@6433816626158650803": {
     "description": "Pending invitation row: boards and who invited you",
-    "x-files": [
-      "src/app/features/home/home.page.html"
-    ]
-  },
-  "8905995985388209337": "Accept",
-  "@8905995985388209337": {
-    "description": "Button: accept an invitation",
     "x-files": [
       "src/app/features/home/home.page.html"
     ]
