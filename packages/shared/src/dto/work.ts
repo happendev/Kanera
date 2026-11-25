@@ -96,6 +96,12 @@ export const workFiltersSchema = z.object({
   dueFrom: calendarDate.nullable().default(null),
   dueTo: calendarDate.nullable().default(null),
   overdueOnly: z.boolean().default(false),
+  // Open cards due from today through the next seven days in their own zone: exactly the cards the
+  // Global Work totals strip counts as "due next 7 days", so clicking that count lists them.
+  dueSoonOnly: z.boolean().default(false),
+  // Completed cards within the current completion filter: under the default that is the recently
+  // completed cards still listed, matching the totals strip's "completed" count.
+  completedOnly: z.boolean().default(false),
   overdueChecklistOnly: z.boolean().default(false),
   unreadOnly: z.boolean().default(false),
   prioritySetOnly: z.boolean().default(false),
@@ -127,6 +133,8 @@ export const workViewDefinitionSchema = z.object({
     dueFrom: null,
     dueTo: null,
     overdueOnly: false,
+    dueSoonOnly: false,
+    completedOnly: false,
     overdueChecklistOnly: false,
     unreadOnly: false,
     prioritySetOnly: false,
@@ -316,7 +324,12 @@ export type WorkCard = CompactCardSummary & {
 };
 
 export type WorkTotals = {
+  /** The size of the filtered list. */
   cards: number;
+  /**
+   * `overdue`, `dueSoon` and `completed` are counted before the overdueOnly / dueSoonOnly /
+   * completedOnly quick filters apply, so with one on the others still say what switching shows.
+   */
   overdue: number;
   dueSoon: number;
   completed: number;

@@ -794,7 +794,10 @@ describe("ListComponent", () => {
     previewView.detectChanges();
 
     try {
-      const element = previewView.rootNodes.find((node: unknown): node is HTMLElement => node instanceof HTMLElement);
+      const frame = previewView.rootNodes.find((node: unknown): node is HTMLElement => node instanceof HTMLElement);
+      // CDK positions the root frame; the lift and completion styling live on the tile inside it.
+      expect(frame?.classList.contains("card-drag-preview-frame")).toBe(true);
+      const element = frame?.querySelector(".card-drag-preview");
       expect(element?.classList.contains("is-completed")).toBe(true);
       expect(element?.querySelector(".card-drag-preview-complete-icon")?.classList.contains("ti-circle-check")).toBe(true);
     } finally {

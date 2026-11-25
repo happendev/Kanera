@@ -545,28 +545,55 @@ k-work-done-view {
 .totals-strip {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: var(--space-2);
-  row-gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   margin: 10px 0 8px;
   color: var(--text-muted);
   font-size: var(--text-sm);
-
-  > span + span::before {
-    content: "·";
-    margin-right: var(--space-2);
-    color: var(--text-muted);
-  }
 
   strong {
     color: var(--text-3);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
+}
 
-  .attention,
-  .attention strong {
+.totals-summary {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-2);
+
+  > * + *::before {
+    content: "·";
+    margin-right: var(--space-2);
+  }
+}
+
+.totals-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.totals-filter {
+  @include toolbar.stat-button;
+
+  strong {
+    color: var(--text);
+  }
+
+  &.is-overdue.has-count i {
     color: var(--danger);
+  }
+
+  &:disabled strong {
+    color: inherit;
+  }
+
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    height: 44px;
   }
 }
 

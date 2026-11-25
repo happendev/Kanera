@@ -351,6 +351,49 @@ void test("Global Work separators can be created at a typed lane anchor inside t
   );
 });
 
+void test("totals quick filters list exactly the cards each total counts", async () => {
+  const f = await seed();
+  const day = 24 * 60 * 60 * 1000;
+  const utcDate = (offsetDays: number) => new Date(Date.now() + offsetDays * day).toISOString().slice(0, 10);
+  // A completed card with a past date must count (and list) as completed, never as overdue.
+  await db.update(cards)
+    .set({ completedAt: new Date(), dueDateLocalDate: utcDate(-1), dueDateSlot: "anyTime", dueDateTimezone: "UTC" })
+    .where(eq(cards.id, f.mine.id));
+  await db.update(cards)
+    .set({ dueDateLocalDate: utcDate(3), dueDateSlot: "anyTime", dueDateTimezone: "UTC" })
+    .where(eq(cards.id, f.restrictedMine.id));
+  await db.update(cards)
+    .set({ dueDateLocalDate: utcDate(-2), dueDateSlot: "anyTime", dueDateTimezone: "UTC" })
+    .where(eq(cards.title, "My guest card"));
+  // Completed long before any workspace window: outside the default list, so not in its count.
+  await db.update(cards)
+    .set({ completedAt: new Date(Date.now() - 400 * day) })
+    .where(eq(cards.id, f.otherWorkspaceMine.id));
+
+  const query = async (filters: Record<string, unknown>) => {
+    const response = await f.app.inject({
+      method: "POST",
+      url: "/work/cards/query",
+      headers: auth(f.viewerToken),
+      payload: { lens: "my", filters, limit: 100 },
+    });
+    assert.equal(response.statusCode, 200);
+    return response.json<WorkQueryResponse>();
+  };
+
+  const { totals } = await query({});
+  assert.deepEqual([totals.overdue, totals.dueSoon, totals.completed], [1, 1, 1]);
+  const overdue = await query({ overdueOnly: true });
+  assert.deepEqual(overdue.cards.map((card) => card.title), ["My guest card"]);
+  // With one quick filter on, the other counts still describe the unfiltered list.
+  assert.deepEqual(
+    [overdue.totals.cards, overdue.totals.overdue, overdue.totals.dueSoon, overdue.totals.completed],
+    [1, 1, 1, 1],
+  );
+  assert.deepEqual((await query({ dueSoonOnly: true })).cards.map((card) => card.title), ["My restricted card"]);
+  assert.deepEqual((await query({ completedOnly: true })).cards.map((card) => card.title), ["My shared card"]);
+});
+
 void test("my lens keeps recently completed cards and hides them only when asked", async () => {
   const f = await seed();
   const day = 24 * 60 * 60 * 1000;

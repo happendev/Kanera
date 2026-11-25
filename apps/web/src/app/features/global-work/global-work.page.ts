@@ -124,6 +124,9 @@ const CHECKLIST_SECTION_COLLAPSE_ID = "checklist:section";
  * would reject anyway.
  */
 const MAX_UP_NEXT_ENTRIES = 50;
+/** The filters the totals strip's counts toggle; see `toggleTotalsFilter`. */
+type TotalsFilter = "overdueOnly" | "dueSoonOnly" | "completedOnly";
+
 @Component({
   selector: "k-global-work",
   standalone: true,
@@ -1080,6 +1083,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inProgressTooLongOnly: false,
       blockedOnly: true,
       atRiskOnly: false,
+      dueSoonOnly: false,
+      completedOnly: false,
       overdueChecklistOnly: false,
       dueFrom: null,
       dueTo: null,
@@ -1179,6 +1184,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       || filters.blockedOnly
       || filters.atRiskOnly
       || filters.overdueOnly
+      || filters.dueSoonOnly
+      || filters.completedOnly
       || filters.overdueChecklistOnly
       || filters.unreadOnly
       || filters.prioritySetOnly
@@ -1439,6 +1446,24 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.applyQuery();
   }
 
+  /**
+   * The totals strip's overdue / due-soon / completed counts double as quick filters. Each maps to
+   * a filter that reuses the server predicate behind its count, so the list shows exactly the cards
+   * counted. They are exclusive (overdue AND due-soon AND completed would always be empty), and
+   * clicking the active one turns it off. Overdue is the filter panel's Overdue switch, so the two
+   * stay in sync.
+   */
+  toggleTotalsFilter(filter: TotalsFilter): void {
+    const filters = this.state.definition().filters;
+    const on = !filters[filter];
+    this.state.updateFilters({
+      overdueOnly: on && filter === "overdueOnly",
+      dueSoonOnly: on && filter === "dueSoonOnly",
+      completedOnly: on && filter === "completedOnly",
+    });
+    this.applyQuery();
+  }
+
   onArchivedChange(archived: boolean): void {
     this.state.setArchived(archived);
     this.applyQuery();
@@ -1461,6 +1486,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       customFieldConditions: [],
       completion: DEFAULT_COMPLETION,
       overdueOnly: false,
+      dueSoonOnly: false,
+      completedOnly: false,
       inactiveOnly: false,
       inProgressOnly: false,
       inProgressTooLongOnly: false,

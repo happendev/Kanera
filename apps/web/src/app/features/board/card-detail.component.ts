@@ -9,6 +9,7 @@ import { afterRenderEffect, ChangeDetectionStrategy, Component, computed, Destro
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
 import { cardBranchName, cardPath } from "@kanera/shared/card-links";
+import { buildCardAgentPrompt } from "./card-agent-prompt";
 import type { CardLinkedItemsResponse, CardMirrorStatus, CardRelationCard, CardRelationsResponse, LinkedInternalSummary } from "@kanera/shared/dto";
 import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type ServerToClientEvents, type WireAgentRun, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
 import { barDurationDays, plannedBar } from "@kanera/shared/schedule";
@@ -33,7 +34,7 @@ import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
 import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
-import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
+import { clipboardAttachmentFiles, dragTargetElement, fileDragActiveSignal, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { CompletionWarningService } from "../../shared/completion-warning.service";
@@ -43,6 +44,7 @@ import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { MinuteClockService } from "../../shared/minute-clock.service";
 import { PendingCustomFieldIds } from "../../shared/pending-custom-field-ids";
 import { ToastService } from "../../shared/toast.service";
+import { copyToClipboard } from "../../shared/clipboard";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import type { UserProfileAction } from "../../shared/user-profile/user-profile-card.service";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
@@ -301,6 +303,25 @@ export class CardDetailComponent {
     await navigator.clipboard?.writeText(cardBranchName(card.key, card.title)).catch(() => undefined);
   }
 
+  async copyAgentPrompt() {
+    const card = this.card();
+    // The drawer already holds the description and checklists, so this copies synchronously.
+    const prompt = buildCardAgentPrompt({
+      key: card.key,
+      url: new URL(cardPath(card.organisationKey, card.key), window.location.origin).toString(),
+      title: card.title,
+      // The published description, not an unsaved draft: the summary card lacks one until detail loads.
+      description: this.state.detailForCard(card.id)?.card.description ?? ("description" in card ? card.description : null),
+      checklists: this.checklists(),
+    });
+    try {
+      await copyToClipboard(prompt);
+      this.toasts.success($localize`:Toast after copying a coding-agent prompt for a card:Prompt copied.`, "robot");
+    } catch {
+      this.toasts.error($localize`:Toast when copying a coding-agent prompt for a card fails:Couldn't copy the prompt.`);
+    }
+  }
+
   async toggleCardWatch() {
     await this.notifications.toggleCardWatch(this.card().id);
   }
@@ -447,7 +468,7 @@ export class CardDetailComponent {
   readonly uploads = inject(AttachmentUploadQueue);
   // Derived so the existing drag/paste guards and dropzone label keep working unchanged.
   readonly uploadingAttachment = computed(() => this.uploads.busy());
-  readonly attachmentDragActive = signal(false);
+  readonly attachmentDragActive = fileDragActiveSignal();
   // Keep every format the shared lightbox can render in attachment order so navigation can cross
   // images, playback media, and documents without exposing download-only files in the sequence.
   readonly lightboxAttachments = computed(() => toLightboxAttachments(this.visibleAttachments()));
@@ -1019,8 +1040,6 @@ export class CardDetailComponent {
     document.addEventListener("keydown", this.handleDocumentKeydown);
     document.addEventListener("dragover", this.handleDocumentAttachmentDragOver);
     document.addEventListener("drop", this.handleDocumentAttachmentDrop);
-    document.addEventListener("dragend", this.handleDocumentAttachmentDragEnd);
-    document.addEventListener("dragexit", this.handleDocumentAttachmentDragEnd);
     this.destroyRef.onDestroy(() => {
       document.removeEventListener("dragover", this.handleAttachmentDragCapture, { capture: true });
       document.removeEventListener("drop", this.handleAttachmentDragCapture, { capture: true });
@@ -1028,8 +1047,6 @@ export class CardDetailComponent {
       document.removeEventListener("keydown", this.handleDocumentKeydown);
       document.removeEventListener("dragover", this.handleDocumentAttachmentDragOver);
       document.removeEventListener("drop", this.handleDocumentAttachmentDrop);
-      document.removeEventListener("dragend", this.handleDocumentAttachmentDragEnd);
-      document.removeEventListener("dragexit", this.handleDocumentAttachmentDragEnd);
       if (this.closeTimer !== null) clearTimeout(this.closeTimer);
       if (this.previouslyFocusedElement?.isConnected) this.previouslyFocusedElement.focus();
     });
@@ -2519,10 +2536,6 @@ export class CardDetailComponent {
     await this.onAttachmentDrop(event);
   }
 
-  onDocumentAttachmentDragEnd() {
-    this.attachmentDragActive.set(false);
-  }
-
   private readonly handleAttachmentDragCapture = (event: DragEvent) => {
     if (!hasDraggedFiles(event.dataTransfer)) return;
     if (!this.canEdit() || !this.isDragInsidePanel(event) || isEditorDropTarget(event.target) || isEditablePasteTarget(event.target)) {
@@ -2534,7 +2547,6 @@ export class CardDetailComponent {
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => this.onDocumentKeydown(event);
   private readonly handleDocumentAttachmentDragOver = (event: DragEvent) => this.onDocumentAttachmentDragOver(event);
   private readonly handleDocumentAttachmentDrop = (event: DragEvent) => void this.onDocumentAttachmentDrop(event);
-  private readonly handleDocumentAttachmentDragEnd = () => this.onDocumentAttachmentDragEnd();
 
   onAttachmentDragEnter(event: DragEvent) {
     if (!this.shouldHandleAttachmentDrag(event)) return;

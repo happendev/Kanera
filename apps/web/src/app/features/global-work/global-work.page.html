@@ -651,15 +651,45 @@
       }
     } @else {
       <section class="totals-strip">
-        <span i18n="Totals strip">{ state.response().totals.cards, plural, one {<strong>{{ state.response().totals.cards }}</strong> card} other {<strong>{{ state.response().totals.cards }}</strong> cards} }</span>
-        <span [class.attention]="state.response().totals.overdue" i18n="Totals strip"><strong>{{ state.response().totals.overdue // i18n(ph="count") }}</strong> overdue</span>
-        <span i18n="Totals strip"><strong>{{ state.response().totals.dueSoon // i18n(ph="count") }}</strong> due next 7 days</span>
-        @if (state.response().totals.completed) {
-          <span i18n="Totals strip"><strong>{{ state.response().totals.completed // i18n(ph="count") }}</strong> completed</span>
-        }
-        @if (state.response().totals.checklistItems) {
-          <span i18n="Totals strip">{ state.response().totals.checklistItems, plural, one {<strong>{{ state.response().totals.checklistItems }}</strong> checklist item} other {<strong>{{ state.response().totals.checklistItems }}</strong> checklist items} }</span>
-        }
+        <span class="totals-summary">
+          <span i18n="Totals strip">{ state.response().totals.cards, plural, one {<strong>{{ state.response().totals.cards }}</strong> card} other {<strong>{{ state.response().totals.cards }}</strong> cards} }</span>
+          @if (state.response().totals.checklistItems) {
+            <span i18n="Totals strip">{ state.response().totals.checklistItems, plural, one {<strong>{{ state.response().totals.checklistItems }}</strong> checklist item} other {<strong>{{ state.response().totals.checklistItems }}</strong> checklist items} }</span>
+          }
+        </span>
+        <!-- The counts double as quick filters onto exactly the cards they count, like the
+             Dependencies view's summary; see toggleTotalsFilter. The server counts them before
+             their own filter applies, so all three stay meaningful while one is on. -->
+        @let filters = state.definition().filters;
+        @let totals = state.response().totals;
+        <span class="totals-filters">
+          <button
+            type="button"
+            class="totals-filter is-overdue"
+            [class.has-count]="totals.overdue > 0"
+            [class.is-active]="filters.overdueOnly"
+            [attr.aria-pressed]="filters.overdueOnly"
+            [disabled]="!totals.overdue && !filters.overdueOnly"
+            (click)="toggleTotalsFilter('overdueOnly')"
+          ><i aria-hidden="true" class="ti ti-alert-circle"></i><span i18n="Totals strip"><strong>{{ totals.overdue // i18n(ph="count") }}</strong> overdue</span></button>
+          <button
+            type="button"
+            class="totals-filter"
+            [class.is-active]="filters.dueSoonOnly"
+            [attr.aria-pressed]="filters.dueSoonOnly"
+            [disabled]="!totals.dueSoon && !filters.dueSoonOnly"
+            (click)="toggleTotalsFilter('dueSoonOnly')"
+          ><i aria-hidden="true" class="ti ti-calendar-due"></i><span i18n="Totals strip"><strong>{{ totals.dueSoon // i18n(ph="count") }}</strong> due next 7 days</span></button>
+          @if (totals.completed || filters.completedOnly) {
+            <button
+              type="button"
+              class="totals-filter"
+              [class.is-active]="filters.completedOnly"
+              [attr.aria-pressed]="filters.completedOnly"
+              (click)="toggleTotalsFilter('completedOnly')"
+            ><i aria-hidden="true" class="ti ti-circle-check"></i><span i18n="Totals strip"><strong>{{ totals.completed // i18n(ph="count") }}</strong> completed</span></button>
+          }
+        </span>
       </section>
 
       @if (bulkSelectedCardIds().size) {

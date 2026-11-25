@@ -10552,6 +10552,14 @@
       "src/app/features/board/card-detail-header.component.html"
     ]
   },
+  "672359310150014762": "Copy prompt",
+  "@672359310150014762": {
+    "description": "Menu item - copy a ready-to-paste prompt that asks a coding agent to carry out this card",
+    "x-files": [
+      "src/app/features/board/card-actions-menu.popover.ts",
+      "src/app/features/board/card-detail-header.component.html"
+    ]
+  },
   "1936837046207394927": "Unarchive card",
   "@1936837046207394927": {
     "description": "Card menu item",
@@ -10572,6 +10580,22 @@
     "x-files": [
       "src/app/features/board/card-actions-menu.popover.ts",
       "src/app/features/board/card-detail-header.component.html"
+    ]
+  },
+  "5770609479736021819": "Prompt copied.",
+  "@5770609479736021819": {
+    "description": "Toast after copying a coding-agent prompt for a card",
+    "x-files": [
+      "src/app/features/board/card-actions-menu.popover.ts",
+      "src/app/features/board/card-detail.component.ts"
+    ]
+  },
+  "7568655446731529996": "Couldn't copy the prompt.",
+  "@7568655446731529996": {
+    "description": "Toast when copying a coding-agent prompt for a card fails",
+    "x-files": [
+      "src/app/features/board/card-actions-menu.popover.ts",
+      "src/app/features/board/card-detail.component.ts"
     ]
   },
   "1078727787042510511": "Card duplicated.",
@@ -17376,6 +17400,13 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
+  "2869825839740952090": "{VAR_PLURAL, plural, one {{START_TAG_STRONG}{INTERPOLATION}{CLOSE_TAG_STRONG} checklist item} other {{START_TAG_STRONG}{INTERPOLATION}{CLOSE_TAG_STRONG} checklist items}}",
+  "@2869825839740952090": {
+    "description": "Totals strip",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
   "9472241685279736": "{$START_TAG_STRONG}{$COUNT}{$CLOSE_TAG_STRONG} overdue",
   "@9472241685279736": {
     "description": "Totals strip",
@@ -17393,13 +17424,6 @@
   },
   "6450470172937930542": "{$START_TAG_STRONG}{$COUNT}{$CLOSE_TAG_STRONG} completed",
   "@6450470172937930542": {
-    "description": "Totals strip",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "2869825839740952090": "{VAR_PLURAL, plural, one {{START_TAG_STRONG}{INTERPOLATION}{CLOSE_TAG_STRONG} checklist item} other {{START_TAG_STRONG}{INTERPOLATION}{CLOSE_TAG_STRONG} checklist items}}",
-  "@2869825839740952090": {
     "description": "Totals strip",
     "x-files": [
       "src/app/features/global-work/global-work.page.html"

@@ -482,6 +482,8 @@ describe("WorkDoneViewComponent", () => {
         dueFrom: null,
         dueTo: null,
         overdueOnly: false,
+        dueSoonOnly: false,
+        completedOnly: false,
         overdueChecklistOnly: false,
         unreadOnly: false,
         archived: false,
