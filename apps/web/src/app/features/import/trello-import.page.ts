@@ -11,6 +11,7 @@ import type { List, WorkspaceMember } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ToastService } from "../../shared/toast.service";
+import { fileDragActiveSignal } from "../../shared/attachments/file-transfer";
 import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { ImportNavigationGuardService } from "./import-navigation-guard.service";
@@ -148,7 +149,7 @@ export class TrelloImportPage implements OnDestroy {
   readonly manifest = signal<ImportManifest | null>(null);
   readonly fileName = signal<string | null>(null);
   readonly selectedFile = signal<File | null>(null);
-  readonly uploadDragActive = signal(false);
+  readonly uploadDragActive = fileDragActiveSignal();
   readonly boardName = signal("");
   readonly boardIcon = signal("layout-kanban");
   readonly boardIconColor = signal<ColorToken | null>(null);

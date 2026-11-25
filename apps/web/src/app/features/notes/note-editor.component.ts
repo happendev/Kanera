@@ -48,7 +48,7 @@ import { formatDateTime } from "../../shared/date-format";
 import { icu } from "../../core/i18n/icu";
 import { appLocale } from "../../core/i18n/locale";
 import { viewerTimeZone } from "../../shared/day-key.util";
-import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
+import { clipboardAttachmentFiles, dragTargetElement, fileDragActiveSignal, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
 import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
 
 const LOCK_HEARTBEAT_MS = 30_000; // 30 seconds
@@ -369,7 +369,7 @@ export class NoteEditorComponent implements OnDestroy {
   readonly uploads = inject(AttachmentUploadQueue);
   // Derived so the existing drag/paste guards and dropzone label keep working unchanged.
   readonly uploadingAttachment = computed(() => this.uploads.busy());
-  readonly attachmentDragActive = signal(false);
+  readonly attachmentDragActive = fileDragActiveSignal();
   readonly acquiringLock = signal(false);
   readonly clock = signal(Date.now());
   readonly lockError = output<string>();
@@ -1079,12 +1079,6 @@ export class NoteEditorComponent implements OnDestroy {
   async onDocumentAttachmentDrop(event: DragEvent) {
     if (!this.canChangeAttachments()) return;
     await this.onAttachmentDrop(event);
-  }
-
-  @HostListener("document:dragend")
-  @HostListener("document:dragexit")
-  onDocumentAttachmentDragEnd() {
-    this.attachmentDragActive.set(false);
   }
 
   private readonly handleAttachmentDragCapture = (event: DragEvent) => {

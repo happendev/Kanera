@@ -2276,6 +2276,12 @@ button.checklist-hide-toggle {
     background: var(--warning-soft);
     border-color: color-mix(in srgb, var(--warning) 30%, transparent);
   }
+
+  // A status badge is one chip; a grey "Due" prefix inside it reads as a stray label.
+  &.overdue .due-badge-kind,
+  &.due-soon .due-badge-kind {
+    color: inherit;
+  }
 }
 
 .due-badge-btn {

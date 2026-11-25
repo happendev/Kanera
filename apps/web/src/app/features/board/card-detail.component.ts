@@ -34,7 +34,7 @@ import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
 import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
-import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
+import { clipboardAttachmentFiles, dragTargetElement, fileDragActiveSignal, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { CompletionWarningService } from "../../shared/completion-warning.service";
@@ -468,7 +468,7 @@ export class CardDetailComponent {
   readonly uploads = inject(AttachmentUploadQueue);
   // Derived so the existing drag/paste guards and dropzone label keep working unchanged.
   readonly uploadingAttachment = computed(() => this.uploads.busy());
-  readonly attachmentDragActive = signal(false);
+  readonly attachmentDragActive = fileDragActiveSignal();
   // Keep every format the shared lightbox can render in attachment order so navigation can cross
   // images, playback media, and documents without exposing download-only files in the sequence.
   readonly lightboxAttachments = computed(() => toLightboxAttachments(this.visibleAttachments()));
@@ -1040,8 +1040,6 @@ export class CardDetailComponent {
     document.addEventListener("keydown", this.handleDocumentKeydown);
     document.addEventListener("dragover", this.handleDocumentAttachmentDragOver);
     document.addEventListener("drop", this.handleDocumentAttachmentDrop);
-    document.addEventListener("dragend", this.handleDocumentAttachmentDragEnd);
-    document.addEventListener("dragexit", this.handleDocumentAttachmentDragEnd);
     this.destroyRef.onDestroy(() => {
       document.removeEventListener("dragover", this.handleAttachmentDragCapture, { capture: true });
       document.removeEventListener("drop", this.handleAttachmentDragCapture, { capture: true });
@@ -1049,8 +1047,6 @@ export class CardDetailComponent {
       document.removeEventListener("keydown", this.handleDocumentKeydown);
       document.removeEventListener("dragover", this.handleDocumentAttachmentDragOver);
       document.removeEventListener("drop", this.handleDocumentAttachmentDrop);
-      document.removeEventListener("dragend", this.handleDocumentAttachmentDragEnd);
-      document.removeEventListener("dragexit", this.handleDocumentAttachmentDragEnd);
       if (this.closeTimer !== null) clearTimeout(this.closeTimer);
       if (this.previouslyFocusedElement?.isConnected) this.previouslyFocusedElement.focus();
     });
@@ -2540,10 +2536,6 @@ export class CardDetailComponent {
     await this.onAttachmentDrop(event);
   }
 
-  onDocumentAttachmentDragEnd() {
-    this.attachmentDragActive.set(false);
-  }
-
   private readonly handleAttachmentDragCapture = (event: DragEvent) => {
     if (!hasDraggedFiles(event.dataTransfer)) return;
     if (!this.canEdit() || !this.isDragInsidePanel(event) || isEditorDropTarget(event.target) || isEditablePasteTarget(event.target)) {
@@ -2555,7 +2547,6 @@ export class CardDetailComponent {
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => this.onDocumentKeydown(event);
   private readonly handleDocumentAttachmentDragOver = (event: DragEvent) => this.onDocumentAttachmentDragOver(event);
   private readonly handleDocumentAttachmentDrop = (event: DragEvent) => void this.onDocumentAttachmentDrop(event);
-  private readonly handleDocumentAttachmentDragEnd = () => this.onDocumentAttachmentDragEnd();
 
   onAttachmentDragEnter(event: DragEvent) {
     if (!this.shouldHandleAttachmentDrag(event)) return;

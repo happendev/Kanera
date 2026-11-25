@@ -36,7 +36,7 @@ import { LabelPickerPopover, type LabelPickerLabel } from "./label-picker.popove
 import { MemberPickerPopover } from "./member-picker.popover";
 import { SelectPickerPopover } from "./select-picker.popover";
 import { viewerTimeZone } from "../../shared/day-key.util";
-import { clipboardAttachmentFiles, hasDraggedFiles } from "../../shared/attachments/file-transfer";
+import { clipboardAttachmentFiles, fileDragActiveSignal, hasDraggedFiles } from "../../shared/attachments/file-transfer";
 import { toggleId } from "../../shared/toggle-id";
 import { byPosition } from "../../shared/position-sort";
 
@@ -173,7 +173,7 @@ export class CardComposerDialogComponent implements OnInit {
    */
   readonly pendingAttachments = signal<PendingAttachment[]>([]);
   /** True while a file drag is over the dialog, so the drop target is visible before the drop. */
-  readonly dragActive = signal(false);
+  readonly dragActive = fileDragActiveSignal();
   /** Staging-time complaints (unsupported type). Upload failures surface through `error` instead. */
   readonly attachmentError = signal<string | null>(null);
   /** Insert position for the create call; see CardComposerSeed.atTop. Not user content, so not drafted. */
