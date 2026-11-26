@@ -25,6 +25,7 @@ An organisation invite can now grant specific boards as **Editor** or **Observer
 
 ## Improvements
 
+- [Cards] Redesigned checklists: each one is its own panel with a progress ring, overdue count and aligned date and assignee columns, and turns green when finished. Sub-items expand inline and can be ticked there
 - [Members] A redesigned board members menu: search, add existing guests by name, invite guests by email, and see pending invites
 - [Onboarding] Signing up asks only for your name, email and password
 - [Notifications] Emails name the card or person, and card emails have an Open card button

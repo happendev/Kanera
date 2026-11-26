@@ -204,7 +204,7 @@
       @if (canEditRole()) {
       <button type="button" class="checklist-check checklist-item-panel-check" [class.checked]="item.completedAt" [class.is-ticking]="tickedChecklistItemId() === item.id" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklistId, item)"
         [attr.aria-label]="item.completedAt ? labels.markItemIncomplete : labels.markItemComplete" [kTooltip]="item.completedAt ? labels.markIncomplete : labels.markComplete">
-        <i aria-hidden="true" class="ti" [class.ti-square-check]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
+        <span class="checklist-box" aria-hidden="true">@if (item.completedAt) {<i aria-hidden="true" class="ti ti-check"></i>}</span>
       </button>
       }
       @if (editingItemId() === item.id && canEditRole()) {
@@ -223,35 +223,82 @@
     </div>
 
     <div class="checklist-item-panel-body">
+      <!-- The card's own Assigned To and Dates sections, scaled to one item: same labelled headings,
+           avatar, dashed add buttons and due chip, so the drawer reads as the card drilled into. Items
+           have one assignee, so the avatar itself reopens the picker to change or clear it. -->
       <div class="checklist-item-meta-row">
-        <div class="checklist-duedate-wrap">
-          @if (itemPresentation?.hasDueDate) {
-          <button type="button" class="checklist-item-due due-badge due-badge-btn" [class.overdue]="itemPresentation?.overdue" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()"
-            (click)="toggleChecklistItemDueDatePicker(item.id, $event)">
-            <i aria-hidden="true" class="ti ti-calendar-event"></i>{{ itemPresentation?.dueDateText }}
-          </button>
-          } @else {
-          <button type="button" class="ghost sm" [disabled]="!canEdit()" (click)="toggleChecklistItemDueDatePicker(item.id, $event)"><i aria-hidden="true" class="ti ti-calendar-plus"></i><ng-container i18n="Button">Add due date</ng-container></button>
-          }
-          @if (checklistItemDueDatePickerId() === item.id && canEditRole()) {
-          <k-date-picker [value]="itemPresentation?.dueDateInputValue ?? ''" [slot]="itemPresentation?.dueDateSlot ?? 'anyTime'" (applyDate)="setChecklistItemDueDate(checklistId, item, $event.value, $event.slot)"
-            (clear)="setChecklistItemDueDate(checklistId, item, '')" (close)="checklistItemDueDatePickerId.set(null)" />
-          }
-        </div>
-        <div class="checklist-assignee-wrap item-detail-assignee">
-          @if (itemPresentation?.assignee; as assignee) {
-          <button type="button" class="checklist-item-panel-assignee" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)">
-            <k-avatar [url]="assignee.avatarUrl" [name]="assignee.displayName" [size]="24" [userId]="assignee.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="assignee.lastOnlineAt" />
-            <span>{{ assignee.displayName }}</span>
-          </button>
-          } @else {
-          <button type="button" class="ghost sm" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)"><i aria-hidden="true" class="ti ti-user-plus"></i><ng-container i18n="Button: assign a person to the checklist item">Assign</ng-container></button>
-          }
-          @if (checklistItemAssigneePickerId() === item.id && canEditRole()) {
-          <k-member-picker [members]="members()" [selectedIds]="item.assigneeId ? [item.assigneeId] : []" [alphabetical]="true" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Unassign item" i18n-clearLabel="Button: remove the checklist item's assignee"
-            (toggle)="setChecklistItemAssignee(checklistId, item, $event)" (clear)="setChecklistItemAssignee(checklistId, item, null)" (close)="checklistItemAssigneePickerId.set(null)" />
-          }
-        </div>
+        <section class="detail-section card-detail-section">
+          <div class="section-label card-detail-section-label">
+            <i aria-hidden="true" class="ti ti-users"></i>
+            &ngsp;<ng-container i18n="Card detail section heading">Assigned To</ng-container>
+          </div>
+          <div class="members-row">
+            <div class="member-picker-wrap">
+              @if (itemPresentation?.assignee; as assignee) {
+              @if (canEditRole()) {
+              <button type="button" class="member-avatar member-avatar-btn" [class.is-active]="checklistItemAssigneePickerId() === item.id" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)"
+                [attr.aria-label]="labels.changeItemAssignee(assignee.displayName)" [kTooltip]="labels.assignedTo(assignee.displayName)">
+                <k-avatar [url]="assignee.avatarUrl" [name]="assignee.displayName" [size]="32" [userId]="assignee.userId" [workspaceId]="workspaceId()" [showPresence]="true" [showTooltip]="false" [lastOnlineAt]="assignee.lastOnlineAt" />
+              </button>
+              } @else {
+              <span class="member-avatar">
+                <k-avatar [url]="assignee.avatarUrl" [name]="assignee.displayName" [size]="32" [userId]="assignee.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="assignee.lastOnlineAt" [profile]="true" />
+              </span>
+              }
+              } @else if (canEditRole()) {
+              <button type="button" class="member-add-btn" [class.is-active]="checklistItemAssigneePickerId() === item.id" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)"
+                aria-label="Assign checklist item" i18n-aria-label kTooltip="Assign item" i18n-kTooltip>
+                <i aria-hidden="true" class="ti ti-plus"></i>
+              </button>
+              } @else {
+              <span class="readonly-empty" i18n="Empty state - nobody is assigned to the checklist item">Unassigned</span>
+              }
+              @if (checklistItemAssigneePickerId() === item.id && canEditRole()) {
+              <k-member-picker [members]="members()" [selectedIds]="item.assigneeId ? [item.assigneeId] : []" [alphabetical]="true" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Unassign item" i18n-clearLabel="Button: remove the checklist item's assignee"
+                (toggle)="setChecklistItemAssignee(checklistId, item, $event)" (clear)="setChecklistItemAssignee(checklistId, item, null)" (close)="checklistItemAssigneePickerId.set(null)" />
+              }
+            </div>
+          </div>
+        </section>
+
+        <section class="detail-section card-detail-section">
+          <div class="section-label card-detail-section-label">
+            <i aria-hidden="true" class="ti ti-calendar-event"></i>
+            &ngsp;<ng-container i18n="Checklist item detail section heading - the item's due date">Due date</ng-container>
+          </div>
+          <div class="due-date-row">
+            <div class="due-picker-wrap">
+              @if (itemPresentation?.hasDueDate) {
+              @if (canEditRole()) {
+              <button type="button" class="due-badge due-badge-btn" [class.overdue]="itemPresentation?.overdue" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()"
+                (click)="toggleChecklistItemDueDatePicker(item.id, $event)" aria-label="Change due date" i18n-aria-label kTooltip="Change due date" i18n-kTooltip>
+                <i aria-hidden="true" class="ti ti-calendar-event"></i>
+                {{ itemPresentation?.dueDateText }}
+                <span type="button" class="due-clear" (click)="setChecklistItemDueDate(checklistId, item, ''); $event.stopPropagation()" kTooltip="Clear due date" i18n-kTooltip>
+                  <i aria-hidden="true" class="ti ti-x"></i>
+                </span>
+              </button>
+              } @else {
+              <span class="due-badge" [class.overdue]="itemPresentation?.overdue">
+                <i aria-hidden="true" class="ti ti-calendar-event"></i>
+                {{ itemPresentation?.dueDateText }}
+              </span>
+              }
+              } @else if (canEditRole()) {
+              <button type="button" class="due-add-btn" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()" (click)="toggleChecklistItemDueDatePicker(item.id, $event)"
+                aria-label="Set due date" i18n-aria-label kTooltip="Add due date" i18n-kTooltip>
+                <i aria-hidden="true" class="ti ti-plus"></i>&ngsp;<ng-container i18n="Button">Add due date</ng-container>
+              </button>
+              } @else {
+              <span class="readonly-empty" i18n>No due date</span>
+              }
+              @if (checklistItemDueDatePickerId() === item.id && canEditRole()) {
+              <k-date-picker [value]="itemPresentation?.dueDateInputValue ?? ''" [slot]="itemPresentation?.dueDateSlot ?? 'anyTime'" (applyDate)="setChecklistItemDueDate(checklistId, item, $event.value, $event.slot)"
+                (clear)="setChecklistItemDueDate(checklistId, item, '')" (close)="checklistItemDueDatePickerId.set(null)" />
+              }
+            </div>
+          </div>
+        </section>
       </div>
 
       <section class="detail-section card-detail-section">

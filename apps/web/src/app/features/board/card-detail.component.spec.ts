@@ -3323,7 +3323,7 @@ describe("CardDetailComponent realtime regressions", () => {
     const root = fixture.nativeElement as HTMLElement;
     const panel = root.querySelector<HTMLElement>(".checklist-item-panel");
 
-    panel?.querySelector<HTMLButtonElement>(".checklist-item-due")?.click();
+    panel?.querySelector<HTMLButtonElement>(".due-badge-btn")?.click();
     fixture.detectChanges();
 
     expect(root.querySelectorAll("k-date-picker")).toHaveLength(1);
@@ -3331,7 +3331,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
     fixture.componentInstance.checklistItemDueDatePickerId.set(null);
     fixture.detectChanges();
-    panel?.querySelector<HTMLButtonElement>(".item-detail-assignee button")?.click();
+    panel?.querySelector<HTMLButtonElement>(".member-avatar-btn")?.click();
     fixture.detectChanges();
 
     expect(root.querySelectorAll("k-member-picker")).toHaveLength(1);
@@ -3605,8 +3605,17 @@ describe("CardDetailComponent realtime regressions", () => {
 
     const detailButton = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".checklist-item-detail");
     expect(detailButton?.disabled).toBe(false);
-    expect(detailButton?.textContent).toContain("0/1");
     expect(detailButton?.querySelector(".ti-align-left")).not.toBeNull();
+    // Sub-item progress lives on its own toggle, which shows the sub-items inline under the row.
+    const subToggle = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".checklist-item-subtoggle");
+    expect(subToggle?.textContent).toContain("0/1");
+    expect(subToggle?.getAttribute("aria-expanded")).toBe("false");
+    subToggle?.click();
+    fixture.detectChanges();
+    expect(subToggle?.getAttribute("aria-expanded")).toBe("true");
+    const inlineSubItem = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".checklist-subitem");
+    expect(inlineSubItem?.textContent).toContain("Read-only sub-item");
+    expect(inlineSubItem?.querySelector<HTMLButtonElement>(".checklist-check")?.disabled).toBe(true);
     detailButton?.click();
     fixture.detectChanges();
 
@@ -3733,7 +3742,9 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(boardState.updateChecklistItem).toHaveBeenCalledWith("card-1", "checklist-1", expect.objectContaining({ id: "item-2", assigneeId: "user-3" }));
   });
 
-  it("names the assignee in the checklist item unassign tooltip", async () => {
+  // Clicking the avatar opens the picker (change or unassign), so the tooltip names who it is
+  // rather than promising a removal the click doesn't make.
+  it("names the assignee in the checklist item assignee tooltip", async () => {
     const assignee = {
       userId: "user-2",
       displayName: "Ada Lovelace",
@@ -3758,7 +3769,7 @@ describe("CardDetailComponent realtime regressions", () => {
     await settleDetail(fixture);
 
     const tooltip = fixture.debugElement.query(By.css(".checklist-item-assignee")).injector.get(TooltipDirective);
-    expect(tooltip.kTooltip()).toBe("Unassign Ada Lovelace");
+    expect(tooltip.kTooltip()).toBe("Assigned to Ada Lovelace");
   });
 
   // Clicking an assignee used to unassign them. It now opens their profile card, which carries

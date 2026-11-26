@@ -10,6 +10,9 @@ async function json<T>(response: APIResponse): Promise<T> {
 
 async function dragItem(page: Page, source: Locator, target: Locator) {
   await source.scrollIntoViewIfNeeded();
+  // The grip hangs outside the card and only shows on row hover, so reach it through the row as a
+  // pointer does.
+  await source.hover();
   const from = (await source.locator(".checklist-item-grip").boundingBox())!;
   const to = (await target.boundingBox())!;
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);

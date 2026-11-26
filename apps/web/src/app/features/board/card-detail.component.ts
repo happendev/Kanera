@@ -5,7 +5,7 @@ import { moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
 import { NgTemplateOutlet } from "@angular/common";
 import type { ElementRef } from "@angular/core";
-import { afterRenderEffect, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, output, signal, untracked, viewChild, ViewEncapsulation } from "@angular/core";
+import { afterNextRender, afterRenderEffect, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, Injector, input, output, signal, untracked, viewChild, ViewEncapsulation } from "@angular/core";
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
 import { cardBranchName, cardPath } from "@kanera/shared/card-links";
@@ -194,12 +194,9 @@ export class CardDetailComponent {
     editChecklistTitle: $localize`:Tooltip:Edit checklist title`,
     changeDueDate: $localize`:Tooltip:Change due date`,
     changeItemAssignee: (person: string) => $localize`:Button label; person is the current assignee:Change checklist item assignee from ${person}:person:`,
-    unassign: (person: string) => $localize`:Tooltip - remove this person from the checklist item:Unassign ${person}:person:`,
     assignedTo: (person: string) => $localize`:Tooltip on a checklist item's assignee:Assigned to ${person}:person:`,
-    notesAndSubItems: $localize`:Tooltip - the checklist item has notes and a sub-checklist:Notes and sub-items`,
     notes: $localize`:Tooltip - the checklist item has notes:Notes`,
     subItems: $localize`:Tooltip - the checklist item has a sub-checklist:Sub-items`,
-    addNotesAndSubItems: $localize`:Tooltip:Add notes & sub-items`,
     allTemplatesAdded: $localize`:Tooltip on a disabled button:All templates already added`,
     addFromTemplateTooltip: $localize`:Tooltip:Add checklist from template`,
     untitled: $localize`:Stand-in for a linked note or card with no title:Untitled`,
@@ -226,6 +223,7 @@ export class CardDetailComponent {
     if (!reminder) return $localize`:Button - set a personal reminder for this card:Remind me`;
     return $localize`:Tooltip on the reminder button; when is e.g. "Wed, 4 Mar, 09.00":Reminder: ${formatDateTime(reminder.remindAt, "weekday")}:when:`;
   });
+  private readonly injector = inject(Injector);
   readonly panel = viewChild<ElementRef<HTMLElement>>("panel");
   readonly titleInput = computed(() => this.headerSection()?.titleInput());
   readonly detailScroller = viewChild<ElementRef<HTMLElement>>("detailScroller");
@@ -831,6 +829,18 @@ export class CardDetailComponent {
     const itemId = this.openChecklistItemId();
     return itemId ? this.checklists().filter((checklist) => checklist.parentItemId === itemId) : [];
   });
+  // Sub-checklists grouped under their parent item, so rows can show them inline without each row
+  // rescanning every checklist on the card.
+  readonly subChecklistsByItemId = computed(() => {
+    const byItem = new Map<string, WireCardChecklist[]>();
+    for (const checklist of this.checklists()) {
+      if (!checklist.parentItemId) continue;
+      const list = byItem.get(checklist.parentItemId);
+      if (list) list.push(checklist);
+      else byItem.set(checklist.parentItemId, [checklist]);
+    }
+    return byItem;
+  });
   readonly subChecklistProgressByItemId = computed(() => {
     const progress = new Map<string, { done: number; total: number }>();
     for (const checklist of this.checklists()) {
@@ -858,6 +868,9 @@ export class CardDetailComponent {
   readonly draftItemText = signal("");
   readonly hideCompletedChecklistItems = signal(this.initialHideCompletedChecklistItems());
   readonly collapsedChecklistIds = signal<Set<string>>(new Set());
+  // Items whose sub-checklists are shown inline on the card. A per-visit view choice: it resets with
+  // the card and isn't persisted, unlike checklist collapse.
+  readonly expandedChecklistItemIds = signal<Set<string>>(new Set());
   readonly appliedChecklistTemplateIdSet = computed(() => {
     const ids = new Set(this.appliedChecklistTemplateIds());
     for (const id of this.locallyAppliedChecklistTemplateIds()) ids.add(id);
@@ -882,17 +895,41 @@ export class CardDetailComponent {
   // Precompute per-checklist progress once per checklists() change instead of re-filtering the
   // items array on every change detection pass (the template reads done/complete/text/fill for
   // each checklist multiple times).
+  // overdue feeds the header's "N overdue" chip. hasDueDates / hasAssignees reserve the date and
+  // assignee columns on every row of that checklist, so chips and avatars line up like a table
+  // instead of each row sizing its own metadata.
   readonly checklistProgressById = computed(() => {
-    const map = new Map<string, { done: number; total: number; complete: boolean; text: string; fillPct: number }>();
+    const map = new Map<string, {
+      done: number;
+      total: number;
+      complete: boolean;
+      text: string;
+      fillPct: number;
+      overdue: number;
+      hasDueDates: boolean;
+      hasAssignees: boolean;
+    }>();
     for (const checklist of this.checklists()) {
       const total = checklist.items.length;
-      const done = checklist.items.reduce((count, item) => (item.completedAt ? count + 1 : count), 0);
+      let done = 0;
+      let overdue = 0;
+      let hasDueDates = false;
+      let hasAssignees = false;
+      for (const item of checklist.items) {
+        if (item.completedAt) done++;
+        else if (isOverdue(item.dueDateLocalDate, item.dueDateSlot, item.dueDateTimezone)) overdue++;
+        if (item.dueDateLocalDate) hasDueDates = true;
+        if (item.assigneeId) hasAssignees = true;
+      }
       map.set(checklist.id, {
         done,
         total,
         complete: total > 0 && done === total,
         text: `${done}/${total}`,
         fillPct: total > 0 ? (done / total) * 100 : 0,
+        overdue,
+        hasDueDates,
+        hasAssignees,
       });
     }
     return map;
@@ -1281,6 +1318,7 @@ export class CardDetailComponent {
     effect(() => {
       const cardId = this.cardId();
       this.collapsedChecklistIds.set(this.initialCollapsedChecklistIds(cardId));
+      this.expandedChecklistItemIds.set(new Set());
     });
 
     effect(() => {
@@ -1877,6 +1915,34 @@ export class CardDetailComponent {
     this.startEditItem(item);
   }
 
+  /**
+   * The keyboard path for reordering: the drag grip is pointer-only, so the item menu offers single
+   * steps. Steps count the rows the user can see, so with completed items hidden "Move up" passes
+   * the visible neighbour rather than an invisible one.
+   */
+  async moveChecklistItemBy(checklist: WireCardChecklist, item: WireCardChecklistItem, offset: -1 | 1) {
+    this.checklistItemActionsMenuId.set(null);
+    if (!this.canEdit()) return;
+    const visible = this.visibleChecklistItems(checklist);
+    const index = visible.findIndex((candidate) => candidate.id === item.id);
+    if (index < 0 || !visible[index + offset]) return;
+    const after = (offset < 0 ? visible[index - 2] : visible[index + 1]) ?? null;
+    // The optimistic position sits between `after` and whatever follows it in the full list (which
+    // may be a hidden completed item), matching where the server's afterItemId places it.
+    const others = checklist.items.filter((candidate) => candidate.id !== item.id);
+    const before = others[after ? others.findIndex((candidate) => candidate.id === after.id) + 1 : 0] ?? null;
+    this.state.moveChecklistItem(this.card().id, item.id, checklist.id, checklist.id, this.positionBetween(after?.position ?? null, before?.position ?? null));
+    // The menu that held focus is gone; put focus back on the moved row's menu button so the next
+    // step is one key press away.
+    afterNextRender(() => {
+      this.panel()?.nativeElement.querySelector<HTMLElement>(`[data-checklist-item-id="${item.id}"] .checklist-item-more`)?.focus();
+    }, { injector: this.injector });
+    await this.api.post(`/cards/${this.card().id}/checklists/${checklist.id}/items/${item.id}/move`, {
+      checklistId: checklist.id,
+      afterItemId: after?.id ?? null,
+    });
+  }
+
   async deleteChecklistItemFromMenu(checklistId: string, item: WireCardChecklistItem) {
     this.checklistItemActionsMenuId.set(null);
     await this.deleteChecklistItem(checklistId, item);
@@ -2088,6 +2154,18 @@ export class CardDetailComponent {
 
   checklistDropListIdsFor(checklists: WireCardChecklist[]): string[] {
     return checklists.map((checklist) => this.checklistDropListId(checklist.id));
+  }
+
+  isChecklistItemExpanded(itemId: string): boolean {
+    return this.expandedChecklistItemIds().has(itemId);
+  }
+
+  toggleChecklistItemExpanded(itemId: string) {
+    this.expandedChecklistItemIds.update((ids) => {
+      const next = new Set(ids);
+      if (!next.delete(itemId)) next.add(itemId);
+      return next;
+    });
   }
 
   subChecklistsFor(item: WireCardChecklistItem): WireCardChecklist[] {
