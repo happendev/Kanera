@@ -176,6 +176,8 @@ type SeedChecklistItem = {
   dueDateSlot?: CardDueDateSlot;
   completedBy?: SeedUserKey;
   completedOffsetHours?: number;
+  /** Inline sub-items, stored as a sub-checklist whose parent is this item. */
+  subChecklist?: { title: string; items: { text: string; completedBy?: SeedUserKey }[] };
 };
 
 type SeedChecklist = {
@@ -1583,6 +1585,9 @@ function buildMarketingWorkspace(reference: Date): SeedWorkspace {
         {
           title: "Design the autumn campaign graphics",
           assignee: "nina",
+          // The README and site card-detail captures use this card, so it carries every section:
+          // a co-owner, item owners and dates, inline sub-items and a second checklist.
+          additionalAssignees: ["zoe"],
           description: [
             "Finish the warm editorial route: landing hero, email header, social crops, and partner lockup.",
             "Keep product UI out of the artwork; Leo is supplying screenshots as separate campaign assets.",
@@ -1591,11 +1596,33 @@ function buildMarketingWorkspace(reference: Date): SeedWorkspace {
           attachments: [{ asset: "campaignReviewCover", uploadedBy: "nina", useAsCover: true }],
           checklists: [{
             title: "Required exports",
+            preserveCompletions: true,
             items: [
-              { text: "Landing-page hero at desktop and mobile sizes", completedBy: "nina", completedOffsetHours: 10 },
-              { text: "Email header with dark-mode check" },
-              { text: "Three social crops with safe areas" },
+              {
+                text: "Landing-page hero at desktop and mobile sizes",
+                assignee: "nina",
+                dueOffsetDays: 1,
+                // Matches the site's checklist-item capture fixture, which reuses these rows.
+                subChecklist: {
+                  title: "Final checks",
+                  items: [
+                    { text: "Confirm the desktop crop and export size", completedBy: "nina" },
+                    { text: "Check mobile safe areas and text contrast", completedBy: "nina" },
+                    { text: "Attach the approved exports to the card" },
+                  ],
+                },
+              },
+              { text: "Email header with dark-mode check", completedBy: "nina", completedOffsetHours: 10 },
+              { text: "Three social crops with safe areas", assignee: "zoe", dueOffsetDays: 2 },
               { text: "Partner lockup without the launch date" },
+            ],
+          }, {
+            title: "Review handoff",
+            preserveCompletions: true,
+            items: [
+              { text: "Share concept two with Zoe for headline fit", completedBy: "nina", completedOffsetHours: 8 },
+              { text: "Split the paper texture into its own layer", completedBy: "nina", completedOffsetHours: 19 },
+              { text: "Send the final review set to Amelia" },
             ],
           }],
           comments: [
@@ -6296,6 +6323,33 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                   }),
                 ).returning();
                 summary.checklistItems += checklistSeed.items.length;
+
+                for (const [itemIndex, itemRow] of checklistItems.entries()) {
+                  const subSeed = seededItems[itemIndex]!.subChecklist;
+                  if (!subSeed) continue;
+                  const [subChecklist] = await tx.insert(cardChecklists).values({
+                    cardId: card!.id,
+                    parentItemId: itemRow.id,
+                    title: subSeed.title,
+                    position: positionForIndex(0),
+                    createdAt: checklistCreatedAt,
+                    updatedAt: checklistCreatedAt,
+                  }).returning();
+                  summary.checklists += 1;
+                  await tx.insert(cardChecklistItems).values(subSeed.items.map((subItem, subIndex) => {
+                    const subCompletedAt = subItem.completedBy ? addHours(cardCreatedAt, subIndex + 3) : null;
+                    return {
+                      checklistId: subChecklist!.id,
+                      text: subItem.text,
+                      position: positionForIndex(subIndex),
+                      completedAt: subCompletedAt,
+                      completedById: subItem.completedBy ? userIdByKey.get(subItem.completedBy)! : null,
+                      createdAt: checklistCreatedAt,
+                      updatedAt: subCompletedAt ?? checklistCreatedAt,
+                    };
+                  }));
+                  summary.checklistItems += subSeed.items.length;
+                }
 
                 // Checklist overdue notifications are standing attention items rather than feed
                 // activity. Seed them directly so My Cards and the inbox both open populated.

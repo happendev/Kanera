@@ -22,7 +22,7 @@ import Image from "@tiptap/extension-image";
 import { Paragraph } from "@tiptap/extension-paragraph";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Fragment, Slice, type Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { TextSelection } from "@tiptap/pm/state";
+import { Selection, TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { Table } from "@tiptap/extension-table";
 import { TableCell } from "@tiptap/extension-table-cell";
@@ -1253,12 +1253,8 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       // real parser errors without enabling that incompatible false-positive.
       emitContentError: true,
       editable: this.editable() && !this.saving(),
-      // Focus through `focusEnd` on create instead of Tiptap's `"end"`, so a draft ending in a quote
-      // (a comment reply) puts the caret below the quote rather than inside it.
+      // Set the initial caret ourselves so a reply can start below a trailing quote.
       autofocus: false,
-      onCreate: () => {
-        if (this.autofocus()) this.focusEnd();
-      },
       onContentError: ({ editor, error }) => {
         if (isMarkdownTableWrapperFalsePositive(error)) return;
         // Invalid inserted content is rejected before dispatch. Re-assert the
@@ -1307,6 +1303,10 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     shell.addEventListener("drop", this.handleDrop, { capture: true });
     window.addEventListener("resize", this.handleViewportChange);
     window.addEventListener("scroll", this.handleViewportChange, true);
+
+    // Tiptap's create callback runs after the editor is editable. Set the initial selection now
+    // so a delayed autofocus cannot overwrite an early selection made by the user.
+    if (this.autofocus()) this.focusEnd();
   }
 
   ngOnDestroy() {
@@ -2072,7 +2072,10 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     if (doc.lastChild?.type.name === "blockquote") {
       chain.insertContentAt(doc.content.size, { type: "paragraph" });
     }
-    chain.focus("end").run();
+    chain.command(({ tr }) => {
+      tr.setSelection(Selection.atEnd(tr.doc));
+      return true;
+    }).scrollIntoView().run();
   }
 
   setSaving(v: boolean) {

@@ -21,6 +21,8 @@ Kanban, Table, Calendar, Timeline, and dependency views over one set of cards. M
 
 ![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg?v=20261105refresh2)
 
+![Kanera card detail showing owners, dates, labels, custom fields, checklists with sub-items and owners, and comments](docs/readme-assets/card-detail.jpg?v=20261126checklists1)
+
 ## Why Kanera
 
 - **Agents work on your board, not in a side chat.** Claude, Codex, Cursor, and other agents pick up cards over MCP or the `kanera` CLI. A live chip shows each run on its card, turns amber when the agent needs you, and every change is attributed **via Claude** or **via Codex**.
@@ -162,7 +164,7 @@ Press `?` to open a shortcut sheet that reflects the current screen. Use two-key
 
 Build one ranked queue from cards assigned to you across every accessible board. Reorder it as priorities change, keep source boards and due dates visible, and see the same order on Home, My Cards, board cards, and Table.
 
-![Kanera My Cards showing a ranked Up next queue beside assigned work](docs/readme-assets/my-cards-up-next.jpg?v=20261105refresh2)
+![Kanera My Cards showing a ranked Up next queue beside assigned work](docs/readme-assets/my-cards-up-next.jpg?v=20261126checklists1)
 
 
 
@@ -190,11 +192,11 @@ Connect cards with **Blocks**, **Blocked by**, or **Relates to** relationships, 
 
 Open **Dependencies** on a board, in **My Cards**, or in **Team Cards**. Follow the chain in **Map**, compare due weeks in **Timeline**, or read a numbered **Steps** list that adapts to your phone. On a workspace board, switch between the board's chains and the wider workspace while keeping each card's source and permissions intact.
 
-![Kanera Dependencies Map showing connected prerequisites, blocked cards, owners, and filters for Blocked, At risk, Start here, and Ready](docs/readme-assets/dependency-map.jpg?v=20261111views1)
+![Kanera Dependencies Map showing connected prerequisites, blocked cards, owners, and filters for Blocked, At risk, Start here, and Ready](docs/readme-assets/dependency-map.jpg?v=20261126checklists1)
 
 Find **Blocked**, **At risk**, **Start here**, and **Ready** work without losing the chain around it. The biggest bottleneck points to the card holding up the most open work; **Critical path** highlights the longest routes by number of open cards. Timeline aligns every chain to shared due-week columns and marks prerequisites due after their dependents in amber.
 
-![Kanera Dependencies Timeline aligning connected cards by due week and marking scheduling risks in amber](docs/readme-assets/dependency-timeline.jpg?v=20261111views1)
+![Kanera Dependencies Timeline aligning connected cards by due week and marking scheduling risks in amber](docs/readme-assets/dependency-timeline.jpg?v=20261126checklists1)
 
 In Map or Timeline, drag from a card's **+** handle to add a blocking link, or select a connector to remove it. Tap-to-link and keyboard controls work too, with **Undo** and **Redo** for your map edits. Changes update live, and agents can inspect the same chains through MCP, the CLI, SDK, or REST API.
 
@@ -242,13 +244,13 @@ Then decide where each notification type reaches you: email, browser push, ntfy,
 
 Descriptions, custom fields, checklists, due dates, comments, attachments, and activity all live in one focused card view.
 
-![Kanera card detail showing custom fields, an assignable checklist, comments, and activity](docs/readme-assets/card-detail.jpg?v=20261105refresh2)
+![Kanera card detail showing owners, dates, labels, custom fields, checklists with sub-items and owners, and comments](docs/readme-assets/card-detail.jpg?v=20261126checklists1)
 
 ### Team Cards brings assigned work together across boards
 
 See the whole visible team or focus on one teammate without losing each card's board, list, fields, or permissions. Switch between Board, Team overview, Table, Calendar, Dependencies, and Work Done views to review ownership, workload, and execution order across projects.
 
-![Kanera Team Cards focused on Ben Ortega with his ranked Up next queue beside assigned work across accessible boards](docs/readme-assets/team-cards.jpg?v=20261105refresh2)
+![Kanera Team Cards focused on Ben Ortega with his ranked Up next queue beside assigned work across accessible boards](docs/readme-assets/team-cards.jpg?v=20261126checklists1)
 
 ### Automations keep routine work moving
 

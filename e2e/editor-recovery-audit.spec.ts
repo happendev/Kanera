@@ -154,7 +154,9 @@ for (const surface of surfaces) {
     const subject = await setup(api, surface, testWorkspace.boardId, testWorkspace.lists.get("Backlog")!);
     await signIn(page, "amelia", subject.url);
     const text = `Unsaved ${surface} work before going away`;
-    await (await startEditing(page, subject)).fill(text);
+    const initialEditor = await startEditing(page, subject);
+    await initialEditor.fill(text);
+    await expect(initialEditor).toHaveText(text);
     let failedRead = false;
     await page.route(`**${subject.read}*`, async (route) => {
       if (failedRead || route.request().method() !== "GET") return route.continue();
