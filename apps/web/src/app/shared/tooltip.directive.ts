@@ -20,6 +20,7 @@ let lastHiddenAt = 0;
 export function resetTooltipTiming(): void {
   lastHiddenAt = 0;
   lastTouchAt = 0;
+  lastMousePressAt = 0;
 }
 /**
  * A tap is not a hover. Mobile browsers synthesise `mouseenter` and move focus on every tap, so
@@ -31,11 +32,27 @@ export function resetTooltipTiming(): void {
  */
 const TOUCH_FOCUS_WINDOW_MS = 1_000;
 let lastTouchAt = 0;
+/**
+ * Focus is a keyboard cue only. A click that opens a dialog or drawer lets it move focus to its first
+ * control, and showing that control's tooltip read as a stray popup ("Back to card" over the
+ * checklist item drawer). A mouse user already gets tooltips by hovering, so focus that follows a
+ * mouse press closely shows nothing. Any key press ends the window, so Tab straight after a click
+ * still announces where focus went.
+ */
+let lastMousePressAt = 0;
 if (typeof document !== "undefined") {
   document.addEventListener(
     "pointerdown",
     (event) => {
-      if (event.pointerType !== "mouse") lastTouchAt = Date.now();
+      if (event.pointerType === "mouse") lastMousePressAt = Date.now();
+      else lastTouchAt = Date.now();
+    },
+    { capture: true, passive: true },
+  );
+  document.addEventListener(
+    "keydown",
+    () => {
+      lastMousePressAt = 0;
     },
     { capture: true, passive: true },
   );
@@ -43,6 +60,10 @@ if (typeof document !== "undefined") {
 
 function recentlyTouched(): boolean {
   return Date.now() - lastTouchAt < TOUCH_FOCUS_WINDOW_MS;
+}
+
+function recentlyPressedWithMouse(): boolean {
+  return Date.now() - lastMousePressAt < TOUCH_FOCUS_WINDOW_MS;
 }
 
 /**
@@ -130,7 +151,7 @@ export class TooltipDirective implements OnDestroy {
 
   @HostListener("focusin")
   onFocusIn() {
-    if (recentlyTouched() || touchOnly()) return;
+    if (recentlyTouched() || recentlyPressedWithMouse() || touchOnly()) return;
     this.show();
   }
 

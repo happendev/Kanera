@@ -172,6 +172,31 @@ describe("TooltipDirective", () => {
     expect(button.hasAttribute("aria-describedby")).toBe(false);
   });
 
+  // A click that opens a drawer lets it focus its first control; that control's tooltip must not pop
+  // up unasked. A key press restores focus tooltips for keyboard users straight away.
+  it("skips focus that follows a mouse press until a key is pressed", () => {
+    TestBed.configureTestingModule({
+      imports: [TooltipHostComponent],
+      providers: [provideZonelessChangeDetection()],
+    });
+    const fixture = createComponentFixture(TooltipHostComponent);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
+    const mousePress = new Event("pointerdown", { bubbles: true });
+    Object.defineProperty(mousePress, "pointerType", { value: "mouse" });
+    document.body.dispatchEvent(mousePress);
+    button.dispatchEvent(new FocusEvent("focusin"));
+    fixture.detectChanges();
+    expect(tooltipElement()).toBeNull();
+
+    button.dispatchEvent(new FocusEvent("focusout"));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+    button.dispatchEvent(new FocusEvent("focusin"));
+    fixture.detectChanges();
+    expect(tooltipElement()).not.toBeNull();
+  });
+
   // The touch window only covers events right after a tap; a focus a phone restores later (a panel
   // closing onto its trigger) would otherwise raise a tooltip nothing can hover away.
   it("never shows on a touch-only device, for hover or focus", () => {
