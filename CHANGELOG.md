@@ -20,6 +20,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Redesigned checklists:** each checklist on a card is now its own panel with a progress ring, a count of overdue items, and a progress bar under its title. Dates and assignees line up in columns, a finished item gets a solid green tick, and a finished checklist turns green so it reads as done even when collapsed. The bulk assign, set date and delete actions appear when you point at a checklist's header (they stay visible on touch screens), and on phones the header wraps so long titles stay readable. Sub-items now expand inline under their item, where you can tick them off without opening the item.
 - **Redesigned board members menu:** one field searches the board and adds people. Type an email address to invite someone outside the organisation as a guest, or (owners and admins) to the organisation, without going to workspace settings. Existing guests from other boards can be added by name. Admins are listed separately with the reason they have access, each person has a single access control for role, assigned-items-only and removal, and pending invites for the board are listed and can be withdrawn.
 - **Shorter signup:** creating an account asks only for your name, email and password. Your organisation starts as "Private" and can be renamed in settings, and the theme follows your device until you pick one.
 - **Clearer emails:** subjects name the card or person, card emails have an Open card button, footers say why you got the email, and every email includes a plain-text version.

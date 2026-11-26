@@ -9142,6 +9142,7 @@
     "x-files": [
       "src/app/features/board/board-export.util.ts",
       "src/app/features/board/card-composer.dialog.html",
+      "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-quick-edit.popover.ts",
       "src/app/features/board/table-view/table-columns.util.ts",
       "src/app/features/board/table-view/table-view.types.ts",
@@ -9404,6 +9405,7 @@
     "description": "Board overview count: cards with no assignee",
     "x-files": [
       "src/app/features/board/board.page.html",
+      "src/app/features/board/card-detail.component.html",
       "src/app/features/board/table-view/group-by.util.ts",
       "src/app/features/board/timeline-view/board-timeline-view.component.ts",
       "src/app/features/board/work-done-view/work-done-report.ts",
@@ -11958,11 +11960,33 @@
       "src/app/features/board/card-detail-checklists.component.html"
     ]
   },
+  "6886800931077084710": "{$COUNT} overdue",
+  "@6886800931077084710": {
+    "description": "Count of overdue checklist items",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
   "672041130757911988": "Drag item",
   "@672041130757911988": {
     "description": "Tooltip on the handle that reorders checklist items",
     "x-files": [
       "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "6875742498983298506": "Open checklist item detail",
+  "@6875742498983298506": {
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "899983344489847167": "{$DONE}/{$TOTAL}",
+  "@899983344489847167": {
+    "description": "Sub-checklist progress, e.g. 2/5 items done",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/shared/board-tile-summary.component.ts"
     ]
   },
   "2515602286506166570": "Change checklist item due date",
@@ -11976,6 +12000,7 @@
     "x-files": [
       "src/app/features/board/card-detail-checklists.component.html",
       "src/app/features/board/card-detail-metadata.component.html",
+      "src/app/features/board/card-detail.component.html",
       "src/app/features/workspace-settings/automations/automation-presentation.util.ts",
       "src/app/features/workspace-settings/automations/automations.page.ts"
     ]
@@ -11997,13 +12022,15 @@
   "1866033008323018681": "Assign item",
   "@1866033008323018681": {
     "x-files": [
-      "src/app/features/board/card-detail-checklists.component.html"
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-detail.component.html"
     ]
   },
   "2705883200584506072": "Assign checklist item",
   "@2705883200584506072": {
     "x-files": [
-      "src/app/features/board/card-detail-checklists.component.html"
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/features/board/card-detail.component.html"
     ]
   },
   "3162221358912199594": "Unassign item",
@@ -12012,20 +12039,6 @@
     "x-files": [
       "src/app/features/board/card-detail-checklists.component.html",
       "src/app/features/board/card-detail.component.html"
-    ]
-  },
-  "6875742498983298506": "Open checklist item detail",
-  "@6875742498983298506": {
-    "x-files": [
-      "src/app/features/board/card-detail-checklists.component.html"
-    ]
-  },
-  "899983344489847167": "{$DONE}/{$TOTAL}",
-  "@899983344489847167": {
-    "description": "Sub-checklist progress, e.g. 2/5 items done",
-    "x-files": [
-      "src/app/features/board/card-detail-checklists.component.html",
-      "src/app/shared/board-tile-summary.component.ts"
     ]
   },
   "8309285169711415702": "Checklist item actions",
@@ -12053,6 +12066,22 @@
     "description": "Menu item: rename the checklist item",
     "x-files": [
       "src/app/features/board/card-detail-checklists.component.html"
+    ]
+  },
+  "8502065112576581103": "Move up",
+  "@8502065112576581103": {
+    "description": "Menu item: move the checklist item one place up",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/shared/priority-queue/priority-queue.component.html"
+    ]
+  },
+  "2207764482815871800": "Move down",
+  "@2207764482815871800": {
+    "description": "Menu item: move the checklist item one place down",
+    "x-files": [
+      "src/app/features/board/card-detail-checklists.component.html",
+      "src/app/shared/priority-queue/priority-queue.component.html"
     ]
   },
   "2674245503578689521": "{VAR_PLURAL, plural, other {{INTERPOLATION} completed hidden}}",
@@ -12252,7 +12281,8 @@
   "@1310142166909985309": {
     "description": "Card detail section heading",
     "x-files": [
-      "src/app/features/board/card-detail-metadata.component.html"
+      "src/app/features/board/card-detail-metadata.component.html",
+      "src/app/features/board/card-detail.component.html"
     ]
   },
   "718742434092230008": "Add member",
@@ -12306,6 +12336,7 @@
   "@4604802037090944524": {
     "x-files": [
       "src/app/features/board/card-detail-metadata.component.html",
+      "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-detail.component.ts"
     ]
   },
@@ -12321,6 +12352,7 @@
   "@8772294577762007235": {
     "x-files": [
       "src/app/features/board/card-detail-metadata.component.html",
+      "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-detail.component.ts",
       "src/app/features/workspace-settings/automations/automations.page.ts"
     ]
@@ -12329,6 +12361,7 @@
   "@8031977097310160007": {
     "x-files": [
       "src/app/features/board/card-detail-metadata.component.html",
+      "src/app/features/board/card-detail.component.html",
       "src/app/features/board/card-quick-edit.popover.ts",
       "src/app/features/board/table-view/table-view.types.ts",
       "src/app/features/dependencies/dependency-map.component.ts",
@@ -12484,13 +12517,6 @@
       "src/app/features/board/card-detail.component.html"
     ]
   },
-  "584754872792429089": "Assign",
-  "@584754872792429089": {
-    "description": "Button: assign a person to the checklist item",
-    "x-files": [
-      "src/app/features/board/card-detail.component.html"
-    ]
-  },
   "3426923595387763985": "Add a description…",
   "@3426923595387763985": {
     "description": "Placeholder shown where an empty description would be",
@@ -12606,13 +12632,6 @@
       "src/app/features/board/card-detail.component.ts"
     ]
   },
-  "577969196793609020": "Unassign {$person}",
-  "@577969196793609020": {
-    "description": "Tooltip - remove this person from the checklist item",
-    "x-files": [
-      "src/app/features/board/card-detail.component.ts"
-    ]
-  },
   "2176980455912403388": "Assigned to {$person}",
   "@2176980455912403388": {
     "description": "Tooltip on a checklist item's assignee",
@@ -12620,23 +12639,9 @@
       "src/app/features/board/card-detail.component.ts"
     ]
   },
-  "7675847671919689760": "Notes and sub-items",
-  "@7675847671919689760": {
-    "description": "Tooltip - the checklist item has notes and a sub-checklist",
-    "x-files": [
-      "src/app/features/board/card-detail.component.ts"
-    ]
-  },
   "8025172473722403631": "Sub-items",
   "@8025172473722403631": {
     "description": "Tooltip - the checklist item has a sub-checklist",
-    "x-files": [
-      "src/app/features/board/card-detail.component.ts"
-    ]
-  },
-  "4321527210703615549": "Add notes & sub-items",
-  "@4321527210703615549": {
-    "description": "Tooltip",
     "x-files": [
       "src/app/features/board/card-detail.component.ts"
     ]
@@ -17505,13 +17510,6 @@
   },
   "3016330245859633710": "Grouped by when they are due, and listed separately from cards.",
   "@3016330245859633710": {
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "6886800931077084710": "{$COUNT} overdue",
-  "@6886800931077084710": {
-    "description": "Count of overdue checklist items",
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -29342,20 +29340,6 @@
     "description": "Picker section for cards whose list is unknown",
     "x-files": [
       "src/app/shared/priority-queue/priority-add-cards.ts"
-    ]
-  },
-  "8502065112576581103": "Move up",
-  "@8502065112576581103": {
-    "description": "Button: move this card one place earlier in the queue",
-    "x-files": [
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "2207764482815871800": "Move down",
-  "@2207764482815871800": {
-    "description": "Button: move this card one place later in the queue",
-    "x-files": [
-      "src/app/shared/priority-queue/priority-queue.component.html"
     ]
   },
   "7552442042396670081": "Remove from Up next",

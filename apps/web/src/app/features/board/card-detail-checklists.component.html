@@ -25,18 +25,19 @@
         <div class="checklists" cdkDropList cdkDropListAutoScrollDisabled [cdkDropListData]="renderChecklists" [cdkDropListDisabled]="!vm.canEdit()" (cdkDropListDropped)="vm.dropChecklist($event)">
           @for (checklist of renderChecklists; track checklist.id) {
           @let progress = vm.checklistProgressById().get(checklist.id);
-          <div class="checklist-block" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-id]="checklist.id" [cdkDragDisabled]="!vm.canEdit()" [cdkDragData]="checklist"
+          <!-- Each checklist is its own card: several checklists on one card stay visibly separate, and a
+               finished one (is-complete) reads as done at a glance even when collapsed. -->
+          <div class="checklist-block" [class.is-complete]="progress?.complete" [class.is-collapsed]="vm.isChecklistCollapsed(checklist.id)" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-id]="checklist.id" [cdkDragDisabled]="!vm.canEdit()" [cdkDragData]="checklist"
             (cdkDragStarted)="vm.onChecklistDragStarted()" (cdkDragMoved)="vm.onChecklistDragMoved($event)" (cdkDragEnded)="vm.onChecklistDragEnded()">
             <ng-template cdkDragPreview>
               <div class="checklist-drag-preview"><i aria-hidden="true" class="ti ti-grip-vertical"></i>{{ checklist.title }}</div>
             </ng-template>
-            <!-- Same column order as an item row (grip, control, text) so the chevron sits over the
-                 checkboxes and the title over the item text. -->
+            <!-- Same column order as an item row (control, text) so the chevron sits over the checkboxes
+                 and the title over the item text. The grip takes no column: it hangs outside the card
+                 on hover, or trails the row on touch (see .checklist-grip in the styles). -->
             <div class="checklist-head">
               @if (vm.canEditRole()) {
               <i aria-hidden="true" class="ti ti-grip-vertical checklist-grip" cdkDragHandle kTooltip="Drag checklist" i18n-kTooltip="Tooltip on the handle that reorders checklists"></i>
-              } @else {
-              <span class="checklist-grip-spacer"></span>
               }
               <button type="button" class="ghost icon checklist-collapse" (click)="vm.toggleChecklistCollapsed(checklist.id)" [kTooltip]="vm.isChecklistCollapsed(checklist.id) ? vm.labels.expandChecklist : vm.labels.collapseChecklist"
                 [attr.aria-label]="vm.isChecklistCollapsed(checklist.id) ? vm.labels.expandChecklist : vm.labels.collapseChecklist">
@@ -48,8 +49,11 @@
               } @else {
               <button type="button" class="checklist-title" [disabled]="!vm.canEdit()" (click)="vm.startEditChecklist(checklist)" [kTooltip]="vm.canEdit() ? vm.labels.editChecklistTitle : checklist.title">{{ checklist.title }}</button>
               }
-              <span class="checklist-count" [class.is-complete]="progress?.complete">{{ progress?.text }}</span>
               @if (vm.canEditRole()) {
+              <!-- Bulk and delete actions appear on hover or focus on precise pointers and stay visible on
+                   touch; an open picker keeps them shown. They sit before the summary so the ring
+                   stays anchored at the card's right edge, over the item menus. -->
+              <div class="checklist-head-actions">
               @if (showItemMeta && checklist.items.length) {
               <div class="checklist-bulk-wrap">
                 <button type="button" class="ghost xs checklist-bulk-btn" [class.is-active]="vm.bulkChecklistAssigneePickerId() === checklist.id" [disabled]="!vm.canEdit()" (click)="vm.toggleBulkChecklistAssigneePicker(checklist.id, $event)" kTooltip="Assign all items" i18n-kTooltip
@@ -71,13 +75,27 @@
                 }
               </div>
               }
-              <button type="button" class="ghost xs checklist-delete" [disabled]="!vm.canEdit()" (click)="vm.deleteChecklist(checklist)" kTooltip="Delete checklist" i18n-kTooltip>
+              <button type="button" class="ghost xs checklist-delete" [disabled]="!vm.canEdit()" (click)="vm.deleteChecklist(checklist)" kTooltip="Delete checklist" i18n-kTooltip aria-label="Delete checklist" i18n-aria-label>
                 <i aria-hidden="true" class="ti ti-trash"></i>
               </button>
+              </div>
+              }
+              @if (progress?.overdue) {
+              <span class="checklist-overdue" i18n="Count of overdue checklist items">{{ progress?.overdue // i18n(ph="count") }} overdue</span>
+              }
+              @if (progress?.total) {
+              <span class="checklist-progress" [class.is-complete]="progress?.complete">
+                <span class="checklist-ring" [style.--cl-pct]="progress?.fillPct" aria-hidden="true">
+                  @if (progress?.complete) {<i aria-hidden="true" class="ti ti-check"></i>}
+                </span>
+                <span class="checklist-count">{{ progress?.text }}</span>
+              </span>
               }
             </div>
 
-            @if (checklist.items.length) {
+            <!-- The bar doubles as the divider between the header and the items, so it only shows while
+                 the checklist is open; collapsed, the header ring carries the progress. -->
+            @if (checklist.items.length && !vm.isChecklistCollapsed(checklist.id)) {
             <div class="checklist-progress-bar" [class.is-complete]="progress?.complete">
               <div class="checklist-progress-fill" [style.width.%]="progress?.fillPct"></div>
             </div>
@@ -85,19 +103,20 @@
 
             @if (!vm.isChecklistCollapsed(checklist.id)) {
             <!-- See sibling checklists list: native auto-scroll disabled so it doesn't compound the manual edge-nudge. -->
-            <div class="checklist-items" cdkDropList cdkDropListAutoScrollDisabled [id]="vm.checklistDropListId(checklist.id)" [cdkDropListData]="vm.visibleChecklistItems(checklist)" [cdkDropListConnectedTo]="vm.checklistDropListIdsFor(renderChecklists)" [cdkDropListDisabled]="!vm.canEdit()"
+            <div class="checklist-items" [class.has-due-column]="showItemMeta && progress?.hasDueDates" [class.has-assignee-column]="showItemMeta && progress?.hasAssignees" cdkDropList cdkDropListAutoScrollDisabled [id]="vm.checklistDropListId(checklist.id)" [cdkDropListData]="vm.visibleChecklistItems(checklist)" [cdkDropListConnectedTo]="vm.checklistDropListIdsFor(renderChecklists)" [cdkDropListDisabled]="!vm.canEdit()"
               (cdkDropListDropped)="vm.dropChecklistItem($event, checklist.id)">
               @for (item of vm.visibleChecklistItems(checklist); track item.id) {
               @let itemPresentation = vm.checklistItemPresentationById().get(item.id);
-              <div class="checklist-item" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-item-id]="item.id" [cdkDragDisabled]="!vm.canEdit()" [cdkDragData]="item"
+              @let subChecklistProgress = showItemMeta ? vm.subChecklistProgressByItemId().get(item.id) : undefined;
+              @let subExpanded = !!subChecklistProgress && vm.isChecklistItemExpanded(item.id);
+              <div class="checklist-item" [class.is-expanded]="subExpanded" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-item-id]="item.id" [cdkDragDisabled]="!vm.canEdit()" [cdkDragData]="item"
                 (cdkDragStarted)="vm.onChecklistDragStarted()" (cdkDragMoved)="vm.onChecklistDragMoved($event)" (cdkDragEnded)="vm.onChecklistDragEnded()">
                 @if (vm.canEditRole()) {
                 <i aria-hidden="true" class="ti ti-grip-vertical checklist-item-grip" cdkDragHandle kTooltip="Drag item" i18n-kTooltip="Tooltip on the handle that reorders checklist items"></i>
-                } @else {
-                <span class="checklist-grip-spacer"></span>
                 }
                 <button type="button" class="checklist-check" [class.checked]="item.completedAt" [class.is-ticking]="vm.tickedChecklistItemId() === item.id" [disabled]="!vm.canEdit()" (click)="vm.toggleChecklistItem(checklist.id, item)" [kTooltip]="item.completedAt ? vm.labels.markIncomplete : vm.labels.markComplete">
-                  <i aria-hidden="true" class="ti" [class.ti-square-check]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
+                  <!-- A drawn box rather than a glyph so a done item reads as a solid green fill. -->
+                  <span class="checklist-box" aria-hidden="true">@if (item.completedAt) {<i aria-hidden="true" class="ti ti-check"></i>}</span>
                 </button>
                 @if (vm.editingItemId() === item.id && vm.canEditRole()) {
                 <input #checklistItemInput class="checklist-item-input" [value]="vm.draftItemText()" (input)="vm.draftItemText.set($any($event.target).value)" (keydown.enter)="vm.saveChecklistItem(checklist.id, item)"
@@ -112,6 +131,24 @@
                 }
                 @if (showItemMeta || vm.canEditRole()) {
                 <div class="checklist-item-actions">
+                <!-- First in the cluster so their varying width never shifts the date, assignee and menu
+                columns. Notes and sub-items are persistent metadata, so they stay visible while empty
+                actions stay contextual. -->
+                @if (showItemMeta && item.description) {
+                <button type="button" class="ghost xs checklist-item-detail has-detail" (click)="vm.openChecklistItemDetail(item)" [kTooltip]="vm.labels.notes" aria-label="Open checklist item detail" i18n-aria-label>
+                  <i aria-hidden="true" class="ti ti-align-left"></i>
+                </button>
+                }
+                <!-- Sub-items expand inline under the row, so they can be read and ticked without
+                opening the drawer; the drawer stays the place to add, rename and reorder them. -->
+                @if (subChecklistProgress) {
+                <button type="button" class="ghost xs checklist-item-subtoggle" [class.is-complete]="subChecklistProgress.done === subChecklistProgress.total" [class.is-active]="subExpanded"
+                  (click)="vm.toggleChecklistItemExpanded(item.id)" [attr.aria-expanded]="subExpanded" [attr.aria-label]="vm.labels.subItems" [kTooltip]="vm.labels.subItems">
+                  <span class="checklist-ring is-sm" [style.--cl-pct]="subChecklistProgress.total ? subChecklistProgress.done / subChecklistProgress.total * 100 : 0" aria-hidden="true"></span>
+                  <span i18n="Sub-checklist progress, e.g. 2/5 items done">{{ subChecklistProgress.done // i18n(ph="done") }}/{{ subChecklistProgress.total // i18n(ph="total") }}</span>
+                  <i aria-hidden="true" class="ti ti-chevron-down checklist-subtoggle-caret"></i>
+                </button>
+                }
                 @if (showItemMeta && (itemPresentation?.hasDueDate || vm.canEditRole())) {
                 <div class="checklist-duedate-wrap" [class.is-empty]="!itemPresentation?.hasDueDate" [class.is-open]="vm.checklistItemDueDatePickerId() === item.id">
                   @if (itemPresentation?.hasDueDate) {
@@ -139,7 +176,7 @@
                 <div class="checklist-assignee-wrap" [class.is-empty]="!itemPresentation?.assignee" [class.is-open]="vm.checklistItemAssigneePickerId() === item.id">
                   @if (itemPresentation?.assignee; as assignee) {
                   <button type="button" class="checklist-item-assignee" [disabled]="!vm.canEdit()" (click)="vm.toggleChecklistItemAssigneePicker(item.id, $event)" [attr.aria-label]="vm.labels.changeItemAssignee(assignee.displayName)"
-                    [kTooltip]="vm.canEdit() ? vm.labels.unassign(assignee.displayName) : vm.labels.assignedTo(assignee.displayName)">
+                    [kTooltip]="vm.labels.assignedTo(assignee.displayName)">
                     <k-avatar [url]="assignee.avatarUrl" [name]="assignee.displayName" [size]="24" [userId]="assignee.userId" [workspaceId]="vm.workspaceId()" [showPresence]="true" [showTooltip]="false" [lastOnlineAt]="assignee.lastOnlineAt" />
                   </button>
                   } @else {
@@ -153,27 +190,6 @@
                     (toggle)="vm.setChecklistItemAssignee(checklist.id, item, $event)" (clear)="vm.setChecklistItemAssignee(checklist.id, item, null)" (close)="vm.checklistItemAssigneePickerId.set(null)" />
                   }
                 </div>
-                }
-                @if (showItemMeta) {
-                @let subChecklistProgress = vm.subChecklistProgressByItemId().get(item.id);
-                @let hasDetail = !!item.description || !!subChecklistProgress;
-                @if (hasDetail) {
-                <!-- Notes and sub-items are persistent metadata, so they remain visible while empty
-                actions stay contextual. The indicator sizes to its content instead of reserving a
-                wide empty column on every row. -->
-                <button type="button" class="ghost xs checklist-item-detail" [class.has-detail]="hasDetail" (click)="vm.openChecklistItemDetail(item)"
-                  [kTooltip]="item.description && subChecklistProgress ? vm.labels.notesAndSubItems : item.description ? vm.labels.notes : subChecklistProgress ? vm.labels.subItems : vm.labels.addNotesAndSubItems" aria-label="Open checklist item detail" i18n-aria-label>
-                  @if (item.description) {
-                  <i aria-hidden="true" class="ti ti-align-left"></i>
-                  }
-                  @if (subChecklistProgress) {
-                  @if (!item.description) {
-                  <i aria-hidden="true" class="ti ti-checklist"></i>
-                  }
-                  <span i18n="Sub-checklist progress, e.g. 2/5 items done">{{ subChecklistProgress.done // i18n(ph="done") }}/{{ subChecklistProgress.total // i18n(ph="total") }}</span>
-                  }
-                </button>
-                }
                 }
                 @if (vm.canEditRole()) {
                 <div class="checklist-item-more-wrap" [class.is-open]="vm.checklistItemActionsMenuId() === item.id">
@@ -192,6 +208,17 @@
                     <button type="button" class="card-actions-item checklist-item-rename" (click)="vm.startEditChecklistItemFromMenu(item)" role="menuitem">
                       <i aria-hidden="true" class="ti ti-pencil"></i><span i18n="Menu item: rename the checklist item">Rename</span>
                     </button>
+                    <!-- Keyboard and screen-reader reordering; the drag grip is pointer-only. -->
+                    @if (!$first) {
+                    <button type="button" class="card-actions-item checklist-item-move-up" (click)="vm.moveChecklistItemBy(checklist, item, -1)" role="menuitem">
+                      <i aria-hidden="true" class="ti ti-arrow-up"></i><span i18n="Menu item: move the checklist item one place up">Move up</span>
+                    </button>
+                    }
+                    @if (!$last) {
+                    <button type="button" class="card-actions-item checklist-item-move-down" (click)="vm.moveChecklistItemBy(checklist, item, 1)" role="menuitem">
+                      <i aria-hidden="true" class="ti ti-arrow-down"></i><span i18n="Menu item: move the checklist item one place down">Move down</span>
+                    </button>
+                    }
                     <button type="button" class="card-actions-item is-danger" (click)="vm.deleteChecklistItemFromMenu(checklist.id, item)" role="menuitem">
                       <i aria-hidden="true" class="ti ti-trash"></i><span i18n="Menu item: delete the checklist item">Delete</span>
                     </button>
@@ -199,6 +226,30 @@
                   }
                 </div>
                 }
+                </div>
+                }
+                @if (subExpanded) {
+                @let subChecklists = vm.subChecklistsByItemId().get(item.id) ?? [];
+                <div class="checklist-subitems">
+                  @for (sub of subChecklists; track sub.id) {
+                  <!-- One sub-checklist's title usually repeats its parent item, so titles show only
+                  when there are several to tell apart. -->
+                  @if (subChecklists.length > 1) {
+                  <div class="checklist-subitems-title">{{ sub.title }}</div>
+                  }
+                  @for (subItem of vm.visibleChecklistItems(sub); track subItem.id) {
+                  <div class="checklist-subitem">
+                    <button type="button" class="checklist-check" [class.checked]="subItem.completedAt" [class.is-ticking]="vm.tickedChecklistItemId() === subItem.id" [disabled]="!vm.canEdit()" (click)="vm.toggleChecklistItem(sub.id, subItem)"
+                      [kTooltip]="subItem.completedAt ? vm.labels.markIncomplete : vm.labels.markComplete">
+                      <span class="checklist-box" aria-hidden="true">@if (subItem.completedAt) {<i aria-hidden="true" class="ti ti-check"></i>}</span>
+                    </button>
+                    <span class="checklist-subitem-text" [class.is-done]="subItem.completedAt">{{ subItem.text }}</span>
+                  </div>
+                  }
+                  @if (vm.hiddenChecklistItemCount(sub)) {
+                  <div class="checklist-subitems-hidden" i18n="Note under a checklist">{ vm.hiddenChecklistItemCount(sub), plural, other {{{ vm.hiddenChecklistItemCount(sub) }} completed hidden} }</div>
+                  }
+                  }
                 </div>
                 }
               </div>

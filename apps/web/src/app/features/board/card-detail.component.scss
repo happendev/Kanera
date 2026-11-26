@@ -532,14 +532,15 @@
   --card-comments-bg: color-mix(in srgb, var(--bg) 55%, var(--surface));
 }
 
-[data-theme="light"] & .panel-body,
-[data-theme="paper"] & .panel-body {
+// The checklist item drawer is a second card body stacked over the first, so it takes the same tone.
+[data-theme="light"] & :is(.panel-body, .checklist-item-panel-body),
+[data-theme="paper"] & :is(.panel-body, .checklist-item-panel-body) {
   background: var(--app-tint);
   --card-comments-bg: color-mix(in srgb, var(--bg) 45%, var(--app-tint));
 }
 
 @media (prefers-color-scheme: light) {
-  :not([data-theme]) & .panel-body {
+  :not([data-theme]) & :is(.panel-body, .checklist-item-panel-body) {
     background: var(--app-tint);
     --card-comments-bg: color-mix(in srgb, var(--bg) 45%, var(--app-tint));
   }
@@ -1244,29 +1245,42 @@
 .checklists {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-left: 0 !important;
+  gap: 10px;
 }
 
-.checklist-actions {
-  margin-left: 0 !important;
-}
-
-// Header, progress bar, items and the add row share one column grid, so every checklist reads as
-// a single aligned block: grip gutter, control column (chevron, checkbox, add icon), text column
-// (title, bar, item text). Rows and the header both inset by --cl-pad on each side, which also
-// lines up the header actions with the item actions on the right.
+// Each checklist is a card. Header, progress bar, items and the add row share one column grid, so
+// it reads as a single aligned block: control column (chevron, checkbox, add icon), then text
+// column (title, item text). Drag grips take no column (see .checklist-grip). Rows and the header both inset by --cl-pad on each side, which
+// also lines up the header actions with the item actions on the right.
+//
+// No overflow clipping on the card: the bulk and per-item pickers open inside it and must escape.
+// Corners are handled per row instead (header wash, last row hover, add row).
 .checklist-block {
-  --cl-pad: 4px;
-  // pad + 16px grip + 6px gap: where the chevron, checkbox and add icon start.
-  --cl-control: 26px;
+  --cl-pad: 6px;
+  // Where the chevron, checkbox and add icon start: just the row inset.
+  --cl-control: var(--cl-pad);
   // control + 24px control + 6px gap + the text buttons' 4px inset: where all text starts.
-  --cl-text: 60px;
+  --cl-text: 40px;
+  // The description box's radius, so checklist cards and the description read as one family.
+  --cl-radius: var(--radius-md, 8px);
+  --cl-inner-radius: calc(var(--cl-radius) - 1px);
 
   display: flex;
   flex-direction: column;
-  gap: 4px;
   padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--cl-radius);
+  background: var(--surface-subtle);
+
+  // A finished checklist reads as done at a glance, open or collapsed: a success ring on the card
+  // and a wash behind the header, never a leading-edge stripe.
+  &.is-complete {
+    border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+
+    > .checklist-head {
+      background: var(--success-soft);
+    }
+  }
 }
 
 .checklist-block.cdk-drag-preview {
@@ -1316,7 +1330,81 @@
 }
 
 .checklist-head {
-  padding-inline: var(--cl-pad);
+  padding: 6px var(--cl-pad);
+  border-radius: var(--cl-inner-radius) var(--cl-inner-radius) 0 0;
+}
+
+.checklist-block.is-collapsed > .checklist-head {
+  border-radius: var(--cl-inner-radius);
+}
+
+// Bulk and delete actions show on hover or focus with a precise pointer; touch keeps them visible.
+// An open bulk picker (its trigger carries is-active) keeps them shown while the pointer is away.
+.checklist-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .checklist-head-actions {
+    opacity: 0;
+    transition: opacity var(--motion-fast);
+  }
+
+  .checklist-head:hover .checklist-head-actions,
+  .checklist-head-actions:focus-within,
+  .checklist-head-actions:has(.is-active) {
+    opacity: 1;
+  }
+}
+
+.checklist-overdue {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--danger-chip-wash);
+  color: var(--danger-chip-ink);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.checklist-progress {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 2px 4px;
+}
+
+// Progress ring: a conic fill masked to a 2px ring. --cl-pct is 0-100 from the template.
+.checklist-ring {
+  --cl-pct: 0;
+
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) calc(var(--cl-pct) * 1%), var(--border-strong) 0);
+  mask: radial-gradient(circle, transparent 5.5px, #000 6px);
+}
+
+.checklist-progress.is-complete .checklist-ring {
+  background: var(--success);
+  color: var(--surface);
+  mask: none;
+
+  i {
+    font-size: 11px;
+  }
 }
 
 .checklist-head:hover {
@@ -1336,24 +1424,78 @@
   }
 }
 
+// Drag grips reserve no column, so checkboxes and the chevron sit at the card's edge instead of
+// behind an empty gutter. With a hovering pointer the grip hangs outside the card, in the section's
+// 21px content indent, and shows on row hover (Notion/Linear style). Its box spans the whole gap up
+// to the row, so moving onto it never leaves the row's :hover. Touch and narrow layouts, which have
+// no hover or no indent to hang into, trail the row instead (below).
+.checklist-head,
+.checklist-item {
+  position: relative;
+}
+
 .checklist-grip,
 .checklist-item-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  // Row padding box starts inside the card's 1px border: -22px reaches the section's content edge.
+  left: -22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
   color: var(--text-muted);
   cursor: grab;
-  flex: 0 0 auto;
   font-size: var(--text-lg);
   opacity: 0;
   transition: opacity 0.15s;
+}
+
+// Item lists reach into that gutter too. A y-locked CDK drag pins the pointer's x to the pickup
+// point and finds the list under the pointer by that x, so with lists starting at the card edge a
+// grip outside them could reorder within its own checklist but never move an item to another.
+// -22px matches the grip's left edge (the list sits inside the card's 1px border).
+.checklist-items {
+  margin-left: -22px;
+  padding-left: 22px;
+}
+
+// No hover to reveal it, or no indent to hang into (sections go flush below 768px): the grip
+// becomes a visible trailing handle, after the row's actions, where iOS puts reorder controls.
+@media (hover: none), (pointer: coarse), (any-pointer: coarse), (max-width: 767.98px) {
+  .checklist-items {
+    margin-left: 0;
+    padding-left: 0;
+  }
+
+  .checklist-grip,
+  .checklist-item-grip {
+    position: relative;
+    inset: auto;
+    flex: 0 0 auto;
+    order: 1;
+    width: 26px;
+    height: 26px;
+  }
+
+  // Expanded sub-items stay the row's last line, under the trailing grip.
+  .checklist-subitems {
+    order: 2;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .checklist-grip,
+  .checklist-item-grip {
+    opacity: 1;
+  }
 }
 
 .checklist-block.cdk-drag-dragging .checklist-grip,
 .checklist-item.cdk-drag-dragging .checklist-item-grip {
   cursor: grabbing;
   opacity: 1;
-}
-
-.checklist-grip-spacer {
-  flex: 0 0 16px;
 }
 
 .checklist-title,
@@ -1442,22 +1584,21 @@
   flex: 0 0 auto;
   font-size: var(--text-sm);
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
-
-  &.is-complete {
-    color: var(--success);
-  }
 }
 
+.checklist-progress.is-complete .checklist-count {
+  color: var(--success);
+}
+
+// Full card width: the bar is the divider between the header and the items.
 .checklist-progress-bar {
-  height: 4px;
-  border-radius: 2px;
+  flex: none;
+  height: 3px;
   // --surface-2 all but vanishes against the light detail tint; --border reads as a track in both themes.
   background: var(--border);
   overflow: hidden;
-  // Spans the text column: starts under the title and item text, ends with the header and item
-  // actions. Tucked up to the title it measures, with the item rows a step below.
-  margin: -2px var(--cl-pad) 2px var(--cl-text);
 
   &.is-complete .checklist-progress-fill {
     background: var(--success);
@@ -1498,6 +1639,7 @@
 
 .checklist-item-assign,
 .checklist-item-detail,
+.checklist-item-subtoggle,
 .checklist-item-more-wrap {
   flex: 0 0 auto;
   opacity: 1;
@@ -1515,25 +1657,41 @@
 }
 
 .checklist-items {
+  // Fits a "12 Nov" chip with its clear button; longer dates ellipsize inside the chip.
+  --cl-due-w: 96px;
+
   display: flex;
   flex-direction: column;
-  gap: 4px;
+}
+
+// Rows divide with hairlines inside the card. The bar already separates the header from the first
+// row, so only rows that follow another row (and the trailing note / add row) draw one. --divider
+// is tuned for the panel surface and vanishes on the card's tint, so this is a softened --border.
+.checklist-item + .checklist-item,
+.checklist-block > .checklist-hidden-note,
+.checklist-block > .checklist-add-btn,
+.checklist-block > .checklist-add-item {
+  border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+// Every item hidden by "Hide completed": the bar is already the divider above the note / add row.
+.checklist-progress-bar + .checklist-items:not(:has(.checklist-item)) + * {
+  border-top: 0;
+}
+
+// Without an add row below (read-only), the last row's hover fill follows the card's corners.
+.checklist-block > .checklist-items:last-child > .checklist-item:last-child {
+  border-radius: 0 0 var(--cl-inner-radius) var(--cl-inner-radius);
 }
 
 .checklist-item {
-  height: 34px;
-  min-height: 34px;
-  max-height: 34px;
-  padding: 3px 4px;
-  border-radius: var(--radius-sm);
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  padding: 3px var(--cl-pad);
+  border-radius: 0;
   background: transparent;
   box-sizing: border-box;
-
-  // The same template renders top-level and sub-checklist items. A low-opacity
-  // text tint gives both levels quiet zebra striping that adapts to either theme.
-  &:nth-child(even) {
-    background: color-mix(in srgb, var(--text) 2.5%, transparent);
-  }
 
   &:hover {
     background: var(--surface-hover);
@@ -1567,29 +1725,116 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
   flex: 0 0 auto;
-  min-width: 26px;
-  width: auto;
+  width: 26px;
   height: var(--h-sm);
-  padding: 0 5px;
+  padding: 0;
   color: var(--text-muted);
 
-  // When the item holds a description or sub-checklist, the indicator is a persistent accent cue (not hover-only) so detail is discoverable at a glance.
+  // An item with notes keeps a persistent accent cue (not hover-only) so detail is discoverable at a glance.
   &.has-detail {
     opacity: 1;
     color: var(--accent);
   }
+}
 
-  span {
-    display: inline-flex;
-    height: 100%;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--text-xs);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
+// Sub-item progress, and the toggle that shows those sub-items inline under the row.
+.checklist-item-subtoggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  height: var(--h-sm);
+  padding: 0 4px 0 6px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+
+  &:hover:not(:disabled),
+  &.is-active {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  &.is-complete > span:not(.checklist-ring) {
+    color: var(--success);
+  }
+}
+
+.checklist-subtoggle-caret {
+  font-size: var(--text-sm);
+  transition: transform var(--dur);
+}
+
+.checklist-item-subtoggle.is-active .checklist-subtoggle-caret {
+  transform: rotate(180deg);
+}
+
+// The header ring at sub-item scale; a finished set turns fully green.
+.checklist-ring.is-sm {
+  width: 12px;
+  height: 12px;
+  mask: radial-gradient(circle, transparent 4px, #000 4.5px);
+}
+
+.checklist-item-subtoggle.is-complete .checklist-ring.is-sm {
+  background: var(--success);
+}
+
+// Expanded rows grow past the fixed row height and wrap, so the sub-items take a full-width line
+// under the row inside the same drag element: they move with their item.
+.checklist-item.is-expanded {
+  flex-wrap: wrap;
+  height: auto;
+  max-height: none;
+}
+
+// Indented so the sub-item boxes start on the parent's text column: one level in, same grid.
+.checklist-subitems {
+  display: flex;
+  flex: 0 0 100%;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 0 0 6px calc(var(--cl-text) - var(--cl-pad) - 4px);
+}
+
+.checklist-subitems-title,
+.checklist-subitems-hidden {
+  padding: 4px 0 2px 4px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.checklist-subitems-title {
+  font-weight: 600;
+}
+
+.checklist-subitem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.checklist-subitem-text {
+  min-width: 0;
+  color: var(--text-3);
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+
+  &.is-done {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  // 44px rows so neighbouring checkbox halos never overlap.
+  .checklist-subitem {
+    min-height: 44px;
   }
 }
 
@@ -1603,9 +1848,20 @@
   flex-direction: column;
   overflow: hidden;
   border-left: 1px solid var(--border);
-  background: var(--surface-overlay);
+  // The card panel's own surface, not --surface-overlay: the drawer is the card body drilled into one
+  // item, and a lighter popover tone made it read as a different object laid over the card.
+  background: var(--surface);
   box-shadow: -18px 0 48px rgba(0, 0, 0, 0.2);
   animation: slide-in var(--motion-base) var(--ease-drawer);
+
+  // As .panel::before: under viewport-fit=cover the full-screen phone panel's notch spacer is covered
+  // by this drawer, so it reserves the status-bar height itself.
+  &::before {
+    content: "";
+    flex-shrink: 0;
+    height: env(safe-area-inset-top);
+    background: var(--surface-2);
+  }
 }
 
 .checklist-item-panel-scrim {
@@ -1632,7 +1888,8 @@
   min-height: 62px;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  // .panel-header's inset, so the header's controls line up with the body's 20px edge below.
+  padding: 10px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 
@@ -1678,6 +1935,12 @@
   flex-shrink: 0;
 }
 
+.checklist-item-panel-body > .card-detail-section {
+  // Content-sized, as in the card panel: the shared 180px flex basis split the drawer between the
+  // description and the sub-checklists, parking the sub-checklists halfway down behind a gap.
+  flex: none;
+}
+
 .checklist-item-panel-body {
   display: flex;
   flex: 1;
@@ -1691,41 +1954,32 @@
   padding: 20px;
 }
 
+// The card's .row-top, laid out for the drawer: labelled sections side by side, content flush under
+// its heading. Not .row-top itself: at 860px+ that row becomes the card's full-width header band.
 .checklist-item-meta-row {
-  --checklist-item-meta-height: 32px;
-
   display: flex;
-  align-items: center;
-  gap: 10px;
   flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px 24px;
 
-  .checklist-duedate-wrap,
-  .item-detail-assignee {
-    width: auto;
-    max-width: none;
-    flex: 0 0 auto;
-  }
-
-  // The compact checklist row uses 26px metadata controls, but the detail drawer has room for
-  // full chips. Keep its due date level with the 32px assigned-user chip beside it.
-  .checklist-item-due {
-    height: var(--checklist-item-meta-height);
-    min-height: var(--checklist-item-meta-height);
+  > .card-detail-section {
+    --section-content-indent: 0;
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: 5px;
   }
 }
 
-.checklist-item-panel-assignee {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: var(--checklist-item-meta-height);
-  min-height: var(--checklist-item-meta-height);
-  padding: 3px 8px 3px 3px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, 8px);
-  background: var(--surface);
-  color: var(--text);
+// The item's one assignee is a button that reopens the picker, styled as the card's avatar.
+.member-avatar-btn {
   cursor: pointer;
+  transition: border-color 0.12s;
+
+  &:hover:not(:disabled),
+  &.is-active {
+    background: var(--list-bg);
+    border-color: var(--accent, var(--text));
+  }
 }
 
 .checklist-item.cdk-drag-preview {
@@ -1760,6 +2014,7 @@
 
 .checklist-check {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   width: 24px;
@@ -1768,34 +2023,79 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-muted);
   cursor: pointer;
 
-  // Green tick for a completed item, the same signal a completed card carries.
-  &.checked {
-    color: var(--success);
-  }
-
   &:hover:not(:disabled) {
-    background: var(--surface-hover);
-    color: var(--text);
-  }
+    background: transparent;
 
-  &.checked:hover:not(:disabled) {
-    color: var(--success);
+    .checklist-box {
+      border-color: var(--text-muted);
+    }
   }
 
   &:disabled {
     cursor: default;
   }
+}
+
+// On a hovered row the empty box would sink into the row's hover fill (--border-strong is close to
+// --surface-hover in dark themes), so it steps up a tier with the row.
+.checklist-item:hover > .checklist-check:not(.checked) .checklist-box,
+.checklist-subitem:hover > .checklist-check:not(.checked) .checklist-box {
+  border-color: var(--text-muted);
+}
+
+// Solid green when done, the same success signal a completed card carries. The tick's ink is the
+// panel surface: dark on the bright dark-theme green, white on the deeper light-theme green.
+.checklist-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--motion-fast), border-color var(--motion-fast);
 
   i {
-    font-size: 17px;
+    font-size: 12px;
   }
+}
 
-  // Only the box this user just ticked; unticking drops the animation, so re-ticking replays it.
-  &.is-ticking.checked i {
-    @include tick.tick-draw("\eb2c"); // ti-square
+.checklist-check.checked .checklist-box,
+.checklist-check.checked:hover:not(:disabled) .checklist-box {
+  border-color: var(--success);
+  background: var(--success);
+  color: var(--surface);
+}
+
+// Only the box this user just ticked; unticking drops the animation, so re-ticking replays it.
+.checklist-check.is-ticking.checked .checklist-box {
+  animation: checklist-box-pop 240ms var(--spring);
+
+  i {
+    animation: checklist-tick-wipe 260ms ease-out;
+  }
+}
+
+@keyframes checklist-box-pop {
+  from {
+    transform: scale(0.78);
+  }
+}
+
+// The tick is drawn left to right, as if by pen.
+@keyframes checklist-tick-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .checklist-check.is-ticking.checked .checklist-box,
+  .checklist-check.is-ticking.checked .checklist-box i {
+    animation: none;
   }
 }
 
@@ -1850,6 +2150,39 @@
     overflow: visible;
     pointer-events: auto;
   }
+}
+
+// When any item in a checklist has a date (or assignee), every row keeps that column so chips and
+// avatars line up down the checklist. Empty slots stay invisible until the row is hovered or
+// focused, like the collapsing slots they replace.
+.checklist-items.has-due-column .checklist-duedate-wrap,
+.checklist-items.has-assignee-column .checklist-assignee-wrap {
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.checklist-items.has-due-column .checklist-duedate-wrap {
+  flex: 0 0 var(--cl-due-w);
+  width: var(--cl-due-w);
+  max-width: none;
+  justify-content: flex-start;
+}
+
+.checklist-items.has-assignee-column .checklist-assignee-wrap {
+  flex-basis: 26px;
+  width: 26px;
+}
+
+.checklist-items.has-due-column .checklist-duedate-wrap.is-empty:not(.is-open) .checklist-item-due-add,
+.checklist-items.has-assignee-column .checklist-assignee-wrap.is-empty:not(.is-open) .checklist-item-assign {
+  opacity: 0;
+  transition: opacity var(--motion-fast);
+}
+
+.checklist-items.has-due-column .checklist-item:is(:hover, :focus-within) .checklist-item-due-add,
+.checklist-items.has-assignee-column .checklist-item:is(:hover, :focus-within) .checklist-item-assign {
+  opacity: 1;
 }
 
 .checklist-item-assign {
@@ -1927,6 +2260,30 @@
   .checklist-duedate-wrap {
     max-width: 124px;
   }
+
+  // One header line left a phone title a few characters, so the header wraps: title and progress
+  // stay on the first line, then the overdue chip (under the title) and the actions (right-aligned)
+  // drop to a second. The ::after is the forced line break, only when there is a second line.
+  .checklist-head:has(.checklist-head-actions, .checklist-overdue) {
+    flex-wrap: wrap;
+    row-gap: 2px;
+
+    &::after {
+      content: "";
+      order: 2;
+      flex-basis: 100%;
+    }
+  }
+
+  .checklist-head .checklist-overdue {
+    order: 3;
+    margin-left: calc(var(--cl-text) - var(--cl-pad));
+  }
+
+  .checklist-head .checklist-head-actions {
+    order: 4;
+    margin-left: auto;
+  }
 }
 
 @media (max-width: 767.98px), (hover: none) {
@@ -1970,8 +2327,13 @@
 
   .checklist-item-due,
   .checklist-item-assignee,
-  .checklist-item-detail {
+  .checklist-item-detail,
+  .checklist-item-subtoggle {
     height: 32px;
+  }
+
+  .checklist-item-detail {
+    width: 32px;
   }
 
   .checklist-item-assignee {
@@ -2014,12 +2376,16 @@
   margin-top: 2px;
 }
 
-// The plus centres in the control column and the label starts on the text column, under the items
-// it adds to. The add form's input lands its text there too (1px border + 7px padding).
+// The card's last row. The plus centres in the control column and the label starts on the text
+// column, under the items it adds to. The add form's input lands its text there too (1px border +
+// 7px padding).
 .checklist-block .checklist-add-btn {
-  margin-left: calc(var(--cl-control) - var(--cl-pad));
-  padding-inline-start: var(--cl-pad);
+  align-self: stretch;
+  justify-content: flex-start;
+  height: 36px;
+  padding: 0 var(--cl-pad) 0 var(--cl-control);
   gap: 10px;
+  border-radius: 0 0 var(--cl-inner-radius) var(--cl-inner-radius);
 
   i {
     width: 24px;
@@ -2028,7 +2394,8 @@
 }
 
 .checklist-add-item {
-  margin-left: calc(var(--cl-text) - 8px);
+  margin: 0;
+  padding: 6px var(--cl-pad) 6px calc(var(--cl-text) - 8px);
 
   input {
     padding-inline: 7px;
@@ -2215,7 +2582,7 @@ button.checklist-hide-toggle {
 .checklist-hidden-note {
   color: var(--text-muted);
   font-size: var(--text-sm);
-  padding: 0 var(--cl-pad) 2px var(--cl-text);
+  padding: 8px var(--cl-pad) 8px var(--cl-text);
 }
 
 // ─── Members ──────────────────────────────────────────────────────────────────
@@ -2793,6 +3160,8 @@ button.checklist-hide-toggle {
   .checklist-delete,
   .checklist-check,
   .checklist-item-more,
+  .checklist-grip,
+  .checklist-item-grip,
   .due-clear {
     position: relative;
 
@@ -2814,11 +3183,14 @@ button.checklist-hide-toggle {
   .attach-actions button:last-child::after { inset-inline-end: -9px; }
   .checklist-bulk-btn::after,
   .checklist-delete::after { inset-inline: -3px; }
-  // Between the grip and the title (6px gaps, both targets), so half of each.
-  .checklist-check::after { inset-inline: -3px; }
-  // Half the 4px actions gap on the left, the row's own 4px padding on the right, each plus the
-  // button's 1px border (insets start at the padding box).
-  .checklist-item-more::after { inset-inline: -3px -5px; }
+  // Half the 6px gap to the title; the row's own padding on the left.
+  .checklist-check::after { inset-inline: -6px -3px; }
+  // Half the 4px actions gap on the left, half the 6px gap to the trailing grip on the right, each
+  // plus the button's 1px border (insets start at the padding box).
+  .checklist-item-more::after { inset-inline: -3px -4px; }
+  // The trailing drag handle ends the row: half the 6px gap before it, the row's padding after.
+  .checklist-grip::after,
+  .checklist-item-grip::after { inset-inline: -3px -6px; }
   // The clear x shares its chip with the date button, so it widens only into the chip's own padding.
   .due-clear::after { inset-inline: -6px; }
 
@@ -2827,6 +3199,9 @@ button.checklist-hide-toggle {
   // lives on k-avatar itself (its profile card), so its halo hangs off that host, not the wrapper.
   .row-top .member-avatar > k-avatar,
   .row-top .member-add-btn,
+  .checklist-item-meta-row .member-avatar-btn,
+  .checklist-item-meta-row .member-add-btn,
+  .checklist-item-meta-row .due-add-btn,
   .row-top .label-chips > .label-chip,
   .row-top .label-add-btn,
   .attach-upload {
@@ -2849,7 +3224,8 @@ button.checklist-hide-toggle {
 
   // ::before rather than ::after: the clear x inside the badge is a later positioned descendant, so
   // it keeps painting, and hitting, above the badge's own halo.
-  .row-top .due-badge-btn {
+  .row-top .due-badge-btn,
+  .checklist-item-meta-row .due-badge-btn {
     position: relative;
 
     &::before {
@@ -2863,6 +3239,19 @@ button.checklist-hide-toggle {
   // the 44px floor like the hide-completed toggle.
   .checklist-add-btn {
     height: 44px;
+  }
+
+  // The outlined section button keeps its 30px look, as .attach-upload does: the 10px section gap
+  // above and 20px below leave room for a 44px halo.
+  .checklist-actions > .checklist-add-btn {
+    position: relative;
+    height: var(--h-md);
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: calc(50% - 22px) 0;
+    }
   }
 
   // The checklist date chip clips its label horizontally only, so its halo can escape vertically.
@@ -3208,6 +3597,24 @@ button.checklist-hide-toggle {
   }
 }
 
+// The section-level "Add checklist" is the same outlined button as "Add attachment", so both
+// sections end in one kind of add control on the shared content edge. (In-card "Add an item" rows
+// keep their own row treatment.)
+.checklist-actions > .checklist-add-btn {
+  gap: 6px;
+  height: var(--h-md);
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+}
+
 .attach-upload {
   display: inline-flex;
   align-items: center;
@@ -3480,6 +3887,12 @@ button.checklist-hide-toggle {
     }
   }
 
+  // Checklist cards follow the description: white cards on the tinted body, not a darker tint.
+  .checklist-block,
+  .checklist-block.cdk-drag-preview {
+    background: var(--surface);
+  }
+
 }
 
 @media (prefers-color-scheme: light) {
@@ -3497,6 +3910,11 @@ button.checklist-hide-toggle {
       &.is-readonly:hover {
         background: var(--surface);
       }
+    }
+
+    .checklist-block,
+    .checklist-block.cdk-drag-preview {
+      background: var(--surface);
     }
 
   }
@@ -3533,7 +3951,9 @@ button.checklist-hide-toggle {
 // whose heights came from padding plus whatever text they held. Pin every control in the band to the
 // avatar's 32px so the row reads as one line. Label chips are deliberately exempt: they are content,
 // not controls, and their smaller size is what separates them from the add button beside them.
-.row-top {
+// The checklist item drawer's metadata row is the same band at item scale.
+.row-top,
+.checklist-item-meta-row {
   --cd-control-h: 32px;
 
   .move-list-btn,
@@ -3578,9 +3998,11 @@ button.checklist-hide-toggle {
     contain-intrinsic-block-size: auto 76px; // Thumbnail plus the existing row padding.
   }
   // CDK must measure real row geometry throughout a drag. Popovers must keep their viewport
-  // containing block, and focused controls must remain rendered for keyboard navigation.
+  // containing block, and focused controls must remain rendered for keyboard navigation. A hovered
+  // row's drag grip hangs outside it, which content-visibility's paint containment would clip.
   body.is-checklist-dragging & .checklist-item,
   .large-checklist-collection:has([kAnchoredPanel], k-member-picker, k-date-picker) .checklist-item,
+  .checklist-item:hover,
   .checklist-item:focus-within,
   .attach-row:focus-within {
     content-visibility: visible;
