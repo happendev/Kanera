@@ -2070,13 +2070,38 @@
   color: var(--surface);
 }
 
-// Only the box this user just ticked; unticking drops the animation, so re-ticking replays it.
+// The tick is always in the box and shown only when checked, so unticking can fade it out with the
+// fill instead of it vanishing a frame before the green drains.
+.checklist-box i {
+  // Its own ink, so while fading out on an untick it stays the tick's colour on the draining green.
+  color: var(--surface);
+  opacity: 0;
+  transition: opacity var(--motion-fast);
+}
+
+// No fade on the way in: the pen draws the tick at full strength.
+.checklist-check.checked .checklist-box i {
+  opacity: 1;
+  transition: none;
+}
+
+// Micro-animations only for the box this user just toggled (is-ticking), never for checked items
+// arriving by render or realtime. Each direction keys on a different selector, so flipping back and
+// forth restarts the matching animation every time.
+//
+// Tick: the box settles in with a small spring and the tick is drawn by pen, the same stroke as the
+// card's completion button and the checklist on board tiles (shared/_tick-draw.scss).
 .checklist-check.is-ticking.checked .checklist-box {
   animation: checklist-box-pop 240ms var(--spring);
 
   i {
-    animation: checklist-tick-wipe 260ms ease-out;
+    animation: checklist-tick-draw 300ms;
   }
+}
+
+// Untick: a light press while the green and the tick fade out together.
+.checklist-check.is-ticking:not(.checked) .checklist-box {
+  animation: checklist-box-press 200ms var(--spring);
 }
 
 @keyframes checklist-box-pop {
@@ -2085,16 +2110,34 @@
   }
 }
 
-// The tick is drawn left to right, as if by pen.
-@keyframes checklist-tick-wipe {
+@keyframes checklist-box-press {
   from {
-    clip-path: inset(0 100% 0 0);
+    transform: scale(0.86);
+  }
+}
+
+// shared/_tick-draw.scss's pen, retimed for ti-check's path (M5 12 l5 5 l10 -10, 2-unit stroke):
+// the stroke spans x 4-21 of the 24-unit glyph with the vertex at x 11. Eases into the short
+// down-stroke, turns at the vertex, then flicks through the long up-stroke.
+@keyframes checklist-tick-draw {
+  0% {
+    clip-path: inset(0 83.3% 0 0);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+  }
+
+  38% {
+    clip-path: inset(0 54.2% 0 0);
+    animation-timing-function: cubic-bezier(0.3, 0.4, 0.45, 1);
+  }
+
+  100% {
+    clip-path: inset(0 12.5% 0 0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .checklist-check.is-ticking.checked .checklist-box,
-  .checklist-check.is-ticking.checked .checklist-box i {
+  .checklist-check.is-ticking .checklist-box,
+  .checklist-check.is-ticking .checklist-box i {
     animation: none;
   }
 }

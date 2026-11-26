@@ -204,7 +204,7 @@
       @if (canEditRole()) {
       <button type="button" class="checklist-check checklist-item-panel-check" [class.checked]="item.completedAt" [class.is-ticking]="tickedChecklistItemId() === item.id" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklistId, item)"
         [attr.aria-label]="item.completedAt ? labels.markItemIncomplete : labels.markItemComplete" [kTooltip]="item.completedAt ? labels.markIncomplete : labels.markComplete">
-        <span class="checklist-box" aria-hidden="true">@if (item.completedAt) {<i aria-hidden="true" class="ti ti-check"></i>}</span>
+        <span class="checklist-box" aria-hidden="true"><i aria-hidden="true" class="ti ti-check"></i></span>
       </button>
       }
       @if (editingItemId() === item.id && canEditRole()) {

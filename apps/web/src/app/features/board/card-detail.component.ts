@@ -2076,13 +2076,13 @@ export class CardDetailComponent {
     }
   }
 
-  // The item this user last ticked, so only that box pops (on the realtime echo) rather than every
-  // checked item when the checklist renders.
+  // The item this user last ticked or unticked, so only that box animates (on the realtime echo)
+  // rather than every checked item when the checklist renders.
   readonly tickedChecklistItemId = signal<string | null>(null);
 
   async toggleChecklistItem(checklistId: string, item: WireCardChecklistItem) {
     if (!this.canEdit()) return;
-    if (!item.completedAt) this.tickedChecklistItemId.set(item.id);
+    this.tickedChecklistItemId.set(item.id);
     await this.api.patch(`/cards/${this.card().id}/checklists/${checklistId}/items/${item.id}`, {
       completed: !item.completedAt,
     });

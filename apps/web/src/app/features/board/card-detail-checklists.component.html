@@ -116,7 +116,7 @@
                 }
                 <button type="button" class="checklist-check" [class.checked]="item.completedAt" [class.is-ticking]="vm.tickedChecklistItemId() === item.id" [disabled]="!vm.canEdit()" (click)="vm.toggleChecklistItem(checklist.id, item)" [kTooltip]="item.completedAt ? vm.labels.markIncomplete : vm.labels.markComplete">
                   <!-- A drawn box rather than a glyph so a done item reads as a solid green fill. -->
-                  <span class="checklist-box" aria-hidden="true">@if (item.completedAt) {<i aria-hidden="true" class="ti ti-check"></i>}</span>
+                  <span class="checklist-box" aria-hidden="true"><i aria-hidden="true" class="ti ti-check"></i></span>
                 </button>
                 @if (vm.editingItemId() === item.id && vm.canEditRole()) {
                 <input #checklistItemInput class="checklist-item-input" [value]="vm.draftItemText()" (input)="vm.draftItemText.set($any($event.target).value)" (keydown.enter)="vm.saveChecklistItem(checklist.id, item)"
@@ -241,7 +241,7 @@
                   <div class="checklist-subitem">
                     <button type="button" class="checklist-check" [class.checked]="subItem.completedAt" [class.is-ticking]="vm.tickedChecklistItemId() === subItem.id" [disabled]="!vm.canEdit()" (click)="vm.toggleChecklistItem(sub.id, subItem)"
                       [kTooltip]="subItem.completedAt ? vm.labels.markIncomplete : vm.labels.markComplete">
-                      <span class="checklist-box" aria-hidden="true">@if (subItem.completedAt) {<i aria-hidden="true" class="ti ti-check"></i>}</span>
+                      <span class="checklist-box" aria-hidden="true"><i aria-hidden="true" class="ti ti-check"></i></span>
                     </button>
                     <span class="checklist-subitem-text" [class.is-done]="subItem.completedAt">{{ subItem.text }}</span>
                   </div>
