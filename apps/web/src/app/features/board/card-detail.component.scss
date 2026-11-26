@@ -1252,7 +1252,17 @@
   margin-left: 0 !important;
 }
 
+// Header, progress bar, items and the add row share one column grid, so every checklist reads as
+// a single aligned block: grip gutter, control column (chevron, checkbox, add icon), text column
+// (title, bar, item text). Rows and the header both inset by --cl-pad on each side, which also
+// lines up the header actions with the item actions on the right.
 .checklist-block {
+  --cl-pad: 4px;
+  // pad + 16px grip + 6px gap: where the chevron, checkbox and add icon start.
+  --cl-control: 26px;
+  // control + 24px control + 6px gap + the text buttons' 4px inset: where all text starts.
+  --cl-text: 60px;
+
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1303,6 +1313,10 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.checklist-head {
+  padding-inline: var(--cl-pad);
 }
 
 .checklist-head:hover {
@@ -1372,6 +1386,9 @@
 }
 
 .checklist-title {
+  // The global button height (36px) made the header taller than the rename input that replaces it.
+  height: var(--h-md);
+  padding-block: 0;
   font-size: var(--text-md);
   font-weight: 600;
 }
@@ -1408,6 +1425,19 @@
   font-size: var(--text-base);
 }
 
+// Renaming happens in place: 1px border + 3px padding keeps the text at the button's 4px inset, so
+// it doesn't jump sideways (or change weight, for titles) when the input swaps in.
+.checklist-head input.checklist-title-input,
+.checklist-item input.checklist-item-input {
+  padding-inline: 3px;
+}
+
+.checklist-head input.checklist-title-input {
+  height: var(--h-md);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
 .checklist-count {
   flex: 0 0 auto;
   font-size: var(--text-sm);
@@ -1425,9 +1455,9 @@
   // --surface-2 all but vanishes against the light detail tint; --border reads as a track in both themes.
   background: var(--border);
   overflow: hidden;
-  // Starts under the checklist title's text: collapse 24 + gap 6 + grip 16 + gap 6 + the title's
-  // 4px inset. It used to stop at the grip's edge, 10px short, lined up with nothing.
-  margin-left: 56px;
+  // Spans the text column: starts under the title and item text, ends with the header and item
+  // actions. Tucked up to the title it measures, with the item rows a step below.
+  margin: -2px var(--cl-pad) 2px var(--cl-text);
 
   &.is-complete .checklist-progress-fill {
     background: var(--success);
@@ -1527,8 +1557,9 @@
   }
 }
 
-// Renaming must not change the row's footprint either.
-.checklist-item-input {
+// Renaming must not change the row's footprint either. Compound selector: the global input height
+// out-ranks a bare class.
+.checklist-item input.checklist-item-input {
   height: var(--h-sm);
 }
 
@@ -1933,7 +1964,7 @@
     overflow-wrap: anywhere;
   }
 
-  .checklist-item-input {
+  .checklist-item input.checklist-item-input {
     height: 32px;
   }
 
@@ -1983,9 +2014,25 @@
   margin-top: 2px;
 }
 
-.checklist-block .checklist-add-btn,
+// The plus centres in the control column and the label starts on the text column, under the items
+// it adds to. The add form's input lands its text there too (1px border + 7px padding).
+.checklist-block .checklist-add-btn {
+  margin-left: calc(var(--cl-control) - var(--cl-pad));
+  padding-inline-start: var(--cl-pad);
+  gap: 10px;
+
+  i {
+    width: 24px;
+    text-align: center;
+  }
+}
+
 .checklist-add-item {
-  margin-left: 24px;
+  margin-left: calc(var(--cl-text) - 8px);
+
+  input {
+    padding-inline: 7px;
+  }
 }
 
 .checklist-actions {
@@ -2168,7 +2215,7 @@ button.checklist-hide-toggle {
 .checklist-hidden-note {
   color: var(--text-muted);
   font-size: var(--text-sm);
-  padding: 0 4px 2px 46px;
+  padding: 0 var(--cl-pad) 2px var(--cl-text);
 }
 
 // ─── Members ──────────────────────────────────────────────────────────────────

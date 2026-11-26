@@ -30,16 +30,18 @@
             <ng-template cdkDragPreview>
               <div class="checklist-drag-preview"><i aria-hidden="true" class="ti ti-grip-vertical"></i>{{ checklist.title }}</div>
             </ng-template>
+            <!-- Same column order as an item row (grip, control, text) so the chevron sits over the
+                 checkboxes and the title over the item text. -->
             <div class="checklist-head">
-              <button type="button" class="ghost icon checklist-collapse" (click)="vm.toggleChecklistCollapsed(checklist.id)" [kTooltip]="vm.isChecklistCollapsed(checklist.id) ? vm.labels.expandChecklist : vm.labels.collapseChecklist"
-                [attr.aria-label]="vm.isChecklistCollapsed(checklist.id) ? vm.labels.expandChecklist : vm.labels.collapseChecklist">
-                <i aria-hidden="true" [class]="vm.isChecklistCollapsed(checklist.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
-              </button>
               @if (vm.canEditRole()) {
               <i aria-hidden="true" class="ti ti-grip-vertical checklist-grip" cdkDragHandle kTooltip="Drag checklist" i18n-kTooltip="Tooltip on the handle that reorders checklists"></i>
               } @else {
               <span class="checklist-grip-spacer"></span>
               }
+              <button type="button" class="ghost icon checklist-collapse" (click)="vm.toggleChecklistCollapsed(checklist.id)" [kTooltip]="vm.isChecklistCollapsed(checklist.id) ? vm.labels.expandChecklist : vm.labels.collapseChecklist"
+                [attr.aria-label]="vm.isChecklistCollapsed(checklist.id) ? vm.labels.expandChecklist : vm.labels.collapseChecklist">
+                <i aria-hidden="true" [class]="vm.isChecklistCollapsed(checklist.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+              </button>
               @if (vm.editingChecklistId() === checklist.id && vm.canEditRole()) {
               <input #checklistTitleInput class="checklist-title-input" [value]="vm.draftChecklistTitle()" (input)="vm.draftChecklistTitle.set($any($event.target).value)" (keydown.enter)="vm.saveChecklistTitle(checklist)"
                 (keydown.escape)="vm.cancelChecklistTitle()" autofocus />
