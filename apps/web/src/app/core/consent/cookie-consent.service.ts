@@ -9,7 +9,8 @@ export interface CookieConsentChoice {
   version: number;
   necessary: true;
   analytics: boolean;
-  marketing: false;
+  // Advertising measurement: Google Ads counting a signup that followed an advert click.
+  marketing: boolean;
   updatedAt: string;
 }
 
@@ -22,7 +23,7 @@ export function parseConsentChoice(raw: string | null, now = Date.now()): Cookie
       value.version !== KANERA_CONSENT_VERSION
       || value.necessary !== true
       || typeof value.analytics !== "boolean"
-      || value.marketing !== false
+      || typeof value.marketing !== "boolean"
       || !Number.isFinite(updatedAt)
       || updatedAt > now + 5 * 60 * 1_000
       || now - updatedAt > CONSENT_MAX_AGE_MS
@@ -74,6 +75,18 @@ export function clearKnownAnalyticsStorage(): void {
   }
 }
 
+/** Remove the advert-click cookies the Google tag writes on the marketing site. */
+function clearAdvertisingStorage(): void {
+  if (typeof document === "undefined") return;
+  const sharedDomain = sharedCookieDomain(window.location.hostname);
+  const names = document.cookie.split(";").map((cookie) => cookie.trim().split("=")[0]!).filter((name) => name.startsWith("_gcl_"));
+  for (const name of names) {
+    expireCookie(name);
+    expireCookie(name, window.location.hostname);
+    if (sharedDomain) expireCookie(name, sharedDomain);
+  }
+}
+
 @Injectable({ providedIn: "root" })
 export class CookieConsentService {
   private readonly _available = signal(false);
@@ -83,24 +96,25 @@ export class CookieConsentService {
   readonly available = this._available.asReadonly();
   readonly choice = this._choice.asReadonly();
   readonly analyticsAllowed = computed(() => this._available() && this._choice()?.analytics === true);
+  readonly marketingAllowed = computed(() => this._available() && this._choice()?.marketing === true);
   readonly settingsRequest = this._settingsRequest.asReadonly();
 
   /**
-   * Outside opt-in regions analytics is on by default. The default is stored like a real choice so
+   * Outside opt-in regions analytics and advertising measurement are on by default. The default is stored like a real choice so
    * the shared .kanera.app cookie agrees with the marketing site, and account settings can still
    * switch it off.
    */
   configure(available: boolean, requiresOptIn = true): void {
-    if (available && !requiresOptIn && !this._choice()) this.save(true);
+    if (available && !requiresOptIn && !this._choice()) this.save(true, true);
     this._available.set(available);
   }
 
-  save(analytics: boolean): CookieConsentChoice {
+  save(analytics: boolean, marketing: boolean): CookieConsentChoice {
     const choice: CookieConsentChoice = {
       version: KANERA_CONSENT_VERSION,
       necessary: true,
       analytics,
-      marketing: false,
+      marketing,
       updatedAt: new Date().toISOString(),
     };
     const sharedDomain = sharedCookieDomain(window.location.hostname);
@@ -114,6 +128,7 @@ export class CookieConsentService {
     document.cookie = `${KANERA_CONSENT_COOKIE}=${encodeURIComponent(JSON.stringify(choice))}; ${attributes}`;
     this._choice.set(choice);
     if (!analytics) clearKnownAnalyticsStorage();
+    if (!marketing) clearAdvertisingStorage();
     return choice;
   }
 
