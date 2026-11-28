@@ -66,3 +66,40 @@ for (const consented of [true, false]) {
     await page.screenshot({ path: testInfo.outputPath("signup-mobile.png") });
   });
 }
+
+for (const marketing of [true, false]) {
+  test(`a completed signup embeds the marketing site's conversion page only with the advertising choice on (${marketing})`, async ({ page, context }) => {
+    const consent = JSON.stringify({ version: 1, necessary: true, analytics: false, marketing, updatedAt: new Date().toISOString() });
+    await context.addCookies([{ name: "kanera_cookie_consent", value: encodeURIComponent(consent), domain: ".kanera.test", path: "/" }]);
+    const conversionFrames: string[] = [];
+    const scriptHosts = new Set<string>();
+    await context.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (route.request().resourceType() === "script") scriptHosts.add(url.hostname);
+      if (url.hostname === "www.kanera.app" && url.pathname === "/conversion/signup") {
+        conversionFrames.push(route.request().frame().parentFrame() ? "framed" : "top");
+        return route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Kanera</title>" });
+      }
+      if (url.hostname !== "board.kanera.test") return route.abort();
+      if (url.pathname === "/api/auth/config") return route.fulfill({ json: {
+        deploymentMode: "hosted", kaneraEnvironment: "production", emailVerificationEnabled: false,
+        signupsEnabled: true, turnstileSiteKey: null,
+        analytics: { enabled: true, provider: "posthog", projectKey, apiHost: "https://analytics.example.test" },
+      } });
+      // The account is created but its organisation still requires MFA: the shortest real success path.
+      if (url.pathname === "/api/auth/signup") return route.fulfill({ json: { status: "mfa_enrollment_required", challengeToken: "local-test" } });
+      if (url.pathname.startsWith("/api/")) return route.fulfill({ status: 401, json: {} });
+      return route.continue();
+    });
+    await page.goto("/signup");
+    await page.getByLabel("Your name", { exact: true }).fill("Test Owner");
+    await page.getByLabel("Email", { exact: true }).fill("conversion@example.test");
+    await page.getByLabel("Password", { exact: true }).fill("Abc12345");
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.waitForURL(/\/login/);
+    if (marketing) await expect.poll(() => conversionFrames).toEqual(["framed"]);
+    else expect(conversionFrames).toEqual([]);
+    // Google's tag belongs to the marketing site; no third-party script may run in the app itself.
+    expect([...scriptHosts]).toEqual(["board.kanera.test"]);
+  });
+}

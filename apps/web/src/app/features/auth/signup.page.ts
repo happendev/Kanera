@@ -12,6 +12,7 @@ import { LogoComponent } from "../../shared/logo.component";
 import { LocaleSwitcherComponent } from "./locale-switcher.component";
 import { ProviderSignInComponent } from "./provider-sign-in.component";
 import { signupAcquisition } from "../../core/analytics/signup-attribution";
+import { reportSignupConversion } from "../../core/analytics/signup-conversion";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import type { SignupStep } from "../../core/analytics/analytics-events";
 import { CookieConsentService } from "../../core/consent/cookie-consent.service";
@@ -342,6 +343,8 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
       return;
     }
     this.turnstile.reset();
+    // The account exists from here on, including when its organisation still requires MFA enrolment.
+    reportSignupConversion(this.consent.marketingAllowed());
     const raw: unknown = await res.json();
     if (isMfaEnrollmentRequired(raw)) {
       // The account was created, but the organisation it joined mandates MFA: no session was issued.
