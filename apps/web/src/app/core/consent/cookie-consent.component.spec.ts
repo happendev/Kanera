@@ -24,7 +24,6 @@ describe("CookieConsentComponent", () => {
     const root = fixture.nativeElement as HTMLElement;
 
     expect(root.querySelector(".consent-banner")?.textContent).toContain("They stay off unless you accept.");
-    expect(root.textContent).not.toContain("Marketing");
     (root.querySelector("button[aria-label='Reject non-essential']") as HTMLButtonElement).click();
     fixture.detectChanges();
 
@@ -35,7 +34,7 @@ describe("CookieConsentComponent", () => {
   it("opens preferences when another settings screen requests them", () => {
     const consent = TestBed.inject(CookieConsentService);
     consent.configure(true);
-    consent.save(false);
+    consent.save(false, false);
     const fixture = TestBed.createComponent(CookieConsentComponent);
     fixture.detectChanges();
 
@@ -57,6 +56,7 @@ describe("CookieConsentComponent", () => {
 
     const dialog = root.querySelector(".consent-dialog")?.textContent ?? "";
     expect(dialog).toContain("Analytics cookies");
+    expect(dialog).toContain("Advertising measurement");
     expect(dialog).toContain("Separate server-side analytics");
     expect(dialog).toContain("subscription starts, renewals, resumptions, cancellations, and plan or seat-count changes");
     expect(dialog).toContain("exclude payment-method details and workspace content");
@@ -69,13 +69,39 @@ describe("CookieConsentComponent", () => {
     fixture.detectChanges();
 
     expect(consent.analyticsAllowed()).toBe(true);
+    expect(consent.marketingAllowed()).toBe(true);
     expect(document.cookie).toContain(KANERA_CONSENT_COOKIE);
     expect((fixture.nativeElement as HTMLElement).querySelector(".consent-banner")).toBeNull();
   });
 
+  it("saves the advertising choice separately and clears advert-click cookies when it is off", () => {
+    const consent = TestBed.inject(CookieConsentService);
+    consent.configure(true);
+    const fixture = TestBed.createComponent(CookieConsentComponent);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+
+    (root.querySelector("button[aria-label='Accept all']") as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(consent.choice()).toMatchObject({ analytics: true, marketing: true });
+
+    document.cookie = "_gcl_aw=GCL.1.click; Path=/";
+    consent.openSettings();
+    fixture.detectChanges();
+    const advertising = root.querySelector("input[aria-label='Allow advertising measurement']") as HTMLInputElement;
+    expect(advertising.checked).toBe(true);
+    advertising.click();
+    (root.querySelector(".dialog-actions .primary") as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(consent.choice()).toMatchObject({ analytics: true, marketing: false });
+    expect(consent.marketingAllowed()).toBe(false);
+    expect(document.cookie).not.toContain("_gcl_aw");
+  });
+
   it("keeps an earlier rejection outside opt-in regions", () => {
     const consent = TestBed.inject(CookieConsentService);
-    consent.save(false);
+    consent.save(false, false);
     consent.configure(true, false);
 
     expect(consent.analyticsAllowed()).toBe(false);

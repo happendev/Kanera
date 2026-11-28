@@ -312,8 +312,8 @@
       "src/app/core/consent/cookie-consent.component.html"
     ]
   },
-  "4576850960921549296": "Optional analytics cookies help us see how visitors find and use Kanera. They stay off unless you accept.",
-  "@4576850960921549296": {
+  "5348926602394101277": "Optional analytics and advertising-measurement cookies help us see how visitors find and use Kanera. They stay off unless you accept.",
+  "@5348926602394101277": {
     "description": "Cookie consent banner text",
     "x-files": [
       "src/app/core/consent/cookie-consent.component.html"
@@ -327,9 +327,9 @@
       "src/app/features/account-settings/profile/profile.page.html"
     ]
   },
-  "1033925530046032386": "Accept analytics",
-  "@1033925530046032386": {
-    "description": "Cookie consent button",
+  "8083493007965546479": "Accept all",
+  "@8083493007965546479": {
+    "description": "Cookie consent button - accept every optional cookie category",
     "x-files": [
       "src/app/core/consent/cookie-consent.component.html"
     ]
@@ -378,8 +378,8 @@
       "src/app/core/consent/cookie-consent.component.html"
     ]
   },
-  "8248985295461457476": "Choose whether hosted Kanera may use optional analytics on this device. You can change this choice at any time.",
-  "@8248985295461457476": {
+  "8299236616422221358": "Choose which optional technologies hosted Kanera may use on this device. You can change this choice at any time.",
+  "@8299236616422221358": {
     "x-files": [
       "src/app/core/consent/cookie-consent.component.html"
     ]
@@ -424,6 +424,25 @@
   },
   "3427507135490473459": "Allow analytics cookies",
   "@3427507135490473459": {
+    "x-files": [
+      "src/app/core/consent/cookie-consent.component.html"
+    ]
+  },
+  "4360270948850509229": "Advertising measurement",
+  "@4360270948850509229": {
+    "description": "Cookie category name",
+    "x-files": [
+      "src/app/core/consent/cookie-consent.component.html"
+    ]
+  },
+  "6389381747299666812": "Lets us count a signup that follows one of our adverts, so we can tell which adverts work. Used only after you arrive from an advert. No personalised advertising. Vendor: Google Ads.",
+  "@6389381747299666812": {
+    "x-files": [
+      "src/app/core/consent/cookie-consent.component.html"
+    ]
+  },
+  "4979206309779425773": "Allow advertising measurement",
+  "@4979206309779425773": {
     "x-files": [
       "src/app/core/consent/cookie-consent.component.html"
     ]

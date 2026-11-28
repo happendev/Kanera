@@ -1,11 +1,11 @@
 @if (consent.available()) {
   @if (!consent.choice() && !preferencesOpen()) {
     <section class="consent-banner" aria-label="Your privacy choices" i18n-aria-label="Cookie consent banner heading" aria-describedby="cookie-consent-description">
-      <p id="cookie-consent-description"><ng-container i18n="Cookie consent banner text">Optional analytics cookies help us see how visitors find and use Kanera. They stay off unless you accept.</ng-container>&ngsp;<a href="https://www.kanera.app/privacy" target="_blank" rel="noopener noreferrer" i18n="Cookie consent banner link to the privacy notice">Privacy</a></p>
+      <p id="cookie-consent-description"><ng-container i18n="Cookie consent banner text">Optional analytics and advertising-measurement cookies help us see how visitors find and use Kanera. They stay off unless you accept.</ng-container>&ngsp;<a href="https://www.kanera.app/privacy" target="_blank" rel="noopener noreferrer" i18n="Cookie consent banner link to the privacy notice">Privacy</a></p>
       <!-- Accept and Reject share one style and width so neither is the easier choice. -->
       <div class="consent-actions">
-        <button type="button" class="decision" (click)="save(true)" aria-label="Accept analytics" i18n-aria-label="Cookie consent button" i18n="Cookie consent button - accept optional analytics">Accept</button>
-        <button type="button" class="decision" (click)="save(false)" aria-label="Reject non-essential" i18n-aria-label="Cookie consent button: decline optional cookies" i18n="Cookie consent button - decline optional analytics">Reject</button>
+        <button type="button" class="decision" (click)="save(true, true)" aria-label="Accept all" i18n-aria-label="Cookie consent button - accept every optional cookie category" i18n="Cookie consent button - accept optional analytics">Accept</button>
+        <button type="button" class="decision" (click)="save(false, false)" aria-label="Reject non-essential" i18n-aria-label="Cookie consent button: decline optional cookies" i18n="Cookie consent button - decline optional analytics">Reject</button>
         <button type="button" class="text" (click)="openPreferences()" aria-label="Manage preferences" i18n-aria-label="Cookie consent button" i18n="Cookie consent button - open detailed cookie choices">Preferences</button>
       </div>
     </section>
@@ -18,7 +18,7 @@
         <header>
           <div>
             <h2 id="cookie-preferences-title" i18n="Cookie preferences dialog heading">Cookie preferences</h2>
-            <p id="cookie-preferences-description" i18n>Choose whether hosted Kanera may use optional analytics on this device. You can change this choice at any time.</p>
+            <p id="cookie-preferences-description" i18n>Choose which optional technologies hosted Kanera may use on this device. You can change this choice at any time.</p>
           </div>
           <button type="button" class="close" (click)="closePreferences()" aria-label="Close cookie preferences" i18n-aria-label><i aria-hidden="true" class="ti ti-x"></i></button>
         </header>
@@ -31,11 +31,15 @@
           <span><strong i18n="Cookie category name">Analytics cookies</strong><small i18n>Help us understand how visitors find Kanera, use key parts of the service, and progress through registration and subscription.</small></span>
           <input type="checkbox" [checked]="analytics()" (input)="analytics.set($any($event.target).checked)" aria-label="Allow analytics cookies" i18n-aria-label />
         </label>
+        <label class="category">
+          <span><strong i18n="Cookie category name">Advertising measurement</strong><small i18n>Lets us count a signup that follows one of our adverts, so we can tell which adverts work. Used only after you arrive from an advert. No personalised advertising. Vendor: Google Ads.</small></span>
+          <input type="checkbox" [checked]="marketing()" (input)="marketing.set($any($event.target).checked)" aria-label="Allow advertising measurement" i18n-aria-label />
+        </label>
 
         <p class="policy" i18n>Separate server-side analytics include limited commercial lifecycle events sent by Kanera's backend, such as subscription starts, renewals, resumptions, cancellations, and plan or seat-count changes. These events exclude payment-method details and workspace content. See our <a href="https://www.kanera.app/privacy" target="_blank" rel="noopener noreferrer">privacy notice</a> for more information.</p>
         <div class="dialog-actions">
-          <button type="button" class="secondary" (click)="save(false)" i18n="Cookie consent button: decline optional cookies">Reject non-essential</button>
-          <button type="button" class="primary" (click)="save(analytics())" i18n="Cookie preferences dialog button">Save preferences</button>
+          <button type="button" class="secondary" (click)="save(false, false)" i18n="Cookie consent button: decline optional cookies">Reject non-essential</button>
+          <button type="button" class="primary" (click)="save(analytics(), marketing())" i18n="Cookie preferences dialog button">Save preferences</button>
         </div>
       </div>
     </div>

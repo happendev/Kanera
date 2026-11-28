@@ -7,6 +7,8 @@ import type { SignInProvider } from "@kanera/shared/schema";
 import { AuthService } from "../../core/auth/auth.service";
 import type { ProviderSignInStep } from "../../core/analytics/analytics-events";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
+import { reportSignupConversion } from "../../core/analytics/signup-conversion";
+import { CookieConsentService } from "../../core/consent/cookie-consent.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { isMfaEnrollmentRequired, MFA_ENROLLMENT_HANDOFF_KEY, MFA_VERIFY_HANDOFF_KEY, parseAuthResponse } from "../../core/auth/auth-response";
 import { LogoComponent } from "../../shared/logo.component";
@@ -140,6 +142,9 @@ export class ProviderCallbackPage implements OnInit {
   private readonly router = inject(Router);
   private readonly location = inject(Location);
   private readonly analytics = inject(AnalyticsService);
+  private readonly consent = inject(CookieConsentService);
+  /** Set once the person submits the new-account details, so only a real signup is reported. */
+  private signupSubmitted = false;
 
   /** One-time handoff code from the API callback. */
   readonly h = input<string>();
@@ -189,6 +194,7 @@ export class ProviderCallbackPage implements OnInit {
     const displayName = this.displayName().trim();
     if (!displayName) { this.formError.set($localize`Name is required.`); return; }
     this.trackStep("signup_details_submitted");
+    this.signupSubmitted = true;
     await this.complete({ signup: { displayName, orgName: DEFAULT_ORG_NAME } });
   }
 
@@ -273,6 +279,8 @@ export class ProviderCallbackPage implements OnInit {
         return;
       }
     }
+    // Every remaining outcome means the request succeeded, so a submitted signup created an account.
+    if (this.signupSubmitted) reportSignupConversion(this.consent.marketingAllowed());
     if (isMfaEnrollmentRequired(body)) {
       await this.router.navigateByUrl("/login", { state: { [MFA_ENROLLMENT_HANDOFF_KEY]: body.challengeToken } });
       return;

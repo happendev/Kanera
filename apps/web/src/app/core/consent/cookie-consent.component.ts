@@ -15,6 +15,7 @@ export class CookieConsentComponent {
   readonly consent = inject(CookieConsentService);
   readonly preferencesOpen = signal(false);
   readonly analytics = signal(false);
+  readonly marketing = signal(false);
   private readonly dialog = viewChild<ElementRef<HTMLElement>>("dialog");
   private previouslyFocused: HTMLElement | null = null;
 
@@ -30,6 +31,7 @@ export class CookieConsentComponent {
 
   openPreferences(): void {
     this.analytics.set(this.consent.choice()?.analytics ?? false);
+    this.marketing.set(this.consent.choice()?.marketing ?? false);
     this.previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.preferencesOpen.set(true);
     queueMicrotask(() => this.dialog()?.nativeElement.querySelector<HTMLElement>("button, input, a")?.focus());
@@ -41,8 +43,8 @@ export class CookieConsentComponent {
     this.previouslyFocused = null;
   }
 
-  save(analytics: boolean): void {
-    this.consent.save(analytics);
+  save(analytics: boolean, marketing: boolean): void {
+    this.consent.save(analytics, marketing);
     this.closePreferences();
   }
 
